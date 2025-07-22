@@ -3,6 +3,7 @@ using System.IO;
 using System.IO.Pipes;
 using System.Linq;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 using EasyDotnet;
@@ -10,7 +11,7 @@ using EasyDotnet.Utils;
 
 class Program
 {
-  private static readonly string PipeName = "EasyDotnet_" + Guid.NewGuid().ToString("N");
+  private const int MaxPipeNameLength = 104;
 
   public static async Task<int> Main(string[] args)
   {
@@ -45,6 +46,8 @@ class Program
 
   private static async Task StartServerAsync()
   {
+    var PipeName = GeneratePipeName();
+
     var clientId = 0;
     while (true)
     {
@@ -53,6 +56,14 @@ class Program
       await stream.WaitForConnectionAsync();
       _ = RespondToRpcRequestsAsync(stream, ++clientId);
     }
+  }
+
+  private static string GeneratePipeName()
+  {
+    var pipePrefix = "CoreFxPipe_";
+    var pipeName = "EasyDotnet_" + Regex.Replace(Convert.ToBase64String(Guid.NewGuid().ToByteArray()), "[/+=]", "");
+    var maxNameLength = MaxPipeNameLength - Path.GetTempPath().Length - pipePrefix.Length - 1;
+    return pipeName[..Math.Min(pipeName.Length, maxNameLength)];
   }
 
   private static async Task RespondToRpcRequestsAsync(Stream stream, int clientId)

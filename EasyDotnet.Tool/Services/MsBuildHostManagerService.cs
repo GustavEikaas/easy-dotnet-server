@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using EasyDotnet.MsBuild.Contracts;
 using EasyDotnet.Utils;
@@ -48,9 +49,12 @@ public class MsBuildHostManager : IMsBuildHostManager, IDisposable
 
   private static string GeneratePipeName(BuildClientType type)
   {
-    var pipePrefix = "EasyDotnet_MSBuild_";
-    var name = $"{pipePrefix}{type}_{Guid.NewGuid():N}";
-    return name[..Math.Min(name.Length, MaxPipeNameLength)];
+    var pipePrefix = "CoreFxPipe_";
+    var pipeName = "EasyDotnet_MSBuild_";
+    var uid = Regex.Replace(Convert.ToBase64String(Guid.NewGuid().ToByteArray()), "[/+=]", "");
+    var name = $"{pipeName}{type}_{uid}";
+    var maxNameLength = MaxPipeNameLength - Path.GetTempPath().Length - pipePrefix.Length - 1;
+    return name[..Math.Min(name.Length, maxNameLength)];
   }
 
   public void StopAll()

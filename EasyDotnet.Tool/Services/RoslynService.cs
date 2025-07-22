@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Controllers.Roslyn;
+using EasyDotnet.Extensions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -11,26 +12,32 @@ using Microsoft.CodeAnalysis.MSBuild;
 
 namespace EasyDotnet.Services;
 
-public class RoslynService
+public class RoslynService(RoslynProjectMetadataCache cache)
 {
+  private async Task<ProjectCacheItem> GetOrSetProjectFromCache(string projectPath, CancellationToken cancellationToken)
+  {
+    if (cache.TryGet(projectPath, out var cachedProject) && cachedProject is not null)
+    {
+      return cachedProject;
+    }
+
+    using var workspace = MSBuildWorkspace.Create();
+    var project = await workspace.OpenProjectAsync(projectPath, cancellationToken: cancellationToken) ?? throw new Exception($"Failed to load project at path: {projectPath}");
+    cache.Set(projectPath, project);
+
+    return !cache.TryGet(projectPath, out var updatedProject) || updatedProject is null
+      ? throw new Exception("Caching failed after setting project metadata.")
+      : updatedProject;
+  }
 
   public async Task<bool> BootstrapFile(string filePath, Kind kind, bool preferFileScopedNamespace, CancellationToken cancellationToken)
   {
     var projectPath = FindCsprojFromFile(filePath);
-    using var workspace = MSBuildWorkspace.Create();
-    var project = await workspace.OpenProjectAsync(projectPath, cancellationToken: cancellationToken);
+    var project = await GetOrSetProjectFromCache(projectPath, cancellationToken);
 
-    var rootNamespace = project.DefaultNamespace;
-    if (string.IsNullOrEmpty(rootNamespace))
-    {
-      throw new Exception("root namespace cannot be null");
-    }
+    var rootNamespace = project.RootNamespace;
 
-    var parseOptions = project.ParseOptions as CSharpParseOptions;
-    var langVersion = parseOptions?.LanguageVersion ?? LanguageVersion.CSharp9;
-
-    var supportsFileScoped = langVersion >= LanguageVersion.CSharp10;
-    var useFileScopedNs = preferFileScopedNamespace && supportsFileScoped;
+    var useFileScopedNs = preferFileScopedNamespace && project.SupportsFileScopedNamespace;
 
     var relativePath = Path.GetDirectoryName(filePath)!
         .Replace(Path.GetDirectoryName(projectPath)!, "")
@@ -40,17 +47,21 @@ public class RoslynService
 
     var className = Path.GetFileNameWithoutExtension(filePath).Split(".").ElementAt(0)!;
 
-    var typeDecl = CreateTypeDeclaration(kind, className, useFileScopedNs);
+    var typeDecl = CreateTypeDeclaration(kind, className);
 
     MemberDeclarationSyntax nsDeclaration = useFileScopedNs
         ? SyntaxFactory.FileScopedNamespaceDeclaration(SyntaxFactory.ParseName(fullNamespace))
-            .AddMembers(typeDecl)
-        : SyntaxFactory.NamespaceDeclaration(SyntaxFactory.ParseName(fullNamespace))
-            .AddMembers(typeDecl);
+        : SyntaxFactory.NamespaceDeclaration(SyntaxFactory.ParseName(fullNamespace));
 
     var unit = SyntaxFactory.CompilationUnit()
-        .AddMembers(nsDeclaration)
-        .NormalizeWhitespace();
+      .AddMembers(nsDeclaration)
+      .AddMembers(typeDecl)
+      .NormalizeWhitespace(eol: Environment.NewLine);
+
+    if (preferFileScopedNamespace)
+    {
+      unit = unit.AddNewLinesAfterNamespaceDeclaration();
+    }
 
     if (File.Exists(filePath) && new FileInfo(filePath).Length > 0)
     {
@@ -86,7 +97,7 @@ public class RoslynService
         : null;
   }
 
-  private static MemberDeclarationSyntax CreateTypeDeclaration(Kind kind, string className, bool useFileScopedNs)
+  private static MemberDeclarationSyntax CreateTypeDeclaration(Kind kind, string className)
   {
     var modifiers = SyntaxFactory.TokenList(SyntaxFactory.Token(SyntaxKind.PublicKeyword));
 
@@ -95,26 +106,17 @@ public class RoslynService
       Kind.Class => SyntaxFactory.ClassDeclaration(className)
           .WithModifiers(modifiers)
           .WithOpenBraceToken(SyntaxFactory.Token(SyntaxKind.OpenBraceToken))
-          .WithCloseBraceToken(SyntaxFactory.Token(SyntaxKind.CloseBraceToken))
-          .WithLeadingTrivia(useFileScopedNs
-              ? SyntaxFactory.TriviaList(SyntaxFactory.CarriageReturnLineFeed, SyntaxFactory.CarriageReturnLineFeed)
-              : SyntaxFactory.TriviaList(SyntaxFactory.CarriageReturnLineFeed)),
+          .WithCloseBraceToken(SyntaxFactory.Token(SyntaxKind.CloseBraceToken)),
 
       Kind.Interface => SyntaxFactory.InterfaceDeclaration(className)
-          .WithModifiers(modifiers)
-          .WithLeadingTrivia(useFileScopedNs
-              ? SyntaxFactory.TriviaList(SyntaxFactory.CarriageReturnLineFeed, SyntaxFactory.CarriageReturnLineFeed)
-              : SyntaxFactory.TriviaList(SyntaxFactory.CarriageReturnLineFeed)),
+          .WithModifiers(modifiers),
 
       Kind.Record => SyntaxFactory.RecordDeclaration(
               SyntaxFactory.Token(SyntaxKind.RecordKeyword),
               SyntaxFactory.Identifier(className))
           .WithModifiers(modifiers)
           .WithParameterList(SyntaxFactory.ParameterList())
-          .WithSemicolonToken(SyntaxFactory.Token(SyntaxKind.SemicolonToken))
-          .WithLeadingTrivia(useFileScopedNs
-              ? SyntaxFactory.TriviaList(SyntaxFactory.CarriageReturnLineFeed, SyntaxFactory.CarriageReturnLineFeed)
-              : SyntaxFactory.TriviaList(SyntaxFactory.CarriageReturnLineFeed)),
+          .WithSemicolonToken(SyntaxFactory.Token(SyntaxKind.SemicolonToken)),
 
       _ => throw new ArgumentOutOfRangeException(nameof(kind))
     };
