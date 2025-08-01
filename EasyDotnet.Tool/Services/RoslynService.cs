@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -11,6 +12,8 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.MSBuild;
 
 namespace EasyDotnet.Services;
+
+public sealed record VariableResult(string Identifier, int LineStart, int LineEnd, int ColumnStart, int ColumnEnd);
 
 public class RoslynService(RoslynProjectMetadataCache cache)
 {
@@ -28,6 +31,83 @@ public class RoslynService(RoslynProjectMetadataCache cache)
     return !cache.TryGet(projectPath, out var updatedProject) || updatedProject is null
       ? throw new Exception("Caching failed after setting project metadata.")
       : updatedProject;
+  }
+
+  public async Task<List<VariableResult>> AnalyzeAsync(string sourceFilePath, int lineNumber)
+  {
+    using var workspace = MSBuildWorkspace.Create();
+
+    var csprojPath = FindCsprojFromFile(sourceFilePath);
+    var project = await workspace.OpenProjectAsync(csprojPath);
+    var document = project.Documents.FirstOrDefault(d => string.Equals(d.FilePath, sourceFilePath, StringComparison.OrdinalIgnoreCase)) ?? throw new Exception("Document not found.");
+    var root = await document.GetSyntaxRootAsync();
+    var semanticModel = await document.GetSemanticModelAsync();
+
+    if (root == null || semanticModel == null)
+      throw new Exception("Unable to load syntax/semantic model.");
+
+    // Find innermost executable node (method, lambda, local func) containing the line
+    var executableNodes = root.DescendantNodes()
+        .Where(n =>
+            n is BaseMethodDeclarationSyntax ||
+            n is AnonymousFunctionExpressionSyntax ||
+            n is LocalFunctionStatementSyntax);
+
+    SyntaxNode? scopeNode = null;
+
+    foreach (var node in executableNodes)
+    {
+      var span = node.GetLocation().GetLineSpan().Span;
+      var start = span.Start.Line + 1;
+      var end = span.End.Line + 1;
+
+      if (lineNumber >= start && lineNumber <= end)
+      {
+        if (scopeNode == null || node.Span.Length < scopeNode.Span.Length)
+        {
+          // Choose the *smallest* containing node to get innermost scope
+          scopeNode = node;
+        }
+      }
+    }
+
+    if (scopeNode == null)
+      throw new Exception($"No executable scope found at line {lineNumber}");
+
+    // Use position at start of the scope node body (or node span start if no body)
+    var position = scopeNode switch
+    {
+      BaseMethodDeclarationSyntax m => m.Body?.OpenBraceToken.Span.End ?? m.SpanStart,
+      AnonymousFunctionExpressionSyntax a => a.Body?.SpanStart ?? a.SpanStart,
+      LocalFunctionStatementSyntax l => l.Body?.OpenBraceToken.Span.End ?? l.SpanStart,
+      _ => scopeNode.SpanStart
+    };
+
+    // Lookup locals and parameters visible at this position
+    var symbolsInScope = semanticModel.LookupSymbols(position)
+        .Where(s => s.Kind == SymbolKind.Local || s.Kind == SymbolKind.Parameter)
+        .Distinct(SymbolEqualityComparer.Default);
+
+    var results = new List<VariableResult>();
+
+    foreach (var symbol in symbolsInScope)
+    {
+      var location = symbol.Locations.FirstOrDefault();
+      if (location == null || !location.IsInSource)
+        continue;
+
+      var symbolSpan = location.GetLineSpan().Span;
+
+      results.Add(new VariableResult(
+          Identifier: symbol.Name,
+          LineStart: symbolSpan.Start.Line + 1,
+          LineEnd: symbolSpan.End.Line + 1,
+          ColumnStart: symbolSpan.Start.Character + 1,
+          ColumnEnd: symbolSpan.End.Character + 1
+      ));
+    }
+
+    return results;
   }
 
   public async Task<bool> BootstrapFile(string filePath, Kind kind, bool preferFileScopedNamespace, CancellationToken cancellationToken)
