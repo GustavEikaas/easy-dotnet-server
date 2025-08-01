@@ -72,7 +72,10 @@ public class RoslynService(RoslynProjectMetadataCache cache)
     }
 
     if (scopeNode == null)
-      throw new Exception($"No executable scope found at line {lineNumber}");
+    {
+      //Top scope e.g Program.cs
+      return [];
+    }
 
     // Use position at start of the scope node body (or node span start if no body)
     var position = scopeNode switch
@@ -98,13 +101,16 @@ public class RoslynService(RoslynProjectMetadataCache cache)
 
       var symbolSpan = location.GetLineSpan().Span;
 
-      results.Add(new VariableResult(
-          Identifier: symbol.Name,
-          LineStart: symbolSpan.Start.Line + 1,
-          LineEnd: symbolSpan.End.Line + 1,
-          ColumnStart: symbolSpan.Start.Character + 1,
-          ColumnEnd: symbolSpan.End.Character + 1
-      ));
+      if (symbolSpan.Start.Line < lineNumber - 1)
+      {
+        results.Add(new VariableResult(
+            Identifier: symbol.Name,
+            LineStart: symbolSpan.Start.Line + 1,
+            LineEnd: symbolSpan.End.Line + 1,
+            ColumnStart: symbolSpan.Start.Character + 1,
+            ColumnEnd: symbolSpan.End.Character + 1
+        ));
+      }
     }
 
     return results;
