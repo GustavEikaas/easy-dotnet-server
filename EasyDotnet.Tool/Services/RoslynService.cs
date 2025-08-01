@@ -53,27 +53,20 @@ public class RoslynService(RoslynProjectMetadataCache cache)
             n is AnonymousFunctionExpressionSyntax ||
             n is LocalFunctionStatementSyntax);
 
-    SyntaxNode? scopeNode = null;
-
-    foreach (var node in executableNodes)
-    {
-      var span = node.GetLocation().GetLineSpan().Span;
-      var start = span.Start.Line + 1;
-      var end = span.End.Line + 1;
-
-      if (lineNumber >= start && lineNumber <= end)
-      {
-        if (scopeNode == null || node.Span.Length < scopeNode.Span.Length)
+    var scopeNode = executableNodes
+        .Where(node =>
         {
-          // Choose the *smallest* containing node to get innermost scope
-          scopeNode = node;
-        }
-      }
-    }
+          var span = node.GetLocation().GetLineSpan().Span;
+          var start = span.Start.Line + 1;
+          var end = span.End.Line + 1;
+          return lineNumber >= start && lineNumber <= end;
+        })
+        .OrderBy(node => node.Span.Length) // Innermost = smallest span
+        .FirstOrDefault();
 
     if (scopeNode == null)
     {
-      //Top scope e.g Program.cs
+      // Top scope, e.g., Program.cs
       return [];
     }
 
@@ -91,27 +84,27 @@ public class RoslynService(RoslynProjectMetadataCache cache)
         .Where(s => s.Kind == SymbolKind.Local || s.Kind == SymbolKind.Parameter)
         .Distinct(SymbolEqualityComparer.Default);
 
-    var results = new List<VariableResult>();
-
-    foreach (var symbol in symbolsInScope)
-    {
-      var location = symbol.Locations.FirstOrDefault();
-      if (location == null || !location.IsInSource)
-        continue;
-
-      var symbolSpan = location.GetLineSpan().Span;
-
-      if (symbolSpan.Start.Line < lineNumber - 1)
-      {
-        results.Add(new VariableResult(
-            Identifier: symbol.Name,
-            LineStart: symbolSpan.Start.Line + 1,
-            LineEnd: symbolSpan.End.Line + 1,
-            ColumnStart: symbolSpan.Start.Character + 1,
-            ColumnEnd: symbolSpan.End.Character + 1
-        ));
-      }
-    }
+    var results = symbolsInScope
+        .Select(symbol => new
+        {
+          Symbol = symbol,
+          Location = symbol.Locations.FirstOrDefault()
+        })
+        .Where(x => x.Location != null && x.Location.IsInSource)
+        .Select(x => new
+        {
+          x.Symbol,
+          x.Location!.GetLineSpan().Span
+        })
+        .Where(x => x.Span.Start.Line < lineNumber - 1)
+        .Select(x => new VariableResult(
+            Identifier: x.Symbol.Name,
+            LineStart: x.Span.Start.Line + 1,
+            LineEnd: x.Span.End.Line + 1,
+            ColumnStart: x.Span.Start.Character + 1,
+            ColumnEnd: x.Span.End.Character + 1
+        ))
+        .ToList();
 
     return results;
   }
