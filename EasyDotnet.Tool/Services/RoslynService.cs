@@ -70,14 +70,9 @@ public class RoslynService(RoslynProjectMetadataCache cache)
       return [];
     }
 
-    // Use position at start of the scope node body (or node span start if no body)
-    var position = scopeNode switch
-    {
-      BaseMethodDeclarationSyntax m => m.Body?.OpenBraceToken.Span.End ?? m.SpanStart,
-      AnonymousFunctionExpressionSyntax a => a.Body?.SpanStart ?? a.SpanStart,
-      LocalFunctionStatementSyntax l => l.Body?.OpenBraceToken.Span.End ?? l.SpanStart,
-      _ => scopeNode.SpanStart
-    };
+    var text = await document.GetTextAsync();
+    var line = text.Lines[Math.Clamp(lineNumber - 1, 0, text.Lines.Count - 1)];
+    var position = line.Start;
 
     // Lookup locals and parameters visible at this position
     var symbolsInScope = semanticModel.LookupSymbols(position)
