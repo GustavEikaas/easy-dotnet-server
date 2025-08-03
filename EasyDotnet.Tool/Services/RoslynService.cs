@@ -101,7 +101,39 @@ public class RoslynService(RoslynProjectMetadataCache cache)
         ))
         .ToList();
 
+    var thisVariable = TryResolveThis(semanticModel, root, position);
+    if (thisVariable != null)
+    {
+      results.Add(thisVariable);
+    }
+
     return results;
+  }
+
+
+  private VariableResult? TryResolveThis(SemanticModel semanticModel, SyntaxNode root, int position) =>
+    semanticModel.GetEnclosingSymbol(position) switch
+    {
+      IMethodSymbol { IsStatic: false, ContainingType: var type } when type is not null =>
+          root.FindToken(position).Parent?.AncestorsAndSelf()
+              .OfType<ClassDeclarationSyntax>()
+              .FirstOrDefault() is { } classNode
+              ? CreateThisVariableResult(classNode)
+              : null,
+
+      _ => null
+    };
+
+  private static VariableResult CreateThisVariableResult(ClassDeclarationSyntax classNode)
+  {
+    var span = classNode.Identifier.GetLocation().GetLineSpan().Span;
+    return new VariableResult(
+        Identifier: "this",
+        LineStart: span.Start.Line + 1,
+        LineEnd: span.End.Line + 1,
+        ColumnStart: span.Start.Character + 1,
+        ColumnEnd: span.End.Character + 1
+    );
   }
 
   public async Task<bool> BootstrapFile(string filePath, Kind kind, bool preferFileScopedNamespace, CancellationToken cancellationToken)
