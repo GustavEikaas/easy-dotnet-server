@@ -52,6 +52,14 @@
 
 **Returns:** `Task<BootstrapFileResultResponse>`
 
+### `roslyn/scope-variables`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| sourceFilePath | string |   |
+| lineNumber | int |   |
+
+**Returns:** `Task<IAsyncEnumerable<VariableResultResponse>>`
+
 ---
 
 ## OutdatedController

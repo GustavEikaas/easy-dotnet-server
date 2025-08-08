@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Services;
@@ -15,4 +17,10 @@ public class RoslynController(RoslynService roslynService) : BaseController
     return new(success);
   }
 
+  [JsonRpcMethod("roslyn/scope-variables")]
+  public async Task<IAsyncEnumerable<VariableResultResponse>> GetVariablesFromScopes(string sourceFilePath, int lineNumber)
+  {
+    var res = await roslynService.AnalyzeAsync(sourceFilePath, lineNumber);
+    return res.Select(x => new VariableResultResponse(x.Identifier, x.LineStart, x.LineEnd, x.ColumnStart, x.ColumnEnd)).AsAsyncEnumerable();
+  }
 }

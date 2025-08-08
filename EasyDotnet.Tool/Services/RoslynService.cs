@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -11,6 +12,8 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.MSBuild;
 
 namespace EasyDotnet.Services;
+
+public sealed record VariableResult(string Identifier, int LineStart, int LineEnd, int ColumnStart, int ColumnEnd);
 
 public class RoslynService(RoslynProjectMetadataCache cache)
 {
@@ -28,6 +31,109 @@ public class RoslynService(RoslynProjectMetadataCache cache)
     return !cache.TryGet(projectPath, out var updatedProject) || updatedProject is null
       ? throw new Exception("Caching failed after setting project metadata.")
       : updatedProject;
+  }
+
+  public async Task<List<VariableResult>> AnalyzeAsync(string sourceFilePath, int lineNumber)
+  {
+    using var workspace = MSBuildWorkspace.Create();
+
+    var csprojPath = FindCsprojFromFile(sourceFilePath);
+    var project = await workspace.OpenProjectAsync(csprojPath);
+    var document = project.Documents.FirstOrDefault(d => string.Equals(d.FilePath, sourceFilePath, StringComparison.OrdinalIgnoreCase)) ?? throw new Exception("Document not found.");
+    var root = await document.GetSyntaxRootAsync();
+    var semanticModel = await document.GetSemanticModelAsync();
+
+    if (root == null || semanticModel == null)
+      throw new Exception("Unable to load syntax/semantic model.");
+
+    // Find innermost executable node (method, lambda, local func) containing the line
+    var executableNodes = root.DescendantNodes()
+        .Where(n =>
+            n is BaseMethodDeclarationSyntax ||
+            n is AnonymousFunctionExpressionSyntax ||
+            n is LocalFunctionStatementSyntax);
+
+    var scopeNode = executableNodes
+        .Where(node =>
+        {
+          var span = node.GetLocation().GetLineSpan().Span;
+          var start = span.Start.Line + 1;
+          var end = span.End.Line + 1;
+          return lineNumber >= start && lineNumber <= end;
+        })
+        .OrderBy(node => node.Span.Length) // Innermost = smallest span
+        .FirstOrDefault();
+
+    if (scopeNode == null)
+    {
+      // Top scope, e.g., Program.cs
+      return [];
+    }
+
+    var text = await document.GetTextAsync();
+    var line = text.Lines[Math.Clamp(lineNumber - 1, 0, text.Lines.Count - 1)];
+    var position = line.Start;
+
+    // Lookup locals and parameters visible at this position
+    var symbolsInScope = semanticModel.LookupSymbols(position)
+        .Where(s => s.Kind == SymbolKind.Local || s.Kind == SymbolKind.Parameter)
+        .Distinct(SymbolEqualityComparer.Default);
+
+    var results = symbolsInScope
+        .Select(symbol => new
+        {
+          Symbol = symbol,
+          Location = symbol.Locations.FirstOrDefault()
+        })
+        .Where(x => x.Location != null && x.Location.IsInSource)
+        .Select(x => new
+        {
+          x.Symbol,
+          x.Location!.GetLineSpan().Span
+        })
+        .Where(x => x.Span.Start.Line < lineNumber - 1)
+        .Select(x => new VariableResult(
+            Identifier: x.Symbol.Name,
+            LineStart: x.Span.Start.Line + 1,
+            LineEnd: x.Span.End.Line + 1,
+            ColumnStart: x.Span.Start.Character + 1,
+            ColumnEnd: x.Span.End.Character + 1
+        ))
+        .ToList();
+
+    var thisVariable = TryResolveThis(semanticModel, root, position);
+    if (thisVariable != null)
+    {
+      results.Add(thisVariable);
+    }
+
+    return results;
+  }
+
+
+  private VariableResult? TryResolveThis(SemanticModel semanticModel, SyntaxNode root, int position) =>
+    semanticModel.GetEnclosingSymbol(position) switch
+    {
+      IMethodSymbol { IsStatic: false, ContainingType: var type } when type is not null =>
+          root.FindToken(position).Parent?.AncestorsAndSelf()
+              .OfType<ClassDeclarationSyntax>()
+              .FirstOrDefault() is { } classNode
+              ? CreateThisVariableResult(classNode)
+              : null,
+
+      _ => null
+    };
+
+  private static VariableResult CreateThisVariableResult(ClassDeclarationSyntax classNode)
+  {
+    var span = classNode.Identifier.GetLocation().GetLineSpan().Span;
+    return new VariableResult(
+        Identifier: "this",
+        LineStart: span.Start.Line + 1,
+        LineEnd: span.End.Line + 1,
+        ColumnStart: span.Start.Character + 1,
+        ColumnEnd: span.End.Character + 1
+    );
   }
 
   public async Task<bool> BootstrapFile(string filePath, Kind kind, bool preferFileScopedNamespace, CancellationToken cancellationToken)
