@@ -1,4 +1,4 @@
-
+using System;
 using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -8,43 +8,84 @@ namespace EasyDotnet.Utils;
 
 public static class NJsonClassExtractor
 {
-  public static string ExtractClassWithNamespace(string generatedCode, string targetNamespace)
+  public static string ExtractClassesWithNamespace(string generatedCode, string targetNamespace, bool preferFileScopedNamespace)
   {
     var tree = CSharpSyntaxTree.ParseText(generatedCode);
     var root = tree.GetCompilationUnitRoot();
 
-    var classDeclaration = root.DescendantNodes()
+    var usingDirective = SyntaxFactory.UsingDirective(
+        SyntaxFactory.ParseName("System.Text.Json.Serialization"));
+
+    var cleanedClasses = root.DescendantNodes()
         .OfType<ClassDeclarationSyntax>()
-        .FirstOrDefault() ?? throw new System.Exception("Json contains no class definition");
-
-    var cleanClass = classDeclaration.WithAttributeLists(
-        SyntaxFactory.List<AttributeListSyntax>());
-
-    var cleanProperties = cleanClass.Members
-        .OfType<PropertyDeclarationSyntax>()
-        .Select(prop => prop.WithAttributeLists(SyntaxFactory.List<AttributeListSyntax>()))
+        .Select(CleanClassDeclaration)
         .Cast<MemberDeclarationSyntax>()
         .ToList();
 
-    cleanClass = cleanClass.WithMembers(SyntaxFactory.List(cleanProperties));
-
-    var modifiers = cleanClass.Modifiers.Where(m => !m.IsKind(SyntaxKind.PartialKeyword));
-    cleanClass = cleanClass.WithModifiers(SyntaxFactory.TokenList(modifiers));
-
-    if (!string.IsNullOrEmpty(targetNamespace))
+    if (cleanedClasses.Count == 0)
     {
-      var fileScopedNamespace = SyntaxFactory.FileScopedNamespaceDeclaration(
-          SyntaxFactory.IdentifierName(targetNamespace))
-          .WithMembers(SyntaxFactory.SingletonList<MemberDeclarationSyntax>(cleanClass));
-
-      var compilationUnit = SyntaxFactory.CompilationUnit()
-          .WithMembers(SyntaxFactory.SingletonList<MemberDeclarationSyntax>(fileScopedNamespace));
-
-      return compilationUnit.NormalizeWhitespace().ToFullString();
+      throw new Exception("Json contains no class definitions");
     }
 
-    var formattedClass = cleanClass.NormalizeWhitespace().ToFullString();
+    var namespaceDecl = preferFileScopedNamespace
+        ? SyntaxFactory.FileScopedNamespaceDeclaration(
+              SyntaxFactory.IdentifierName(targetNamespace))
+            .WithMembers(SyntaxFactory.List(cleanedClasses))
+        : (MemberDeclarationSyntax)SyntaxFactory.NamespaceDeclaration(
+              SyntaxFactory.IdentifierName(targetNamespace))
+            .WithMembers(SyntaxFactory.List(cleanedClasses));
 
-    return formattedClass;
+    var compilationUnit = SyntaxFactory.CompilationUnit()
+        .WithUsings(SyntaxFactory.SingletonList(usingDirective))
+        .WithMembers(SyntaxFactory.SingletonList(namespaceDecl));
+
+    return compilationUnit.NormalizeWhitespace().ToFullString();
+  }
+
+  private static bool IsAdditionalPropertiesField(PropertyDeclarationSyntax prop)
+  {
+    if (prop.Identifier.Text != "AdditionalProperties")
+    {
+      return false;
+    }
+
+    var typeString = prop.Type.ToString();
+    return typeString == "System.Collections.Generic.IDictionary<string, object>";
+  }
+
+  private static ClassDeclarationSyntax CleanClassDeclaration(ClassDeclarationSyntax classDecl)
+  {
+    var cleanedClass = classDecl.WithAttributeLists(SyntaxFactory.List<AttributeListSyntax>());
+
+    var modifiers = cleanedClass.Modifiers.Where(m => !m.IsKind(SyntaxKind.PartialKeyword));
+    cleanedClass = cleanedClass.WithModifiers(SyntaxFactory.TokenList(modifiers));
+
+    var cleanedProperties = classDecl.Members
+        .OfType<PropertyDeclarationSyntax>()
+        .Where(prop => !IsAdditionalPropertiesField(prop))
+        .Select(CleanPropertyDeclaration)
+        .Cast<MemberDeclarationSyntax>()
+        .ToList();
+
+    return cleanedClass.WithMembers(SyntaxFactory.List(cleanedProperties));
+  }
+
+  private static PropertyDeclarationSyntax CleanPropertyDeclaration(PropertyDeclarationSyntax prop)
+  {
+    var jsonPropertyAttributes = prop.AttributeLists
+        .SelectMany(attrList => attrList.Attributes)
+        .Where(attr =>
+            attr.Name.ToString().EndsWith("JsonPropertyName") ||
+            attr.Name.ToString().EndsWith("JsonPropertyNameAttribute"))
+        .Select(attr =>
+            SyntaxFactory.Attribute(SyntaxFactory.IdentifierName("JsonPropertyName"))
+                .WithArgumentList(attr.ArgumentList));
+
+    var newAttributeList = SyntaxFactory.AttributeList(SyntaxFactory.SeparatedList(jsonPropertyAttributes));
+
+    return prop.WithAttributeLists(
+        newAttributeList.Attributes.Count > 0
+            ? SyntaxFactory.SingletonList(newAttributeList)
+            : SyntaxFactory.List<AttributeListSyntax>());
   }
 }

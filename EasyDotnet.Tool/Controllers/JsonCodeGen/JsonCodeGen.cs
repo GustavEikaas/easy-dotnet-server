@@ -14,7 +14,7 @@ namespace EasyDotnet.Controllers.JsonCodeGen;
 public class JsonCodeGen : BaseController
 {
   [JsonRpcMethod("json-code-gen")]
-  public static async Task<IEnumerable<object>> JsonToCode(string jsonData, string filePath)
+  public static async Task<IEnumerable<object>> JsonToCode(string jsonData, string filePath, bool preferFileScopedNamespace)
   {
     var schema = JsonSchema.FromSampleJson(jsonData);
 
@@ -22,7 +22,7 @@ public class JsonCodeGen : BaseController
     {
       GenerateDataAnnotations = false,
       GenerateJsonMethods = false,
-      JsonLibrary = CSharpJsonLibrary.SystemTextJson, // This should remove Newtonsoft attributes
+      JsonLibrary = CSharpJsonLibrary.SystemTextJson,
       GenerateOptionalPropertiesAsNullable = false,
       GenerateNullableReferenceTypes = false,
       ClassStyle = CSharpClassStyle.Poco,
@@ -48,9 +48,9 @@ public class JsonCodeGen : BaseController
     var nsSuffix = relativePath.Replace(Path.DirectorySeparatorChar, '.');
     var fullNamespace = string.IsNullOrEmpty(nsSuffix) ? rootNamespace : $"{rootNamespace}.{nsSuffix}";
 
-    var cleanClassOnly = NJsonClassExtractor.ExtractClassWithNamespace(code, fullNamespace!);
+    var cleanClassesOnly = NJsonClassExtractor.ExtractClassesWithNamespace(code, fullNamespace!, preferFileScopedNamespace);
 
-    File.WriteAllText(filePath, cleanClassOnly);
+    File.WriteAllText(filePath, cleanClassesOnly);
     return [];
   }
 
