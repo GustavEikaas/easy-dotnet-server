@@ -4,6 +4,7 @@ using EasyDotnet.Services;
 using EasyDotnet.Utils;
 using Microsoft.Extensions.DependencyInjection;
 using StreamJsonRpc;
+using ZiggyCreatures.Caching.Fusion;
 
 namespace EasyDotnet;
 
@@ -15,6 +16,8 @@ public static class DiModules
     var services = new ServiceCollection();
     services.AddSingleton(jsonRpc);
     services.AddSingleton<ClientService>();
+    // services.AddSingleton<IFusionCache>();
+    services.AddFusionCache();
 
     services.AddTransient<MsBuildService>();
     services.AddTransient<UserSecretsService>();
