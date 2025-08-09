@@ -1,4 +1,5 @@
 using System.Threading.Tasks;
+using EasyDotnet.MsBuild.Contracts;
 using EasyDotnet.Services;
 using StreamJsonRpc;
 
@@ -14,4 +15,14 @@ public class MsBuildController(ClientService clientService, MsBuildService msBui
 
     return new(result.Success);
   }
+
+  [JsonRpcMethod("msbuild/project-properties")]
+  public async Task<DotnetProjectProperties> QueryProperties(QueryProjectPropertiesRequest request)
+  {
+    clientService.ThrowIfNotInitialized();
+    var result = await msBuild.QueryProjectProperties(request.TargetPath, request.ConfigurationOrDefault, request.TargetFramework);
+
+    return result;
+  }
+
 }

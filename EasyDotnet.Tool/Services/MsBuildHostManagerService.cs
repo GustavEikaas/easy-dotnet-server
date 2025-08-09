@@ -113,6 +113,17 @@ public class MsBuildHost(string pipeName)
     return await _rpc.InvokeWithParameterObjectAsync<BuildResult>("msbuild/build", request);
   }
 
+  public async Task<DotnetProjectProperties> QueryProjectProperties(string targetPath, string configuration, string targetFramework)
+  {
+    if (_rpc == null)
+    {
+      throw new InvalidOperationException("BuildClient not connected.");
+    }
+
+    var request = new { TargetPath = targetPath, Configuration = configuration, targetFramework };
+    return await _rpc.InvokeWithParameterObjectAsync<DotnetProjectProperties>("msbuild/query-project-properties", request);
+  }
+
   public void StopServer()
   {
     if (_serverProcess != null && !_serverProcess.HasExited)
