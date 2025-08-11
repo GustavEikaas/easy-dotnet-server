@@ -1,8 +1,8 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using EasyDotnet.Controllers.Roslyn;
 using EasyDotnet.Utils;
 using Microsoft.CodeAnalysis.MSBuild;
 using NJsonSchema;
@@ -14,8 +14,13 @@ namespace EasyDotnet.Controllers.JsonCodeGen;
 public class JsonCodeGen : BaseController
 {
   [JsonRpcMethod("json-code-gen")]
-  public static async Task<IEnumerable<object>> JsonToCode(string jsonData, string filePath, bool preferFileScopedNamespace)
+  public static async Task<BootstrapFileResultResponse> JsonToCode(string jsonData, string filePath, bool preferFileScopedNamespace)
   {
+    if (File.Exists(filePath) && new FileInfo(filePath).Length > 0)
+    {
+      return new(false);
+    }
+
     var schema = JsonSchema.FromSampleJson(jsonData);
 
     var generator = new CSharpGenerator(schema, new CSharpGeneratorSettings
@@ -51,7 +56,7 @@ public class JsonCodeGen : BaseController
     var cleanClassesOnly = NJsonClassExtractor.ExtractClassesWithNamespace(code, fullNamespace!, preferFileScopedNamespace);
 
     File.WriteAllText(filePath, cleanClassesOnly);
-    return [];
+    return new(true);
   }
 
   private static string FindCsprojFromFile(string filePath)
