@@ -44,7 +44,7 @@ public class InitializeController(ClientService clientService) : BaseController
   private static List<string> GetRpcPaths() =>
       [.. AssemblyScanner.GetControllerTypes()
           .SelectMany(rpcType =>
-              rpcType.GetMethods(BindingFlags.Instance | BindingFlags.Public)
+              rpcType.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public)
                   .Where(m => m.GetCustomAttribute<JsonRpcMethodAttribute>() is not null)
                   .Select(m => m.GetCustomAttribute<JsonRpcMethodAttribute>()!.Name)
           )];
@@ -52,7 +52,7 @@ public class InitializeController(ClientService clientService) : BaseController
   private static List<string> GetRpcNotifications() =>
       [.. AssemblyScanner.GetNotificationDispatchers()
           .SelectMany(rpcType =>
-              rpcType.GetMethods(BindingFlags.Instance | BindingFlags.Public)
+              rpcType.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public)
                   .Where(m => m.GetCustomAttribute<RpcNotificationAttribute>() is not null)
                   .Select(m => m.GetCustomAttribute<RpcNotificationAttribute>()!.Name)
           )];

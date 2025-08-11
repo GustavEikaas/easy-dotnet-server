@@ -79,7 +79,7 @@ public static class RpcDocGenerator
   private static List<RpcApiDoc> GenerateDocStructure() => [.. AssemblyScanner.GetControllerTypes()
         .Select(rpcType =>
         {
-          var methods = rpcType.GetMethods(BindingFlags.Instance | BindingFlags.Public)
+          var methods = rpcType.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public)
               .Where(m => m.GetCustomAttribute<JsonRpcMethodAttribute>() is not null)
               .Select(m =>
               {
