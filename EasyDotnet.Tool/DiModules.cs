@@ -26,6 +26,7 @@ public static class DiModules
     services.AddTransient<OutdatedService>();
     services.AddSingleton<IFileSystem, FileSystem>();
     services.AddSingleton<RoslynService>();
+    services.AddSingleton<TemplateEngineService>();
     services.AddSingleton<RoslynProjectMetadataCache>();
     services.AddSingleton<IMsBuildHostManager, MsBuildHostManager>();
 
