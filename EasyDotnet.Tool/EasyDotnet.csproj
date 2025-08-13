@@ -35,6 +35,9 @@
     <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="4.13.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.6" />
     <PackageReference Include="Microsoft.TestPlatform.TranslationLayer" Version="17.13.0" />
+    <PackageReference Include="Microsoft.TemplateEngine.Edge" Version="9.0.304" />
+    <PackageReference Include="Microsoft.TemplateEngine.IDE" Version="9.0.304" />
+    <PackageReference Include="Microsoft.TemplateEngine.Utils" Version="9.0.304" />
     <PackageReference Include="MSTest.TestAdapter" Version="3.3.1" />
     <PackageReference Include="MSTest.TestFramework" Version="3.3.1" />
     <PackageReference Include="Microsoft.TestPlatform" Version="17.13.0" />
