@@ -32,22 +32,27 @@ public class BootstrapTests
         var recordDecl = await GetNode<RecordDeclarationSyntax>(res.SyntaxTree);
         Assert.NotNull(recordDecl);
         Assert.Equal("MyController", recordDecl.Identifier.Text);
+        Assert.True(
+            ns!.Members.Contains(recordDecl),
+            "Record is not inside the namespace.");
         break;
 
       case Kind.Class:
         var classDecl = await GetNode<ClassDeclarationSyntax>(res.SyntaxTree);
         Assert.NotNull(classDecl);
         Assert.Equal("MyController", classDecl.Identifier.Text);
+        Assert.True(
+            ns!.Members.Contains(classDecl),
+            "Class is not inside the namespace.");
         break;
 
       case Kind.Interface:
         var interfaceDecl = await GetNode<InterfaceDeclarationSyntax>(res.SyntaxTree);
         Assert.NotNull(interfaceDecl);
         Assert.Equal("IMyController", interfaceDecl.Identifier.Text);
-        break;
-
-      default:
-        Assert.Fail($"Unsupported kind: {kind}");
+        Assert.True(
+            ns!.Members.Contains(interfaceDecl),
+            "Interface is not inside the namespace.");
         break;
     }
   }
