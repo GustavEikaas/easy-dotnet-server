@@ -155,14 +155,15 @@ public class RoslynService(RoslynProjectMetadataCache cache)
 
     var typeDecl = CreateTypeDeclaration(kind, className);
 
-    MemberDeclarationSyntax nsDeclaration = useFileScopedNs
+    BaseNamespaceDeclarationSyntax nsDeclaration = useFileScopedNs
         ? SyntaxFactory.FileScopedNamespaceDeclaration(SyntaxFactory.ParseName(fullNamespace))
-        : SyntaxFactory.NamespaceDeclaration(SyntaxFactory.ParseName(fullNamespace));
+              .AddMembers(typeDecl)
+        : SyntaxFactory.NamespaceDeclaration(SyntaxFactory.ParseName(fullNamespace))
+              .AddMembers(typeDecl);
 
     var unit = SyntaxFactory.CompilationUnit()
-      .AddMembers(nsDeclaration)
-      .AddMembers(typeDecl)
-      .NormalizeWhitespace(eol: Environment.NewLine);
+        .AddMembers(nsDeclaration)
+        .NormalizeWhitespace(eol: Environment.NewLine);
 
     if (preferFileScopedNamespace)
     {
