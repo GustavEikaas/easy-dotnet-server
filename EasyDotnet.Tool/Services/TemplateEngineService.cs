@@ -19,6 +19,9 @@ public class TemplateEngineService(IMsBuildHostManager manager)
         hostIdentifier: "easy-dotnet",
         version: "1.0.0");
 
+  private const string FrameworkParamKey = "Framework";
+  private const string TargetFrameworkOverrideParamKey = "TargetFrameworkOverride";
+
   private static readonly string TemplatesRoot = @"C:\Program Files\dotnet\templates";
 
   public async Task EnsureInstalled()
@@ -76,14 +79,14 @@ public class TemplateEngineService(IMsBuildHostManager manager)
     var result = await sdkBuildHost.QuerySdkInstallations();
     var monikers = result.Select(x => x.Moniker).ToList();
 
-
     var parameters = template.ParameterDefinitions
         .Where(p => p.Precedence.PrecedenceDefinition != PrecedenceDefinition.Implicit)
+        .Where(x => x.Name != TargetFrameworkOverrideParamKey)
         .Select(p =>
         {
-          if (p.Name != "Framework") return p;
+          if (p.Name != FrameworkParamKey) return p;
 
-          var choices = p.Choices?.ToDictionary() ?? new Dictionary<string, ParameterChoice>();
+          var choices = p.Choices?.ToDictionary() ?? [];
           foreach (var moniker in monikers)
           {
             if (!choices.ContainsKey(moniker))
@@ -133,16 +136,26 @@ public class TemplateEngineService(IMsBuildHostManager manager)
         loadDefaultComponents: true,
         virtualizeConfiguration: false);
 
+    var updatedParams = OverwriteTargetFrameworkIfSet(parameters);
+
+    await bootstrapper.CreateAsync(template, name, outputPath, updatedParams);
+  }
+
+  public static IReadOnlyDictionary<string, string?> OverwriteTargetFrameworkIfSet(IReadOnlyDictionary<string, string?>? parameters)
+  {
+    if (parameters is null)
+    {
+      return new ReadOnlyDictionary<string, string?>(new Dictionary<string, string?>());
+    }
     var updatedParams = parameters != null
             ? new Dictionary<string, string?>(parameters)
             : [];
 
-    if (updatedParams.TryGetValue("Framework", out var frameworkValue) && !string.IsNullOrWhiteSpace(frameworkValue))
+    if (updatedParams.TryGetValue(FrameworkParamKey, out var frameworkValue) && !string.IsNullOrWhiteSpace(frameworkValue))
     {
-      updatedParams.Remove("Framework");
-      updatedParams["TargetFrameworkOverride"] = frameworkValue;
+      updatedParams.Remove(FrameworkParamKey);
+      updatedParams[TargetFrameworkOverrideParamKey] = frameworkValue;
     }
-
-    await bootstrapper.CreateAsync(template, name, outputPath, updatedParams.AsReadOnly() ?? new ReadOnlyDictionary<string, string?>(new Dictionary<string, string?>()));
+    return updatedParams.AsReadOnly();
   }
 }

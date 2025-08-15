@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -8,11 +7,8 @@ using StreamJsonRpc;
 
 namespace EasyDotnet.Controllers.Template;
 
-public sealed record DotnetNewTemplateResponse(string DisplayName, string Identity, string? Type);
-public sealed record DotnetNewParameterResponse(string Name, string? DefaultValue, string? DefaultIfOptionWithoutValue, string DataType, string? Description, bool IsRequired, IReadOnlyDictionary<string, string>? Choices);
 public class TemplateController(TemplateEngineService templateEngineService) : BaseController
 {
-
   [JsonRpcMethod("template/list")]
   public async Task<IAsyncEnumerable<object>> GetTemplates()
   {
@@ -20,7 +16,6 @@ public class TemplateController(TemplateEngineService templateEngineService) : B
     var templates = await templateEngineService.GetTemplatesAsync();
 
     return templates.Where(x => x.GetLanguage() == "C#").Select(x => new DotnetNewTemplateResponse(x.Name, x.Identity, x.GetTemplateType())).AsAsyncEnumerable();
-    // return templates.AsAsyncEnumerable();
   }
 
   [JsonRpcMethod("template/parameters")]
