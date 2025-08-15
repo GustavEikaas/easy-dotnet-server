@@ -10,7 +10,7 @@ namespace EasyDotnet.Controllers.Template;
 public class TemplateController(TemplateEngineService templateEngineService) : BaseController
 {
   [JsonRpcMethod("template/list")]
-  public async Task<IAsyncEnumerable<object>> GetTemplates()
+  public async Task<IAsyncEnumerable<DotnetNewTemplateResponse>> GetTemplates()
   {
     await templateEngineService.EnsureInstalled();
     var templates = await templateEngineService.GetTemplatesAsync();

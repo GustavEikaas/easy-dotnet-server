@@ -30,6 +30,32 @@
 
 ---
 
+## TemplateController
+
+### `template/list`
+_No parameters_
+
+**Returns:** `Task<IAsyncEnumerable<DotnetNewTemplateResponse>>`
+
+### `template/parameters`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| identity | string |   |
+
+**Returns:** `Task<IAsyncEnumerable<DotnetNewParameterResponse>>`
+
+### `template/instantiate`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| identity | string |   |
+| name | string |   |
+| outputPath | string |   |
+| parameters | Dictionary<string, string> |   |
+
+**Returns:** `Task`
+
+---
+
 ## SolutionController
 
 ### `solution/list-projects`
