@@ -113,6 +113,11 @@ public class MsBuildHost(string pipeName)
     return await _rpc.InvokeWithParameterObjectAsync<BuildResult>("msbuild/build", request);
   }
 
+
+  public async Task<SdkInstallation[]> QuerySdkInstallations() => _rpc != null
+      ? await _rpc.InvokeAsync<SdkInstallation[]>("msbuild/sdk-installations")
+      : throw new InvalidOperationException("BuildClient not connected.");
+
   public void StopServer()
   {
     if (_serverProcess != null && !_serverProcess.HasExited)

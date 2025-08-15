@@ -13,7 +13,7 @@ using Microsoft.TemplateEngine.Utils;
 
 namespace EasyDotnet.Services;
 
-public class TemplateEngineService
+public class TemplateEngineService(IMsBuildHostManager manager)
 {
   private readonly Microsoft.TemplateEngine.Edge.DefaultTemplateEngineHost _host = new(
         hostIdentifier: "easy-dotnet",
@@ -29,55 +29,37 @@ public class TemplateEngineService
         virtualizeConfiguration: false);
 
 
-    var paths = Directory.GetDirectories(TemplatesRoot).ToList()
-      .Select(Path.GetFileName);
+    var paths = Directory.GetDirectories(TemplatesRoot).ToList().Select(Path.GetFileName);
 
+    var highestVersionDir =
+      Directory.GetDirectories(TemplatesRoot).ToList()
+        .Select(Path.GetFileName)
+        .Where(name => Version.TryParse(name, out _))
+        .OrderByDescending(name => Version.Parse(name ?? ""))
+        .FirstOrDefault();
 
-    foreach (var x in paths)
+    if (highestVersionDir == null)
     {
-      var fullPath = Path.Combine(TemplatesRoot, x!);
-      var nupkgs = Directory.GetFiles(fullPath, "*.nupkg");
-      var results = await bootstrapper.InstallTemplatePackagesAsync([.. nupkgs.Select(path => new InstallRequest(path))], InstallationScope.Global, CancellationToken.None);
+      return;
     }
 
-    // .ForEach(async x =>
-    // {
-    //
-    //   var fullPath = Path.Combine(TemplatesRoot, x!);
-    //   var nupkgs = Directory.GetFiles(fullPath, "*.nupkg");
-    //   var results = await bootstrapper.InstallTemplatePackagesAsync([.. nupkgs.Select(path => new InstallRequest(path))], InstallationScope.Global, CancellationToken.None);
-    // });
+    var fullPath = Path.Combine(TemplatesRoot, highestVersionDir);
+    var nupkgs = Directory.GetFiles(fullPath, "*.nupkg");
 
+    var existingPackageNames = new HashSet<string>(
+        (await bootstrapper.GetManagedTemplatePackagesAsync(CancellationToken.None))
+            .Select(x => Path.GetFileName(new Uri(x.MountPointUri).LocalPath)),
+        StringComparer.OrdinalIgnoreCase
+    );
 
-    // var highestVersionDir =
-    //   Directory.GetDirectories(TemplatesRoot).ToList()
-    //     .Select(Path.GetFileName)
-    //     .Where(name => Version.TryParse(name, out _))
-    //     .OrderByDescending(name => Version.Parse(name ?? ""))
-    //     .FirstOrDefault();
-    //
-    // if (highestVersionDir == null)
-    // {
-    //   return;
-    // }
-    //
-    // var fullPath = Path.Combine(TemplatesRoot, highestVersionDir);
-    // var nupkgs = Directory.GetFiles(fullPath, "*.nupkg");
-    //
-    // var existingPackageNames = new HashSet<string>(
-    //     (await bootstrapper.GetManagedTemplatePackagesAsync(CancellationToken.None))
-    //         .Select(x => Path.GetFileName(new Uri(x.MountPointUri).LocalPath)),
-    //     StringComparer.OrdinalIgnoreCase
-    // );
-    //
-    // var missing = nupkgs
-    //     .Where(x => !existingPackageNames.Contains(Path.GetFileName(x)))
-    //     .ToList();
-    //
-    // if (missing.Count != 0)
-    // {
-    //   var results = await bootstrapper.InstallTemplatePackagesAsync([.. missing.Select(path => new InstallRequest(path))], InstallationScope.Global, CancellationToken.None);
-    // }
+    var missing = nupkgs
+        .Where(x => !existingPackageNames.Contains(Path.GetFileName(x)))
+        .ToList();
+
+    if (missing.Count != 0)
+    {
+      var results = await bootstrapper.InstallTemplatePackagesAsync([.. missing.Select(path => new InstallRequest(path))], InstallationScope.Global, CancellationToken.None);
+    }
   }
 
   public async Task<List<ITemplateParameter>> GetTemplateOptions(string identity)
@@ -90,7 +72,43 @@ public class TemplateEngineService
 
     var template = templates.FirstOrDefault(x => x.Identity == identity) ?? throw new Exception($"Failed to find template with id {identity}");
 
-    var parameters = template.ParameterDefinitions.Where(x => x.Precedence.PrecedenceDefinition != PrecedenceDefinition.Implicit).ToList();
+    var sdkBuildHost = await manager.GetOrStartClientAsync(BuildClientType.Sdk);
+    var result = await sdkBuildHost.QuerySdkInstallations();
+    var monikers = result.Select(x => x.Moniker).ToList();
+
+
+    var parameters = template.ParameterDefinitions
+        .Where(p => p.Precedence.PrecedenceDefinition != PrecedenceDefinition.Implicit)
+        .Select(p =>
+        {
+          if (p.Name != "Framework") return p;
+
+          var choices = p.Choices?.ToDictionary() ?? new Dictionary<string, ParameterChoice>();
+          foreach (var moniker in monikers)
+          {
+            if (!choices.ContainsKey(moniker))
+            {
+              choices[moniker] = new ParameterChoice(moniker, moniker);
+            }
+          }
+
+          return new TemplateParameter(
+          p.Name,
+          p.Type,
+          p.DataType,
+          p.Precedence,
+          p.IsName,
+          p.DefaultValue,
+          p.DefaultIfOptionWithoutValue,
+          p.Description,
+          p.DisplayName,
+          p.AllowMultipleValues,
+          choices
+      );
+        })
+        .OrderByDescending(x => x.Precedence.IsRequired)
+        .ToList();
+
     return parameters;
   }
 
@@ -114,6 +132,17 @@ public class TemplateEngineService
         _host,
         loadDefaultComponents: true,
         virtualizeConfiguration: false);
-    await bootstrapper.CreateAsync(template, name, outputPath, parameters ?? new ReadOnlyDictionary<string, string?>(new Dictionary<string, string?>()));
+
+    var updatedParams = parameters != null
+            ? new Dictionary<string, string?>(parameters)
+            : [];
+
+    if (updatedParams.TryGetValue("Framework", out var frameworkValue) && !string.IsNullOrWhiteSpace(frameworkValue))
+    {
+      updatedParams.Remove("Framework");
+      updatedParams["TargetFrameworkOverride"] = frameworkValue;
+    }
+
+    await bootstrapper.CreateAsync(template, name, outputPath, updatedParams.AsReadOnly() ?? new ReadOnlyDictionary<string, string?>(new Dictionary<string, string?>()));
   }
 }

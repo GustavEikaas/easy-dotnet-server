@@ -6,7 +6,7 @@ using StreamJsonRpc;
 
 namespace EasyDotnet.MsBuildSdk.Controllers;
 
-public class MsbuildController
+public class MsbuildController(SdkInstallation[] monikers)
 {
 
   [JsonRpcMethod("msbuild/build")]
@@ -24,6 +24,10 @@ public class MsbuildController
 
     return new MsBuild.Contracts.BuildResult(Success: result.OverallResult == BuildResultCode.Success, logger.Errors, logger.Warnings);
   }
+
+  [JsonRpcMethod("msbuild/sdk-installations")]
+  public SdkInstallation[] QuerySdkInstallations() => monikers;
+
 }
 
 public class InMemoryLogger : ILogger
