@@ -14,4 +14,13 @@ public class MsBuildController(ClientService clientService, MsBuildService msBui
 
     return new(result.Success);
   }
+
+  [JsonRpcMethod("msbuild/query-properties")]
+  public async Task<dynamic> Properties(BuildRequest request)
+  {
+    clientService.ThrowIfNotInitialized();
+    var result = await msBuild.PropertiesAsync(request.TargetPath, request.ConfigurationOrDefault);
+
+    return result;
+  }
 }

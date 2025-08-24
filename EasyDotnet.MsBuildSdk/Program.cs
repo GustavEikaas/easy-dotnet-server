@@ -48,7 +48,7 @@ class Program
 
     var handler = new HeaderDelimitedMessageHandler(stream, stream, jsonMessageFormatter);
     var jsonRpc = new JsonRpc(handler);
-    jsonRpc.AddLocalRpcTarget(new MsbuildController(monikers));
+    jsonRpc.AddLocalRpcTarget(new MsbuildController(monikers, new DotnetProjectCache()));
 
     jsonRpc.StartListening();
     Console.WriteLine($"JSON-RPC listener attached to #{clientId}. Waiting for requests...");

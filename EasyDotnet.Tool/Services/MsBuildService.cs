@@ -13,4 +13,11 @@ public class MsBuildService(IMsBuildHostManager manager)
     var result = await sdkBuildHost.BuildAsync(targetPath, configuration);
     return result;
   }
+
+  public async Task<object> PropertiesAsync(string targetPath, string configuration, CancellationToken cancellationToken = default)
+  {
+    var sdkBuildHost = await manager.GetOrStartClientAsync(BuildClientType.Sdk);
+    var result = await sdkBuildHost.Properties(targetPath, configuration);
+    return result;
+  }
 }
