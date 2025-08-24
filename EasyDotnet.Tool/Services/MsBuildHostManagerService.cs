@@ -104,6 +104,15 @@ public class MsBuildHost(string pipeName)
     _rpc.StartListening();
   }
 
+  public async Task<object> Properties(string targetPath, string configuration)
+  {
+    if (_rpc == null)
+      throw new InvalidOperationException("BuildClient not connected.");
+
+    var request = new { TargetPath = targetPath, Configuration = configuration };
+    return await _rpc.InvokeWithParameterObjectAsync<object>("msbuild/project-properties", request);
+  }
+
   public async Task<BuildResult> BuildAsync(string targetPath, string configuration)
   {
     if (_rpc == null)

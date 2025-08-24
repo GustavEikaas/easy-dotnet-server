@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using EasyDotnet.MsBuild.Contracts;
 using Microsoft.Build.Evaluation;
 using Microsoft.Build.Execution;
@@ -6,7 +7,7 @@ using StreamJsonRpc;
 
 namespace EasyDotnet.MsBuildSdk.Controllers;
 
-public class MsbuildController(SdkInstallation[] monikers)
+public class MsbuildController(SdkInstallation[] monikers, DotnetProjectCache cache)
 {
 
   [JsonRpcMethod("msbuild/build")]
@@ -28,6 +29,59 @@ public class MsbuildController(SdkInstallation[] monikers)
   [JsonRpcMethod("msbuild/sdk-installations")]
   public SdkInstallation[] QuerySdkInstallations() => monikers;
 
+  public class DotnetRecord
+  {
+    public string Path { get; set; } = string.Empty;
+    public string TargetPath { get; set; } = string.Empty;
+    public string OutputPath { get; set; } = string.Empty;
+    public string ResponseTime { get; set; } = "";
+    public bool IsCached { get; set; }
+    public string CacheDir { get; set; } = "";
+  }
+
+  [JsonRpcMethod("msbuild/project-properties")]
+  public DotnetRecord ProjectProperties(string targetPath, string configuration)
+  {
+    var sw = Stopwatch.StartNew();
+    var is_cached = true;
+
+    var record = cache.GetOrCreate(targetPath, (path, cachedir) =>
+           {
+             is_cached = false;
+             var properties = new Dictionary<string, string?>
+              {
+                  { "Configuration", configuration }
+              };
+
+             using var pc = new ProjectCollection();
+             var project = pc.LoadProject(targetPath, properties, toolsVersion: null);
+
+             return new CachedRecord
+             {
+               Path = project.FullPath,
+               TargetPath = project.GetPropertyValue("TargetPath"),
+               OutputPath = project.GetPropertyValue("OutputPath"),
+               Imports = [.. project.Imports.Select(x => x.ImportedProject.FullPath).Where(x => File.Exists(x))],
+               CacheDir = cachedir,
+               LastVerified = DateTime.UtcNow,
+               CreatedAt = DateTime.UtcNow
+             };
+           });
+
+    sw.Stop();
+
+    var elapsedSeconds = sw.Elapsed.TotalSeconds;
+    record.ResponseTime = $"{elapsedSeconds} seconds";
+    return new DotnetRecord()
+    {
+      Path = record.Path,
+      TargetPath = record.TargetPath,
+      OutputPath = record.OutputPath,
+      ResponseTime = record.ResponseTime,
+      IsCached = is_cached,
+      CacheDir = record.CacheDir
+    };
+  }
 }
 
 public class InMemoryLogger : ILogger
