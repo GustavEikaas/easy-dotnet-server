@@ -63,7 +63,11 @@ public class MsBuildHostManager : IMsBuildHostManager, IDisposable
     _buildClientCache.Clear();
   }
 
-  public void Dispose() => StopAll();
+  public void Dispose()
+  {
+    StopAll();
+    GC.SuppressFinalize(this);
+  }
 }
 
 public class MsBuildHost(string pipeName)
@@ -83,16 +87,22 @@ public class MsBuildHost(string pipeName)
     }
   }
 
+  public bool IsAlive() => _serverProcess is not null && !_serverProcess.HasExited;
+
   private async Task ConnectInternalAsync(bool ensureServerStarted)
   {
     if (ensureServerStarted)
     {
       _serverProcess = BuildServerStarter.StartBuildServer(_pipeName);
       await Task.Delay(1000);
+      if (_serverProcess.HasExited)
+      {
+        throw new InvalidOperationException($"Build server process exited prematurely. Exit code: {_serverProcess.ExitCode}");
+      }
     }
 
     var stream = new NamedPipeClientStream(".", _pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
-    await stream.ConnectAsync();
+    await stream.ConnectAsync(5000);
 
     var jsonMessageFormatter = new JsonMessageFormatter
     {
@@ -104,18 +114,31 @@ public class MsBuildHost(string pipeName)
     _rpc.StartListening();
   }
 
-  public async Task<BuildResult> BuildAsync(string targetPath, string configuration)
+  public JsonRpc EnsureRpcAlive()
   {
     if (_rpc == null)
+    {
       throw new InvalidOperationException("BuildClient not connected.");
-
-    var request = new { TargetPath = targetPath, Configuration = configuration };
-    return await _rpc.InvokeWithParameterObjectAsync<BuildResult>("msbuild/build", request);
+    }
+    if (!IsAlive())
+    {
+      throw new InvalidOperationException("BuildServer has crashed");
+    }
+    return _rpc;
   }
 
-  public async Task<SdkInstallation[]> QuerySdkInstallations() => _rpc != null
-      ? await _rpc.InvokeAsync<SdkInstallation[]>("msbuild/sdk-installations")
-      : throw new InvalidOperationException("BuildClient not connected.");
+  public async Task<BuildResult> BuildAsync(string targetPath, string configuration)
+  {
+    var rpc = EnsureRpcAlive();
+    var request = new { TargetPath = targetPath, Configuration = configuration };
+    return await rpc.InvokeWithParameterObjectAsync<BuildResult>("msbuild/build", request);
+  }
+
+  public async Task<SdkInstallation[]> QuerySdkInstallations()
+  {
+    var rpc = EnsureRpcAlive();
+    return await rpc.InvokeAsync<SdkInstallation[]>("msbuild/sdk-installations");
+  }
 
   public void StopServer()
   {
