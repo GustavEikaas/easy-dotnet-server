@@ -10,7 +10,7 @@ public class ServiceProviderTests
   public void TestServiceProviderHasRequiredServicesForControllers()
   {
     var jsonRpc = RpcTestServerInstantiator.GetUninitializedStreamServer();
-    var sp = DiModules.BuildServiceProvider(jsonRpc);
+    var sp = DiModules.BuildServiceProvider(jsonRpc, System.Diagnostics.SourceLevels.Off);
     AssemblyScanner.GetControllerTypes().ForEach(x => sp.GetRequiredService(x));
   }
 }

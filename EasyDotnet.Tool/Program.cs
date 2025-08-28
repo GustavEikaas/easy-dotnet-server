@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
 using System.Linq;
@@ -38,23 +39,34 @@ class Program
       return 0;
     }
 
+    SourceLevels? logLevel = null;
 
-    await StartServerAsync();
+    var logArg = args
+        .SkipWhile(a => !a.Equals("--logLevel", StringComparison.OrdinalIgnoreCase))
+        .Skip(1)
+        .LastOrDefault();
+
+    if (logArg != null && Enum.TryParse<SourceLevels>(logArg, true, out var parsedLevel))
+    {
+      logLevel = parsedLevel;
+    }
+
+    await StartServerAsync(logLevel);
 
     return 0;
   }
 
-  private static async Task StartServerAsync()
+  private static async Task StartServerAsync(SourceLevels? logLevel)
   {
-    var PipeName = GeneratePipeName();
+    var pipeName = GeneratePipeName();
 
     var clientId = 0;
     while (true)
     {
-      var stream = new NamedPipeServerStream(PipeName, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
-      Console.WriteLine($"Named pipe server started: {PipeName}");
+      var stream = new NamedPipeServerStream(pipeName, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+      Console.WriteLine($"Named pipe server started: {pipeName}");
       await stream.WaitForConnectionAsync();
-      _ = RespondToRpcRequestsAsync(stream, ++clientId);
+      _ = RespondToRpcRequestsAsync(stream, ++clientId, logLevel);
     }
   }
 
@@ -66,9 +78,9 @@ class Program
     return pipeName[..Math.Min(pipeName.Length, maxNameLength)];
   }
 
-  private static async Task RespondToRpcRequestsAsync(Stream stream, int clientId)
+  private static async Task RespondToRpcRequestsAsync(Stream stream, int clientId, SourceLevels? logLevel)
   {
-    var rpc = JsonRpcServerBuilder.Build(stream, stream);
+    var rpc = JsonRpcServerBuilder.Build(stream, stream, null, logLevel ?? SourceLevels.Off);
     rpc.StartListening();
     await rpc.Completion;
     await Console.Error.WriteLineAsync($"Connection #{clientId} terminated.");

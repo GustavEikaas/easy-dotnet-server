@@ -25,7 +25,7 @@ public interface IMsBuildHostManager
   void StopAll();
 }
 
-public class MsBuildHostManager : IMsBuildHostManager, IDisposable
+public class MsBuildHostManager(LogService serverLogger) : IMsBuildHostManager, IDisposable
 {
   private const int MaxPipeNameLength = 104;
   private readonly string _sdk_Pipe = GeneratePipeName(BuildClientType.Sdk);
@@ -33,19 +33,17 @@ public class MsBuildHostManager : IMsBuildHostManager, IDisposable
 
   private readonly ConcurrentDictionary<string, MsBuildHost> _buildClientCache = new();
 
-
   public async Task<MsBuildHost> GetOrStartClientAsync(BuildClientType type)
   {
     var client = _buildClientCache.AddOrUpdate(
     type == BuildClientType.Sdk ? _sdk_Pipe : _framework_Pipe,
-    key => new MsBuildHost(key),
+    key => new MsBuildHost(key, serverLogger),
     (key, existingClient) =>
-      existingClient ?? new MsBuildHost(key));
+      existingClient ?? new MsBuildHost(key, serverLogger));
 
     await client.ConnectAsync(ensureServerStarted: true);
     return client;
   }
-
 
   private static string GeneratePipeName(BuildClientType type)
   {
@@ -63,10 +61,14 @@ public class MsBuildHostManager : IMsBuildHostManager, IDisposable
     _buildClientCache.Clear();
   }
 
-  public void Dispose() => StopAll();
+  public void Dispose()
+  {
+    StopAll();
+    GC.SuppressFinalize(this);
+  }
 }
 
-public class MsBuildHost(string pipeName)
+public class MsBuildHost(string pipeName, LogService logger)
 {
   private JsonRpc? _rpc;
   private Process? _serverProcess;
@@ -83,16 +85,24 @@ public class MsBuildHost(string pipeName)
     }
   }
 
+  public bool IsAlive() => _serverProcess is not null && !_serverProcess.HasExited;
+
   private async Task ConnectInternalAsync(bool ensureServerStarted)
   {
     if (ensureServerStarted)
     {
-      _serverProcess = BuildServerStarter.StartBuildServer(_pipeName);
+      _serverProcess = BuildServerStarter.StartBuildServer(_pipeName, logger);
       await Task.Delay(1000);
+      if (_serverProcess.HasExited)
+      {
+        logger.Error($"Build server process exited prematurely. Exit code: {_serverProcess.ExitCode}");
+        throw new InvalidOperationException($"Build server process exited prematurely. Exit code: {_serverProcess.ExitCode}");
+      }
     }
 
     var stream = new NamedPipeClientStream(".", _pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
-    await stream.ConnectAsync();
+    logger.Verbose($"Connecting to {_pipeName}");
+    await stream.ConnectAsync(5000);
 
     var jsonMessageFormatter = new JsonMessageFormatter
     {
@@ -104,23 +114,37 @@ public class MsBuildHost(string pipeName)
     _rpc.StartListening();
   }
 
-  public async Task<BuildResult> BuildAsync(string targetPath, string configuration)
+  public JsonRpc EnsureRpcAlive()
   {
     if (_rpc == null)
+    {
       throw new InvalidOperationException("BuildClient not connected.");
-
-    var request = new { TargetPath = targetPath, Configuration = configuration };
-    return await _rpc.InvokeWithParameterObjectAsync<BuildResult>("msbuild/build", request);
+    }
+    if (!IsAlive())
+    {
+      throw new InvalidOperationException("BuildServer has crashed");
+    }
+    return _rpc;
   }
 
-  public async Task<SdkInstallation[]> QuerySdkInstallations() => _rpc != null
-      ? await _rpc.InvokeAsync<SdkInstallation[]>("msbuild/sdk-installations")
-      : throw new InvalidOperationException("BuildClient not connected.");
+  public async Task<BuildResult> BuildAsync(string targetPath, string configuration)
+  {
+    var rpc = EnsureRpcAlive();
+    var request = new { TargetPath = targetPath, Configuration = configuration };
+    return await rpc.InvokeWithParameterObjectAsync<BuildResult>("msbuild/build", request);
+  }
+
+  public async Task<SdkInstallation[]> QuerySdkInstallations()
+  {
+    var rpc = EnsureRpcAlive();
+    return await rpc.InvokeAsync<SdkInstallation[]>("msbuild/sdk-installations");
+  }
 
   public void StopServer()
   {
     if (_serverProcess != null && !_serverProcess.HasExited)
     {
+      logger.Info($"Stopping build server: {_serverProcess.Id}");
       _serverProcess.Kill(true);
       _serverProcess.Dispose();
     }
@@ -129,7 +153,7 @@ public class MsBuildHost(string pipeName)
 
 public static class BuildServerStarter
 {
-  public static Process StartBuildServer(string pipeName)
+  public static Process StartBuildServer(string pipeName, LogService logger)
   {
     var dir = HostDirectoryUtil.HostDirectory;
 
@@ -147,10 +171,12 @@ public static class BuildServerStarter
       throw new FileNotFoundException("Build server executable not found.", exePath);
     }
 
+    var arguments = $"\"{exePath}\" {pipeName} --logLevel {logger.SourceLevel}";
+
     var startInfo = new ProcessStartInfo
     {
       FileName = "dotnet",
-      Arguments = $"\"{exePath}\" {pipeName}",
+      Arguments = arguments,
       UseShellExecute = false,
       RedirectStandardOutput = true,
       RedirectStandardError = true,
@@ -160,7 +186,7 @@ public static class BuildServerStarter
     var process = new Process { StartInfo = startInfo };
     process.Start();
 
-    Console.WriteLine($"Started BuildServer from: {exePath}");
+    logger.Info($"Started BuildServer from: {exePath} - {arguments}");
 
     return process;
   }
