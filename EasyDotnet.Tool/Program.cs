@@ -80,7 +80,7 @@ class Program
 
   private static async Task RespondToRpcRequestsAsync(Stream stream, int clientId, SourceLevels? logLevel)
   {
-    var rpc = JsonRpcServerBuilder.Build(stream, stream, null, logLevel);
+    var rpc = JsonRpcServerBuilder.Build(stream, stream, null, logLevel ?? SourceLevels.Off);
     rpc.StartListening();
     await rpc.Completion;
     await Console.Error.WriteLineAsync($"Connection #{clientId} terminated.");

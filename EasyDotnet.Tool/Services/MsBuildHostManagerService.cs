@@ -25,7 +25,7 @@ public interface IMsBuildHostManager
   void StopAll();
 }
 
-public class MsBuildHostManager : IMsBuildHostManager, IDisposable
+public class MsBuildHostManager(JsonRpc server) : IMsBuildHostManager, IDisposable
 {
   private const int MaxPipeNameLength = 104;
   private readonly string _sdk_Pipe = GeneratePipeName(BuildClientType.Sdk);
@@ -42,7 +42,7 @@ public class MsBuildHostManager : IMsBuildHostManager, IDisposable
     (key, existingClient) =>
       existingClient ?? new MsBuildHost(key));
 
-    await client.ConnectAsync(ensureServerStarted: true);
+    await client.ConnectAsync(ensureServerStarted: true, server.TraceSource.Switch.Level);
     return client;
   }
 
@@ -78,22 +78,22 @@ public class MsBuildHost(string pipeName)
   private readonly object _connectLock = new();
   private readonly string _pipeName = pipeName;
 
-  public Task ConnectAsync(bool ensureServerStarted = true)
+  public Task ConnectAsync(bool ensureServerStarted = true, SourceLevels? sourceLevel = null)
   {
     lock (_connectLock)
     {
-      _connectTask ??= ConnectInternalAsync(ensureServerStarted);
+      _connectTask ??= ConnectInternalAsync(ensureServerStarted, sourceLevel ?? SourceLevels.Off);
       return _connectTask;
     }
   }
 
   public bool IsAlive() => _serverProcess is not null && !_serverProcess.HasExited;
 
-  private async Task ConnectInternalAsync(bool ensureServerStarted)
+  private async Task ConnectInternalAsync(bool ensureServerStarted, SourceLevels sourceLevel)
   {
     if (ensureServerStarted)
     {
-      _serverProcess = BuildServerStarter.StartBuildServer(_pipeName);
+      _serverProcess = BuildServerStarter.StartBuildServer(_pipeName, sourceLevel);
       await Task.Delay(1000);
       if (_serverProcess.HasExited)
       {
@@ -152,7 +152,7 @@ public class MsBuildHost(string pipeName)
 
 public static class BuildServerStarter
 {
-  public static Process StartBuildServer(string pipeName)
+  public static Process StartBuildServer(string pipeName, SourceLevels sourceLevel)
   {
     var dir = HostDirectoryUtil.HostDirectory;
 
@@ -170,10 +170,12 @@ public static class BuildServerStarter
       throw new FileNotFoundException("Build server executable not found.", exePath);
     }
 
+    var arguments = $"\"{exePath}\" {pipeName} --logLevel {sourceLevel}";
+
     var startInfo = new ProcessStartInfo
     {
       FileName = "dotnet",
-      Arguments = $"\"{exePath}\" {pipeName}",
+      Arguments = arguments,
       UseShellExecute = false,
       RedirectStandardOutput = true,
       RedirectStandardError = true,

@@ -47,21 +47,25 @@ public static class JsonRpcServerBuilder
     ts.Listeners.Add(new ConsoleTraceListener());
 #endif
 
-    ts.Switch.Level = logLevel;
-    var logDir = Path.Combine(Path.GetTempPath(), "easy-dotnet-server");
-    Directory.CreateDirectory(logDir);
 
-    var logFile = Path.Combine(
-        logDir,
-        $"jsonrpc-{DateTime.UtcNow:yyyyMMdd_HHmmss}-{Environment.ProcessId}.log");
-    var traceSource = new TraceSource("StreamJsonRpc", logLevel);
-    var listener = new TextWriterTraceListener(logFile)
+    if (logLevel != SourceLevels.Off)
     {
-      TraceOutputOptions = TraceOptions.Timestamp
-    };
-    WriteLogHeader(listener);
-    jsonRpc.TraceSource.Listeners.Add(listener);
-    Trace.AutoFlush = true;
+      ts.Switch.Level = logLevel;
+      var logDir = Path.Combine(Path.GetTempPath(), "easy-dotnet-server");
+      Directory.CreateDirectory(logDir);
+
+      var logFile = Path.Combine(
+          logDir,
+          $"jsonrpc-easy-dotnet-server-{DateTime.UtcNow:yyyyMMdd_HHmmss}-{Environment.ProcessId}.log");
+      var traceSource = new TraceSource("StreamJsonRpc", logLevel);
+      var listener = new TextWriterTraceListener(logFile);
+      if (logLevel == SourceLevels.Verbose)
+      {
+        WriteLogHeader(listener);
+      }
+      jsonRpc.TraceSource.Listeners.Add(listener);
+      Trace.AutoFlush = true;
+    }
   }
 
   private static void WriteLogHeader(TextWriterTraceListener listener)
@@ -69,7 +73,7 @@ public static class JsonRpcServerBuilder
     var process = Process.GetCurrentProcess();
 
     listener.WriteLine("============================================================");
-    listener.WriteLine(" EasyDotnet JSON-RPC Server Log");
+    listener.WriteLine(" [EasyDotnet] Host Server Log");
     listener.WriteLine("============================================================");
     listener.WriteLine($"Timestamp      : {DateTime.UtcNow:O} (UTC)");
     listener.WriteLine($"ProcessId      : {Environment.ProcessId}");
