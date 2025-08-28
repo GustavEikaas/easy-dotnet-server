@@ -13,13 +13,13 @@ namespace EasyDotnet;
 
 public static class JsonRpcServerBuilder
 {
-  public static JsonRpc Build(Stream writer, Stream reader, Func<JsonRpc, ServiceProvider>? buildServiceProvider = null, SourceLevels? logLevel = SourceLevels.Off)
+  public static JsonRpc Build(Stream writer, Stream reader, Func<JsonRpc, SourceLevels, ServiceProvider>? buildServiceProvider = null, SourceLevels? logLevel = SourceLevels.Off)
   {
     var formatter = CreateJsonMessageFormatter();
     var handler = new HeaderDelimitedMessageHandler(writer, reader, formatter);
     var jsonRpc = new JsonRpc(handler);
 
-    var sp = buildServiceProvider is not null ? buildServiceProvider(jsonRpc) : DiModules.BuildServiceProvider(jsonRpc);
+    var sp = buildServiceProvider is not null ? buildServiceProvider(jsonRpc, logLevel ?? SourceLevels.Off) : DiModules.BuildServiceProvider(jsonRpc, logLevel ?? SourceLevels.Off);
     RegisterControllers(jsonRpc, sp);
     EnableTracingIfNeeded(jsonRpc, logLevel ?? SourceLevels.Off);
 

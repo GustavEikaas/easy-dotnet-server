@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO.Abstractions;
 using DotNetOutdated.Core.Services;
 using EasyDotnet.Services;
@@ -10,7 +11,7 @@ namespace EasyDotnet;
 public static class DiModules
 {
   //Singleton is scoped per client
-  public static ServiceProvider BuildServiceProvider(JsonRpc jsonRpc)
+  public static ServiceProvider BuildServiceProvider(JsonRpc jsonRpc, SourceLevels levels)
   {
     var services = new ServiceCollection();
     services.AddSingleton(jsonRpc);
@@ -29,6 +30,7 @@ public static class DiModules
     services.AddSingleton<TemplateEngineService>();
     services.AddSingleton<RoslynProjectMetadataCache>();
     services.AddSingleton<IMsBuildHostManager, MsBuildHostManager>();
+    services.AddSingleton(new LogService(levels, jsonRpc));
 
     //Dotnet oudated
     services.AddSingleton<IProjectAnalysisService, ProjectAnalysisService>();

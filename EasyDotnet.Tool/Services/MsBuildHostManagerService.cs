@@ -25,7 +25,7 @@ public interface IMsBuildHostManager
   void StopAll();
 }
 
-public class MsBuildHostManager(JsonRpc server) : IMsBuildHostManager, IDisposable
+public class MsBuildHostManager(LogService serverLogger) : IMsBuildHostManager, IDisposable
 {
   private const int MaxPipeNameLength = 104;
   private readonly string _sdk_Pipe = GeneratePipeName(BuildClientType.Sdk);
@@ -33,19 +33,17 @@ public class MsBuildHostManager(JsonRpc server) : IMsBuildHostManager, IDisposab
 
   private readonly ConcurrentDictionary<string, MsBuildHost> _buildClientCache = new();
 
-
   public async Task<MsBuildHost> GetOrStartClientAsync(BuildClientType type)
   {
     var client = _buildClientCache.AddOrUpdate(
     type == BuildClientType.Sdk ? _sdk_Pipe : _framework_Pipe,
-    key => new MsBuildHost(key),
+    key => new MsBuildHost(key, serverLogger),
     (key, existingClient) =>
-      existingClient ?? new MsBuildHost(key));
+      existingClient ?? new MsBuildHost(key, serverLogger));
 
-    await client.ConnectAsync(ensureServerStarted: true, server.TraceSource.Switch.Level);
+    await client.ConnectAsync(ensureServerStarted: true);
     return client;
   }
-
 
   private static string GeneratePipeName(BuildClientType type)
   {
@@ -70,7 +68,7 @@ public class MsBuildHostManager(JsonRpc server) : IMsBuildHostManager, IDisposab
   }
 }
 
-public class MsBuildHost(string pipeName)
+public class MsBuildHost(string pipeName, LogService logger)
 {
   private JsonRpc? _rpc;
   private Process? _serverProcess;
@@ -78,30 +76,32 @@ public class MsBuildHost(string pipeName)
   private readonly object _connectLock = new();
   private readonly string _pipeName = pipeName;
 
-  public Task ConnectAsync(bool ensureServerStarted = true, SourceLevels? sourceLevel = null)
+  public Task ConnectAsync(bool ensureServerStarted = true)
   {
     lock (_connectLock)
     {
-      _connectTask ??= ConnectInternalAsync(ensureServerStarted, sourceLevel ?? SourceLevels.Off);
+      _connectTask ??= ConnectInternalAsync(ensureServerStarted);
       return _connectTask;
     }
   }
 
   public bool IsAlive() => _serverProcess is not null && !_serverProcess.HasExited;
 
-  private async Task ConnectInternalAsync(bool ensureServerStarted, SourceLevels sourceLevel)
+  private async Task ConnectInternalAsync(bool ensureServerStarted)
   {
     if (ensureServerStarted)
     {
-      _serverProcess = BuildServerStarter.StartBuildServer(_pipeName, sourceLevel);
+      _serverProcess = BuildServerStarter.StartBuildServer(_pipeName, logger);
       await Task.Delay(1000);
       if (_serverProcess.HasExited)
       {
+        logger.Error($"Build server process exited prematurely. Exit code: {_serverProcess.ExitCode}");
         throw new InvalidOperationException($"Build server process exited prematurely. Exit code: {_serverProcess.ExitCode}");
       }
     }
 
     var stream = new NamedPipeClientStream(".", _pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+    logger.Verbose($"Connecting to {_pipeName}");
     await stream.ConnectAsync(5000);
 
     var jsonMessageFormatter = new JsonMessageFormatter
@@ -144,6 +144,7 @@ public class MsBuildHost(string pipeName)
   {
     if (_serverProcess != null && !_serverProcess.HasExited)
     {
+      logger.Info($"Stopping build server: {_serverProcess.Id}");
       _serverProcess.Kill(true);
       _serverProcess.Dispose();
     }
@@ -152,7 +153,7 @@ public class MsBuildHost(string pipeName)
 
 public static class BuildServerStarter
 {
-  public static Process StartBuildServer(string pipeName, SourceLevels sourceLevel)
+  public static Process StartBuildServer(string pipeName, LogService logger)
   {
     var dir = HostDirectoryUtil.HostDirectory;
 
@@ -170,7 +171,7 @@ public static class BuildServerStarter
       throw new FileNotFoundException("Build server executable not found.", exePath);
     }
 
-    var arguments = $"\"{exePath}\" {pipeName} --logLevel {sourceLevel}";
+    var arguments = $"\"{exePath}\" {pipeName} --logLevel {logger.SourceLevel}";
 
     var startInfo = new ProcessStartInfo
     {
@@ -185,7 +186,7 @@ public static class BuildServerStarter
     var process = new Process { StartInfo = startInfo };
     process.Start();
 
-    Console.WriteLine($"Started BuildServer from: {exePath}");
+    logger.Info($"Started BuildServer from: {exePath} - {arguments}");
 
     return process;
   }
