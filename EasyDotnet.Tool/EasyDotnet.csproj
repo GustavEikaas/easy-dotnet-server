@@ -14,16 +14,6 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <IncludePackageReadmeFile>true</IncludePackageReadmeFile>
   </PropertyGroup>
-  <PropertyGroup>
-    <MsBuildSdkSource>..\EasyDotnet.MsBuildSdk\bin\Release\net8.0\**\*</MsBuildSdkSource>
-  </PropertyGroup>
-
-  <Target Name="CopyAndIncludeSdkFiles" AfterTargets="Build">
-    <ItemGroup>
-      <None Include="$(MsBuildSdkSource)" Pack="true" PackagePath="tools/net8.0/any/MsBuildSdk" />
-    </ItemGroup>
-  </Target>
-
   <ItemGroup>
     <None Include="..\LICENSE" Pack="true" PackagePath="" />
     <None Include="..\README.md" Pack="true" PackagePath="" />
