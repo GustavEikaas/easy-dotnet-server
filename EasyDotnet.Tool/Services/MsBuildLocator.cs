@@ -13,7 +13,7 @@ public enum MSBuildType
 
 public record MSBuildInfo(MSBuildType Type, string Command);
 
-public class MSBuildLocator(IMemoryCache cache)
+public class VisualStudioLocator(IMemoryCache cache)
 {
   public string GetVisualStudioMSBuildPath() => cache.GetOrCreate("MSBuildInfo", entry =>
                                       {

@@ -13,7 +13,7 @@ using Microsoft.TemplateEngine.Utils;
 
 namespace EasyDotnet.Services;
 
-public class TemplateEngineService(IMsBuildHostManager manager)
+public class TemplateEngineService(MsBuildService msBuildService)
 {
   private readonly Microsoft.TemplateEngine.Edge.DefaultTemplateEngineHost _host = new(
         hostIdentifier: "easy-dotnet",
@@ -75,9 +75,7 @@ public class TemplateEngineService(IMsBuildHostManager manager)
 
     var template = templates.FirstOrDefault(x => x.Identity == identity) ?? throw new Exception($"Failed to find template with id {identity}");
 
-    var sdkBuildHost = await manager.GetOrStartClientAsync(BuildClientType.Sdk);
-    var result = await sdkBuildHost.QuerySdkInstallations();
-    var monikers = result.Select(x => x.Moniker).ToList();
+    var monikers = msBuildService.QuerySdkInstallations().Select(x => x.Moniker).ToList();
 
     var parameters = template.ParameterDefinitions
         .Where(p => p.Precedence.PrecedenceDefinition != PrecedenceDefinition.Implicit)

@@ -6,11 +6,22 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.MsBuild.Contracts;
+using Microsoft.Build.Locator;
 
 namespace EasyDotnet.Services;
 
-public partial class MsBuildService(MSBuildLocator locator, ClientService clientService)
+public sealed record SdkInstallation(string Name, string Moniker, Version Version, string MSBuildPath, string VisualStudioRootPath);
+
+public partial class MsBuildService(VisualStudioLocator locator, ClientService clientService)
 {
+  public SdkInstallation[] QuerySdkInstallations()
+  {
+    MSBuildLocator.AllowQueryAllRuntimeVersions = true;
+    var instances = MSBuildLocator.QueryVisualStudioInstances().Where(x => x.DiscoveryType == DiscoveryType.DotNetSdk).ToList();
+    var monikers = instances.Select(x => new SdkInstallation(x.Name, $"net{x.Version.Major}.0", x.Version, x.MSBuildPath, x.VisualStudioRootPath)).ToArray();
+    return monikers;
+  }
+
   public async Task<BuildResult> RequestBuildAsync(
          string targetPath,
          string? targetFrameworkMoniker,

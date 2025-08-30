@@ -17,7 +17,7 @@ public static class DiModules
     services.AddMemoryCache();
     services.AddSingleton(jsonRpc);
     services.AddSingleton<ClientService>();
-    services.AddSingleton<MSBuildLocator>();
+    services.AddSingleton<VisualStudioLocator>();
 
     services.AddTransient<MsBuildService>();
     services.AddTransient<UserSecretsService>();
