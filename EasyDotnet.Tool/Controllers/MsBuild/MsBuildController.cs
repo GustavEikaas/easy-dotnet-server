@@ -7,11 +7,11 @@ namespace EasyDotnet.Controllers.MsBuild;
 public class MsBuildController(ClientService clientService, MsBuildService msBuild) : BaseController
 {
   [JsonRpcMethod("msbuild/build")]
-  public async Task<dynamic> Build(BuildRequest request)
+  public async Task<BuildResultResponse> Build(BuildRequest request)
   {
     clientService.ThrowIfNotInitialized();
     var result = await msBuild.RequestBuildAsync(request.TargetPath, request.TargetFramework, request.ConfigurationOrDefault);
 
-    return result;
+    return new(result.Success);
   }
 }

@@ -75,7 +75,7 @@ public class TemplateEngineService(MsBuildService msBuildService)
 
     var template = templates.FirstOrDefault(x => x.Identity == identity) ?? throw new Exception($"Failed to find template with id {identity}");
 
-    var monikers = msBuildService.QuerySdkInstallations().Select(x => x.Moniker).ToList();
+    var monikers = MsBuildService.QuerySdkInstallations().Select(x => x.Moniker).ToList();
 
     var parameters = template.ParameterDefinitions
         .Where(p => p.Precedence.PrecedenceDefinition != PrecedenceDefinition.Implicit)

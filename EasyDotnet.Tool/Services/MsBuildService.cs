@@ -15,7 +15,7 @@ public sealed record BuildResult(bool Success, List<BuildMessage> Errors, List<B
 
 public partial class MsBuildService(VisualStudioLocator locator, ClientService clientService)
 {
-  public SdkInstallation[] QuerySdkInstallations()
+  public static SdkInstallation[] QuerySdkInstallations()
   {
     MSBuildLocator.AllowQueryAllRuntimeVersions = true;
     var instances = MSBuildLocator.QueryVisualStudioInstances().Where(x => x.DiscoveryType == DiscoveryType.DotNetSdk).ToList();
