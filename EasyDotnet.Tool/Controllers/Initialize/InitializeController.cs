@@ -38,6 +38,12 @@ public class InitializeController(ClientService clientService) : BaseController
     clientService.IsInitialized = true;
     clientService.ProjectInfo = request.ProjectInfo;
     clientService.ClientInfo = request.ClientInfo;
+
+    if (request.Options is not null)
+    {
+      clientService.UseVisualStudio = request.Options.UseVisualStudio;
+    }
+
     return new InitializeResponse(new ServerInfo("EasyDotnet", serverVersion.ToString()), new ServerCapabilities(GetRpcPaths(), GetRpcNotifications()));
   }
 

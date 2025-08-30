@@ -72,10 +72,14 @@ class Program
 
   private static string GeneratePipeName()
   {
+#if DEBUG 
+    return "EasyDotnet_ROcrjwn9kiox3tKvRWcQg";
+#else
     var pipePrefix = "CoreFxPipe_";
     var pipeName = "EasyDotnet_" + Regex.Replace(Convert.ToBase64String(Guid.NewGuid().ToByteArray()), "[/+=]", "");
     var maxNameLength = MaxPipeNameLength - Path.GetTempPath().Length - pipePrefix.Length - 1;
     return pipeName[..Math.Min(pipeName.Length, maxNameLength)];
+#endif
   }
 
   private static async Task RespondToRpcRequestsAsync(Stream stream, int clientId, SourceLevels? logLevel)

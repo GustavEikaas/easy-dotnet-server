@@ -6,6 +6,7 @@ namespace EasyDotnet.Services;
 public class ClientService
 {
   public bool IsInitialized { get; set; }
+  public bool UseVisualStudio { get; set; } = false;
   public ProjectInfo? ProjectInfo { get; set; }
   public ClientInfo? ClientInfo { get; set; }
 
