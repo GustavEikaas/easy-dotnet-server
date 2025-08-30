@@ -5,12 +5,13 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using EasyDotnet.MsBuild.Contracts;
 using Microsoft.Build.Locator;
 
 namespace EasyDotnet.Services;
 
+public sealed record BuildMessage(string Type, string FilePath, int LineNumber, int ColumnNumber, string Code, string? Message);
 public sealed record SdkInstallation(string Name, string Moniker, Version Version, string MSBuildPath, string VisualStudioRootPath);
+public sealed record BuildResult(bool Success, List<BuildMessage> Errors, List<BuildMessage> Warnings);
 
 public partial class MsBuildService(VisualStudioLocator locator, ClientService clientService)
 {
