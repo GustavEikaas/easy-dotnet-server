@@ -163,6 +163,13 @@ _No parameters_
 
 **Returns:** `Task<BuildResultResponse>`
 
+### `msbuild/project-properties`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | ProjectPropertiesRequest |   |
+
+**Returns:** `Task<DotnetProjectProperties>`
+
 ---
 
 ## JsonCodeGen

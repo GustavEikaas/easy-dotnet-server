@@ -15,7 +15,6 @@ public class MsBuildController(ClientService clientService, MsBuildService msBui
     return new(result.Success);
   }
 
-
   [JsonRpcMethod("msbuild/project-properties")]
   public async Task<DotnetProjectProperties> QueryProjectProperties(ProjectPropertiesRequest request)
   {
