@@ -13,6 +13,27 @@ public sealed record BuildMessage(string Type, string FilePath, int LineNumber, 
 public sealed record SdkInstallation(string Name, string Moniker, Version Version, string MSBuildPath, string VisualStudioRootPath);
 public sealed record BuildResult(bool Success, List<BuildMessage> Errors, List<BuildMessage> Warnings);
 
+public sealed record DotnetProjectProperties(
+    string? OutputPath,
+    string? OutputType,
+    string? TargetExt,
+    string? AssemblyName,
+    string? TargetFramework,
+    string[]? TargetFrameworks,
+    bool IsTestProject,
+    string? UserSecretsId,
+    bool TestingPlatformDotnetTestSupport,
+    string? TargetPath,
+    bool GeneratePackageOnBuild,
+    bool IsPackable,
+    string? PackageId,
+    string? NugetVersion,
+    string? Version,
+    string? PackageOutputPath,
+    bool IsMultiTarget,
+    bool IsNetFramework
+);
+
 public partial class MsBuildService(VisualStudioLocator locator, ClientService clientService)
 {
   public static SdkInstallation[] QuerySdkInstallations()
@@ -44,6 +65,79 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
         success,
         errors,
         warnings
+    );
+  }
+
+
+  public async Task<DotnetProjectProperties> GetProjectPropertiesAsync(
+      string projectPath,
+      string? targetFrameworkMoniker = null,
+      string configuration = "Debug",
+      CancellationToken cancellationToken = default)
+  {
+    if (string.IsNullOrWhiteSpace(projectPath))
+    {
+      throw new ArgumentException("Project path must be provided", nameof(projectPath));
+    }
+    var propsToQuery = new[]
+        {
+        "OutputPath", "OutputType", "TargetExt", "AssemblyName",
+        "TargetFramework", "TargetFrameworks", "IsTestProject", "UserSecretsId",
+        "TestingPlatformDotnetTestSupport", "TargetPath", "GeneratePackageOnBuild",
+        "IsPackable", "PackageId", "Version", "PackageOutputPath", "TargetFrameworkVersion"
+    };
+
+    var values = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+
+    foreach (var prop in propsToQuery)
+    {
+      var (command, args) = GetCommandAndArguments(
+          clientService.UseVisualStudio ? MSBuildType.VisualStudio : MSBuildType.SDK,
+          projectPath,
+          targetFrameworkMoniker,
+          configuration);
+
+      args += $" -getProperty:{prop} -nologo -v:minimal";
+
+      var (success, stdout, stderr) = await RunProcessAsync(command, args, cancellationToken);
+      if (!success)
+        throw new InvalidOperationException($"Failed to get property {prop}: {stderr}");
+
+      var value = stdout.Trim();
+      values[prop] = string.IsNullOrEmpty(value) ? null : value;
+    }
+
+    string? TryGet(string name) => values.TryGetValue(name, out var v) ? v : null;
+    bool TryGetBool(string name) => values.TryGetValue(name, out var v) && bool.TryParse(v, out var b) && b;
+
+    var tfm = TryGet("TargetFramework");
+    var versionMoniker = tfm != null && tfm.StartsWith("net", StringComparison.OrdinalIgnoreCase)
+        ? tfm[3..]
+        : tfm;
+
+    var nugetVersion = TryGet("Version");
+
+    var targetFrameworkVersion = TryGet("TargetFrameworkVersion");
+    var isNetFramework = !string.IsNullOrEmpty(targetFrameworkVersion);
+    return new DotnetProjectProperties(
+        OutputPath: TryGet("OutputPath"),
+        OutputType: TryGet("OutputType"),
+        TargetExt: TryGet("TargetExt"),
+        AssemblyName: TryGet("AssemblyName"),
+        TargetFramework: tfm,
+        TargetFrameworks: TryGet("TargetFrameworks")?.Split(';', StringSplitOptions.RemoveEmptyEntries),
+        IsTestProject: TryGetBool("IsTestProject"),
+        UserSecretsId: TryGet("UserSecretsId"),
+        TestingPlatformDotnetTestSupport: TryGetBool("TestingPlatformDotnetTestSupport"),
+        TargetPath: TryGet("TargetPath"),
+        GeneratePackageOnBuild: TryGetBool("GeneratePackageOnBuild"),
+        IsPackable: TryGetBool("IsPackable"),
+        PackageId: TryGet("PackageId"),
+        NugetVersion: string.IsNullOrWhiteSpace(nugetVersion) ? null : nugetVersion,
+        Version: versionMoniker ?? targetFrameworkVersion,
+        PackageOutputPath: TryGet("PackageOutputPath"),
+        IsMultiTarget: (TryGet("TargetFrameworks")?.Split(';', StringSplitOptions.RemoveEmptyEntries).Length ?? 0) > 1,
+        isNetFramework
     );
   }
 
