@@ -7,6 +7,7 @@ namespace EasyDotnet.Controllers.VsTest;
 
 public class VsTestController(VsTestService vsTestService, ClientService clientService) : BaseController
 {
+  //TODO: deprecate vsTestPath in next major
   [JsonRpcMethod("vstest/discover")]
   public FileResultResponse VsTestDiscover(string vsTestPath, string dllPath)
   {
@@ -16,10 +17,11 @@ public class VsTestController(VsTestService vsTestService, ClientService clientS
     }
     var outFile = Path.GetTempFileName();
 
-    vsTestService.RunDiscover(vsTestPath, [new DiscoverProjectRequest(dllPath, outFile)]);
+    vsTestService.RunDiscover([new DiscoverProjectRequest(dllPath, outFile)]);
     return new FileResultResponse(outFile);
   }
 
+  //TODO: deprecate vsTestPath in next major
   [JsonRpcMethod("vstest/run")]
   public FileResultResponse VsTestRun(string vsTestPath, string dllPath, Guid[] testIds)
   {
@@ -29,7 +31,7 @@ public class VsTestController(VsTestService vsTestService, ClientService clientS
     }
     var outFile = Path.GetTempFileName();
 
-    vsTestService.RunTests(vsTestPath, dllPath, testIds, outFile);
+    vsTestService.RunTests(dllPath, testIds, outFile);
     return new FileResultResponse(outFile);
   }
 }
