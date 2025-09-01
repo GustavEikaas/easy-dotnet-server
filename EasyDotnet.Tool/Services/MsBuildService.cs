@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -36,7 +35,7 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
 
     var (command, args) = GetCommandAndArguments(clientService.UseVisualStudio ? MSBuildType.VisualStudio : MSBuildType.SDK, targetPath, targetFrameworkMoniker, configuration);
 
-    var (success, stdout, stderr) = await RunProcessAsync(command, args, cancellationToken);
+    var (success, stdout, stderr) = await ProcessUtils.RunProcessAsync(command, args, cancellationToken);
 
     var (errors, warnings) = ParseBuildOutput(stdout, stderr);
 
@@ -63,30 +62,6 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
       MSBuildType.VisualStudio => (locator.GetVisualStudioMSBuildPath(), $"\"{targetPath}\" /p:Configuration={configuration}{tfmArg}"),
       _ => throw new InvalidOperationException("Unknown MSBuild type")
     };
-  }
-
-  private static async Task<(bool Success, string StdOut, string StdErr)> RunProcessAsync(string command, string arguments, CancellationToken cancellationToken)
-  {
-    var startInfo = new ProcessStartInfo
-    {
-      FileName = command,
-      Arguments = arguments,
-      RedirectStandardOutput = true,
-      RedirectStandardError = true,
-      UseShellExecute = false,
-      CreateNoWindow = true
-    };
-
-    using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Failed to start MSBuild process.");
-
-    var stdOutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-    var stdErrTask = process.StandardError.ReadToEndAsync(cancellationToken);
-
-    await Task.WhenAll(stdOutTask, stdErrTask);
-
-    await process.WaitForExitAsync(cancellationToken);
-
-    return (process.ExitCode == 0, stdOutTask.Result, stdErrTask.Result);
   }
 
   private static (List<BuildMessage> Errors, List<BuildMessage> Warnings) ParseBuildOutput(string stdout, string stderr)
