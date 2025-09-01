@@ -13,7 +13,7 @@ public enum MSBuildType
 
 public record MSBuildInfo(MSBuildType Type, string Command);
 
-public class VisualStudioLocator(IMemoryCache cache)
+public class VisualStudioLocator(IMemoryCache cache, ClientService clientService)
 {
   public string GetVisualStudioMSBuildPath() => cache.GetOrCreate("MSBuildInfo", entry =>
                                       {
@@ -21,6 +21,27 @@ public class VisualStudioLocator(IMemoryCache cache)
                                         return !string.IsNullOrEmpty(vsCommand) ? vsCommand
                                            : throw new InvalidOperationException("Could not locate MSBuild on this machine.");
                                       }) ?? throw new InvalidOperationException("Could not locate MSBuild on this machine.");
+
+  public string? GetApplicationHostConfig() => cache.GetOrCreate("ApplicationHostConfig", entry =>
+                                                {
+                                                  var sln = clientService.ProjectInfo?.SolutionFile;
+                                                  if (string.IsNullOrEmpty(sln))
+                                                  {
+                                                    return null;
+                                                  }
+
+                                                  var slnDir = Path.GetDirectoryName(sln);
+                                                  if (string.IsNullOrEmpty(slnDir))
+                                                  {
+                                                    return null;
+                                                  }
+
+                                                  var slnName = Path.GetFileNameWithoutExtension(sln);
+
+                                                  var configPath = Path.Combine(slnDir, ".vs", slnName, "config", "applicationhost.config");
+
+                                                  return File.Exists(configPath) ? configPath : null;
+                                                });
 
   private static string? GetVisualStudioMSBuild()
   {
