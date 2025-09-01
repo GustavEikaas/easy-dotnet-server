@@ -9,10 +9,12 @@ using NuGet.Configuration;
 using NuGet.Protocol;
 using NuGet.Protocol.Core.Types;
 using NuGet.Versioning;
+using StreamJsonRpc;
 
 namespace EasyDotnet.Services;
 
-public sealed record RestoreResult(bool Success, List<string> Errors, List<string> Warnings);
+public sealed record RestoreResult(bool Success, IAsyncEnumerable<string> Errors, IAsyncEnumerable<string> Warnings);
+
 public class NugetService(ClientService clientService, LogService logger)
 {
 
@@ -39,9 +41,9 @@ public class NugetService(ClientService clientService, LogService logger)
     var warnings = (stdout + Environment.NewLine + stderr)
         .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
         .Where(l => l.Contains("warning", StringComparison.OrdinalIgnoreCase))
-        .ToList();
+        .AsAsyncEnumerable();
 
-    return new RestoreResult(success && errors.Count == 0, errors, warnings);
+    return new RestoreResult(success && errors.Count == 0, errors.AsAsyncEnumerable(), warnings);
   }
 
   public List<PackageSource> GetSources()
