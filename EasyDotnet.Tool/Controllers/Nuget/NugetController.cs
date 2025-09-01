@@ -43,7 +43,7 @@ public class NugetController(ClientService clientService, NugetService nugetServ
   {
     clientService.ThrowIfNotInitialized();
 
-    var versions = await NugetService.GetPackageVersionsAsync(
+    var versions = await nugetService.GetPackageVersionsAsync(
         packageId,
         new CancellationToken(),
         includePrerelease,
