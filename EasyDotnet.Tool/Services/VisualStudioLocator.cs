@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace EasyDotnet.Services;
@@ -42,6 +43,12 @@ public class VisualStudioLocator(IMemoryCache cache, ClientService clientService
 
                                                   return File.Exists(configPath) ? configPath : null;
                                                 });
+
+  public string? GetIisExpressExe() => cache.GetOrCreate("IisExpressExe", entry => new[]
+  {
+    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "IIS Express", "iisexpress.exe"),
+    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "IIS Express", "iisexpress.exe")
+  }.FirstOrDefault(File.Exists));
 
   private static string? GetVisualStudioMSBuild()
   {
