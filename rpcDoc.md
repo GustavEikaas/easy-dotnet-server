@@ -102,6 +102,13 @@ _No parameters_
 
 ## NugetController
 
+### `nuget/restore`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| targetPath | string |   |
+
+**Returns:** `Task<RestoreResult>`
+
 ### `nuget/list-sources`
 _No parameters_
 
