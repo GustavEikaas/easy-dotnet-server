@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -14,6 +15,8 @@ public sealed record SdkInstallation(string Name, string Moniker, Version Versio
 public sealed record BuildResult(bool Success, List<BuildMessage> Errors, List<BuildMessage> Warnings);
 
 public sealed record DotnetProjectProperties(
+    string ProjectName,
+    string Language,
     string? OutputPath,
     string? OutputType,
     string? TargetExt,
@@ -21,6 +24,8 @@ public sealed record DotnetProjectProperties(
     string? TargetFramework,
     string[]? TargetFrameworks,
     bool IsTestProject,
+    bool IsWebProject,
+    bool IsWorkerProject,
     string? UserSecretsId,
     bool TestingPlatformDotnetTestSupport,
     string? TargetPath,
@@ -31,7 +36,11 @@ public sealed record DotnetProjectProperties(
     string? Version,
     string? PackageOutputPath,
     bool IsMultiTarget,
-    bool IsNetFramework
+    bool IsNetFramework,
+    bool UseIISExpress,
+    string RunCommand,
+    string BuildCommand,
+    string TestCommand
 );
 
 public partial class MsBuildService(VisualStudioLocator locator, ClientService clientService)
@@ -72,6 +81,11 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
   {
     public Dictionary<string, string?> Properties { get; set; } = new(StringComparer.OrdinalIgnoreCase);
   }
+
+  private static string GetLanguage(string path) => path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) ? "csharp" :
+    path.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase) ? "fsharp" :
+    "unknown";
+
   public async Task<DotnetProjectProperties> GetProjectPropertiesAsync(
       string projectPath,
       string? targetFrameworkMoniker = null,
@@ -88,7 +102,8 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
         "OutputPath", "OutputType", "TargetExt", "AssemblyName",
         "TargetFramework", "TargetFrameworks", "IsTestProject", "UserSecretsId",
         "TestingPlatformDotnetTestSupport", "TargetPath", "GeneratePackageOnBuild",
-        "IsPackable", "PackageId", "Version", "PackageOutputPath", "TargetFrameworkVersion"
+        "IsPackable", "PackageId", "Version", "PackageOutputPath", "TargetFrameworkVersion",
+        "UsingMicrosoftNETSdkWorker", "UsingMicrosoftNETSdkWeb",  "UseIISExpress"
     };
 
     var (command, args) = GetCommandAndArguments(
@@ -116,9 +131,16 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
 
     var nugetVersion = TryGet("Version");
     var targetFrameworkVersion = TryGet("TargetFrameworkVersion");
-    var isNetFramework = !string.IsNullOrEmpty(targetFrameworkVersion);
+    var isNetFramework = targetFrameworkVersion is not null && targetFrameworkVersion.StartsWith("v4");
+    var useIISExpress = TryGetBool("UseIISExpress");
+    var targetPath = TryGet("TargetPath");
+
 
     return new DotnetProjectProperties(
+        ProjectName: Path.GetFileNameWithoutExtension(projectPath),
+        Language: GetLanguage(projectPath),
+        IsWebProject: TryGetBool("UsingMicrosoftNETSdkWeb"),
+        IsWorkerProject: TryGetBool("UsingMicrosoftNETSdkWorker"),
         OutputPath: TryGet("OutputPath"),
         OutputType: TryGet("OutputType"),
         TargetExt: TryGet("TargetExt"),
@@ -133,11 +155,40 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
         IsPackable: TryGetBool("IsPackable"),
         PackageId: TryGet("PackageId"),
         NugetVersion: string.IsNullOrWhiteSpace(nugetVersion) ? null : nugetVersion,
-        Version: versionMoniker ?? targetFrameworkVersion,
+        Version: targetFrameworkVersion,
         PackageOutputPath: TryGet("PackageOutputPath"),
         IsMultiTarget: (TryGet("TargetFrameworks")?.Split(';', StringSplitOptions.RemoveEmptyEntries).Length ?? 0) > 1,
-        IsNetFramework: isNetFramework
+        IsNetFramework: isNetFramework,
+        UseIISExpress: useIISExpress,
+        RunCommand: BuildRunCommand(!isNetFramework, useIISExpress, targetPath, projectPath),
+        TestCommand: BuildTestCommand(!isNetFramework, targetPath, projectPath),
+        BuildCommand: BuildBuildCommand(!isNetFramework, projectPath)
     );
+  }
+
+  private string BuildRunCommand(bool isSdk, bool useIISExpress, string? targetPath, string projectPath) => (isSdk, useIISExpress) switch
+  {
+    (true, _) => $"dotnet run --project \"{projectPath}\"",
+    (false, true) =>
+        $"\"{locator.GetIisExpressExe()}\" \"{targetPath}\" /config:\"{locator.GetApplicationHostConfig()}\"",
+    (false, false) => $"\"{targetPath}\""
+  };
+
+
+  private static string BuildTestCommand(bool isSdk, string? targetPath, string projectPath) => isSdk switch
+  {
+    true => $"dotnet test \"{projectPath}\"",
+    false => $"dotnet vstest \"{targetPath}\""
+  };
+
+  private string BuildBuildCommand(bool isSdk, string projectPath)
+  {
+    var normalizedPath = Path.GetFullPath(projectPath)
+        .Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+
+    return isSdk
+        ? $"dotnet build \"{normalizedPath}\""
+        : $"\"{locator.GetVisualStudioMSBuildPath()}\" \"{normalizedPath}\"";
   }
 
   private (string Command, string Arguments) GetCommandAndArguments(
