@@ -10,6 +10,16 @@ namespace EasyDotnet.Controllers.Nuget;
 
 public class NugetController(ClientService clientService, NugetService nugetService, OutFileWriterService outFileWriterService) : BaseController
 {
+
+  [JsonRpcMethod("nuget/restore")]
+  public async Task<RestoreResult> RestorePackages(string targetPath)
+  {
+    clientService.ThrowIfNotInitialized();
+
+    var result = await nugetService.RestorePackagesAsync(targetPath, CancellationToken.None);
+    return result;
+  }
+
   [JsonRpcMethod("nuget/list-sources")]
   public List<NugetSourceResponse> GetSources()
   {
@@ -47,7 +57,7 @@ public class NugetController(ClientService clientService, NugetService nugetServ
   {
     clientService.ThrowIfNotInitialized();
 
-    var packages = await nugetService.SearchAllSourcesByNameAsync(searchTerm, new CancellationToken(), take: 10, includePrerelease: false, sources);
+    var packages = await NugetService.SearchAllSourcesByNameAsync(searchTerm, new CancellationToken(), take: 10, includePrerelease: false, sources);
 
     var list = packages
         .SelectMany(kvp => kvp.Value.Select(x => NugetPackageMetadata.From(x, kvp.Key)))

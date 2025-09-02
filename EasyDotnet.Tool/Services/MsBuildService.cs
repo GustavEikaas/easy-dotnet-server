@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -57,7 +57,7 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
 
     var (command, args) = GetCommandAndArguments(clientService.UseVisualStudio ? MSBuildType.VisualStudio : MSBuildType.SDK, targetPath, targetFrameworkMoniker, configuration);
 
-    var (success, stdout, stderr) = await RunProcessAsync(command, args, cancellationToken);
+    var (success, stdout, stderr) = await ProcessUtils.RunProcessAsync(command, args, cancellationToken);
 
     var (errors, warnings) = ParseBuildOutput(stdout, stderr);
 
@@ -68,7 +68,10 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
     );
   }
 
-
+  private class MsBuildPropertiesResponse
+  {
+    public Dictionary<string, string?> Properties { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+  }
   public async Task<DotnetProjectProperties> GetProjectPropertiesAsync(
       string projectPath,
       string? targetFrameworkMoniker = null,
@@ -79,46 +82,42 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
     {
       throw new ArgumentException("Project path must be provided", nameof(projectPath));
     }
+
     var propsToQuery = new[]
-        {
+    {
         "OutputPath", "OutputType", "TargetExt", "AssemblyName",
         "TargetFramework", "TargetFrameworks", "IsTestProject", "UserSecretsId",
         "TestingPlatformDotnetTestSupport", "TargetPath", "GeneratePackageOnBuild",
         "IsPackable", "PackageId", "Version", "PackageOutputPath", "TargetFrameworkVersion"
     };
 
-    var values = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+    var (command, args) = GetCommandAndArguments(
+        clientService.UseVisualStudio ? MSBuildType.VisualStudio : MSBuildType.SDK,
+        projectPath,
+        targetFrameworkMoniker,
+        configuration);
 
-    foreach (var prop in propsToQuery)
-    {
-      var (command, args) = GetCommandAndArguments(
-          clientService.UseVisualStudio ? MSBuildType.VisualStudio : MSBuildType.SDK,
-          projectPath,
-          targetFrameworkMoniker,
-          configuration);
+    args += " -nologo -v:minimal " + string.Join(" ", propsToQuery.Select(p => $"-getProperty:{p}"));
 
-      args += $" -getProperty:{prop} -nologo -v:minimal";
+    var (success, stdout, stderr) = await ProcessUtils.RunProcessAsync(command, args, cancellationToken);
+    if (!success)
+      throw new InvalidOperationException($"Failed to get project properties: {stderr}");
 
-      var (success, stdout, stderr) = await RunProcessAsync(command, args, cancellationToken);
-      if (!success)
-        throw new InvalidOperationException($"Failed to get property {prop}: {stderr}");
-
-      var value = stdout.Trim();
-      values[prop] = string.IsNullOrEmpty(value) ? null : value;
-    }
+    var msbuildOutput = JsonSerializer.Deserialize<MsBuildPropertiesResponse>(stdout);
+    var values = msbuildOutput?.Properties ?? new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
 
     string? TryGet(string name) => values.TryGetValue(name, out var v) ? v : null;
     bool TryGetBool(string name) => values.TryGetValue(name, out var v) && bool.TryParse(v, out var b) && b;
 
     var tfm = TryGet("TargetFramework");
-    var versionMoniker = tfm != null && tfm.StartsWith("net", StringComparison.OrdinalIgnoreCase)
-        ? tfm[3..]
+    var versionMoniker = tfm is { } s && s.StartsWith("net", StringComparison.OrdinalIgnoreCase)
+        ? s[3..]
         : tfm;
 
     var nugetVersion = TryGet("Version");
-
     var targetFrameworkVersion = TryGet("TargetFrameworkVersion");
     var isNetFramework = !string.IsNullOrEmpty(targetFrameworkVersion);
+
     return new DotnetProjectProperties(
         OutputPath: TryGet("OutputPath"),
         OutputType: TryGet("OutputType"),
@@ -137,7 +136,7 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
         Version: versionMoniker ?? targetFrameworkVersion,
         PackageOutputPath: TryGet("PackageOutputPath"),
         IsMultiTarget: (TryGet("TargetFrameworks")?.Split(';', StringSplitOptions.RemoveEmptyEntries).Length ?? 0) > 1,
-        isNetFramework
+        IsNetFramework: isNetFramework
     );
   }
 
@@ -157,30 +156,6 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
       MSBuildType.VisualStudio => (locator.GetVisualStudioMSBuildPath(), $"\"{targetPath}\" /p:Configuration={configuration}{tfmArg}"),
       _ => throw new InvalidOperationException("Unknown MSBuild type")
     };
-  }
-
-  private static async Task<(bool Success, string StdOut, string StdErr)> RunProcessAsync(string command, string arguments, CancellationToken cancellationToken)
-  {
-    var startInfo = new ProcessStartInfo
-    {
-      FileName = command,
-      Arguments = arguments,
-      RedirectStandardOutput = true,
-      RedirectStandardError = true,
-      UseShellExecute = false,
-      CreateNoWindow = true
-    };
-
-    using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Failed to start MSBuild process.");
-
-    var stdOutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-    var stdErrTask = process.StandardError.ReadToEndAsync(cancellationToken);
-
-    await Task.WhenAll(stdOutTask, stdErrTask);
-
-    await process.WaitForExitAsync(cancellationToken);
-
-    return (process.ExitCode == 0, stdOutTask.Result, stdErrTask.Result);
   }
 
   private static (List<BuildMessage> Errors, List<BuildMessage> Warnings) ParseBuildOutput(string stdout, string stderr)

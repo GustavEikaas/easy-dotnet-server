@@ -1,13 +1,16 @@
 using System;
+using System.IO;
 using System.Linq;
 using EasyDotnet.VSTest;
 
 namespace EasyDotnet.Services;
 
-public class VsTestService(OutFileWriterService outFileWriter)
+public class VsTestService(OutFileWriterService outFileWriter, LogService logService)
 {
-  public void RunDiscover(string vsTestPath, DiscoverProjectRequest[] projects)
+  public void RunDiscover(DiscoverProjectRequest[] projects)
   {
+    var vsTestPath = GetVsTestPath();
+    logService.Info($"Using VSTest path: {vsTestPath}");
     var dllPaths = projects.Select(x => x.DllPath).ToArray();
     var discoveredTests = DiscoverHandler.Discover(vsTestPath, dllPaths);
 
@@ -22,14 +25,21 @@ public class VsTestService(OutFileWriterService outFileWriter)
   }
 
   public void RunTests(
-    string vsTestPath,
     string dllPath,
     Guid[] testIds,
     string outFile
 )
   {
+    var vsTestPath = GetVsTestPath();
+    logService.Info($"Using VSTest path: {vsTestPath}");
     var testResults = RunHandler.RunTests(vsTestPath, dllPath, testIds);
     outFileWriter.WriteTestRunResults(testResults, outFile);
+  }
+
+  private string GetVsTestPath()
+  {
+    var x = MsBuildService.QuerySdkInstallations();
+    return Path.Join(x.ToList()[0].MSBuildPath, "vstest.console.dll");
   }
 
 }

@@ -9,11 +9,42 @@ using NuGet.Configuration;
 using NuGet.Protocol;
 using NuGet.Protocol.Core.Types;
 using NuGet.Versioning;
+using StreamJsonRpc;
 
 namespace EasyDotnet.Services;
 
-public class NugetService
+public sealed record RestoreResult(bool Success, IAsyncEnumerable<string> Errors, IAsyncEnumerable<string> Warnings);
+
+public class NugetService(ClientService clientService, LogService logger)
 {
+
+  private static (string Command, string Arguments) GetCommandAndArguments(
+      MSBuildType type,
+      string targetPath) => type switch
+      {
+        MSBuildType.SDK => ("dotnet", $"restore \"{targetPath}\" "),
+        MSBuildType.VisualStudio => ("nuget", $"restore \"{targetPath}\""),
+        _ => throw new InvalidOperationException("Unknown MSBuild type")
+      };
+
+  public async Task<RestoreResult> RestorePackagesAsync(string targetPath, CancellationToken cancellationToken)
+  {
+    var (command, args) = GetCommandAndArguments(clientService.UseVisualStudio ? MSBuildType.VisualStudio : MSBuildType.SDK, targetPath);
+    logger.Info($"Starting restore `{command} {args}`");
+    var (success, stdout, stderr) = await ProcessUtils.RunProcessAsync(command, args, cancellationToken);
+
+    var errors = stderr
+        .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
+        .Where(l => l.Contains("error", StringComparison.OrdinalIgnoreCase))
+        .ToList();
+
+    var warnings = (stdout + Environment.NewLine + stderr)
+        .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
+        .Where(l => l.Contains("warning", StringComparison.OrdinalIgnoreCase))
+        .AsAsyncEnumerable();
+
+    return new RestoreResult(success && errors.Count == 0, errors.AsAsyncEnumerable(), warnings);
+  }
 
   public List<PackageSource> GetSources()
   {
@@ -62,7 +93,7 @@ public class NugetService
   }
 
 
-  public async Task<Dictionary<string, IEnumerable<IPackageSearchMetadata>>> SearchAllSourcesByNameAsync(
+  public static async Task<Dictionary<string, IEnumerable<IPackageSearchMetadata>>> SearchAllSourcesByNameAsync(
         string searchTerm,
         CancellationToken cancellationToken,
         int take = 10,
@@ -132,7 +163,7 @@ public class NugetService
     return true;
   }
 
-  private async Task<PackageUpdateResource> GetPackageUpdateResourceAsync(string sourceUrl)
+  private static async Task<PackageUpdateResource> GetPackageUpdateResourceAsync(string sourceUrl)
   {
     var packageSource = new PackageSource(sourceUrl);
     var sourceRepository = Repository.Factory.GetCoreV3(packageSource);
