@@ -12,6 +12,6 @@ public class MsBuildController(ClientService clientService, MsBuildService msBui
     clientService.ThrowIfNotInitialized();
     var result = await msBuild.RequestBuildAsync(request.TargetPath, request.TargetFramework, request.ConfigurationOrDefault);
 
-    return new(result.Success);
+    return new(result.Success, result.Errors.AsAsyncEnumerable(), result.Warnings.AsAsyncEnumerable());
   }
 }
