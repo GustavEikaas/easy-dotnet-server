@@ -112,13 +112,23 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
         targetFrameworkMoniker,
         configuration);
 
-    args += " -nologo -v:minimal " + string.Join(" ", propsToQuery.Select(p => $"-getProperty:{p}"));
+    args += " -nologo -v:quiet " + string.Join(" ", propsToQuery.Select(p => $"-getProperty:{p}"));
 
     var (success, stdout, stderr) = await ProcessUtils.RunProcessAsync(command, args, cancellationToken);
     if (!success)
       throw new InvalidOperationException($"Failed to get project properties: {stderr}");
 
-    var msbuildOutput = JsonSerializer.Deserialize<MsBuildPropertiesResponse>(stdout);
+    var lines = stdout.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+    var jsonStartIndex = Array.FindIndex(lines, line => line.Trim() == "{");
+
+    if (jsonStartIndex == -1)
+    {
+      throw new InvalidOperationException("Did not find JSON payload in MSBuild output.");
+    }
+
+    var jsonPayload = string.Join("\n", lines.Skip(jsonStartIndex));
+
+    var msbuildOutput = JsonSerializer.Deserialize<MsBuildPropertiesResponse>(jsonPayload);
     var values = msbuildOutput?.Properties ?? new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
 
     string? TryGet(string name) => values.TryGetValue(name, out var v) ? v : null;
