@@ -23,23 +23,7 @@ public class TemplateEngineService(MsBuildService msBuildService)
   private const string FrameworkParamKey = "Framework";
   private const string TargetFrameworkOverrideParamKey = "TargetFrameworkOverride";
 
-  private static string GetTemplatesRoot()
-  {
-    if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-    {
-      return @"C:\Program Files\dotnet\templates";
-    }
-    else
-    {
-      var sdk = MsBuildService.QuerySdkInstallations()[0];
-      if (sdk == null)
-      {
-        throw new Exception("No sdk installation found");
-      }
-
-      return Path.Combine(sdk.MSBuildPath, "Templates");
-    }
-  }
+  private static string GetTemplatesRoot() => RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? @"C:\Program Files\dotnet\templates" : "/usr/share/dotnet/templates";
 
   public async Task EnsureInstalled()
   {
