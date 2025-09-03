@@ -168,17 +168,17 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
 
   private string BuildRunCommand(bool isSdk, bool useIISExpress, string? targetPath, string projectPath, string projectName)
   {
-      var buildCmd = BuildBuildCommand(isSdk, projectPath);
+    var buildCmd = BuildBuildCommand(isSdk, projectPath);
 
-      return (isSdk, useIISExpress) switch
-      {
-          (true, _) => $"dotnet run --project \"{projectPath}\"",
+    return (isSdk, useIISExpress) switch
+    {
+      (true, _) => $"dotnet run --project \"{projectPath}\"",
 
-          (false, true) =>
-              $"{buildCmd}; & \"{locator.GetIisExpressExe()}\" /config:\"{locator.GetApplicationHostConfig()}\" /site:\"{projectName}\"",
+      (false, true) =>
+          $"{buildCmd}; & \"{locator.GetIisExpressExe()}\" /config:\"{locator.GetApplicationHostConfig()}\" /site:\"{projectName}\"",
 
-          (false, false) => $"\"{targetPath}\""
-      };
+      (false, false) => $"\"{targetPath}\""
+    };
   }
 
   private static string BuildTestCommand(bool isSdk, string? targetPath, string projectPath) => isSdk switch
