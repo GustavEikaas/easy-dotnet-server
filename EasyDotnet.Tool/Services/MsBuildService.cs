@@ -134,10 +134,10 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
     var isNetFramework = targetFrameworkVersion is not null && targetFrameworkVersion.StartsWith("v4");
     var useIISExpress = TryGetBool("UseIISExpress");
     var targetPath = TryGet("TargetPath");
-
+    var projectName = Path.GetFileNameWithoutExtension(projectPath);
 
     return new DotnetProjectProperties(
-        ProjectName: Path.GetFileNameWithoutExtension(projectPath),
+        ProjectName: projectName,
         Language: GetLanguage(projectPath),
         IsWebProject: TryGetBool("UsingMicrosoftNETSdkWeb"),
         IsWorkerProject: TryGetBool("UsingMicrosoftNETSdkWorker"),
@@ -160,20 +160,26 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
         IsMultiTarget: (TryGet("TargetFrameworks")?.Split(';', StringSplitOptions.RemoveEmptyEntries).Length ?? 0) > 1,
         IsNetFramework: isNetFramework,
         UseIISExpress: useIISExpress,
-        RunCommand: BuildRunCommand(!isNetFramework, useIISExpress, targetPath, projectPath),
+        RunCommand: BuildRunCommand(!isNetFramework, useIISExpress, targetPath, projectPath, projectName),
         TestCommand: BuildTestCommand(!isNetFramework, targetPath, projectPath),
         BuildCommand: BuildBuildCommand(!isNetFramework, projectPath)
     );
   }
 
-  private string BuildRunCommand(bool isSdk, bool useIISExpress, string? targetPath, string projectPath) => (isSdk, useIISExpress) switch
+  private string BuildRunCommand(bool isSdk, bool useIISExpress, string? targetPath, string projectPath, string projectName)
   {
-    (true, _) => $"dotnet run --project \"{projectPath}\"",
-    (false, true) =>
-        $"\"{locator.GetIisExpressExe()}\" \"{targetPath}\" /config:\"{locator.GetApplicationHostConfig()}\"",
-    (false, false) => $"\"{targetPath}\""
-  };
+      var buildCmd = BuildBuildCommand(isSdk, projectPath);
 
+      return (isSdk, useIISExpress) switch
+      {
+          (true, _) => $"dotnet run --project \"{projectPath}\"",
+
+          (false, true) =>
+              $"{buildCmd}; & \"{locator.GetIisExpressExe()}\" /config:\"{locator.GetApplicationHostConfig()}\" /site:\"{projectName}\"",
+
+          (false, false) => $"\"{targetPath}\""
+      };
+  }
 
   private static string BuildTestCommand(bool isSdk, string? targetPath, string projectPath) => isSdk switch
   {
@@ -188,7 +194,7 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
 
     return isSdk
         ? $"dotnet build \"{normalizedPath}\""
-        : $"\"{locator.GetVisualStudioMSBuildPath()}\" \"{normalizedPath}\"";
+        : $"& \"{locator.GetVisualStudioMSBuildPath()}\" \"{normalizedPath}\"";
   }
 
   private (string Command, string Arguments) GetCommandAndArguments(
