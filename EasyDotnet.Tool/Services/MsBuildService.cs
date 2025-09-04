@@ -229,28 +229,38 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
   {
     var regex = MsBuildLoggingLine();
 
-    var messages = stdout
-           .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
-           .Select(line => regex.Match(line))
-           .Where(match => match.Success)
-           .Select(match => new BuildMessage(
-               Type: match.Groups["type"].Value,
-               FilePath: match.Groups["file"].Value,
-               LineNumber: int.Parse(match.Groups["line"].Value),
-               ColumnNumber: int.Parse(match.Groups["col"].Value),
-               Code: match.Groups["code"].Value,
-               Message: match.Groups["msg"].Value
-           ))
-           .ToList();
+    var messages =
+        stdout
+            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => regex.Match(line))
+            .Where(match => match.Success)
+            .Select(match => new BuildMessage(
+                Type: match.Groups["type"].Value,
+                FilePath: match.Groups["file"].Value.Trim(), // strip leading spaces
+                LineNumber: int.Parse(match.Groups["line"].Value),
+                ColumnNumber: int.Parse(match.Groups["col"].Value),
+                Code: match.Groups["code"].Value,
+                Message: match.Groups["msg"].Value
+            ));
 
-    var errors = messages.Where(m => m.Type.Equals("error", StringComparison.OrdinalIgnoreCase)).ToList();
-    var warnings = messages.Where(m => m.Type.Equals("warning", StringComparison.OrdinalIgnoreCase)).ToList();
+    var stderrMessages =
+        stderr
+            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => new BuildMessage("error", "", 0, 0, "", line));
 
-    var stderrErrors = stderr
-        .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
-        .Select(line => new BuildMessage("error", "", 0, 0, "", line));
+    var allMessages = messages.Concat(stderrMessages);
 
-    errors.AddRange(stderrErrors);
+    var errors = allMessages
+        .Where(m => m.Type.Equals("error", StringComparison.OrdinalIgnoreCase))
+        .GroupBy(m => (m.Type, m.Code, m.LineNumber, m.ColumnNumber))
+        .Select(g => g.First())
+        .ToList();
+
+    var warnings = allMessages
+        .Where(m => m.Type.Equals("warning", StringComparison.OrdinalIgnoreCase))
+        .GroupBy(m => (m.Type, m.Code, m.LineNumber, m.ColumnNumber))
+        .Select(g => g.First())
+        .ToList();
 
     return (errors, warnings);
   }
