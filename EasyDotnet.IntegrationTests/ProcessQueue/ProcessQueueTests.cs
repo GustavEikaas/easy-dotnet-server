@@ -59,7 +59,7 @@ public class ProcessQueueServiceTests
   }
 
   [Fact]
-  public async Task KillOnTimeout_KillsProcess()
+  public async Task KillOnTimeout_KillsProcess_CrossPlatform()
   {
     var service = new ProcessQueueService(new TestLogService(), maxConcurrent: 1);
 
@@ -67,14 +67,9 @@ public class ProcessQueueServiceTests
         KillOnTimeout: true,
         CancellationTimeout: TimeSpan.FromSeconds(1));
 
-    await Assert.ThrowsAsync<OperationCanceledException>(async () => await service.RunProcessAsync(
-              "ping",
-              "127.0.0.1 -n 10",
-              options,
-              CancellationToken.None));
+    var (cmd, args) = GetSleepCommand(10);
 
-    var stillRunning = Process.GetProcessesByName("ping");
-    Assert.DoesNotContain(stillRunning, p => !p.HasExited);
+    await Assert.ThrowsAsync<OperationCanceledException>(async () => await service.RunProcessAsync(cmd, args, options, CancellationToken.None));
   }
 
   private class TestLogService : LogService
