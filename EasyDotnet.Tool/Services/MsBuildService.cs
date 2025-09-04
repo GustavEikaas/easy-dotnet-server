@@ -14,7 +14,6 @@ public sealed record BuildMessage(string Type, string FilePath, int LineNumber, 
 public sealed record SdkInstallation(string Name, string Moniker, Version Version, string MSBuildPath, string VisualStudioRootPath);
 public sealed record BuildResult(bool Success, List<BuildMessage> Errors, List<BuildMessage> Warnings);
 
-<<<<<<< HEAD
 public sealed record DotnetProjectProperties(
     string ProjectName,
     string Language,
@@ -44,10 +43,7 @@ public sealed record DotnetProjectProperties(
     string TestCommand
 );
 
-public partial class MsBuildService(VisualStudioLocator locator, ClientService clientService, ProcessQueueService processLimiter)
-=======
 public partial class MsBuildService(VisualStudioLocator locator, ClientService clientService, ProcessQueueService processQueueService)
->>>>>>> ddfb09a095de6f259ed1f241bf0fcc858e2919ce
 {
   public static SdkInstallation[] QuerySdkInstallations()
   {
@@ -70,11 +66,7 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
 
     var (command, args) = GetCommandAndArguments(clientService.UseVisualStudio ? MSBuildType.VisualStudio : MSBuildType.SDK, targetPath, targetFrameworkMoniker, configuration);
 
-<<<<<<< HEAD
-    var (success, stdout, stderr) = await processLimiter.RunProcessAsync(command, args, new ProcessOptions(KillOnTimeout: true), cancellationToken);
-=======
     var (success, stdout, stderr) = await processQueueService.RunProcessAsync(command, args, new ProcessOptions(true), cancellationToken);
->>>>>>> ddfb09a095de6f259ed1f241bf0fcc858e2919ce
 
     var (errors, warnings) = ParseBuildOutput(stdout, stderr);
 
@@ -122,7 +114,7 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
 
     args += " -nologo -v:quiet " + string.Join(" ", propsToQuery.Select(p => $"-getProperty:{p}"));
 
-    var (success, stdout, stderr) = await processLimiter.RunProcessAsync(command, args, new ProcessOptions(KillOnTimeout: true), cancellationToken);
+    var (success, stdout, stderr) = await processQueueService.RunProcessAsync(command, args, new ProcessOptions(KillOnTimeout: true), cancellationToken);
     if (!success)
       throw new InvalidOperationException($"Failed to get project properties: {stderr}");
 

@@ -10,11 +10,7 @@ public record ProcessOptions(
     TimeSpan? CancellationTimeout = null
 );
 
-<<<<<<< HEAD
-public class ProcessQueueService(LogService logService, int maxConcurrent = 40)
-=======
 public class ProcessQueueService(LogService logService, int maxConcurrent = 35)
->>>>>>> ddfb09a095de6f259ed1f241bf0fcc858e2919ce
 {
   private readonly SemaphoreSlim _semaphore = new(maxConcurrent, maxConcurrent);
   private readonly TimeSpan _maxTimeout = TimeSpan.FromMinutes(2);
@@ -76,11 +72,6 @@ public class ProcessQueueService(LogService logService, int maxConcurrent = 35)
         }
         catch
         {
-<<<<<<< HEAD
-          // Swallow errors from Kill (e.g., process already exited)
-=======
-
->>>>>>> ddfb09a095de6f259ed1f241bf0fcc858e2919ce
         }
 
         throw; // rethrow cancellation so caller knows it was cancelled
