@@ -15,6 +15,8 @@ public class ProcessQueueService(LogService logService, int maxConcurrent = 40)
   private readonly SemaphoreSlim _semaphore = new(maxConcurrent, maxConcurrent);
   private readonly TimeSpan _maxTimeout = TimeSpan.FromMinutes(2);
 
+  public int CurrentCount() => _semaphore.CurrentCount;
+
   public async Task<(bool Success, string StdOut, string StdErr)> RunProcessAsync(
       string command,
       string arguments,

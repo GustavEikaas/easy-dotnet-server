@@ -31,7 +31,7 @@ public class NugetService(ClientService clientService, LogService logger, Proces
   {
     var (command, args) = GetCommandAndArguments(clientService.UseVisualStudio ? MSBuildType.VisualStudio : MSBuildType.SDK, targetPath);
     logger.Info($"Starting restore `{command} {args}`");
-    var (success, stdout, stderr) = await processLimiter.RunProcessAsync(command, args, cancellationToken);
+    var (success, stdout, stderr) = await processLimiter.RunProcessAsync(command, args, new ProcessOptions(KillOnTimeout: true), cancellationToken);
 
     var errors = stderr
         .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
