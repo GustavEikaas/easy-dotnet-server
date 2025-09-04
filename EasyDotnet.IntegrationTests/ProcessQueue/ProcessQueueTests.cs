@@ -1,0 +1,89 @@
+
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using EasyDotnet.IntegrationTests.Utils;
+using EasyDotnet.Services;
+
+namespace EasyDotnet.IntegrationTests.ProcessQueue;
+
+
+public class ProcessQueueServiceTests
+{
+  [Fact]
+  public async Task ConcurrencyLimit_IsHonored()
+  {
+    var service = new ProcessQueueService(new TestLogService(), maxConcurrent: 2);
+
+    var tasks = Enumerable.Range(0, 5).Select(async _ =>
+    {
+      var (command, args) = GetSleepCommand(5);
+      await service.RunProcessAsync(command, args, cancellationToken: CancellationToken.None);
+    });
+
+    Assert.True(service.CurrentCount() == 1, $"Current running was {service.CurrentCount()}");
+  }
+  private static (string Command, string Arguments) GetSleepCommand(int seconds)
+  {
+    if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+    {
+      return ("powershell", $"-Command \"Start-Sleep -Seconds {seconds}\"");
+    }
+    else
+    {
+      return ("bash", $"-c \"sleep {seconds}\"");
+    }
+  }
+
+  [Fact]
+  public async Task Timeout_CancelsLongRunningProcess()
+  {
+    var service = new ProcessQueueService(new TestLogService(), maxConcurrent: 1);
+
+    var options = new ProcessOptions(
+        KillOnTimeout: false,
+        CancellationTimeout: TimeSpan.FromSeconds(1));
+
+    var sw = Stopwatch.StartNew();
+    var args = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+        ? "127.0.0.1 -n 5"     // Windows
+        : "-c 5 127.0.0.1";    // Linux/macOS
+    await Assert.ThrowsAsync<OperationCanceledException>(async () => await service.RunProcessAsync(
+              "ping",
+              args,
+              options,
+              CancellationToken.None));
+    sw.Stop();
+
+    Assert.True(sw.Elapsed < TimeSpan.FromSeconds(5),
+        "Process should have been canceled early due to timeout");
+  }
+
+  [Fact]
+  public async Task KillOnTimeout_KillsProcess()
+  {
+    var service = new ProcessQueueService(new TestLogService(), maxConcurrent: 1);
+
+    var options = new ProcessOptions(
+        KillOnTimeout: true,
+        CancellationTimeout: TimeSpan.FromSeconds(1));
+
+    await Assert.ThrowsAsync<OperationCanceledException>(async () => await service.RunProcessAsync(
+              "ping",
+              "127.0.0.1 -n 10",
+              options,
+              CancellationToken.None));
+
+    var stillRunning = Process.GetProcessesByName("ping");
+    Assert.DoesNotContain(stillRunning, p => !p.HasExited);
+  }
+
+  private class TestLogService : LogService
+  {
+    public TestLogService() : base(System.Diagnostics.SourceLevels.All, RpcTestServerInstantiator.GetInitializedStreamServer().Result) { }
+
+    public new void Info(string message) { }
+    public new void Warning(string message) { }
+    public new void Error(string message) { }
+    public new void Verbose(string message) { }
+  }
+}
