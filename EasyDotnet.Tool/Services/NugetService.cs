@@ -15,7 +15,7 @@ namespace EasyDotnet.Services;
 
 public sealed record RestoreResult(bool Success, IAsyncEnumerable<string> Errors, IAsyncEnumerable<string> Warnings);
 
-public class NugetService(ClientService clientService, LogService logger)
+public class NugetService(ClientService clientService, LogService logger, ProcessQueueService processLimiter)
 {
 
   private static (string Command, string Arguments) GetCommandAndArguments(
@@ -31,7 +31,7 @@ public class NugetService(ClientService clientService, LogService logger)
   {
     var (command, args) = GetCommandAndArguments(clientService.UseVisualStudio ? MSBuildType.VisualStudio : MSBuildType.SDK, targetPath);
     logger.Info($"Starting restore `{command} {args}`");
-    var (success, stdout, stderr) = await ProcessUtils.RunProcessAsync(command, args, cancellationToken);
+    var (success, stdout, stderr) = await processLimiter.RunProcessAsync(command, args, cancellationToken);
 
     var errors = stderr
         .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)

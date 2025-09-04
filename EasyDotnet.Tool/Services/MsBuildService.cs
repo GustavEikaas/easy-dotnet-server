@@ -43,7 +43,7 @@ public sealed record DotnetProjectProperties(
     string TestCommand
 );
 
-public partial class MsBuildService(VisualStudioLocator locator, ClientService clientService)
+public partial class MsBuildService(VisualStudioLocator locator, ClientService clientService, ProcessQueueService processLimiter)
 {
   public static SdkInstallation[] QuerySdkInstallations()
   {
@@ -66,7 +66,7 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
 
     var (command, args) = GetCommandAndArguments(clientService.UseVisualStudio ? MSBuildType.VisualStudio : MSBuildType.SDK, targetPath, targetFrameworkMoniker, configuration);
 
-    var (success, stdout, stderr) = await ProcessUtils.RunProcessAsync(command, args, cancellationToken);
+    var (success, stdout, stderr) = await processLimiter.RunProcessAsync(command, args, cancellationToken);
 
     var (errors, warnings) = ParseBuildOutput(stdout, stderr);
 
@@ -114,7 +114,7 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
 
     args += " -nologo -v:quiet " + string.Join(" ", propsToQuery.Select(p => $"-getProperty:{p}"));
 
-    var (success, stdout, stderr) = await ProcessUtils.RunProcessAsync(command, args, cancellationToken);
+    var (success, stdout, stderr) = await processLimiter.RunProcessAsync(command, args, cancellationToken);
     if (!success)
       throw new InvalidOperationException($"Failed to get project properties: {stderr}");
 
