@@ -12,7 +12,7 @@ public sealed record BuildMessage(string Type, string FilePath, int LineNumber, 
 public sealed record SdkInstallation(string Name, string Moniker, Version Version, string MSBuildPath, string VisualStudioRootPath);
 public sealed record BuildResult(bool Success, List<BuildMessage> Errors, List<BuildMessage> Warnings);
 
-public partial class MsBuildService(VisualStudioLocator locator, ClientService clientService)
+public partial class MsBuildService(VisualStudioLocator locator, ClientService clientService, ProcessQueueService processQueueService)
 {
   public static SdkInstallation[] QuerySdkInstallations()
   {
@@ -35,7 +35,7 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
 
     var (command, args) = GetCommandAndArguments(clientService.UseVisualStudio ? MSBuildType.VisualStudio : MSBuildType.SDK, targetPath, targetFrameworkMoniker, configuration);
 
-    var (success, stdout, stderr) = await ProcessUtils.RunProcessAsync(command, args, cancellationToken);
+    var (success, stdout, stderr) = await processQueueService.RunProcessAsync(command, args, new ProcessOptions(true), cancellationToken);
 
     var (errors, warnings) = ParseBuildOutput(stdout, stderr);
 
