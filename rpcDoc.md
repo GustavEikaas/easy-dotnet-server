@@ -86,6 +86,14 @@ _No parameters_
 
 **Returns:** `Task<IAsyncEnumerable<VariableResultResponse>>`
 
+### `roslyn/get-workspace-diagnostics`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| targetPath | string |   |
+| includeWarnings | bool | ✅  |
+
+**Returns:** `IAsyncEnumerable<DiagnosticMessage>`
+
 ---
 
 ## OutdatedController

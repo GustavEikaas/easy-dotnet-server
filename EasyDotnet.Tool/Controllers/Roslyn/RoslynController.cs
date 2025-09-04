@@ -23,4 +23,8 @@ public class RoslynController(RoslynService roslynService) : BaseController
     var res = await roslynService.AnalyzeAsync(sourceFilePath, lineNumber);
     return res.Select(x => new VariableResultResponse(x.Identifier, x.LineStart, x.LineEnd, x.ColumnStart, x.ColumnEnd)).AsAsyncEnumerable();
   }
+
+  [JsonRpcMethod("roslyn/get-workspace-diagnostics")]
+  public IAsyncEnumerable<DiagnosticMessage> GetDiagnostics(string targetPath, bool includeWarnings = false) =>
+    roslynService.GetWorkspaceDiagnosticsAsync(targetPath, includeWarnings);
 }
