@@ -122,7 +122,8 @@ public class BootstrapTests
   {
     var (project, controllerFilePath) = CreateDummyProjectWithFreshFile(controllerName);
 
-    var roslynService = new RoslynService(new RoslynProjectMetadataCache());
+    var mockLogService = new TestLogService();
+    var roslynService = new RoslynService(new RoslynProjectMetadataCache(), mockLogService);
     await roslynService.BootstrapFile(
         controllerFilePath,
         kind,
@@ -142,5 +143,15 @@ public class BootstrapTests
       string RawText) : IDisposable
   {
     public void Dispose() => Project.Dispose();
+  }
+
+  private class TestLogService : LogService
+  {
+    public TestLogService() : base(System.Diagnostics.SourceLevels.All, null!) { }
+
+    public new void Info(string message) { }
+    public new void Warning(string message) { }
+    public new void Error(string message) { }
+    public new void Verbose(string message) { }
   }
 }

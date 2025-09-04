@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 using EasyDotnet.Controllers.Roslyn;
 using EasyDotnet.Extensions;
@@ -15,7 +16,7 @@ namespace EasyDotnet.Services;
 
 public sealed record VariableResult(string Identifier, int LineStart, int LineEnd, int ColumnStart, int ColumnEnd);
 
-public class RoslynService(RoslynProjectMetadataCache cache)
+public class RoslynService(RoslynProjectMetadataCache cache, LogService logService)
 {
   private async Task<ProjectCacheItem> GetOrSetProjectFromCache(string projectPath, CancellationToken cancellationToken)
   {
@@ -109,7 +110,6 @@ public class RoslynService(RoslynProjectMetadataCache cache)
 
     return results;
   }
-
 
   private VariableResult? TryResolveThis(SemanticModel semanticModel, SyntaxNode root, int position) =>
     semanticModel.GetEnclosingSymbol(position) switch
@@ -228,4 +228,117 @@ public class RoslynService(RoslynProjectMetadataCache cache)
       _ => throw new ArgumentOutOfRangeException(nameof(kind))
     };
   }
+
+  public async IAsyncEnumerable<DiagnosticMessage> GetWorkspaceDiagnosticsAsync(
+    string projectPath,
+    bool includeWarnings)
+  {
+    if (string.IsNullOrWhiteSpace(projectPath))
+      throw new ArgumentException("Project path must be provided", nameof(projectPath));
+
+    if (!File.Exists(projectPath))
+      throw new FileNotFoundException($"Project or solution file not found: {projectPath}");
+
+    using var workspace = MSBuildWorkspace.Create();
+
+    Solution solution;
+
+    try
+    {
+      if (projectPath.EndsWith(".sln", StringComparison.OrdinalIgnoreCase))
+      {
+        solution = await workspace.OpenSolutionAsync(projectPath).ConfigureAwait(false);
+      }
+      else if (projectPath.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) ||
+               projectPath.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase))
+      {
+        var project = await workspace.OpenProjectAsync(projectPath).ConfigureAwait(false);
+        solution = project.Solution;
+      }
+      else
+      {
+        throw new ArgumentException($"Path must be a .sln or project file (.csproj, .fsproj): {projectPath}");
+      }
+    }
+    catch (InvalidOperationException ex)
+    {
+      throw new InvalidOperationException($"Failed to open {(projectPath.EndsWith(".sln") ? "solution" : "project")}: {ex.Message}", ex);
+    }
+    catch (FileNotFoundException ex)
+    {
+      throw new FileNotFoundException($"Project or solution file not found: {ex.Message}", ex);
+    }
+    catch (IOException ex)
+    {
+      throw new IOException($"IO error while opening {(projectPath.EndsWith(".sln") ? "solution" : "project")}: {ex.Message}", ex);
+    }
+    catch (UnauthorizedAccessException ex)
+    {
+      throw new UnauthorizedAccessException($"Access denied to {(projectPath.EndsWith(".sln") ? "solution" : "project")}: {ex.Message}", ex);
+    }
+
+    var allDocuments = solution.Projects.SelectMany(project => project.Documents);
+    var channel = Channel.CreateUnbounded<DiagnosticMessage>();
+    var writer = channel.Writer;
+
+    var parallelTask = Parallel.ForEachAsync(allDocuments,
+      new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
+      async (document, cancellationToken) =>
+      {
+        try
+        {
+          var semanticModel = await document.GetSemanticModelAsync(cancellationToken).ConfigureAwait(false);
+          if (semanticModel == null) return;
+
+          var diagnostics = semanticModel.GetDiagnostics(cancellationToken: cancellationToken);
+
+          foreach (var diagnostic in diagnostics)
+          {
+            if (!ShouldIncludeDiagnostic(diagnostic, includeWarnings))
+              continue;
+
+            var lineSpan = diagnostic.Location.GetLineSpan();
+            var diagnosticMessage = new DiagnosticMessage(
+              FilePath: diagnostic.Location.SourceTree?.FilePath ?? document.FilePath ?? string.Empty,
+              Range: new(
+                new(lineSpan.StartLinePosition.Line, lineSpan.StartLinePosition.Character),
+                new(lineSpan.EndLinePosition.Line, lineSpan.EndLinePosition.Character)
+              ),
+              Severity: MapSeverity(diagnostic.Severity),
+              Message: diagnostic.GetMessage(),
+              Code: diagnostic.Id,
+              Source: "roslyn",
+              Category: diagnostic.Descriptor.Category
+            );
+
+            await writer.WriteAsync(diagnosticMessage, cancellationToken).ConfigureAwait(false);
+          }
+        }
+        catch (Exception ex)
+        {
+          logService.Warning($"Failed to load document '{document.FilePath}': {ex.Message}");
+        }
+      });
+
+    // Close writer when parallel processing completes
+    _ = parallelTask.ContinueWith(_ => writer.Complete(), TaskScheduler.Default);
+
+    await foreach (var diagnostic in channel.Reader.ReadAllAsync())
+    {
+      yield return diagnostic;
+    }
+  }
+
+  private static bool ShouldIncludeDiagnostic(Diagnostic diagnostic, bool includeWarnings) =>
+    diagnostic.Severity == DiagnosticSeverity.Error ||
+    (includeWarnings && diagnostic.Severity == DiagnosticSeverity.Warning);
+
+  private static int MapSeverity(DiagnosticSeverity severity) => severity switch
+  {
+    DiagnosticSeverity.Error => 1,
+    DiagnosticSeverity.Warning => 2,
+    DiagnosticSeverity.Info => 3,
+    DiagnosticSeverity.Hidden => 4,
+    _ => 3
+  };
 }
