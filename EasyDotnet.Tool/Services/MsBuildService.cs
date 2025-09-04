@@ -56,6 +56,7 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
   public async Task<BuildResult> RequestBuildAsync(
          string targetPath,
          string? targetFrameworkMoniker,
+         string? buildArgs,
          string configuration = "Debug",
          CancellationToken cancellationToken = default)
   {
@@ -64,7 +65,7 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
       throw new ArgumentException("Target path must be provided", nameof(targetPath));
     }
 
-    var (command, args) = GetCommandAndArguments(clientService.UseVisualStudio ? MSBuildType.VisualStudio : MSBuildType.SDK, targetPath, targetFrameworkMoniker, configuration);
+    var (command, args) = GetCommandAndArguments(clientService.UseVisualStudio ? MSBuildType.VisualStudio : MSBuildType.SDK, targetPath, targetFrameworkMoniker, configuration, buildArgs);
 
     var (success, stdout, stderr) = await processQueueService.RunProcessAsync(command, args, new ProcessOptions(true), cancellationToken);
 
@@ -110,7 +111,7 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
         clientService.UseVisualStudio ? MSBuildType.VisualStudio : MSBuildType.SDK,
         projectPath,
         targetFrameworkMoniker,
-        configuration);
+        configuration, "");
 
     args += " -nologo -v:quiet " + string.Join(" ", propsToQuery.Select(p => $"-getProperty:{p}"));
 
@@ -211,7 +212,7 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
       MSBuildType type,
       string targetPath,
       string? targetFrameworkMoniker,
-      string configuration)
+      string configuration, string? args)
   {
     var tfmArg = string.IsNullOrWhiteSpace(targetFrameworkMoniker)
         ? string.Empty
@@ -219,8 +220,8 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
 
     return type switch
     {
-      MSBuildType.SDK => ("dotnet", $"msbuild \"{targetPath}\" /p:Configuration={configuration}{tfmArg}"),
-      MSBuildType.VisualStudio => (locator.GetVisualStudioMSBuildPath(), $"\"{targetPath}\" /p:Configuration={configuration}{tfmArg}"),
+      MSBuildType.SDK => ("dotnet", $"msbuild \"{targetPath}\" /p:Configuration={configuration} {tfmArg} {args ?? ""}"),
+      MSBuildType.VisualStudio => (locator.GetVisualStudioMSBuildPath(), $"\"{targetPath}\" /p:Configuration={configuration} {tfmArg} {args ?? ""}"),
       _ => throw new InvalidOperationException("Unknown MSBuild type")
     };
   }
