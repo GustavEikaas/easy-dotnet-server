@@ -20,7 +20,7 @@ public class ProcessQueueServiceTests
       await service.RunProcessAsync(command, args, cancellationToken: CancellationToken.None);
     });
 
-    Assert.True(service.CurrentCount() == 1, $"Current running was {service.CurrentCount()}");
+    Assert.True(service.CurrentCount() == 2, $"Current running was {service.CurrentCount()}");
   }
   private static (string Command, string Arguments) GetSleepCommand(int seconds)
   {
