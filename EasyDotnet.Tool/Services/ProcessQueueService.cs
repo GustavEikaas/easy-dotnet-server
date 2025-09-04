@@ -72,6 +72,7 @@ public class ProcessQueueService(LogService logService, int maxConcurrent = 35)
         }
         catch
         {
+
         }
 
         throw; // rethrow cancellation so caller knows it was cancelled
