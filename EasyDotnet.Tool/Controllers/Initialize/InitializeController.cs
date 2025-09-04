@@ -10,7 +10,7 @@ using StreamJsonRpc;
 
 namespace EasyDotnet.Controllers.Initialize;
 
-public class InitializeController(ClientService clientService) : BaseController
+public class InitializeController(ClientService clientService, VisualStudioLocator locator) : BaseController
 {
   [JsonRpcMethod("initialize")]
   public InitializeResponse Initialize(InitializeRequest request)
@@ -44,7 +44,11 @@ public class InitializeController(ClientService clientService) : BaseController
       clientService.UseVisualStudio = request.Options.UseVisualStudio;
     }
 
-    return new InitializeResponse(new ServerInfo("EasyDotnet", serverVersion.ToString()), new ServerCapabilities(GetRpcPaths(), GetRpcNotifications()));
+    return new InitializeResponse(
+        new ServerInfo("EasyDotnet", serverVersion.ToString()),
+        new ServerCapabilities(GetRpcPaths(), GetRpcNotifications()),
+        new ToolPaths(locator.GetVisualStudioMSBuildPath())
+        );
   }
 
   private static List<string> GetRpcPaths() =>
