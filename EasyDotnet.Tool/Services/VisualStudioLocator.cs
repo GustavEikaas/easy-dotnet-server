@@ -63,7 +63,7 @@ public class VisualStudioLocator(IMemoryCache cache, ClientService clientService
       var process = Process.Start(new ProcessStartInfo
       {
         FileName = vswhere,
-        Arguments = "-latest -products * -requires Microsoft.Component.MSBuild -property installationPath",
+        Arguments = "-latest -property installationPath",
         RedirectStandardOutput = true,
         UseShellExecute = false,
         CreateNoWindow = true
@@ -73,7 +73,9 @@ public class VisualStudioLocator(IMemoryCache cache, ClientService clientService
       process?.WaitForExit();
 
       if (string.IsNullOrEmpty(output) || !Directory.Exists(output))
+      {
         return null;
+      }
 
       var msbuildPath = Path.Combine(output, "MSBuild", "Current", "Bin", "MSBuild.exe");
       return File.Exists(msbuildPath) ? msbuildPath : null;
