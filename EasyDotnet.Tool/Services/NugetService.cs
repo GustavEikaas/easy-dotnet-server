@@ -48,7 +48,7 @@ public class NugetService(ClientService clientService, LogService logger, Proces
 
   public List<PackageSource> GetSources()
   {
-    var settings = Settings.LoadDefaultSettings(root: null);
+    var settings = Settings.LoadDefaultSettings(root: Directory.GetCurrentDirectory());
     var sourceProvider = new PackageSourceProvider(settings);
     var sources = sourceProvider.LoadPackageSources();
     return [.. sources];

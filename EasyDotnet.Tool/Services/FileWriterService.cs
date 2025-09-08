@@ -51,22 +51,6 @@ public class OutFileWriterService
     }
   }
 
-  public void WriteNugetResults(List<NugetPackageMetadata> packages, string outFile)
-  {
-
-    using var writer = new StreamWriter(outFile, false);
-
-    if (packages.Count == 0)
-    {
-      writer.WriteLine("[]");
-    }
-    else
-    {
-      packages.ToList().ForEach(x =>
-          writer.WriteLine(JsonSerializer.Serialize(x, SerializerOptions).Replace("\n", "").Replace("\r", ""))
-        );
-    }
-  }
 
   public void WriteOutdatedDependencies(List<OutdatedDependencyInfoResponse> packages, string outFile)
   {
