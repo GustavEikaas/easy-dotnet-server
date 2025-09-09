@@ -39,7 +39,7 @@ public class NugetController(ClientService clientService, NugetService nugetServ
   }
 
   [JsonRpcMethod("nuget/get-package-versions")]
-  public async Task<List<string>> GetPackageVersions(string packageId, List<string>? sources = null, bool includePrerelease = false)
+  public async Task<IAsyncEnumerable<string>> GetPackageVersions(string packageId, List<string>? sources = null, bool includePrerelease = false)
   {
     clientService.ThrowIfNotInitialized();
 
@@ -49,11 +49,11 @@ public class NugetController(ClientService clientService, NugetService nugetServ
         includePrerelease,
         sources);
 
-    return [.. versions.Select(v => v.ToNormalizedString())];
+    return versions.OrderBy(v => v.Version).Select(v => v.ToNormalizedString()).AsAsyncEnumerable();
   }
 
   [JsonRpcMethod("nuget/search-packages")]
-  public async Task<FileResultResponse> SearchPackages(string searchTerm, List<string>? sources = null)
+  public async Task<IAsyncEnumerable<NugetPackageMetadata>> SearchPackages(string searchTerm, List<string>? sources = null)
   {
     clientService.ThrowIfNotInitialized();
 
@@ -61,11 +61,8 @@ public class NugetController(ClientService clientService, NugetService nugetServ
 
     var list = packages
         .SelectMany(kvp => kvp.Value.Select(x => NugetPackageMetadata.From(x, kvp.Key)))
-        .ToList();
+        .AsAsyncEnumerable();
 
-    var outFile = Path.GetTempFileName();
-    outFileWriterService.WriteNugetResults(list, outFile);
-
-    return new FileResultResponse(outFile);
+    return list;
   }
 }

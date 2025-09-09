@@ -138,7 +138,7 @@ _No parameters_
 | sources | List<string> | ✅  |
 | includePrerelease | bool | ✅  |
 
-**Returns:** `Task<List<string>>`
+**Returns:** `Task<IAsyncEnumerable<string>>`
 
 ### `nuget/search-packages`
 | Parameter | Type | Optional |
@@ -146,7 +146,7 @@ _No parameters_
 | searchTerm | string |   |
 | sources | List<string> | ✅  |
 
-**Returns:** `Task<FileResultResponse>`
+**Returns:** `Task<IAsyncEnumerable<NugetPackageMetadata>>`
 
 ---
 
