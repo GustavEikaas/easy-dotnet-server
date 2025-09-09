@@ -125,9 +125,7 @@ public class BootstrapTests
 
     var mockLogService = new TestLogService();
     var memoryCache = new MemoryCache(new MemoryCacheOptions());
-    var roslynService = new RoslynService(
-        new MsBuildService(
-          new VisualStudioLocator(memoryCache, new ClientService()), new ClientService(), new ProcessQueueService(mockLogService), memoryCache), mockLogService);
+    var roslynService = new RoslynService(new MsBuildService(new VisualStudioLocator(memoryCache, new ClientService()), new ClientService(), new ProcessQueueService(mockLogService), memoryCache, mockLogService), mockLogService);
     await roslynService.BootstrapFile(
         controllerFilePath,
         kind,
