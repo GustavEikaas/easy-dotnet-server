@@ -8,7 +8,7 @@ using StreamJsonRpc;
 
 namespace EasyDotnet.Controllers.Nuget;
 
-public class NugetController(ClientService clientService, NugetService nugetService, OutFileWriterService outFileWriterService) : BaseController
+public class NugetController(ClientService clientService, NugetService nugetService) : BaseController
 {
 
   [JsonRpcMethod("nuget/restore")]

@@ -10,9 +10,9 @@ using EasyDotnet.Types;
 
 namespace EasyDotnet.Services;
 
-public class MtpService(OutFileWriterService outFileWriterService)
+public class MtpService
 {
-  public async Task<List<Types.DiscoveredTest>> RunDiscoverAsync(string testExecutablePath, CancellationToken token)
+  public async Task<List<DiscoveredTest>> RunDiscoverAsync(string testExecutablePath, CancellationToken token)
   {
     if (!File.Exists(testExecutablePath))
     {
