@@ -19,7 +19,7 @@ public class MsBuildController(ClientService clientService, MsBuildService msBui
   public async Task<DotnetProjectProperties> QueryProjectProperties(ProjectPropertiesRequest request)
   {
     clientService.ThrowIfNotInitialized();
-    var result = await msBuild.GetProjectPropertiesAsync(request.TargetPath, request.TargetFramework, request.ConfigurationOrDefault);
+    var result = await msBuild.GetOrSetProjectPropertiesAsync(request.TargetPath, request.TargetFramework, request.ConfigurationOrDefault);
 
     return result;
   }

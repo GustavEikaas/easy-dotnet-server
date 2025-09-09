@@ -31,7 +31,6 @@ public static class DiModules
     services.AddSingleton<RoslynService>();
     services.AddSingleton<ProcessQueueService>();
     services.AddSingleton<TemplateEngineService>();
-    services.AddSingleton<RoslynProjectMetadataCache>();
     services.AddSingleton(new LogService(levels, jsonRpc));
 
     //Dotnet oudated

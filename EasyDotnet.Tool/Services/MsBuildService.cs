@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Build.Locator;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace EasyDotnet.Services;
 
@@ -31,6 +32,8 @@ public sealed record DotnetProjectProperties(
     string? TargetPath,
     bool GeneratePackageOnBuild,
     bool IsPackable,
+    string? LangVersion,
+    string? RootNamespace,
     string? PackageId,
     string? NugetVersion,
     string? Version,
@@ -43,7 +46,7 @@ public sealed record DotnetProjectProperties(
     string TestCommand
 );
 
-public partial class MsBuildService(VisualStudioLocator locator, ClientService clientService, ProcessQueueService processQueueService)
+public partial class MsBuildService(VisualStudioLocator locator, ClientService clientService, ProcessQueueService processQueueService, IMemoryCache memoryCache)
 {
   public static SdkInstallation[] QuerySdkInstallations()
   {
@@ -87,6 +90,18 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
     path.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase) ? "fsharp" :
     "unknown";
 
+
+  public async Task<DotnetProjectProperties> GetOrSetProjectPropertiesAsync(
+      string projectPath,
+      string? targetFrameworkMoniker = null,
+      string configuration = "Debug",
+      CancellationToken cancellationToken = default) => await memoryCache.GetOrCreateAsync(
+        GetCacheKeyProperties(projectPath, targetFrameworkMoniker, configuration),
+        entry => GetProjectPropertiesAsync(projectPath, targetFrameworkMoniker, configuration, cancellationToken)
+    ) ?? throw new Exception("Failed to get project properties");
+
+  private static string GetCacheKeyProperties(string projectPath, string? targetFrameworkMoniker, string configuration) => $"{projectPath}-{targetFrameworkMoniker ?? ""}-{configuration ?? ""}";
+
   public async Task<DotnetProjectProperties> GetProjectPropertiesAsync(
       string projectPath,
       string? targetFrameworkMoniker = null,
@@ -104,7 +119,7 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
         "TargetFramework", "TargetFrameworks", "IsTestProject", "UserSecretsId",
         "TestingPlatformDotnetTestSupport", "TargetPath", "GeneratePackageOnBuild",
         "IsPackable", "PackageId", "Version", "PackageOutputPath", "TargetFrameworkVersion",
-        "UsingMicrosoftNETSdkWorker", "UsingMicrosoftNETSdkWeb",  "UseIISExpress"
+        "UsingMicrosoftNETSdkWorker", "UsingMicrosoftNETSdkWeb",  "UseIISExpress", "LangVersion", "RootNamespace"
     };
 
     var (command, args) = GetCommandAndArguments(
@@ -162,6 +177,8 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
         UserSecretsId: TryGet("UserSecretsId"),
         TestingPlatformDotnetTestSupport: TryGetBool("TestingPlatformDotnetTestSupport"),
         TargetPath: TryGet("TargetPath"),
+        LangVersion: TryGet("LangVersion"),
+        RootNamespace: TryGet("RootNamespace"),
         GeneratePackageOnBuild: TryGetBool("GeneratePackageOnBuild"),
         IsPackable: TryGetBool("IsPackable"),
         PackageId: TryGet("PackageId"),
