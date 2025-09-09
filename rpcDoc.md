@@ -1,24 +1,3 @@
-## VsTestController
-
-### `vstest/discover`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| vsTestPath | string |   |
-| dllPath | string |   |
-
-**Returns:** `FileResultResponse`
-
-### `vstest/run`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| vsTestPath | string |   |
-| dllPath | string |   |
-| testIds | Guid[] |   |
-
-**Returns:** `FileResultResponse`
-
----
-
 ## UserSecretsController
 
 ### `user-secrets/init`
@@ -27,6 +6,29 @@
 | projectPath | string |   |
 
 **Returns:** `ProjectUserSecretsInitResponse`
+
+---
+
+## TestController
+
+### `test/discover`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+| targetFrameworkMoniker | string |   |
+| configuration | string |   |
+
+**Returns:** `Task<IAsyncEnumerable<DiscoveredTest>>`
+
+### `test/run`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+| targetFrameworkMoniker | string |   |
+| configuration | string |   |
+| filter | RunRequestNode[] |   |
+
+**Returns:** `Task<IAsyncEnumerable<TestRunResult>>`
 
 ---
 
@@ -104,7 +106,7 @@ _No parameters_
 | targetPath | string |   |
 | includeTransitive | bool? | ✅  |
 
-**Returns:** `Task<FileResultResponse>`
+**Returns:** `Task<IAsyncEnumerable<OutdatedDependencyInfoResponse>>`
 
 ---
 
@@ -147,25 +149,6 @@ _No parameters_
 | sources | List<string> | ✅  |
 
 **Returns:** `Task<IAsyncEnumerable<NugetPackageMetadata>>`
-
----
-
-## MtpController
-
-### `mtp/discover`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| testExecutablePath | string |   |
-
-**Returns:** `Task<FileResultResponse>`
-
-### `mtp/run`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| testExecutablePath | string |   |
-| filter | RunRequestNode[] |   |
-
-**Returns:** `Task<FileResultResponse>`
 
 ---
 
