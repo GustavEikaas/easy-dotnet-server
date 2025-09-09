@@ -8,4 +8,4 @@ public sealed record InitializeResponse(ServerInfo ServerInfo, ServerCapabilitie
 
 public sealed record ServerCapabilities(List<string> Routes, List<string> ServerSentNotifications);
 
-public sealed record ToolPaths(string MsBuildPath);
+public sealed record ToolPaths(string? MsBuildPath);

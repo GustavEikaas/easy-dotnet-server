@@ -44,11 +44,24 @@ public class InitializeController(ClientService clientService, VisualStudioLocat
       clientService.UseVisualStudio = request.Options.UseVisualStudio;
     }
 
+
     return new InitializeResponse(
         new ServerInfo("EasyDotnet", serverVersion.ToString()),
         new ServerCapabilities(GetRpcPaths(), GetRpcNotifications()),
-        new ToolPaths(locator.GetVisualStudioMSBuildPath())
+        new ToolPaths(TryGetMsBuildPath(locator))
         );
+  }
+
+  private static string? TryGetMsBuildPath(VisualStudioLocator locator)
+  {
+    try
+    {
+      return locator.GetVisualStudioMSBuildPath();
+    }
+    catch
+    {
+      return null;
+    }
   }
 
   private static List<string> GetRpcPaths() =>
