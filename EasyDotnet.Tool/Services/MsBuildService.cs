@@ -46,13 +46,14 @@ public sealed record DotnetProjectProperties(
     string TestCommand
 );
 
-public partial class MsBuildService(VisualStudioLocator locator, ClientService clientService, ProcessQueueService processQueueService, IMemoryCache memoryCache)
+public partial class MsBuildService(VisualStudioLocator locator, ClientService clientService, ProcessQueueService processQueueService, IMemoryCache memoryCache, LogService logService)
 {
   public static SdkInstallation[] QuerySdkInstallations()
   {
     MSBuildLocator.AllowQueryAllRuntimeVersions = true;
     var instances = MSBuildLocator.QueryVisualStudioInstances().Where(x => x.DiscoveryType == DiscoveryType.DotNetSdk).ToList();
     var monikers = instances.Select(x => new SdkInstallation(x.Name, $"net{x.Version.Major}.0", x.Version, x.MSBuildPath, x.VisualStudioRootPath)).ToArray();
+
     return monikers;
   }
 
