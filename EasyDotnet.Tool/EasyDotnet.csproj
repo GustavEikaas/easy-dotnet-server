@@ -6,13 +6,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>dotnet-easydotnet</ToolCommandName>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
-<<<<<<< HEAD
     <Version>2.0.0</Version>
-||||||| b9ed9e5
-    <Version>1.0.29</Version>
-=======
-    <Version>1.0.30</Version>
->>>>>>> 13fd065eb05f075cfedf7d2580acedb1618e66f0
     <Authors>Gustav Eikaas</Authors>
     <PackageId>EasyDotnet</PackageId>
     <Nullable>enable</Nullable>
