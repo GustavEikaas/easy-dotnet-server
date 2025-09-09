@@ -9,5 +9,5 @@ public sealed record TestRunResult
   public required long? Duration { get; init; }
   public required IAsyncEnumerable<string> StackTrace { get; init; }
   public required string? ErrorMessage { get; init; }
-  public required string? StdOut { get; init; }
+  public required IAsyncEnumerable<string> StdOut { get; init; }
 }

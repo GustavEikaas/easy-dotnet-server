@@ -31,7 +31,7 @@ public static class TestCaseExtensions
     ErrorMessage = x.ErrorMessage,
     Id = x.TestCase.Id.ToString(),
     Outcome = GetTestOutcome(x.Outcome),
-    StdOut = x.Messages.FirstOrDefault(message => message.Category == TestResultMessage.StandardOutCategory)?.Text
+    StdOut = (x.GetStandardOutput()?.Split(Environment.NewLine) ?? []).AsAsyncEnumerable()
   };
 
   public static string GetTestOutcome(TestOutcome outcome) => outcome switch
@@ -43,4 +43,7 @@ public static class TestCaseExtensions
     TestOutcome.NotFound => "not found",
     _ => "",
   };
+
+  private static string? GetStandardOutput(this TestResult testResult) 
+    => testResult.Messages.FirstOrDefault(message => message.Category == TestResultMessage.StandardOutCategory)?.Text;
 }

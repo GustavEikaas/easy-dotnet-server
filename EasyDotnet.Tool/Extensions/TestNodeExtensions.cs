@@ -29,6 +29,6 @@ public static class TestNodeExtensions
     Duration = (long?)test.Node.Duration,
     ErrorMessage = test.Node.Message,
     StackTrace = (test.Node.StackTrace?.Split(Environment.NewLine) ?? []).AsAsyncEnumerable(),
-    StdOut = test.Node.StandardOutput
+    StdOut = (test.Node.StandardOutput?.Split(Environment.NewLine) ?? []).AsAsyncEnumerable()
   };
 }
