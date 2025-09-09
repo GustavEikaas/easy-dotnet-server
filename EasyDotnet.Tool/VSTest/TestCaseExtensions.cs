@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using EasyDotnet.Types;
 
 using Microsoft.VisualStudio.TestPlatform.ObjectModel;
@@ -29,7 +30,8 @@ public static class TestCaseExtensions
     StackTrace = (x.ErrorStackTrace?.Split(Environment.NewLine) ?? []).AsAsyncEnumerable(),
     ErrorMessage = x.ErrorMessage,
     Id = x.TestCase.Id.ToString(),
-    Outcome = GetTestOutcome(x.Outcome)
+    Outcome = GetTestOutcome(x.Outcome),
+    StdOut = x.Messages.FirstOrDefault(message => message.Category == TestResultMessage.StandardOutCategory)?.Text
   };
 
   public static string GetTestOutcome(TestOutcome outcome) => outcome switch
