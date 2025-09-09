@@ -1,6 +1,8 @@
+using System;
 using EasyDotnet.Types;
 
 using Microsoft.VisualStudio.TestPlatform.ObjectModel;
+using StreamJsonRpc;
 
 namespace EasyDotnet.VSTest;
 
@@ -24,7 +26,7 @@ public static class TestCaseExtensions
   public static TestRunResult ToTestRunResult(this TestResult x) => new()
   {
     Duration = (long?)x.Duration.TotalMilliseconds,
-    StackTrace = x.ErrorStackTrace,
+    StackTrace = (x.ErrorStackTrace?.Split(Environment.NewLine) ?? []).AsAsyncEnumerable(),
     ErrorMessage = x.ErrorMessage,
     Id = x.TestCase.Id.ToString(),
     Outcome = GetTestOutcome(x.Outcome)

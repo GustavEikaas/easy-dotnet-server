@@ -48,7 +48,7 @@ public static class JsonRpcServerBuilder
     if (logLevel != SourceLevels.Off)
     {
       ts.Switch.Level = logLevel;
-      var logDir = Path.Combine(Path.GetTempPath(), "easy-dotnet-server");
+      var logDir = Directory.GetCurrentDirectory();
       Directory.CreateDirectory(logDir);
 
       var logFile = Path.Combine(

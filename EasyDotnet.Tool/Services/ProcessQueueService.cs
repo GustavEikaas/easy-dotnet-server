@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
+using EasyDotnet.MTP;
 
 namespace EasyDotnet.Services;
 
@@ -57,6 +58,12 @@ public class ProcessQueueService(LogService logService, int maxConcurrent = 35)
 
         await Task.WhenAll(stdOutTask, stdErrTask);
 
+        if (logService.SourceLevel == SourceLevels.Verbose)
+        {
+          logService.Info("STDOUT: " + stdOutTask.Result);
+          logService.Info("STDERR: " + stdErrTask.Result);
+        }
+
         await process.WaitForExitAsync(linkedCts.Token);
 
         return (process.ExitCode == 0, stdOutTask.Result, stdErrTask.Result);
@@ -67,6 +74,8 @@ public class ProcessQueueService(LogService logService, int maxConcurrent = 35)
         {
           if (!process.HasExited)
           {
+
+            logService.Info("[Timeout] Force killing: " + process.ProcessName);
             process.Kill(entireProcessTree: true);
           }
         }

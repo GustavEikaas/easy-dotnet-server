@@ -16,24 +16,8 @@ namespace EasyDotnet.Services;
 
 public sealed record VariableResult(string Identifier, int LineStart, int LineEnd, int ColumnStart, int ColumnEnd);
 
-public class RoslynService(RoslynProjectMetadataCache cache, LogService logService)
+public class RoslynService(MsBuildService service, LogService logService)
 {
-  private async Task<ProjectCacheItem> GetOrSetProjectFromCache(string projectPath, CancellationToken cancellationToken)
-  {
-    if (cache.TryGet(projectPath, out var cachedProject) && cachedProject is not null)
-    {
-      return cachedProject;
-    }
-
-    using var workspace = MSBuildWorkspace.Create();
-    var project = await workspace.OpenProjectAsync(projectPath, cancellationToken: cancellationToken) ?? throw new Exception($"Failed to load project at path: {projectPath}");
-    cache.Set(projectPath, project);
-
-    return !cache.TryGet(projectPath, out var updatedProject) || updatedProject is null
-      ? throw new Exception("Caching failed after setting project metadata.")
-      : updatedProject;
-  }
-
   public async Task<List<VariableResult>> AnalyzeAsync(string sourceFilePath, int lineNumber)
   {
     using var workspace = MSBuildWorkspace.Create();
@@ -139,11 +123,17 @@ public class RoslynService(RoslynProjectMetadataCache cache, LogService logServi
   public async Task<bool> BootstrapFile(string filePath, Kind kind, bool preferFileScopedNamespace, CancellationToken cancellationToken)
   {
     var projectPath = FindCsprojFromFile(filePath);
-    var project = await GetOrSetProjectFromCache(projectPath, cancellationToken);
 
-    var rootNamespace = project.RootNamespace;
+    var project = await service.GetOrSetProjectPropertiesAsync(projectPath, null, "Debug", cancellationToken);
 
-    var useFileScopedNs = preferFileScopedNamespace && project.SupportsFileScopedNamespace;
+    var rootNamespace = project.RootNamespace ?? project.ProjectName;
+
+    var supportsFileScopedNamespace =
+        string.IsNullOrEmpty(project.LangVersion) ||
+        string.Compare(project.LangVersion, "10.0", StringComparison.OrdinalIgnoreCase) >= 0 ||
+        project.LangVersion.Equals("latest", StringComparison.OrdinalIgnoreCase);
+
+    var useFileScopedNs = preferFileScopedNamespace && supportsFileScopedNamespace;
 
     var relativePath = Path.GetDirectoryName(filePath)!
         .Replace(Path.GetDirectoryName(projectPath)!, "")

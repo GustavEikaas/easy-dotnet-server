@@ -1,47 +1,35 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using EasyDotnet.Types;
 using EasyDotnet.VSTest;
 
 namespace EasyDotnet.Services;
 
-public class VsTestService(OutFileWriterService outFileWriter, LogService logService)
+public class VsTestService(LogService logService)
 {
-  public void RunDiscover(DiscoverProjectRequest[] projects)
+  public List<DiscoveredTest> RunDiscover(string dllPath)
   {
     var vsTestPath = GetVsTestPath();
     logService.Info($"Using VSTest path: {vsTestPath}");
-    var dllPaths = projects.Select(x => x.DllPath).ToArray();
-    var discoveredTests = DiscoverHandler.Discover(vsTestPath, dllPaths);
-
-    projects
-          .Join(
-              discoveredTests,
-              proj => proj.DllPath,
-              test => test.Key.Replace("\\", "/"),
-              (proj, test) => new { proj.OutFile, Tests = test.Value }
-          )
-          .ToList().ForEach(x => outFileWriter.WriteDiscoveredTests(x.Tests, x.OutFile));
+    var discoveredTests = DiscoverHandler.Discover(vsTestPath, [dllPath]);
+    discoveredTests.TryGetValue(dllPath, out var tests);
+    return tests ?? [];
   }
 
-  public void RunTests(
-    string dllPath,
-    Guid[] testIds,
-    string outFile
-)
+  public List<TestRunResult> RunTests(string dllPath, Guid[] testIds)
   {
     var vsTestPath = GetVsTestPath();
     logService.Info($"Using VSTest path: {vsTestPath}");
     var testResults = RunHandler.RunTests(vsTestPath, dllPath, testIds);
-    outFileWriter.WriteTestRunResults(testResults, outFile);
+    return testResults;
   }
 
-  private string GetVsTestPath()
+  private static string GetVsTestPath()
   {
     var x = MsBuildService.QuerySdkInstallations();
     return Path.Join(x.ToList()[0].MSBuildPath, "vstest.console.dll");
   }
 
 }
-
-public sealed record DiscoverProjectRequest(string DllPath, string OutFile);

@@ -23,7 +23,6 @@ public static class DiModules
     services.AddTransient<UserSecretsService>();
     services.AddTransient<NotificationService>();
     services.AddTransient<NugetService>();
-    services.AddTransient<OutFileWriterService>();
     services.AddTransient<VsTestService>();
     services.AddTransient<MtpService>();
     services.AddTransient<OutdatedService>();
@@ -31,7 +30,6 @@ public static class DiModules
     services.AddSingleton<RoslynService>();
     services.AddSingleton<ProcessQueueService>();
     services.AddSingleton<TemplateEngineService>();
-    services.AddSingleton<RoslynProjectMetadataCache>();
     services.AddSingleton(new LogService(levels, jsonRpc));
 
     //Dotnet oudated
