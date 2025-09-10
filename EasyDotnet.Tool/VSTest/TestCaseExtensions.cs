@@ -44,6 +44,6 @@ public static class TestCaseExtensions
     _ => "",
   };
 
-  private static string? GetStandardOutput(this TestResult testResult) 
+  private static string? GetStandardOutput(this TestResult testResult)
     => testResult.Messages.FirstOrDefault(message => message.Category == TestResultMessage.StandardOutCategory)?.Text;
 }
