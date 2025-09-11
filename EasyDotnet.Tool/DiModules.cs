@@ -28,6 +28,7 @@ public static class DiModules
     services.AddTransient<OutdatedService>();
     services.AddSingleton<IFileSystem, FileSystem>();
     services.AddSingleton<RoslynService>();
+    services.AddSingleton<SolutionService>();
     services.AddSingleton<ProcessQueueService>();
     services.AddSingleton<TemplateEngineService>();
     services.AddSingleton(new LogService(levels, jsonRpc));

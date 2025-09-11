@@ -49,5 +49,8 @@ public sealed record TestNode
   string NodeType,
 
   [property: JsonProperty("execution-state")]
-  string ExecutionState
+  string ExecutionState,
+
+  [property: JsonProperty("standardOutput")]
+  string? StandardOutput
 );

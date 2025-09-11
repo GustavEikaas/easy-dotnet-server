@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using EasyDotnet.Types;
 
 using Microsoft.VisualStudio.TestPlatform.ObjectModel;
@@ -29,7 +30,8 @@ public static class TestCaseExtensions
     StackTrace = (x.ErrorStackTrace?.Split(Environment.NewLine) ?? []).AsAsyncEnumerable(),
     ErrorMessage = x.ErrorMessage,
     Id = x.TestCase.Id.ToString(),
-    Outcome = GetTestOutcome(x.Outcome)
+    Outcome = GetTestOutcome(x.Outcome),
+    StdOut = (x.GetStandardOutput()?.Split(Environment.NewLine) ?? []).AsAsyncEnumerable()
   };
 
   public static string GetTestOutcome(TestOutcome outcome) => outcome switch
@@ -41,4 +43,7 @@ public static class TestCaseExtensions
     TestOutcome.NotFound => "not found",
     _ => "",
   };
+
+  private static string? GetStandardOutput(this TestResult testResult)
+    => testResult.Messages.FirstOrDefault(message => message.Category == TestResultMessage.StandardOutCategory)?.Text;
 }
