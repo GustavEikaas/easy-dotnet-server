@@ -5,7 +5,7 @@
 |-----------|------|----------|
 | projectPath | string |   |
 
-**Returns:** `ProjectUserSecretsInitResponse`
+**Returns:** `Task<ProjectUserSecretsInitResponse>`
 
 ---
 
