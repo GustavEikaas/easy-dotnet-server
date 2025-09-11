@@ -46,7 +46,7 @@ public sealed record DotnetProjectProperties(
     string TestCommand
 );
 
-public partial class MsBuildService(VisualStudioLocator locator, ClientService clientService, ProcessQueueService processQueueService, IMemoryCache memoryCache, LogService logService)
+public partial class MsBuildService(VisualStudioLocator locator, ClientService clientService, ProcessQueueService processQueueService, IMemoryCache memoryCache, LogService logService, NotificationService notificationService)
 {
   public static SdkInstallation[] QuerySdkInstallations()
   {
@@ -91,6 +91,12 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
     path.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase) ? "fsharp" :
     "unknown";
 
+
+  public async Task InvalidateProjectProperties(string projectPath, string? targetFrameworkMoniker = null, string configuration = "Debug")
+  {
+    memoryCache.Remove(GetCacheKeyProperties(projectPath, targetFrameworkMoniker, configuration));
+    await notificationService.NotifyProjectChanged(projectPath, targetFrameworkMoniker, configuration);
+  }
 
   public async Task<DotnetProjectProperties> GetOrSetProjectPropertiesAsync(
       string projectPath,

@@ -36,6 +36,8 @@ public class UserSecretsService(MsBuildService msBuildService, ProcessQueueServi
       throw new Exception("Failed to initialize user secrets");
     }
 
+    await msBuildService.InvalidateProjectProperties(projectPath);
+
     EnsureSecretsDirectory(newSecretsId);
     var secretsFilePath = GetSecretsPath(newSecretsId);
 

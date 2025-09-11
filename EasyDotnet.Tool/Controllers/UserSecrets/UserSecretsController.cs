@@ -1,3 +1,4 @@
+using System.IO;
 using System.Threading.Tasks;
 using EasyDotnet.Services;
 using StreamJsonRpc;
@@ -9,7 +10,7 @@ public class UserSecretsController(UserSecretsService userSecretsService) : Base
   [JsonRpcMethod("user-secrets/init")]
   public async Task<ProjectUserSecretsInitResponse> InitSecrets(string projectPath)
   {
-    var secret = await userSecretsService.AddUserSecretsId(projectPath);
+    var secret = await userSecretsService.AddUserSecretsId(Path.GetFullPath(projectPath));
     return new(secret.Id, secret.FilePath);
   }
 
