@@ -1,28 +1,27 @@
 using System;
 using System.IO;
-using System.Linq;
-using Microsoft.Build.Evaluation;
+using System.Threading.Tasks;
 
 namespace EasyDotnet.Services;
 
 public sealed record ProjectUserSecret(string Id, string FilePath);
 
-public class UserSecretsService
+public class UserSecretsService(MsBuildService msBuildService, ProcessQueueService processQueueService)
 {
 
   private readonly string _basePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Microsoft", "UserSecrets");
 
-  public ProjectUserSecret AddUserSecretsId(string projectPath)
+  public async Task<ProjectUserSecret> AddUserSecretsId(string projectPath)
   {
     if (!File.Exists(projectPath))
     {
       throw new FileNotFoundException("Project file not found", projectPath);
     }
 
-    var projectCollection = new ProjectCollection();
-    var project = projectCollection.LoadProject(projectPath);
+    var project = await msBuildService.GetOrSetProjectPropertiesAsync(projectPath);
 
-    var currentSecretsId = project.GetPropertyValue("UserSecretsId");
+    var currentSecretsId = project.UserSecretsId;
+
     if (!string.IsNullOrEmpty(currentSecretsId))
     {
       var path = GetSecretsPath(currentSecretsId);
@@ -31,13 +30,11 @@ public class UserSecretsService
 
     var newSecretsId = Guid.NewGuid().ToString();
 
-    var propertyGroup = project.Xml.PropertyGroups
-        .FirstOrDefault(pg => pg.ConditionLocation is null)
-        ?? project.Xml.AddPropertyGroup();
-
-    propertyGroup.AddProperty("UserSecretsId", newSecretsId);
-
-    project.Save();
+    var (success, _, _) = await processQueueService.RunProcessAsync("dotnet", $"user-secrets init --project {projectPath} --id {newSecretsId}", new ProcessOptions(true));
+    if (!success)
+    {
+      throw new Exception("Failed to initialize user secrets");
+    }
 
     EnsureSecretsDirectory(newSecretsId);
     var secretsFilePath = GetSecretsPath(newSecretsId);
