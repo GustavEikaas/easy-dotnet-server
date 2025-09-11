@@ -148,7 +148,8 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
     var msbuildOutput = JsonSerializer.Deserialize<MsBuildPropertiesResponse>(jsonPayload);
     var values = msbuildOutput?.Properties ?? new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
 
-    string? TryGet(string name) => values.TryGetValue(name, out var v) ? v : null;
+    string? TryGet(string name)
+        => values.TryGetValue(name, out var v) && !string.IsNullOrEmpty(v) ? v : null;
     bool TryGetBool(string name) => values.TryGetValue(name, out var v) && bool.TryParse(v, out var b) && b;
 
     var tfm = TryGet("TargetFramework");
