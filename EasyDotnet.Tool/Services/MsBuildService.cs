@@ -232,6 +232,29 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
     return references;
   }
 
+
+  public async Task<bool> AddProjectReferenceAsync(string projectPath, string targetPath, CancellationToken cancellationToken = default)
+  {
+    var (success, _, _) = await processQueueService.RunProcessAsync(
+           "dotnet",
+           $"add \"{projectPath}\" reference \"{targetPath}\"",
+           new ProcessOptions(true),
+           cancellationToken);
+
+    return success;
+  }
+
+  public async Task<bool> RemoveProjectReferenceAsync(string projectPath, string targetPath, CancellationToken cancellationToken = default)
+  {
+    var (success, _, _) = await processQueueService.RunProcessAsync(
+           "dotnet",
+           $"remove \"{projectPath}\" reference \"{targetPath}\"",
+           new ProcessOptions(true),
+           cancellationToken);
+
+    return success;
+  }
+
   private string BuildRunCommand(bool isSdk, bool useIISExpress, string? targetPath, string projectPath, string projectName)
   {
     var buildCmd = BuildBuildCommand(isSdk, projectPath);
