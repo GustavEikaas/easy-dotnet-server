@@ -171,7 +171,7 @@ _No parameters_
 ### `msbuild/project-references`
 | Parameter | Type | Optional |
 |-----------|------|----------|
-| targetPath | string |   |
+| projectPath | string |   |
 
 **Returns:** `Task<List<string>>`
 

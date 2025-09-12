@@ -27,9 +27,9 @@ public class MsBuildController(ClientService clientService, MsBuildService msBui
   }
 
   [JsonRpcMethod("msbuild/project-references")]
-  public async Task<List<string>> GetProjectReferences(string targetPath)
+  public async Task<List<string>> GetProjectReferences(string projectPath)
   {
     clientService.ThrowIfNotInitialized();
-    return await msBuild.GetProjectReferencesAsync(Path.GetFullPath(targetPath));
+    return await msBuild.GetProjectReferencesAsync(Path.GetFullPath(projectPath));
   }
 }
