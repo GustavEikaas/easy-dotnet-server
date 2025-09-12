@@ -1,8 +1,7 @@
 using System.Collections.Generic;
-using System.Linq;
+using System.IO;
 using System.Threading.Tasks;
 using EasyDotnet.Services;
-using Microsoft.CodeAnalysis.MSBuild;
 using StreamJsonRpc;
 
 namespace EasyDotnet.Controllers.MsBuild;
@@ -31,11 +30,6 @@ public class MsBuildController(ClientService clientService, MsBuildService msBui
   public async Task<List<string>> GetProjectReferences(string targetPath)
   {
     clientService.ThrowIfNotInitialized();
-    using var workspace = MSBuildWorkspace.Create();
-    var project = await workspace.OpenProjectAsync(targetPath);
-    return project.ProjectReferences
-            .Select(r => workspace.CurrentSolution.GetProject(r.ProjectId)?.FilePath)
-            .Where(path => path != null)
-            .ToList()!;
+    return await msBuild.GetProjectReferencesAsync(Path.GetFullPath(targetPath));
   }
 }

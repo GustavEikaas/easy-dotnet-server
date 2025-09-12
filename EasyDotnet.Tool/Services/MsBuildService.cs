@@ -202,6 +202,22 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
     );
   }
 
+  public async Task<List<string>> GetProjectReferencesAsync(string projectPath, CancellationToken cancellationToken = default)
+  {
+    if (string.IsNullOrWhiteSpace(projectPath))
+    {
+      throw new ArgumentException("Project path must be provided", nameof(projectPath));
+    }
+
+    var (success, stdOut, stdErr) = await processQueueService.RunProcessAsync("dotnet", $"list \"{projectPath}\" reference", new ProcessOptions(), cancellationToken);
+    return success
+      ? [.. stdOut
+        .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
+        .Select(line => line.Trim())
+        .Where(line => line.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) || line.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase))]
+      : throw new InvalidOperationException($"Failed to get project references: {stdErr}");
+  }
+
   private string BuildRunCommand(bool isSdk, bool useIISExpress, string? targetPath, string projectPath, string projectName)
   {
     var buildCmd = BuildBuildCommand(isSdk, projectPath);
