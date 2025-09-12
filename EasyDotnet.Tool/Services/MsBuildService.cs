@@ -202,6 +202,59 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
     );
   }
 
+  public async Task<List<string>> GetProjectReferencesAsync(string projectPath, CancellationToken cancellationToken = default)
+  {
+    if (string.IsNullOrWhiteSpace(projectPath))
+    {
+      throw new ArgumentException("Project path must be provided", nameof(projectPath));
+    }
+
+    var (success, stdOut, stdErr) = await processQueueService.RunProcessAsync(
+           "dotnet",
+           $"list \"{projectPath}\" reference",
+           new ProcessOptions(true),
+           cancellationToken);
+
+    if (!success)
+    {
+      throw new InvalidOperationException($"Failed to get project references: {stdErr}");
+    }
+
+    var projectDir = Path.GetDirectoryName(projectPath)!;
+
+    var references = stdOut
+        .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
+        .Select(line => line.Trim())
+        .Where(line => line.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) || line.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase))
+        .Select(relativePath => Path.GetFullPath(Path.Combine(projectDir, relativePath)))
+        .ToList();
+
+    return references;
+  }
+
+
+  public async Task<bool> AddProjectReferenceAsync(string projectPath, string targetPath, CancellationToken cancellationToken = default)
+  {
+    var (success, _, _) = await processQueueService.RunProcessAsync(
+           "dotnet",
+           $"add \"{projectPath}\" reference \"{targetPath}\"",
+           new ProcessOptions(true),
+           cancellationToken);
+
+    return success;
+  }
+
+  public async Task<bool> RemoveProjectReferenceAsync(string projectPath, string targetPath, CancellationToken cancellationToken = default)
+  {
+    var (success, _, _) = await processQueueService.RunProcessAsync(
+           "dotnet",
+           $"remove \"{projectPath}\" reference \"{targetPath}\"",
+           new ProcessOptions(true),
+           cancellationToken);
+
+    return success;
+  }
+
   private string BuildRunCommand(bool isSdk, bool useIISExpress, string? targetPath, string projectPath, string projectName)
   {
     var buildCmd = BuildBuildCommand(isSdk, projectPath);

@@ -168,6 +168,29 @@ _No parameters_
 
 **Returns:** `Task<DotnetProjectProperties>`
 
+### `msbuild/list-project-reference`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+
+**Returns:** `Task<List<string>>`
+
+### `msbuild/add-project-reference`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+| targetPath | string |   |
+
+**Returns:** `Task<bool>`
+
+### `msbuild/remove-project-reference`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+| targetPath | string |   |
+
+**Returns:** `Task<bool>`
+
 ---
 
 ## JsonCodeGen
