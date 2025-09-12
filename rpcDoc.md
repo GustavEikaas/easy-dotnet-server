@@ -168,6 +168,13 @@ _No parameters_
 
 **Returns:** `Task<DotnetProjectProperties>`
 
+### `msbuild/project-references`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| targetPath | string |   |
+
+**Returns:** `Task<List<string>>`
+
 ---
 
 ## JsonCodeGen
