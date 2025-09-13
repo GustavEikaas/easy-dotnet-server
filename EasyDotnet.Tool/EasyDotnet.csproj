@@ -41,4 +41,7 @@
     <PackageReference Include="NuGet.Protocol" Version="6.14.0" />
     <PackageReference Include="StreamJsonRpc" Version="2.21.69" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\EasyDotnet.Infrastructure\EasyDotnet.Infrastructure.csproj" />
+  </ItemGroup>
 </Project>

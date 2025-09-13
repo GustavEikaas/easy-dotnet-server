@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO.Abstractions;
 using DotNetOutdated.Core.Services;
+using EasyDotnet.Infrastructure.Process;
 using EasyDotnet.Services;
 using EasyDotnet.Utils;
 using Microsoft.Extensions.DependencyInjection;
@@ -29,7 +30,7 @@ public static class DiModules
     services.AddSingleton<IFileSystem, FileSystem>();
     services.AddSingleton<RoslynService>();
     services.AddSingleton<SolutionService>();
-    services.AddSingleton<ProcessQueueService>();
+    services.AddSingleton<IProcessQueue, ProcessQueue>();
     services.AddSingleton<TemplateEngineService>();
     services.AddSingleton(new LogService(levels, jsonRpc));
 
