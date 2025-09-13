@@ -112,7 +112,7 @@ public class Client : IAsyncDisposable
            cancellationToken
        );
 
-    return [.. tests.Where(x => x.Node.ExecutionState != "in-progress")];
+    return [.. tests.Where(x => x.Node.ExecutionState != "in-progress" && x.Node.ExecutionState != "discovered")];
   }
 
   private async Task<TestNodeUpdate[]> WithCancellation(

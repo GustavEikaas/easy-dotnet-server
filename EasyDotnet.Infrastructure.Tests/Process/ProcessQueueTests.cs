@@ -1,18 +1,16 @@
-
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using EasyDotnet.IntegrationTests.Utils;
-using EasyDotnet.Services;
+using EasyDotnet.Infrastructure.Process;
 
-namespace EasyDotnet.IntegrationTests.ProcessQueue;
+namespace EasyDotnet.Infrastructure.Tests.Process;
 
-
-public class ProcessQueueServiceTests
+public class ProcessQueueTests
 {
-  [Fact]
+
+  [Test]
   public async Task ConcurrencyLimit_IsHonored()
   {
-    var service = new ProcessQueueService(new TestLogService(), maxConcurrent: 2);
+    var service = new ProcessQueue(maxConcurrent: 2);
 
     var tasks = Enumerable.Range(0, 5).Select(async _ =>
     {
@@ -20,24 +18,14 @@ public class ProcessQueueServiceTests
       await service.RunProcessAsync(command, args, cancellationToken: CancellationToken.None);
     });
 
-    Assert.True(service.CurrentCount() == 2, $"Current running was {service.CurrentCount()}");
-  }
-  private static (string Command, string Arguments) GetSleepCommand(int seconds)
-  {
-    if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-    {
-      return ("powershell", $"-Command \"Start-Sleep -Seconds {seconds}\"");
-    }
-    else
-    {
-      return ("bash", $"-c \"sleep {seconds}\"");
-    }
+    await Assert.That(service.CurrentCount()).IsEqualTo(2);
   }
 
-  [Fact]
+
+  [Test]
   public async Task Timeout_CancelsLongRunningProcess()
   {
-    var service = new ProcessQueueService(new TestLogService(), maxConcurrent: 1);
+    var service = new ProcessQueue(maxConcurrent: 1);
 
     var options = new ProcessOptions(
         KillOnTimeout: false,
@@ -54,14 +42,13 @@ public class ProcessQueueServiceTests
               CancellationToken.None));
     sw.Stop();
 
-    Assert.True(sw.Elapsed < TimeSpan.FromSeconds(5),
-        "Process should have been canceled early due to timeout");
+    await Assert.That(sw.Elapsed).IsLessThan(TimeSpan.FromSeconds(5));
   }
 
-  [Fact]
+  [Test]
   public async Task KillOnTimeout_KillsProcess_CrossPlatform()
   {
-    var service = new ProcessQueueService(new TestLogService(), maxConcurrent: 1);
+    var service = new ProcessQueue(maxConcurrent: 1);
 
     var options = new ProcessOptions(
         KillOnTimeout: true,
@@ -72,13 +59,16 @@ public class ProcessQueueServiceTests
     await Assert.ThrowsAsync<OperationCanceledException>(async () => await service.RunProcessAsync(cmd, args, options, CancellationToken.None));
   }
 
-  private class TestLogService : LogService
-  {
-    public TestLogService() : base(System.Diagnostics.SourceLevels.All, RpcTestServerInstantiator.GetInitializedStreamServer().Result) { }
 
-    public new void Info(string message) { }
-    public new void Warning(string message) { }
-    public new void Error(string message) { }
-    public new void Verbose(string message) { }
+  private static (string Command, string Arguments) GetSleepCommand(int seconds)
+  {
+    if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+    {
+      return ("powershell", $"-Command \"Start-Sleep -Seconds {seconds}\"");
+    }
+    else
+    {
+      return ("bash", $"-c \"sleep {seconds}\"");
+    }
   }
 }
