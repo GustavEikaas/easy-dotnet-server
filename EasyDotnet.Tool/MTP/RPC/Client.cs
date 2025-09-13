@@ -5,11 +5,9 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
-
 using EasyDotnet.MTP.RPC.Models;
 using EasyDotnet.MTP.RPC.Requests;
 using EasyDotnet.MTP.RPC.Response;
-
 using StreamJsonRpc;
 
 namespace EasyDotnet.MTP.RPC;
@@ -112,7 +110,7 @@ public class Client : IAsyncDisposable
            cancellationToken
        );
 
-    return [.. tests.Where(x => x.Node.ExecutionState != "in-progress")];
+    return [.. tests.Where(x => x.Node.ExecutionState != "in-progress" && x.Node.ExecutionState != "discovered")];
   }
 
   private async Task<TestNodeUpdate[]> WithCancellation(
