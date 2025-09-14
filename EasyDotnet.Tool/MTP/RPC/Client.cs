@@ -8,8 +8,6 @@ using System.Threading.Tasks;
 using EasyDotnet.MTP.RPC.Models;
 using EasyDotnet.MTP.RPC.Requests;
 using EasyDotnet.MTP.RPC.Response;
-using Microsoft.Extensions.Logging;
-using Microsoft.VisualStudio.TestTools.UnitTesting.Logging;
 using StreamJsonRpc;
 
 namespace EasyDotnet.MTP.RPC;
