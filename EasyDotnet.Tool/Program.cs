@@ -37,7 +37,7 @@ class Program
       return 0;
     }
 
-    SourceLevels? logLevel = null;
+    var logLevel = SourceLevels.Off;
 
     var logArg = args
         .SkipWhile(a => !a.Equals("--logLevel", StringComparison.OrdinalIgnoreCase))
@@ -54,7 +54,7 @@ class Program
     return 0;
   }
 
-  private static async Task StartServerAsync(SourceLevels? logLevel)
+  private static async Task StartServerAsync(SourceLevels logLevel)
   {
     var pipeName = GeneratePipeName();
 
@@ -80,9 +80,9 @@ class Program
 #endif
   }
 
-  private static async Task RespondToRpcRequestsAsync(Stream stream, int clientId, SourceLevels? logLevel)
+  private static async Task RespondToRpcRequestsAsync(Stream stream, int clientId, SourceLevels logLevel)
   {
-    var rpc = JsonRpcServerBuilder.Build(stream, stream, null, logLevel ?? SourceLevels.Off);
+    var rpc = JsonRpcServerBuilder.Build(stream, stream, null, logLevel);
     rpc.StartListening();
     await rpc.Completion;
     await Console.Error.WriteLineAsync($"Connection #{clientId} terminated.");
