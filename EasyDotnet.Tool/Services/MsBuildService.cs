@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using EasyDotnet.Infrastructure.Process;
 using Microsoft.Build.Locator;
 using Microsoft.Extensions.Caching.Memory;
 
@@ -46,7 +47,7 @@ public sealed record DotnetProjectProperties(
     string TestCommand
 );
 
-public partial class MsBuildService(VisualStudioLocator locator, ClientService clientService, ProcessQueueService processQueueService, IMemoryCache memoryCache, NotificationService notificationService)
+public partial class MsBuildService(VisualStudioLocator locator, ClientService clientService, IProcessQueue processQueue, IMemoryCache memoryCache, NotificationService notificationService)
 {
   public static SdkInstallation[] QuerySdkInstallations()
   {
@@ -71,7 +72,7 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
 
     var (command, args) = GetCommandAndArguments(clientService.UseVisualStudio ? MSBuildType.VisualStudio : MSBuildType.SDK, targetPath, targetFrameworkMoniker, configuration, buildArgs);
 
-    var (success, stdout, stderr) = await processQueueService.RunProcessAsync(command, args, new ProcessOptions(true), cancellationToken);
+    var (success, stdout, stderr) = await processQueue.RunProcessAsync(command, args, new ProcessOptions(true), cancellationToken);
 
     var (errors, warnings) = ParseBuildOutput(stdout, stderr);
 
@@ -137,7 +138,7 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
 
     args += " -nologo -v:quiet " + string.Join(" ", propsToQuery.Select(p => $"-getProperty:{p}"));
 
-    var (success, stdout, stderr) = await processQueueService.RunProcessAsync(command, args, new ProcessOptions(KillOnTimeout: true), cancellationToken);
+    var (success, stdout, stderr) = await processQueue.RunProcessAsync(command, args, new ProcessOptions(KillOnTimeout: true), cancellationToken);
     if (!success)
       throw new InvalidOperationException($"Failed to get project properties: {stderr}");
 
@@ -209,7 +210,7 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
       throw new ArgumentException("Project path must be provided", nameof(projectPath));
     }
 
-    var (success, stdOut, stdErr) = await processQueueService.RunProcessAsync(
+    var (success, stdOut, stdErr) = await processQueue.RunProcessAsync(
            "dotnet",
            $"list \"{projectPath}\" reference",
            new ProcessOptions(true),
@@ -235,7 +236,7 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
 
   public async Task<bool> AddProjectReferenceAsync(string projectPath, string targetPath, CancellationToken cancellationToken = default)
   {
-    var (success, _, _) = await processQueueService.RunProcessAsync(
+    var (success, _, _) = await processQueue.RunProcessAsync(
            "dotnet",
            $"add \"{projectPath}\" reference \"{targetPath}\"",
            new ProcessOptions(true),
@@ -246,7 +247,7 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
 
   public async Task<bool> RemoveProjectReferenceAsync(string projectPath, string targetPath, CancellationToken cancellationToken = default)
   {
-    var (success, _, _) = await processQueueService.RunProcessAsync(
+    var (success, _, _) = await processQueue.RunProcessAsync(
            "dotnet",
            $"remove \"{projectPath}\" reference \"{targetPath}\"",
            new ProcessOptions(true),

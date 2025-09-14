@@ -1,12 +1,13 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
+using EasyDotnet.Infrastructure.Process;
 
 namespace EasyDotnet.Services;
 
 public sealed record ProjectUserSecret(string Id, string FilePath);
 
-public class UserSecretsService(MsBuildService msBuildService, ProcessQueueService processQueueService)
+public class UserSecretsService(MsBuildService msBuildService, IProcessQueue processQueue)
 {
 
   private readonly string _basePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Microsoft", "UserSecrets");
@@ -30,7 +31,7 @@ public class UserSecretsService(MsBuildService msBuildService, ProcessQueueServi
 
     var newSecretsId = Guid.NewGuid().ToString();
 
-    var (success, _, _) = await processQueueService.RunProcessAsync("dotnet", $"user-secrets init --project {projectPath} --id {newSecretsId}", new ProcessOptions(true));
+    var (success, _, _) = await processQueue.RunProcessAsync("dotnet", $"user-secrets init --project {projectPath} --id {newSecretsId}", new ProcessOptions(true));
     if (!success)
     {
       throw new Exception("Failed to initialize user secrets");
