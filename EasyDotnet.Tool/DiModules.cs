@@ -98,7 +98,7 @@ public static class DiModules
          SourceLevels.Warning => Serilog.Events.LogEventLevel.Warning,
          SourceLevels.Information => Serilog.Events.LogEventLevel.Information,
          SourceLevels.Verbose => Serilog.Events.LogEventLevel.Verbose,
-         _ => Serilog.Events.LogEventLevel.Verbose
+         _ => Serilog.Events.LogEventLevel.Information
        };
 
   private static void WriteLogHeader()
@@ -106,23 +106,23 @@ public static class DiModules
     var logger = Log.Logger ?? throw new InvalidOperationException("Serilog logger is not initialized.");
     var process = Process.GetCurrentProcess();
 
-    logger.Information("============================================================");
-    logger.Information(" [EasyDotnet] Host Server Log");
-    logger.Information("============================================================");
-    logger.Information($"Timestamp      : {DateTime.UtcNow:O} (UTC)");
-    logger.Information($"ProcessId      : {Environment.ProcessId}");
-    logger.Information($"Process Name   : {process.ProcessName}");
-    logger.Information($"Machine Name   : {Environment.MachineName}");
-    logger.Information($"User           : {Environment.UserName}");
-    logger.Information($"OS Version     : {Environment.OSVersion}");
-    logger.Information($"OS Arch        : {RuntimeInformation.OSArchitecture}");
-    logger.Information($"Process Arch   : {RuntimeInformation.ProcessArchitecture}");
-    logger.Information($"Framework      : {RuntimeInformation.FrameworkDescription}");
-    logger.Information($"CPU Count      : {Environment.ProcessorCount}");
-    logger.Information($"Working Set    : {process.WorkingSet64 / 1024 / 1024} MB");
-    logger.Information($"Current Dir    : {Environment.CurrentDirectory}");
-    logger.Information($"Server Version : {Assembly.GetExecutingAssembly().GetName().Version}");
-    logger.Information("============================================================");
-    logger.Information("");
+    logger.Debug("============================================================");
+    logger.Debug(" [EasyDotnet] Host Server Log");
+    logger.Debug("============================================================");
+    logger.Debug($"Timestamp      : {DateTime.UtcNow:O} (UTC)");
+    logger.Debug($"ProcessId      : {Environment.ProcessId}");
+    logger.Debug($"Process Name   : {process.ProcessName}");
+    logger.Debug($"Machine Name   : {Environment.MachineName}");
+    logger.Debug($"User           : {Environment.UserName}");
+    logger.Debug($"OS Version     : {Environment.OSVersion}");
+    logger.Debug($"OS Arch        : {RuntimeInformation.OSArchitecture}");
+    logger.Debug($"Process Arch   : {RuntimeInformation.ProcessArchitecture}");
+    logger.Debug($"Framework      : {RuntimeInformation.FrameworkDescription}");
+    logger.Debug($"CPU Count      : {Environment.ProcessorCount}");
+    logger.Debug($"Working Set    : {process.WorkingSet64 / 1024 / 1024} MB");
+    logger.Debug($"Current Dir    : {Environment.CurrentDirectory}");
+    logger.Debug($"Server Version : {Assembly.GetExecutingAssembly().GetName().Version}");
+    logger.Debug("============================================================");
+    logger.Debug("");
   }
 }

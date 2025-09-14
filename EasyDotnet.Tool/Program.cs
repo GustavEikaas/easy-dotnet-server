@@ -37,7 +37,7 @@ class Program
       return 0;
     }
 
-    var logLevel = SourceLevels.Information;
+    var logLevel = SourceLevels.Off;
 
     var logArg = args
         .SkipWhile(a => !a.Equals("--logLevel", StringComparison.OrdinalIgnoreCase))

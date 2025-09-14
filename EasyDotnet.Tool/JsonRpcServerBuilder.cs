@@ -16,7 +16,7 @@ public static class JsonRpcServerBuilder
     var handler = new HeaderDelimitedMessageHandler(writer, reader, formatter);
     var jsonRpc = new JsonRpc(handler);
 
-    var sp = buildServiceProvider is not null ? buildServiceProvider(jsonRpc, logLevel ?? SourceLevels.Information) : DiModules.BuildServiceProvider(jsonRpc, logLevel ?? SourceLevels.Off);
+    var sp = buildServiceProvider is not null ? buildServiceProvider(jsonRpc, logLevel ?? SourceLevels.Off) : DiModules.BuildServiceProvider(jsonRpc, logLevel ?? SourceLevels.Off);
     RegisterControllers(jsonRpc, sp);
     ConfigureTracing(jsonRpc);
     return jsonRpc;
