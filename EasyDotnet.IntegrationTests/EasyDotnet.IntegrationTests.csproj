@@ -22,7 +22,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\EasyDotnet.Tool\EasyDotnet.csproj" />
-    <ProjectReference Include="..\EasyDotnet.Infrastructure\EasyDotnet.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

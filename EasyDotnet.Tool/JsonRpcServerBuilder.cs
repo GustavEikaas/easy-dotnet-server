@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using EasyDotnet.Utils;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Serialization;
 using StreamJsonRpc;
 
@@ -20,7 +21,7 @@ public static class JsonRpcServerBuilder
 
     var sp = buildServiceProvider is not null ? buildServiceProvider(jsonRpc, logLevel ?? SourceLevels.Off) : DiModules.BuildServiceProvider(jsonRpc, logLevel ?? SourceLevels.Off);
     RegisterControllers(jsonRpc, sp);
-    EnableTracingIfNeeded(jsonRpc, logLevel ?? SourceLevels.Off);
+    EnableTracingIfNeeded(jsonRpc, logLevel ?? SourceLevels.Off, sp);
 
     return jsonRpc;
   }
@@ -35,7 +36,7 @@ public static class JsonRpcServerBuilder
 
   private static void RegisterControllers(JsonRpc jsonRpc, IServiceProvider provider) => AssemblyScanner.GetControllerTypes().ForEach(x => jsonRpc.AddLocalRpcTarget(provider.GetRequiredService(x)));
 
-  private static void EnableTracingIfNeeded(JsonRpc jsonRpc, SourceLevels logLevel)
+  private static void EnableTracingIfNeeded(JsonRpc jsonRpc, SourceLevels logLevel, ServiceProvider serviceProvider)
   {
     var ts = jsonRpc.TraceSource;
 
@@ -47,6 +48,7 @@ public static class JsonRpcServerBuilder
 
     if (logLevel != SourceLevels.Off)
     {
+      var logger = serviceProvider.GetRequiredService<ILogger<JsonRpc>>();
       ts.Switch.Level = logLevel;
       var logDir = Directory.GetCurrentDirectory();
       Directory.CreateDirectory(logDir);
@@ -54,6 +56,7 @@ public static class JsonRpcServerBuilder
       var logFile = Path.Combine(
           logDir,
           $"jsonrpc-easy-dotnet-server-{DateTime.UtcNow:yyyyMMdd_HHmmss}-{Environment.ProcessId}.log");
+      //jsonRpc.TraceSource.Listeners.Add(new JsonRpcLogger(logger));
       var traceSource = new TraceSource("StreamJsonRpc", logLevel);
       var listener = new TextWriterTraceListener(logFile);
       if (logLevel == SourceLevels.Verbose)

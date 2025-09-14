@@ -8,6 +8,8 @@ using System.Threading.Tasks;
 using EasyDotnet.MTP.RPC.Models;
 using EasyDotnet.MTP.RPC.Requests;
 using EasyDotnet.MTP.RPC.Response;
+using Microsoft.Extensions.Logging;
+using Microsoft.VisualStudio.TestTools.UnitTesting.Logging;
 using StreamJsonRpc;
 
 namespace EasyDotnet.MTP.RPC;
@@ -73,6 +75,7 @@ public class Client : IAsyncDisposable
     {
       var ts = jsonRpc.TraceSource;
       ts.Switch.Level = SourceLevels.Verbose;
+      ts.Listeners.Add(new Logger());
       ts.Listeners.Add(new ConsoleTraceListener());
     }
 

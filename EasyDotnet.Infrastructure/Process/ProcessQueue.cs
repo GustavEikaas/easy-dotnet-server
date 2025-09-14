@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Infrastructure.Process;
 
@@ -57,7 +58,7 @@ public interface IProcessQueue
 /// <summary>
 /// Provides a queue-based implementation for running external processes with concurrency limits.
 /// </summary>
-public class ProcessQueue(int maxConcurrent = 35) : IProcessQueue
+public class ProcessQueue(int maxConcurrent = 35, ILogger<ProcessQueue>? logger = null) : IProcessQueue
 {
   private readonly SemaphoreSlim _semaphore = new(maxConcurrent, maxConcurrent);
   private readonly TimeSpan _maxTimeout = TimeSpan.FromMinutes(2);
@@ -72,7 +73,12 @@ public class ProcessQueue(int maxConcurrent = 35) : IProcessQueue
   {
     if (_semaphore.CurrentCount == 0)
     {
-      // logService.Info($"[{DateTime.UtcNow:O}] Request queued for {command} {arguments}");
+      logger?.LogInformation(
+          "[{UtcNow}] Request queued for {Command} {Arguments}",
+          DateTime.UtcNow.ToString("O"),
+          command,
+          arguments
+      );
     }
 
     await _semaphore.WaitAsync(cancellationToken);
@@ -104,13 +110,12 @@ public class ProcessQueue(int maxConcurrent = 35) : IProcessQueue
 
         await Task.WhenAll(stdOutTask, stdErrTask);
 
-        // if (logService.SourceLevel == SourceLevels.Verbose)
-        // {
-        //   logService.Info("STDOUT: " + stdOutTask.Result);
-        //   logService.Info("STDERR: " + stdErrTask.Result);
-        // }
+        logger?.LogDebug("STDOUT: {Stdout}", stdOutTask.Result);
+        logger?.LogDebug("STDERR: {Stderr}", stdErrTask.Result);
 
         await process.WaitForExitAsync(linkedCts.Token);
+
+        logger?.LogDebug("Process {Command} exited with code {ExitCode}", command, process.ExitCode);
 
         return (process.ExitCode == 0, stdOutTask.Result, stdErrTask.Result);
       }
@@ -120,8 +125,7 @@ public class ProcessQueue(int maxConcurrent = 35) : IProcessQueue
         {
           if (!process.HasExited)
           {
-
-            // logService.Info("[Timeout] Force killing: " + process.ProcessName);
+            logger?.LogWarning("Process {Command} timed out, killing process tree...", command);
             process.Kill(entireProcessTree: true);
           }
         }

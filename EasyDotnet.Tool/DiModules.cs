@@ -15,6 +15,7 @@ public static class DiModules
   public static ServiceProvider BuildServiceProvider(JsonRpc jsonRpc, SourceLevels levels)
   {
     var services = new ServiceCollection();
+    services.AddLogging();
     services.AddMemoryCache();
     services.AddSingleton(jsonRpc);
     services.AddSingleton<ClientService>();
