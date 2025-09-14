@@ -28,7 +28,7 @@ public static class TestCaseExtensions
   {
     Duration = (long?)x.Duration.TotalMilliseconds,
     StackTrace = (x.ErrorStackTrace?.Split(Environment.NewLine) ?? []).AsAsyncEnumerable(),
-    ErrorMessage = x.ErrorMessage,
+    ErrorMessage = x.ErrorMessage?.Split(Environment.NewLine) ?? [],
     Id = x.TestCase.Id.ToString(),
     Outcome = GetTestOutcome(x.Outcome),
     StdOut = (x.GetStandardOutput()?.Split(Environment.NewLine) ?? []).AsAsyncEnumerable()

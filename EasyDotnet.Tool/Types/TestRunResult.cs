@@ -8,6 +8,6 @@ public sealed record TestRunResult
   public required string Outcome { get; init; }
   public required long? Duration { get; init; }
   public required IAsyncEnumerable<string> StackTrace { get; init; }
-  public required string? ErrorMessage { get; init; }
+  public required string[] ErrorMessage { get; init; }
   public required IAsyncEnumerable<string> StdOut { get; init; }
 }
