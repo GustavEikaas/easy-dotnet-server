@@ -32,8 +32,10 @@ public static class JsonRpcServerBuilder
 
   private static void RegisterControllers(JsonRpc jsonRpc, IServiceProvider provider) => AssemblyScanner.GetControllerTypes().ForEach(x => jsonRpc.AddLocalRpcTarget(provider.GetRequiredService(x)));
 
-  private static void ConfigureTracing(JsonRpc jsonRpc) =>
+  private static void ConfigureTracing(JsonRpc jsonRpc)
+  {
 #if DEBUG
     jsonRpc.TraceSource.Switch.Level = SourceLevels.Verbose;
 #endif
+  }
 }
