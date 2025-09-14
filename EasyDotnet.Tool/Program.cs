@@ -8,8 +8,6 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 using EasyDotnet;
-using Microsoft.Extensions.Logging;
-using Serilog;
 
 class Program
 {
@@ -50,21 +48,11 @@ class Program
     {
       logLevel = parsedLevel;
     }
-    var serilogConfig = new LoggerConfiguration()
-        .MinimumLevel.Is(GetLogLevel(logLevel))
-        .WriteTo.Console();
 
     await StartServerAsync(logLevel);
 
     return 0;
   }
-  LogLevel GetLogLevelFromVerbosity(string? verbosity) => verbosity?.ToLower() switch
-  {
-    "quiet" => LogLevel.Warning,
-    "verbose" => LogLevel.Debug,
-    "trace" => LogLevel.Trace,
-    _ => LogLevel.Information
-  };
 
   private static async Task StartServerAsync(SourceLevels logLevel)
   {

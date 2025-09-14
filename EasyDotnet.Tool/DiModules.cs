@@ -36,7 +36,7 @@ public static class DiModules
     services.AddSingleton<IFileSystem, FileSystem>();
     services.AddSingleton<RoslynService>();
     services.AddSingleton<SolutionService>();
-    services.AddSingleton<ProcessQueueService>();
+    services.AddSingleton<IProcessQueue, ProcessQueue>();
     services.AddSingleton<TemplateEngineService>();
 
     services.AddTransient<MsBuildService>();

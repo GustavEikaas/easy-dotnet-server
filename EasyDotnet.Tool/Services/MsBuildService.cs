@@ -47,11 +47,7 @@ public sealed record DotnetProjectProperties(
     string TestCommand
 );
 
-<<<<<<< HEAD
 public partial class MsBuildService(VisualStudioLocator locator, ClientService clientService, IProcessQueue processQueue, IMemoryCache memoryCache, NotificationService notificationService)
-=======
-public partial class MsBuildService(VisualStudioLocator locator, ClientService clientService, ProcessQueueService processQueueService, IMemoryCache memoryCache, NotificationService notificationService)
->>>>>>> 39e08e504704b7cea9e3aaa8cd3f2e5a597fd0a2
 {
   public static SdkInstallation[] QuerySdkInstallations()
   {

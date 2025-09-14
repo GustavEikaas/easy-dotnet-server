@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using EasyDotnet.Infrastructure.Process;
 using Microsoft.Extensions.Logging;
 using NuGet.Common;
 using NuGet.Configuration;
@@ -16,7 +17,7 @@ namespace EasyDotnet.Services;
 
 public sealed record RestoreResult(bool Success, IAsyncEnumerable<string> Errors, IAsyncEnumerable<string> Warnings);
 
-public class NugetService(ClientService clientService, ILogger<NugetService> logger, ProcessQueueService processLimiter)
+public class NugetService(ClientService clientService, ILogger<NugetService> logger, IProcessQueue processLimiter)
 {
 
   private static (string Command, string Arguments) GetCommandAndArguments(

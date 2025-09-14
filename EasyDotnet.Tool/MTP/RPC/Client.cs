@@ -75,7 +75,6 @@ public class Client : IAsyncDisposable
     {
       var ts = jsonRpc.TraceSource;
       ts.Switch.Level = SourceLevels.Verbose;
-      ts.Listeners.Add(new Logger());
       ts.Listeners.Add(new ConsoleTraceListener());
     }
 

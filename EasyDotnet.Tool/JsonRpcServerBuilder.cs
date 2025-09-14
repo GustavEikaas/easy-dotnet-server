@@ -3,7 +3,6 @@ using System.Diagnostics;
 using System.IO;
 using EasyDotnet.Utils;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Serialization;
 using StreamJsonRpc;
 
