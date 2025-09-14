@@ -6,7 +6,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.Extensions.Caching.Memory;
-using StreamJsonRpc;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace EasyDotnet.IntegrationTests.Roslyn;
 
@@ -125,9 +125,9 @@ public class BootstrapTests
   {
     var (project, controllerFilePath) = CreateDummyProjectWithFreshFile(controllerName);
 
-    var mockLogService = new TestLogService();
+    var mockLogService = NullLogger<RoslynService>.Instance;
     var memoryCache = new MemoryCache(new MemoryCacheOptions());
-    var roslynService = new RoslynService(new MsBuildService(new VisualStudioLocator(memoryCache, new ClientService()), new ClientService(), new ProcessQueue(), memoryCache, new TestNotificationService()), mockLogService);
+    var roslynService = new RoslynService(new MsBuildService(new VisualStudioLocator(memoryCache, new ClientService()), new ClientService(), new ProcessQueueService(NullLogger<ProcessQueueService>.Instance), memoryCache, new TestNotificationService()), mockLogService);
     await roslynService.BootstrapFile(
         controllerFilePath,
         kind,
@@ -151,14 +151,5 @@ public class BootstrapTests
 
   private class TestNotificationService() : NotificationService(null!)
   {
-  }
-  private class TestLogService : LogService
-  {
-    public TestLogService() : base(System.Diagnostics.SourceLevels.All, null!) { }
-
-    public new void Info(string message) { }
-    public new void Warning(string message) { }
-    public new void Error(string message) { }
-    public new void Verbose(string message) { }
   }
 }

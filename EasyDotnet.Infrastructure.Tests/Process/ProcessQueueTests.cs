@@ -1,16 +1,16 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using EasyDotnet.Infrastructure.Process;
+using EasyDotnet.Services;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace EasyDotnet.Infrastructure.Tests.Process;
 
 public class ProcessQueueTests
 {
-
-  [Test]
-  public async Task ConcurrencyLimit_IsHonored()
+  [Fact]
+  public void ConcurrencyLimit_IsHonored()
   {
-    var service = new ProcessQueue(maxConcurrent: 2);
+    var service = new ProcessQueueService(NullLogger<ProcessQueueService>.Instance, maxConcurrent: 2);
 
     var tasks = Enumerable.Range(0, 5).Select(async _ =>
     {
@@ -25,7 +25,7 @@ public class ProcessQueueTests
   [Test]
   public async Task Timeout_CancelsLongRunningProcess()
   {
-    var service = new ProcessQueue(maxConcurrent: 1);
+    var service = new ProcessQueueService(NullLogger<ProcessQueueService>.Instance, maxConcurrent: 1);
 
     var options = new ProcessOptions(
         KillOnTimeout: false,
@@ -48,7 +48,7 @@ public class ProcessQueueTests
   [Test]
   public async Task KillOnTimeout_KillsProcess_CrossPlatform()
   {
-    var service = new ProcessQueue(maxConcurrent: 1);
+    var service = new ProcessQueueService(NullLogger<ProcessQueueService>.Instance, maxConcurrent: 1);
 
     var options = new ProcessOptions(
         KillOnTimeout: true,
@@ -59,16 +59,4 @@ public class ProcessQueueTests
     await Assert.ThrowsAsync<OperationCanceledException>(async () => await service.RunProcessAsync(cmd, args, options, CancellationToken.None));
   }
 
-
-  private static (string Command, string Arguments) GetSleepCommand(int seconds)
-  {
-    if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-    {
-      return ("powershell", $"-Command \"Start-Sleep -Seconds {seconds}\"");
-    }
-    else
-    {
-      return ("bash", $"-c \"sleep {seconds}\"");
-    }
-  }
 }

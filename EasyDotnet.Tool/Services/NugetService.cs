@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using EasyDotnet.Infrastructure.Process;
+using Microsoft.Extensions.Logging;
 using NuGet.Common;
 using NuGet.Configuration;
 using NuGet.Protocol;
@@ -16,7 +16,7 @@ namespace EasyDotnet.Services;
 
 public sealed record RestoreResult(bool Success, IAsyncEnumerable<string> Errors, IAsyncEnumerable<string> Warnings);
 
-public class NugetService(ClientService clientService, LogService logger, IProcessQueue processQueue)
+public class NugetService(ClientService clientService, ILogger<NugetService> logger, ProcessQueueService processLimiter)
 {
 
   private static (string Command, string Arguments) GetCommandAndArguments(
@@ -31,8 +31,8 @@ public class NugetService(ClientService clientService, LogService logger, IProce
   public async Task<RestoreResult> RestorePackagesAsync(string targetPath, CancellationToken cancellationToken)
   {
     var (command, args) = GetCommandAndArguments(clientService.UseVisualStudio ? MSBuildType.VisualStudio : MSBuildType.SDK, targetPath);
-    logger.Info($"Starting restore `{command} {args}`");
-    var (success, stdout, stderr) = await processQueue.RunProcessAsync(command, args, new ProcessOptions(KillOnTimeout: true), cancellationToken);
+    logger.LogInformation("Starting restore `{command} {args}`", command, args);
+    var (success, stdout, stderr) = await processLimiter.RunProcessAsync(command, args, new ProcessOptions(KillOnTimeout: true), cancellationToken);
 
     var errors = stderr
         .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)

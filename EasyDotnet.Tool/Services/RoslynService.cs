@@ -11,12 +11,13 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.MSBuild;
+using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Services;
 
 public sealed record VariableResult(string Identifier, int LineStart, int LineEnd, int ColumnStart, int ColumnEnd);
 
-public class RoslynService(MsBuildService service, LogService logService)
+public class RoslynService(MsBuildService service, ILogger<RoslynService> logService)
 {
   public async Task<List<VariableResult>> AnalyzeAsync(string sourceFilePath, int lineNumber)
   {
@@ -306,7 +307,7 @@ public class RoslynService(MsBuildService service, LogService logService)
         }
         catch (Exception ex)
         {
-          logService.Warning($"Failed to load document '{document.FilePath}': {ex.Message}");
+          logService.LogWarning("Failed to load document '{document.FilePath}': {ex.Message}", document.FilePath, ex.Message);
         }
       });
 
