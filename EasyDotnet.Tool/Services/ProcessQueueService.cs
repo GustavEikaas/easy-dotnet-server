@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Services;
 
@@ -10,7 +11,7 @@ public record ProcessOptions(
     TimeSpan? CancellationTimeout = null
 );
 
-public class ProcessQueueService(LogService logService, int maxConcurrent = 35)
+public class ProcessQueueService(ILogger<ProcessQueueService> logService, int maxConcurrent = 35)
 {
   private readonly SemaphoreSlim _semaphore = new(maxConcurrent, maxConcurrent);
   private readonly TimeSpan _maxTimeout = TimeSpan.FromMinutes(2);
@@ -25,7 +26,7 @@ public class ProcessQueueService(LogService logService, int maxConcurrent = 35)
   {
     if (_semaphore.CurrentCount == 0)
     {
-      logService.Info($"[{DateTime.UtcNow:O}] Request queued for {command} {arguments}");
+      logService.LogInformation($"[{DateTime.UtcNow:O}] Request queued for {command} {arguments}");
     }
 
     await _semaphore.WaitAsync(cancellationToken);
@@ -57,11 +58,8 @@ public class ProcessQueueService(LogService logService, int maxConcurrent = 35)
 
         await Task.WhenAll(stdOutTask, stdErrTask);
 
-        if (logService.SourceLevel == SourceLevels.Verbose)
-        {
-          logService.Info("STDOUT: " + stdOutTask.Result);
-          logService.Info("STDERR: " + stdErrTask.Result);
-        }
+        logService.LogDebug("STDOUT: {StdOut}", stdOutTask.Result);
+        logService.LogDebug("STDERR: {StdErr}", stdErrTask.Result);
 
         await process.WaitForExitAsync(linkedCts.Token);
 
@@ -74,7 +72,7 @@ public class ProcessQueueService(LogService logService, int maxConcurrent = 35)
           if (!process.HasExited)
           {
 
-            logService.Info("[Timeout] Force killing: " + process.ProcessName);
+            logService.LogInformation("[Timeout] Force killing: {processName}", process.ProcessName);
             process.Kill(entireProcessTree: true);
           }
         }

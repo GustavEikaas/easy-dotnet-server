@@ -4,15 +4,16 @@ using System.IO;
 using System.Linq;
 using EasyDotnet.Types;
 using EasyDotnet.VSTest;
+using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Services;
 
-public class VsTestService(LogService logService)
+public class VsTestService(ILogger<VsTestService> logService)
 {
   public List<DiscoveredTest> RunDiscover(string dllPath)
   {
     var vsTestPath = GetVsTestPath();
-    logService.Info($"Using VSTest path: {vsTestPath}");
+    logService.LogInformation("Using VSTest path: {vsTestPath}", vsTestPath);
     var discoveredTests = DiscoverHandler.Discover(vsTestPath, [dllPath]);
     discoveredTests.TryGetValue(dllPath, out var tests);
     return tests ?? [];
@@ -21,7 +22,7 @@ public class VsTestService(LogService logService)
   public List<TestRunResult> RunTests(string dllPath, Guid[] testIds)
   {
     var vsTestPath = GetVsTestPath();
-    logService.Info($"Using VSTest path: {vsTestPath}");
+    logService.LogInformation("Using VSTest path: {vsTestPath}", vsTestPath);
     var testResults = RunHandler.RunTests(vsTestPath, dllPath, testIds);
     return testResults;
   }
