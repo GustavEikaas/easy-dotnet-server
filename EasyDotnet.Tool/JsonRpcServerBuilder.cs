@@ -18,7 +18,9 @@ public static class JsonRpcServerBuilder
 
     var sp = buildServiceProvider is not null ? buildServiceProvider(jsonRpc, logLevel ?? SourceLevels.Off) : DiModules.BuildServiceProvider(jsonRpc, logLevel ?? SourceLevels.Off);
     RegisterControllers(jsonRpc, sp);
-    ConfigureTracing(jsonRpc);
+#if DEBUG
+    jsonRpc.TraceSource.Switch.Level = SourceLevels.Verbose;
+#endif
     return jsonRpc;
   }
 
@@ -31,13 +33,4 @@ public static class JsonRpcServerBuilder
   };
 
   private static void RegisterControllers(JsonRpc jsonRpc, IServiceProvider provider) => AssemblyScanner.GetControllerTypes().ForEach(x => jsonRpc.AddLocalRpcTarget(provider.GetRequiredService(x)));
-
-  private static void ConfigureTracing(JsonRpc jsonRpc)
-  {
-#if DEBUG
-#pragma warning disable IDE0022
-    jsonRpc.TraceSource.Switch.Level = SourceLevels.Verbose;
-#pragma warning restore IDE0022
-#endif
-  }
 }
