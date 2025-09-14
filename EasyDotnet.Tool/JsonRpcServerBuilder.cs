@@ -35,7 +35,9 @@ public static class JsonRpcServerBuilder
   private static void ConfigureTracing(JsonRpc jsonRpc)
   {
 #if DEBUG
+#pragma warning disable IDE0022
     jsonRpc.TraceSource.Switch.Level = SourceLevels.Verbose;
+#pragma warning restore IDE0022
 #endif
   }
 }
