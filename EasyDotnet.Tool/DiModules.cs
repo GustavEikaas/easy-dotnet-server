@@ -39,6 +39,7 @@ public static class DiModules
     services.AddSingleton<IProcessQueue, ProcessQueue>();
     services.AddSingleton<TemplateEngineService>();
 
+    services.AddTransient<NetcoreDbgService>();
     services.AddTransient<MsBuildService>();
     services.AddTransient<UserSecretsService>();
     services.AddTransient<NotificationService>();
