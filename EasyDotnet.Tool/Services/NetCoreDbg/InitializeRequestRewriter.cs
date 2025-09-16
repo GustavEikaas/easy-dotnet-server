@@ -57,17 +57,15 @@ public static class InitializeRequestRewriter
 
   public static Task<JsonNode> CreateInitRequestBasedOnProjectType(string projectPath, DotnetProjectProperties project, string cwd, int seq)
   {
-    if (project.IsTestProject)
+    if (project.IsTestProject && project.TestingPlatformDotnetTestSupport != true)
     {
       var processId = StartTestProcess(projectPath);
       return CreateAttachRequestAsync(processId, cwd, seq);
-
     }
     else
     {
       return CreateLaunchRequestAsync(project, cwd, seq);
     }
-
   }
 
   private static async Task<JsonNode> CreateLaunchRequestAsync(DotnetProjectProperties project, string cwd, int seq)

@@ -1,138 +1,159 @@
 using System;
-using System.Diagnostics;
+using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Net;
-using System.Net.Sockets;
-using System.Text;
 using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
-using EasyDotnet.Infrastructure.Dap;
 using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Services.NetCoreDbg;
 
-public class NetcoreDbgService(MsBuildService msBuildService, ILogger<NetcoreDbgService> logger)
+public class NetcoreDbgService(
+    MsBuildService msBuildService,
+    ILogger<NetcoreDbgClient> netcoreDbgLogger,
+    ILogger<TcpDapClient> tcpDapClientLogger,
+    ILogger<NetcoreDbgService> logger)
 {
-  private TcpListener? _listener;
-  private Process? _process;
-
-  public static Process StartProcess()
-  {
-    var process = new Process
-    {
-      StartInfo = new ProcessStartInfo
-      {
-        FileName = "netcoredbg",
-        Arguments = "--interpreter=vscode",
-        RedirectStandardInput = true,
-        RedirectStandardOutput = true,
-        RedirectStandardError = true,
-        UseShellExecute = false,
-        CreateNoWindow = true
-      }
-    };
-    process.Start();
-    process.EnableRaisingEvents = true;
-    return process;
-  }
-
+  private NetcoreDbgClient? _netcoreDbgClient;
+  private TcpDapClient? _tcpDapClient;
+  private readonly Dictionary<int, int> _clientToDebuggerSeq = [];
+  private int _seqCounter = 1;
 
   public void Start()
   {
-    if (_listener != null)
-    {
-      throw new InvalidOperationException("TCP server already running.");
-    }
+    _tcpDapClient = new TcpDapClient(tcpDapClientLogger, async (message) => await RunWithLogging(async () =>
+      {
 
-    _listener = new TcpListener(IPAddress.Any, 8086);
-    _process = StartProcess();
+        if (_netcoreDbgClient is null)
+        {
+          throw new Exception("NetcoreDbg client is null");
+        }
 
-    _process.EnableRaisingEvents = true;
-    _process.Exited += (s, e) =>
-    {
-      logger.LogInformation("netcoredbg exited, shutting down TCP server...");
-      Stop();
-    };
+        var node = JsonNode.Parse(message) ?? throw new Exception("Message cannot be null");
 
-    _listener.Start();
+        switch (node["type"]?.GetValue<string>())
+        {
+          case "request":
+            {
+              var clientSeq = node["seq"]!.GetValue<int>();
+              var newSeq = _seqCounter++;
+
+              _clientToDebuggerSeq[newSeq] = clientSeq;
+              node["seq"] = newSeq;
+
+              var maybeModified = await RefineAttachRequestAsync(node);
+              var outbound = maybeModified ?? node.ToJsonString();
+
+              logger.LogInformation("OUTBOUND request {command}: {outbound}", node["command"], outbound);
+              await _netcoreDbgClient.SendMessageAsync(outbound, CancellationToken.None);
+              break;
+            }
+
+          case "event":
+            {
+              node["seq"] = _seqCounter++;
+              var outbound = node.ToJsonString();
+              logger.LogInformation("OUTBOUND event {event}: {outbound}", node["event"], outbound);
+              await _netcoreDbgClient.SendMessageAsync(outbound, CancellationToken.None);
+              break;
+            }
+
+          default: // should not usually happen client→debugger
+            {
+              node["seq"] = _seqCounter++;
+              var outbound = node.ToJsonString();
+              logger.LogInformation("OUTBOUND other: {outbound}", outbound);
+              await _netcoreDbgClient.SendMessageAsync(outbound, CancellationToken.None);
+              break;
+            }
+        }
+      }));
 
     Task.Run(async () =>
     {
-      logger.LogInformation("Waiting for client...");
-      var client = await _listener.AcceptTcpClientAsync();
-      logger.LogInformation("Client connected: {EndPoint}", client.Client.RemoteEndPoint);
 
-      await HandleClientAsync(client, _process);
+      _netcoreDbgClient = new NetcoreDbgClient(
+          logger: netcoreDbgLogger,
+          callback: async (message) => await RunWithLogging(async () =>
+          {
+
+            var node = JsonNode.Parse(message) ?? throw new Exception("Messages cant be null");
+
+            switch (node["type"]?.GetValue<string>())
+            {
+              case "response":
+                {
+                  var dbgReqSeq = node["request_seq"]?.GetValue<int>();
+                  if (dbgReqSeq is not null &&
+                      _clientToDebuggerSeq.TryGetValue(dbgReqSeq.Value, out var clientSeq))
+                  {
+                    node["request_seq"] = clientSeq;
+                  }
+
+                  node["seq"] = _seqCounter++;
+                  var inbound = node.ToJsonString();
+                  logger.LogInformation("INBOUND response {command}: {inbound}", node["command"], inbound);
+                  await _tcpDapClient.SendMessageAsync(inbound, CancellationToken.None);
+                  break;
+                }
+
+              case "event":
+                {
+                  node["seq"] = _seqCounter++;
+                  var inbound = node.ToJsonString();
+                  logger.LogInformation("INBOUND event {event}: {inbound}", node["event"], inbound);
+                  await _tcpDapClient.SendMessageAsync(inbound, CancellationToken.None);
+                  break;
+                }
+
+              default:
+                {
+                  node["seq"] = _seqCounter++;
+                  var inbound = node.ToJsonString();
+                  logger.LogInformation("INBOUND other: {inbound}", inbound);
+                  await _tcpDapClient.SendMessageAsync(inbound, CancellationToken.None);
+                  break;
+                }
+            }
+          }),
+          exitHandler: () =>
+          {
+            logger.LogInformation("netcoredbg exited, shutting down TCP server...");
+            Stop();
+          }
+      );
+
+      logger.LogInformation("Waiting for client...");
+      await RunWithLogging(async () => await _tcpDapClient.StartAndConnect(() =>
+      {
+        Stop();
+        return Task.CompletedTask;
+      }));
     });
 
   }
+
   public void Stop()
   {
-    _listener?.Stop();
-    _listener = null;
-
-    if (_process != null && !_process.HasExited)
+    try
     {
-      _process.Kill();
-      _process.Dispose();
+      _tcpDapClient?.Dispose();
     }
+    catch (Exception ex) { logger.LogError(ex, "Error disposing TcpDapClient"); }
 
-    _process = null;
+    try
+    {
+      _netcoreDbgClient?.Dispose();
+    }
+    catch (Exception ex) { logger.LogError(ex, "Error disposing NetcoreDbgClient"); }
+
+    _tcpDapClient = null;
+    _netcoreDbgClient = null;
+
+    logger.LogInformation("TCP proxy stopped.");
   }
 
-  private async Task HandleClientAsync(TcpClient client, Process process)
-  {
-    process.Exited += (sender, args) => client.Dispose();
-    using (client)
-    {
-      var clientStream = client.GetStream();
-      var dbgIn = process.StandardInput.BaseStream;
-      var dbgOut = process.StandardOutput.BaseStream;
-
-      // Start both proxy loops
-      var clientToDbg = Task.Run(() => RunWithLogging(() => ProxyLoop(clientStream, dbgIn, RefineIncomingAsync), "client->debugger"));
-      var dbgToClient = Task.Run(() => RunWithLogging(() => ProxyLoop(dbgOut, clientStream, RefineOutboundAsync), "debugger->client"));
-
-      Console.WriteLine("Proxying started. Press Ctrl+C to stop.");
-
-      await Task.WhenAny(clientToDbg, dbgToClient, process.WaitForExitAsync());
-
-      Console.WriteLine("Shutting down proxy.");
-    }
-  }
-
-  private async Task ProxyLoop(Stream input, Stream output, Func<string, Task<string>> refine)
-  {
-
-    while (true)
-    {
-
-      var json = await DapMessageReader.ReadDapMessageAsync(input, CancellationToken.None);
-      if (json == null) break; // Stream closed
-      json = await refine(json);
-
-      // 3. Encode the refined JSON and frame it
-      var jsonBytes = Encoding.UTF8.GetBytes(json);
-      var headerBytes = Encoding.UTF8.GetBytes($"Content-Length: {jsonBytes.Length}\r\n\r\n");
-
-      // 4. Send header + body
-      await output.WriteAsync(headerBytes, 0, headerBytes.Length);
-      await output.WriteAsync(jsonBytes, 0, jsonBytes.Length);
-
-
-
-
-      // json = await refine(json);
-      //
-      // Console.WriteLine($"Refine incoming {json}");
-      // var message = $"Content-Length: {Encoding.UTF8.GetByteCount(json)}\r\n\r\n{json}";
-      // Console.WriteLine($"Server->NetcoreDbg: {message}");
-      // await writer.WriteAsync(message);
-    }
-  }
-  private async Task RunWithLogging(Func<Task> taskFunc, string direction)
+  private async Task RunWithLogging(Func<Task> taskFunc)
   {
     try
     {
@@ -140,40 +161,11 @@ public class NetcoreDbgService(MsBuildService msBuildService, ILogger<NetcoreDbg
     }
     catch (Exception ex)
     {
-      logger.LogError(ex, "Error in proxy loop {Direction}", direction);
-    }
-    finally
-    {
-      logger.LogInformation("Proxy loop {Direction} ended", direction);
+      logger.LogError(ex, "An error occurred");
     }
   }
 
 
-  /// Incoming: client → debugger
-  private async Task<string> RefineIncomingAsync(string json)
-  {
-    Console.WriteLine($"[INCOMING] {json}");
-
-    try
-    {
-      if (json.Contains("\"command\":\"attach\"", StringComparison.OrdinalIgnoreCase) &&
-          json.Contains("\"type\":\"request\"", StringComparison.OrdinalIgnoreCase))
-      {
-        var node = JsonNode.Parse(json);
-        if (node == null) return json;
-
-        var modified = await RefineAttachRequestAsync(node);
-        return modified ?? json;
-      }
-
-      return json;
-    }
-    catch (Exception ex)
-    {
-      Console.WriteLine($"[REFINE ERROR] {ex.Message}");
-      return json;
-    }
-  }
   private async Task<string?> RefineAttachRequestAsync(JsonNode node)
   {
     if (node["type"]?.GetValue<string>() != "request" ||
@@ -200,12 +192,4 @@ public class NetcoreDbgService(MsBuildService msBuildService, ILogger<NetcoreDbg
     return stringifiedMessage;
   }
 
-
-  /// Outbound: debugger → client
-  private async Task<string> RefineOutboundAsync(string json)
-  {
-    // TODO: add filtering/modification logic
-    Console.WriteLine($"[OUTBOUND] {json}");
-    return await Task.FromResult(json);
-  }
 }
