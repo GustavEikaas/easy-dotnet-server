@@ -73,7 +73,7 @@ public class TestController(ClientService clientService, MtpService mtpService, 
 
   }
 
-  private static string GetExecutablePath(DotnetProjectProperties project) => OperatingSystem.IsWindows() ? Path.ChangeExtension(project.TargetPath!, ".exe") : Path.GetFileNameWithoutExtension(project.TargetPath!);
+  private static string GetExecutablePath(DotnetProjectProperties project) => OperatingSystem.IsWindows() ? Path.ChangeExtension(project.TargetPath!, ".exe") : Path.ChangeExtension(project.TargetPath!, "");
 
   private async Task<DotnetProjectProperties> GetProject(string projectPath, string? targetFrameworkMoniker, string? configuration, CancellationToken cancellationToken)
   {
