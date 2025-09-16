@@ -5,19 +5,20 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
-using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Threading;
 using System.Threading.Tasks;
-using EasyDotnet.Services.NetCoreDbg;
+using EasyDotnet.Infrastructure.Dap;
 using Microsoft.Extensions.Logging;
-using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol;
 
-namespace EasyDotnet.Services;
+namespace EasyDotnet.Services.NetCoreDbg;
 
 public class NetcoreDbgService(MsBuildService msBuildService, ILogger<NetcoreDbgService> logger)
 {
+  private TcpListener? _listener;
+  private Process? _process;
 
-  public Process StartProcess()
+  public static Process StartProcess()
   {
     var process = new Process
     {
@@ -33,29 +34,57 @@ public class NetcoreDbgService(MsBuildService msBuildService, ILogger<NetcoreDbg
       }
     };
     process.Start();
+    process.EnableRaisingEvents = true;
     return process;
   }
 
 
   public void Start()
   {
-    var listener = new TcpListener(IPAddress.Any, 8086);
-    var process = StartProcess();
-    listener.Start();
+    if (_listener != null)
+    {
+      throw new InvalidOperationException("TCP server already running.");
+    }
+
+    _listener = new TcpListener(IPAddress.Any, 8086);
+    _process = StartProcess();
+
+    _process.EnableRaisingEvents = true;
+    _process.Exited += (s, e) =>
+    {
+      logger.LogInformation("netcoredbg exited, shutting down TCP server...");
+      Stop();
+    };
+
+    _listener.Start();
 
     Task.Run(async () =>
     {
-      Console.WriteLine("Waiting for client...");
-      var client = await listener.AcceptTcpClientAsync();
-      Console.WriteLine($"Client connected: {client.Client.RemoteEndPoint}");
+      logger.LogInformation("Waiting for client...");
+      var client = await _listener.AcceptTcpClientAsync();
+      logger.LogInformation("Client connected: {EndPoint}", client.Client.RemoteEndPoint);
 
-      await HandleClientAsync(client, process);
+      await HandleClientAsync(client, _process);
     });
 
+  }
+  public void Stop()
+  {
+    _listener?.Stop();
+    _listener = null;
+
+    if (_process != null && !_process.HasExited)
+    {
+      _process.Kill();
+      _process.Dispose();
+    }
+
+    _process = null;
   }
 
   private async Task HandleClientAsync(TcpClient client, Process process)
   {
+    process.Exited += (sender, args) => client.Dispose();
     using (client)
     {
       var clientStream = client.GetStream();
@@ -80,7 +109,7 @@ public class NetcoreDbgService(MsBuildService msBuildService, ILogger<NetcoreDbg
     while (true)
     {
 
-      var json = await ReadDapMessageAsync(input);
+      var json = await DapMessageReader.ReadDapMessageAsync(input, CancellationToken.None);
       if (json == null) break; // Stream closed
       json = await refine(json);
 
@@ -119,46 +148,6 @@ public class NetcoreDbgService(MsBuildService msBuildService, ILogger<NetcoreDbg
     }
   }
 
-  private async Task<string?> ReadDapMessageAsync(Stream stream)
-  {
-    var headerBuilder = new StringBuilder();
-    var buffer = new byte[1];
-
-    // Read headers byte by byte until \r\n\r\n
-    while (true)
-    {
-      var n = await stream.ReadAsync(buffer, 0, 1);
-      if (n == 0) return null; // disconnected
-      var c = (char)buffer[0];
-      headerBuilder.Append(c);
-
-      if (headerBuilder.Length >= 4 &&
-          headerBuilder[^4] == '\r' &&
-          headerBuilder[^3] == '\n' &&
-          headerBuilder[^2] == '\r' &&
-          headerBuilder[^1] == '\n')
-        break;
-    }
-
-    // parse Content-Length
-    var headers = headerBuilder.ToString().Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
-    var contentLengthLine = headers.FirstOrDefault(h => h.StartsWith("Content-Length", StringComparison.OrdinalIgnoreCase));
-    if (contentLengthLine == null) return null;
-    var contentLength = int.Parse(contentLengthLine.Split(':')[1].Trim());
-
-    // read exact bytes
-    var messageBytes = new byte[contentLength];
-    var read = 0;
-    while (read < contentLength)
-    {
-      var n = await stream.ReadAsync(messageBytes, read, contentLength - read);
-      if (n == 0) return null; // disconnected
-      read += n;
-    }
-
-    // decode JSON
-    return Encoding.UTF8.GetString(messageBytes);
-  }
 
   /// Incoming: client → debugger
   private async Task<string> RefineIncomingAsync(string json)

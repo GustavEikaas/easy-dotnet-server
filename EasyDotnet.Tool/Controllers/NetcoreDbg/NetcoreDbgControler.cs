@@ -1,4 +1,4 @@
-using EasyDotnet.Services;
+using EasyDotnet.Services.NetCoreDbg;
 using StreamJsonRpc;
 
 namespace EasyDotnet.Controllers.NetcoreDbg;
