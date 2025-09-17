@@ -1,9 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Infrastructure.Dap;
@@ -21,12 +19,6 @@ public class NetcoreDbgService(
   private TcpDapClient? _tcpDapClient;
   private readonly Dictionary<int, int> _clientToDebuggerSeq = [];
   private int _seqCounter = 1;
-  private static readonly JsonSerializerOptions JsonSerializerOptions = new()
-  {
-    WriteIndented = true,
-    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-  };
 
   public void Start()
   {
@@ -37,6 +29,8 @@ public class NetcoreDbgService(
     _tcpDapClient = tpcDapClient;
     Task.Run(async () =>
     {
+
+
       InitializeNetcoreDbgClient();
       logger.LogInformation("Waiting for client...");
 
@@ -112,10 +106,10 @@ public class NetcoreDbgService(
     _clientToDebuggerSeq[newSeq] = clientSeq;
     node["seq"] = newSeq;
 
-    logger.LogInformation("{Direction} {command}: {message}", DirectionLabel(MessageDirection.ClientToDebugger), node["command"], JsonSerializer.Serialize(node, JsonSerializerOptions));
     var maybeModified = await RefineAttachRequestAsync(node);
     var outbound = maybeModified ?? node.ToJsonString();
 
+    logger.LogInformation("{Direction} request {command}: {message}", DirectionLabel(MessageDirection.ClientToDebugger), node["command"], outbound);
     await _netcoreDbgClient!.SendMessageAsync(outbound, CancellationToken.None);
   }
 
@@ -130,7 +124,7 @@ public class NetcoreDbgService(
 
     node["seq"] = _seqCounter++;
     var inbound = node.ToJsonString();
-    logger.LogInformation("{Direction} {command}: {message}", DirectionLabel(MessageDirection.DebuggerToClient), node["command"], JsonSerializer.Serialize(node, JsonSerializerOptions));
+    logger.LogInformation("{Direction} response {command}: {message}", DirectionLabel(MessageDirection.DebuggerToClient), node["command"], inbound);
     await _tcpDapClient!.SendMessageAsync(inbound, CancellationToken.None);
   }
 
@@ -242,28 +236,21 @@ public class NetcoreDbgService(
 
     var seq = node["seq"]?.GetValue<int>() ?? throw new InvalidOperationException("Sequence number (seq) is missing in DAP message");
 
-
-    if (args["launch_args"]?["project"]?.GetValue<string>() is not string projectPath)
+    if (args?["project"]?.GetValue<string>() is not string projectPath)
     {
-      _ = _clientToDebuggerSeq.TryGetValue(seq, out var clientSeq);
+      _ = _clientToDebuggerSeq.TryGetValue(seq, out var clientSeq)!;
 
       throw new DapException(
           command: node["command"]!.GetValue<string>(),
           seq: seq,
-          requestSeq: clientSeq,
-          message: "Missing required launch arguments or project path"
+          requestSeq: clientSeq!,
+          message: "Project path missing"
       );
     }
 
-    var launchArgs = args["launch_args"]!;
+    var msBuildProject = await msBuildService.GetOrSetProjectPropertiesAsync(projectPath);
 
-    var targetFrameworkMoniker = launchArgs["targetFramework"]?.GetValue<string>();
-    var config = launchArgs["configuration"]?.GetValue<string>();
-    var launchProfile = launchArgs["launchProfile"]?.GetValue<string>();
 
-    var msBuildProject = await msBuildService.GetOrSetProjectPropertiesAsync(projectPath, targetFrameworkMoniker, config ?? "Debug");
-
-    //TODO: resolve and pass launch profile to CreateInitRequestBasedOnProjectType
     var modifiedRequest = await InitializeRequestRewriter.CreateInitRequestBasedOnProjectType(projectPath, msBuildProject, Path.GetDirectoryName(projectPath)!, seq);
 
     logger.LogInformation("[REFINED] attach request converted:\n{stringifiedMessage}", modifiedRequest);
@@ -272,7 +259,7 @@ public class NetcoreDbgService(
   }
 
   private static string DirectionLabel(MessageDirection direction) =>
-      direction == MessageDirection.ClientToDebugger ? "[REQUEST]: " : "[RESPONSE]: ";
+      direction == MessageDirection.DebuggerToClient ? "INBOUND" : "OUTBOUND";
 
   private enum MessageDirection
   {
