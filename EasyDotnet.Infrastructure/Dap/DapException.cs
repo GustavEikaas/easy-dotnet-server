@@ -1,5 +1,9 @@
 namespace EasyDotnet.Infrastructure.Dap;
 
+/// <summary>
+/// Represents an exception that occurs during the processing of a DAP (Debug Adapter Protocol) message
+/// and encapsulates the information necessary to send a properly formatted DAP error response to the client.
+/// </summary>
 public sealed class DapException : Exception
 {
   public string Command { get; }

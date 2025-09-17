@@ -24,60 +24,16 @@ public class NetcoreDbgService(
   {
     _seqCounter = 1;
     _clientToDebuggerSeq.Clear();
-    _tcpDapClient = new TcpDapClient(tcpDapClientLogger, async (message) => await RunWithDapErrorHandling(async () =>
-      {
-        if (_netcoreDbgClient is null)
-        {
-          throw new Exception("NetcoreDbg client is null");
-        }
 
-        var node = JsonNode.Parse(message) ?? throw new Exception("Message cannot be null");
-
-        switch (node["type"]?.GetValue<string>())
-        {
-          case "request":
-            await HandleRequestMessage(node);
-            break;
-          case "event":
-            await HandleEventMessage(node, MessageDirection.ClientToDebugger);
-            break;
-          default:
-            await HandleOtherMessage(node, MessageDirection.ClientToDebugger);
-            break;
-        }
-      }));
-
+    var tpcDapClient = InitializeTcpClient();
+    _tcpDapClient = tpcDapClient;
     Task.Run(async () =>
     {
 
-      _netcoreDbgClient = new NetcoreDbgClient(
-          logger: netcoreDbgLogger,
-          callback: async (message) => await RunWithLogging(async () =>
-          {
 
-            var node = JsonNode.Parse(message) ?? throw new Exception("Messages cant be null");
-
-            switch (node["type"]?.GetValue<string>())
-            {
-              case "response":
-                await HandleResponseMessage(node);
-                break;
-              case "event":
-                await HandleEventMessage(node, MessageDirection.DebuggerToClient);
-                break;
-              default:
-                await HandleOtherMessage(node, MessageDirection.DebuggerToClient);
-                break;
-            }
-          }),
-          exitHandler: () =>
-          {
-            logger.LogInformation("netcoredbg exited, shutting down TCP server...");
-            Stop();
-          }
-      );
-
+      InitializeNetcoreDbgClient();
       logger.LogInformation("Waiting for client...");
+
       await RunWithLogging(async () => await _tcpDapClient.StartAndConnect(() =>
       {
         Stop();
@@ -85,6 +41,61 @@ public class NetcoreDbgService(
       }));
     });
 
+  }
+
+  private void InitializeNetcoreDbgClient() => _netcoreDbgClient = new NetcoreDbgClient(
+            logger: netcoreDbgLogger,
+            callback: async (message) => await RunWithLogging(async () =>
+            {
+
+              var node = JsonNode.Parse(message) ?? throw new Exception("Messages cant be null");
+
+              switch (node["type"]?.GetValue<string>())
+              {
+                case "response":
+                  await HandleResponseMessage(node);
+                  break;
+                case "event":
+                  await HandleEventMessage(node, MessageDirection.DebuggerToClient);
+                  break;
+                default:
+                  await HandleOtherMessage(node, MessageDirection.DebuggerToClient);
+                  break;
+              }
+            }),
+            exitHandler: () =>
+            {
+              logger.LogInformation("netcoredbg exited, shutting down TCP server...");
+              Stop();
+            }
+        );
+
+
+  private TcpDapClient InitializeTcpClient()
+  {
+    var tcpClient = new TcpDapClient(tcpDapClientLogger, async (message) => await RunWithDapErrorHandling(async () =>
+                                          {
+                                            if (_netcoreDbgClient is null)
+                                            {
+                                              throw new Exception("NetcoreDbg client is null");
+                                            }
+
+                                            var node = JsonNode.Parse(message) ?? throw new Exception("Message cannot be null");
+
+                                            switch (node["type"]?.GetValue<string>())
+                                            {
+                                              case "request":
+                                                await HandleRequestMessage(node);
+                                                break;
+                                              case "event":
+                                                await HandleEventMessage(node, MessageDirection.ClientToDebugger);
+                                                break;
+                                              default:
+                                                await HandleOtherMessage(node, MessageDirection.ClientToDebugger);
+                                                break;
+                                            }
+                                          }));
+    return tcpClient;
   }
 
   private async Task HandleRequestMessage(JsonNode node)
