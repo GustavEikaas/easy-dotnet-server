@@ -4,6 +4,7 @@ using System.IO;
 using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
+using EasyDotnet.Infrastructure.Dap;
 using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Services.NetCoreDbg;
@@ -23,7 +24,7 @@ public class NetcoreDbgService(
   {
     _seqCounter = 1;
     _clientToDebuggerSeq.Clear();
-    _tcpDapClient = new TcpDapClient(tcpDapClientLogger, async (message) => await RunWithLogging(async () =>
+    _tcpDapClient = new TcpDapClient(tcpDapClientLogger, async (message) => await RunWithDapErrorHandling(async () =>
       {
         if (_netcoreDbgClient is null)
         {
@@ -182,6 +183,34 @@ public class NetcoreDbgService(
   }
 
 
+  private async Task RunWithDapErrorHandling(Func<Task> taskFunc)
+  {
+    try
+    {
+      await taskFunc();
+    }
+    catch (DapException dex)
+    {
+      logger.LogError(dex, "DAP exception during message processing");
+
+      if (_tcpDapClient is not null)
+      {
+        try
+        {
+          await _tcpDapClient.SendMessageAsync(dex.DapErrorMessage.ToSerializedResponse(), CancellationToken.None);
+        }
+        catch (Exception innerEx)
+        {
+          logger.LogError(innerEx, "Failed to send DAP exception response");
+        }
+      }
+    }
+    catch (Exception ex)
+    {
+      logger.LogError(ex, "An error occurred");
+    }
+  }
+
   private async Task<string?> RefineAttachRequestAsync(JsonNode node)
   {
     if (node["type"]?.GetValue<string>() != "request" ||
@@ -190,15 +219,27 @@ public class NetcoreDbgService(
 
     var args = node["arguments"];
     if (args?["request"]?.GetValue<string>() != "attach")
+    {
       return null;
+    }
 
-    var projectPath = args["project"]?.GetValue<string>()
-                      ?? throw new InvalidOperationException("project path missing");
+    var seq = node["seq"]?.GetValue<int>() ?? throw new InvalidOperationException("Sequence number (seq) is missing in DAP message");
+
+    if (args?["project"]?.GetValue<string>() is not string projectPath)
+    {
+      _ = _clientToDebuggerSeq.TryGetValue(seq, out var clientSeq)!;
+
+      throw new DapException(
+          command: node["command"]!.GetValue<string>(),
+          seq: seq,
+          requestSeq: clientSeq!,
+          message: "Project path missing"
+      );
+    }
 
     var msBuildProject = await msBuildService.GetOrSetProjectPropertiesAsync(projectPath);
 
 
-    var seq = node["seq"]?.GetValue<int>() ?? throw new InvalidOperationException("Sequence number (seq) is missing in DAP message");
     var modifiedRequest = await InitializeRequestRewriter.CreateInitRequestBasedOnProjectType(projectPath, msBuildProject, Path.GetDirectoryName(projectPath)!, seq);
 
     logger.LogInformation("[REFINED] attach request converted:\n{stringifiedMessage}", modifiedRequest);

@@ -4,7 +4,6 @@ namespace EasyDotnet.Infrastructure.Dap;
 
 public class DapMessageWriter
 {
-
   public static async Task WriteDapMessageAsync(string json, Stream stream, CancellationToken cancellationToken)
   {
     var bytes = Encoding.UTF8.GetBytes(json);
