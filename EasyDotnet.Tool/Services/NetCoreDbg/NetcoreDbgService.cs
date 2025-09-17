@@ -6,6 +6,7 @@ using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using EasyDotnet.Controllers.LaunchProfile;
 using EasyDotnet.Infrastructure.Dap;
 using Microsoft.Extensions.Logging;
 
@@ -19,6 +20,7 @@ public class NetcoreDbgService(
   private NetcoreDbgClient? _netcoreDbgClient;
   private TcpDapClient? _tcpDapClient;
   private DotnetProjectProperties? _project;
+  private LaunchProfile? _launchProfile;
   private string? _projectPath;
   private readonly Dictionary<int, int> _clientToDebuggerSeq = [];
   private int _seqCounter = 1;
@@ -29,10 +31,11 @@ public class NetcoreDbgService(
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
   };
 
-  public void Start(DotnetProjectProperties project, string projectPath, string? launchProfileName)
+  public void Start(DotnetProjectProperties project, string projectPath, LaunchProfile? launchProfile)
   {
     _project = project;
     _projectPath = projectPath;
+    _launchProfile = launchProfile;
     _seqCounter = 1;
     _clientToDebuggerSeq.Clear();
 
@@ -245,29 +248,7 @@ public class NetcoreDbgService(
 
     var seq = node["seq"]?.GetValue<int>() ?? throw new InvalidOperationException("Sequence number (seq) is missing in DAP message");
 
-    //
-    // if (args["launch_args"]?["project"]?.GetValue<string>() is not string projectPath)
-    // {
-    //   _ = _clientToDebuggerSeq.TryGetValue(seq, out var clientSeq);
-    //
-    //   throw new DapException(
-    //       command: node["command"]!.GetValue<string>(),
-    //       seq: seq,
-    //       requestSeq: clientSeq,
-    //       message: "Missing required launch arguments or project path"
-    //   );
-    // }
-    //
-    // var launchArgs = args["launch_args"]!;
-    //
-    // var targetFrameworkMoniker = launchArgs["targetFramework"]?.GetValue<string>();
-    // var config = launchArgs["configuration"]?.GetValue<string>();
-    // var launchProfile = launchArgs["launchProfile"]?.GetValue<string>();
-    //
-    // var msBuildProject = await msBuildService.GetOrSetProjectPropertiesAsync(projectPath);
-
-    //TODO: resolve and pass launch profile to CreateInitRequestBasedOnProjectType
-    var modifiedRequest = await InitializeRequestRewriter.CreateInitRequestBasedOnProjectType(_projectPath!, _project!, Path.GetDirectoryName(_projectPath!)!, seq);
+    var modifiedRequest = await InitializeRequestRewriter.CreateInitRequestBasedOnProjectType(_projectPath!, _project!, _launchProfile, Path.GetDirectoryName(_projectPath!)!, seq);
 
     logger.LogInformation("[REFINED] attach request converted:\n{stringifiedMessage}", modifiedRequest);
 

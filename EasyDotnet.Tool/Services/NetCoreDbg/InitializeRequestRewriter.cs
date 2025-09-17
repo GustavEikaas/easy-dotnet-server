@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
+using EasyDotnet.Controllers.LaunchProfile;
 
 namespace EasyDotnet.Services.NetCoreDbg;
 
@@ -63,7 +65,7 @@ public static class InitializeRequestRewriter
     return processId;
   }
 
-  public static Task<string> CreateInitRequestBasedOnProjectType(string projectPath, DotnetProjectProperties project, string cwd, int seq)
+  public static Task<string> CreateInitRequestBasedOnProjectType(string projectPath, DotnetProjectProperties project, LaunchProfile? launchProfile, string cwd, int seq)
   {
     if (project.IsTestProject && project.TestingPlatformDotnetTestSupport != true)
     {
@@ -72,7 +74,7 @@ public static class InitializeRequestRewriter
     }
     else
     {
-      return CreateLaunchRequestAsync(project, cwd, seq);
+      return CreateLaunchRequestAsync(project, launchProfile, cwd, seq);
     }
   }
 
@@ -91,18 +93,23 @@ public static class InitializeRequestRewriter
       LaunchRequestArguments Arguments = null!
   );
 
-  private static async Task<string> CreateLaunchRequestAsync(DotnetProjectProperties project, string cwd, int seq)
+
+  private static Dictionary<string, string> BuildEnvironmentVariables(LaunchProfile? launchProfile) => launchProfile == null
+        ? []
+        : launchProfile.EnvironmentVariables
+            .Concat(
+                !string.IsNullOrEmpty(launchProfile.ApplicationUrl)
+                    ? [new KeyValuePair<string, string>("ASPNETCORE_URLS", launchProfile.ApplicationUrl)]
+                    : Array.Empty<KeyValuePair<string, string>>()
+            )
+            .ToDictionary(kv => kv.Key, kv => kv.Value);
+
+  private static async Task<string> CreateLaunchRequestAsync(DotnetProjectProperties project, LaunchProfile? launchProfile, string cwd, int seq)
   {
+    var env = BuildEnvironmentVariables(launchProfile);
+    var request = new LaunchRequest("request", seq, "launch", new LaunchRequestArguments(cwd, project.TargetPath!, "launch", "coreclr", env));
 
-    //TODO: resolve project properties launch profile
-    var env = new Dictionary<string, string>
-    {
-      ["ASPNETCORE_ENVIRONMENT"] = "Development",
-      ["ASPNETCORE_URLS"] = "https://localhost:7081;http://localhost:5163"
-    };
-    var x = new LaunchRequest("request", seq, "launch", new LaunchRequestArguments(cwd, project.TargetPath!, "launch", "coreclr", env));
-
-    return await Task.FromResult(JsonSerializer.Serialize(x, SerializerOptions));
+    return await Task.FromResult(JsonSerializer.Serialize(request, SerializerOptions));
   }
 
   public record AttachRequestArguments(

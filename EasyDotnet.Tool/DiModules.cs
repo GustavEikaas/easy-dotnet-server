@@ -45,6 +45,7 @@ public static class DiModules
     services.AddTransient<UserSecretsService>();
     services.AddTransient<NotificationService>();
     services.AddTransient<NugetService>();
+    services.AddTransient<LaunchProfileService>();
     services.AddTransient<VsTestService>();
     services.AddTransient<MtpService>();
     services.AddTransient<OutdatedService>();
