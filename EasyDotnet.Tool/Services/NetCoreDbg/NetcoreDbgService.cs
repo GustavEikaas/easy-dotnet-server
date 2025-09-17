@@ -12,13 +12,14 @@ using Microsoft.Extensions.Logging;
 namespace EasyDotnet.Services.NetCoreDbg;
 
 public class NetcoreDbgService(
-    MsBuildService msBuildService,
     ILogger<NetcoreDbgClient> netcoreDbgLogger,
     ILogger<TcpDapClient> tcpDapClientLogger,
     ILogger<NetcoreDbgService> logger)
 {
   private NetcoreDbgClient? _netcoreDbgClient;
   private TcpDapClient? _tcpDapClient;
+  private DotnetProjectProperties? _project;
+  private string? _projectPath;
   private readonly Dictionary<int, int> _clientToDebuggerSeq = [];
   private int _seqCounter = 1;
   private static readonly JsonSerializerOptions JsonSerializerOptions = new()
@@ -28,8 +29,10 @@ public class NetcoreDbgService(
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
   };
 
-  public void Start()
+  public void Start(DotnetProjectProperties project, string projectPath, string? launchProfileName)
   {
+    _project = project;
+    _projectPath = projectPath;
     _seqCounter = 1;
     _clientToDebuggerSeq.Clear();
 
@@ -242,29 +245,29 @@ public class NetcoreDbgService(
 
     var seq = node["seq"]?.GetValue<int>() ?? throw new InvalidOperationException("Sequence number (seq) is missing in DAP message");
 
-
-    if (args["launch_args"]?["project"]?.GetValue<string>() is not string projectPath)
-    {
-      _ = _clientToDebuggerSeq.TryGetValue(seq, out var clientSeq);
-
-      throw new DapException(
-          command: node["command"]!.GetValue<string>(),
-          seq: seq,
-          requestSeq: clientSeq,
-          message: "Missing required launch arguments or project path"
-      );
-    }
-
-    var launchArgs = args["launch_args"]!;
-
-    var targetFrameworkMoniker = launchArgs["targetFramework"]?.GetValue<string>();
-    var config = launchArgs["configuration"]?.GetValue<string>();
-    var launchProfile = launchArgs["launchProfile"]?.GetValue<string>();
-
-    var msBuildProject = await msBuildService.GetOrSetProjectPropertiesAsync(projectPath, targetFrameworkMoniker, config ?? "Debug");
+    //
+    // if (args["launch_args"]?["project"]?.GetValue<string>() is not string projectPath)
+    // {
+    //   _ = _clientToDebuggerSeq.TryGetValue(seq, out var clientSeq);
+    //
+    //   throw new DapException(
+    //       command: node["command"]!.GetValue<string>(),
+    //       seq: seq,
+    //       requestSeq: clientSeq,
+    //       message: "Missing required launch arguments or project path"
+    //   );
+    // }
+    //
+    // var launchArgs = args["launch_args"]!;
+    //
+    // var targetFrameworkMoniker = launchArgs["targetFramework"]?.GetValue<string>();
+    // var config = launchArgs["configuration"]?.GetValue<string>();
+    // var launchProfile = launchArgs["launchProfile"]?.GetValue<string>();
+    //
+    // var msBuildProject = await msBuildService.GetOrSetProjectPropertiesAsync(projectPath);
 
     //TODO: resolve and pass launch profile to CreateInitRequestBasedOnProjectType
-    var modifiedRequest = await InitializeRequestRewriter.CreateInitRequestBasedOnProjectType(projectPath, msBuildProject, Path.GetDirectoryName(projectPath)!, seq);
+    var modifiedRequest = await InitializeRequestRewriter.CreateInitRequestBasedOnProjectType(_projectPath!, _project!, Path.GetDirectoryName(_projectPath!)!, seq);
 
     logger.LogInformation("[REFINED] attach request converted:\n{stringifiedMessage}", modifiedRequest);
 
