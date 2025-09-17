@@ -10,14 +10,7 @@ public class DapMessageReaderTests
   private static (Stream client, Stream server) CreateStreamPair()
          => FullDuplexStream.CreatePair();
 
-  private static async Task WriteDapMessageAsync(Stream stream, string json)
-  {
-    var bytes = Encoding.UTF8.GetBytes(json);
-    var header = Encoding.UTF8.GetBytes($"Content-Length: {bytes.Length}\r\n\r\n");
-    await stream.WriteAsync(header);
-    await stream.WriteAsync(bytes);
-    await stream.FlushAsync();
-  }
+  private static async Task WriteDapMessageAsync(Stream stream, string json) => await DapMessageWriter.WriteDapMessageAsync(json, stream, default);
 
   [Test]
   public async Task DapMessageIsReadCorrectly()
