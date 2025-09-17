@@ -21,9 +21,10 @@ public class NetcoreDbgService(
 
   public void Start()
   {
+    _seqCounter = 1;
+    _clientToDebuggerSeq.Clear();
     _tcpDapClient = new TcpDapClient(tcpDapClientLogger, async (message) => await RunWithLogging(async () =>
       {
-
         if (_netcoreDbgClient is null)
         {
           throw new Exception("NetcoreDbg client is null");
@@ -34,38 +35,14 @@ public class NetcoreDbgService(
         switch (node["type"]?.GetValue<string>())
         {
           case "request":
-            {
-              var clientSeq = node["seq"]!.GetValue<int>();
-              var newSeq = _seqCounter++;
-
-              _clientToDebuggerSeq[newSeq] = clientSeq;
-              node["seq"] = newSeq;
-
-              var maybeModified = await RefineAttachRequestAsync(node);
-              var outbound = maybeModified ?? node.ToJsonString();
-
-              logger.LogInformation("OUTBOUND request {command}: {outbound}", node["command"], outbound);
-              await _netcoreDbgClient.SendMessageAsync(outbound, CancellationToken.None);
-              break;
-            }
-
+            await HandleRequestMessage(node);
+            break;
           case "event":
-            {
-              node["seq"] = _seqCounter++;
-              var outbound = node.ToJsonString();
-              logger.LogInformation("OUTBOUND event {event}: {outbound}", node["event"], outbound);
-              await _netcoreDbgClient.SendMessageAsync(outbound, CancellationToken.None);
-              break;
-            }
-
-          default: // should not usually happen client→debugger
-            {
-              node["seq"] = _seqCounter++;
-              var outbound = node.ToJsonString();
-              logger.LogInformation("OUTBOUND other: {outbound}", outbound);
-              await _netcoreDbgClient.SendMessageAsync(outbound, CancellationToken.None);
-              break;
-            }
+            await HandleEventMessage(node, MessageDirection.ClientToDebugger);
+            break;
+          default:
+            await HandleOtherMessage(node, MessageDirection.ClientToDebugger);
+            break;
         }
       }));
 
@@ -82,38 +59,14 @@ public class NetcoreDbgService(
             switch (node["type"]?.GetValue<string>())
             {
               case "response":
-                {
-                  var dbgReqSeq = node["request_seq"]?.GetValue<int>();
-                  if (dbgReqSeq is not null &&
-                      _clientToDebuggerSeq.TryGetValue(dbgReqSeq.Value, out var clientSeq))
-                  {
-                    node["request_seq"] = clientSeq;
-                  }
-
-                  node["seq"] = _seqCounter++;
-                  var inbound = node.ToJsonString();
-                  logger.LogInformation("INBOUND response {command}: {inbound}", node["command"], inbound);
-                  await _tcpDapClient.SendMessageAsync(inbound, CancellationToken.None);
-                  break;
-                }
-
+                await HandleResponseMessage(node);
+                break;
               case "event":
-                {
-                  node["seq"] = _seqCounter++;
-                  var inbound = node.ToJsonString();
-                  logger.LogInformation("INBOUND event {event}: {inbound}", node["event"], inbound);
-                  await _tcpDapClient.SendMessageAsync(inbound, CancellationToken.None);
-                  break;
-                }
-
+                await HandleEventMessage(node, MessageDirection.DebuggerToClient);
+                break;
               default:
-                {
-                  node["seq"] = _seqCounter++;
-                  var inbound = node.ToJsonString();
-                  logger.LogInformation("INBOUND other: {inbound}", inbound);
-                  await _tcpDapClient.SendMessageAsync(inbound, CancellationToken.None);
-                  break;
-                }
+                await HandleOtherMessage(node, MessageDirection.DebuggerToClient);
+                break;
             }
           }),
           exitHandler: () =>
@@ -133,6 +86,69 @@ public class NetcoreDbgService(
 
   }
 
+  private async Task HandleRequestMessage(JsonNode node)
+  {
+    var clientSeq = node["seq"]!.GetValue<int>();
+    var newSeq = _seqCounter++;
+
+    _clientToDebuggerSeq[newSeq] = clientSeq;
+    node["seq"] = newSeq;
+
+    var maybeModified = await RefineAttachRequestAsync(node);
+    var outbound = maybeModified ?? node.ToJsonString();
+
+    logger.LogInformation("{Direction} request {command}: {message}", DirectionLabel(MessageDirection.ClientToDebugger), node["command"], outbound);
+    await _netcoreDbgClient!.SendMessageAsync(outbound, CancellationToken.None);
+  }
+
+  private async Task HandleResponseMessage(JsonNode node)
+  {
+    var dbgReqSeq = node["request_seq"]?.GetValue<int>();
+    if (dbgReqSeq is not null &&
+        _clientToDebuggerSeq.TryGetValue(dbgReqSeq.Value, out var clientSeq))
+    {
+      node["request_seq"] = clientSeq;
+    }
+
+    node["seq"] = _seqCounter++;
+    var inbound = node.ToJsonString();
+    logger.LogInformation("{Direction} response {command}: {message}", DirectionLabel(MessageDirection.DebuggerToClient), node["command"], inbound);
+    await _tcpDapClient!.SendMessageAsync(inbound, CancellationToken.None);
+  }
+
+  private async Task HandleEventMessage(JsonNode node, MessageDirection direction)
+  {
+    node["seq"] = _seqCounter++;
+    var serialized = node.ToJsonString();
+
+    if (direction == MessageDirection.DebuggerToClient)
+    {
+      // logger.LogInformation("INBOUND event {event}: {serialized}", node["event"], serialized);
+      await _tcpDapClient!.SendMessageAsync(serialized, CancellationToken.None);
+    }
+    else
+    {
+      // logger.LogInformation("OUTBOUND event {event}: {serialized}", node["event"], serialized);
+      await _netcoreDbgClient!.SendMessageAsync(serialized, CancellationToken.None);
+    }
+  }
+
+  private async Task HandleOtherMessage(JsonNode node, MessageDirection direction)
+  {
+    node["seq"] = _seqCounter++;
+    var serialized = node.ToJsonString();
+
+    if (direction == MessageDirection.DebuggerToClient)
+    {
+      logger.LogInformation("INBOUND other: {serialized}", serialized);
+      await _tcpDapClient!.SendMessageAsync(serialized, CancellationToken.None);
+    }
+    else
+    {
+      logger.LogInformation("OUTBOUND other: {serialized}", serialized);
+      await _netcoreDbgClient!.SendMessageAsync(serialized, CancellationToken.None);
+    }
+  }
   public void Stop()
   {
     try
@@ -185,11 +201,18 @@ public class NetcoreDbgService(
     var seq = node["seq"]?.GetValue<int>() ?? throw new InvalidOperationException("Sequence number (seq) is missing in DAP message");
     var modifiedRequest = await InitializeRequestRewriter.CreateInitRequestBasedOnProjectType(projectPath, msBuildProject, Path.GetDirectoryName(projectPath)!, seq);
 
-    var stringifiedMessage = modifiedRequest.ToJsonString();
+    logger.LogInformation("[REFINED] attach request converted:\n{stringifiedMessage}", modifiedRequest);
 
-    logger.LogInformation("[REFINED] attach request converted:\n{stringifiedMessage}", stringifiedMessage);
+    return modifiedRequest;
+  }
 
-    return stringifiedMessage;
+  private static string DirectionLabel(MessageDirection direction) =>
+      direction == MessageDirection.DebuggerToClient ? "INBOUND" : "OUTBOUND";
+
+  private enum MessageDirection
+  {
+    ClientToDebugger,
+    DebuggerToClient
   }
 
 }

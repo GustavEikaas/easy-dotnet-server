@@ -1,12 +1,20 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
-using System.Text.Json.Nodes;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace EasyDotnet.Services.NetCoreDbg;
 
 public static class InitializeRequestRewriter
 {
+
+  private static readonly JsonSerializerOptions SerializerOptions = new()
+  {
+    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    WriteIndented = false,
+    DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+  };
 
   private static int StartTestProcess(string projectPath)
   {
@@ -55,7 +63,7 @@ public static class InitializeRequestRewriter
     return processId;
   }
 
-  public static Task<JsonNode> CreateInitRequestBasedOnProjectType(string projectPath, DotnetProjectProperties project, string cwd, int seq)
+  public static Task<string> CreateInitRequestBasedOnProjectType(string projectPath, DotnetProjectProperties project, string cwd, int seq)
   {
     if (project.IsTestProject && project.TestingPlatformDotnetTestSupport != true)
     {
@@ -68,52 +76,53 @@ public static class InitializeRequestRewriter
     }
   }
 
-  private static async Task<JsonNode> CreateLaunchRequestAsync(DotnetProjectProperties project, string cwd, int seq)
+  public record LaunchRequestArguments(
+      string Cwd,
+      string Program,
+      string Request = "launch",
+      string Type = "coreclr",
+      Dictionary<string, string>? Env = null
+  );
+
+  public record LaunchRequest(
+      string Type = "request",
+      int Seq = 0,
+      string Command = "launch",
+      LaunchRequestArguments Arguments = null!
+  );
+
+  private static async Task<string> CreateLaunchRequestAsync(DotnetProjectProperties project, string cwd, int seq)
   {
 
     //TODO: resolve project properties launch profile
-    var env = new JsonObject
+    var env = new Dictionary<string, string>
     {
       ["ASPNETCORE_ENVIRONMENT"] = "Development",
       ["ASPNETCORE_URLS"] = "https://localhost:7081;http://localhost:5163"
     };
+    var x = new LaunchRequest("request", seq, "launch", new LaunchRequestArguments(cwd, project.TargetPath!, "launch", "coreclr", env));
 
-    var request = new JsonObject
-    {
-      ["type"] = "request",
-      ["seq"] = seq,
-      ["command"] = "launch",
-      ["arguments"] = new JsonObject
-      {
-        ["cwd"] = cwd,
-        ["env"] = env,
-        // ["name"] = "Program",
-        ["program"] = project.TargetPath,
-        ["request"] = "launch",
-        ["type"] = "coreclr"
-      }
-    };
-
-    return await Task.FromResult(request);
+    return await Task.FromResult(JsonSerializer.Serialize(x, SerializerOptions));
   }
 
+  public record AttachRequestArguments(
+      string Cwd,
+      int ProcessId,
+      string Request = "attach",
+      string Type = "coreclr"
+  );
 
-  private static async Task<JsonNode> CreateAttachRequestAsync(int processId, string cwd, int seq)
+  public record AttachRequest(
+      string Type = "request",
+      int Seq = 0,
+      string Command = "attach",
+      AttachRequestArguments Arguments = null!
+  );
+
+  private static async Task<string> CreateAttachRequestAsync(int processId, string cwd, int seq)
   {
-    var request = new JsonObject
-    {
-      ["type"] = "request",
-      ["seq"] = seq,
-      ["command"] = "attach",
-      ["arguments"] = new JsonObject
-      {
-        ["cwd"] = cwd,
-        ["processId"] = processId,
-        ["request"] = "attach",
-        ["type"] = "coreclr"
-      }
-    };
+    var request = new AttachRequest("request", seq, "attach", new AttachRequestArguments(cwd, processId, "attach", "coreclr"));
 
-    return await Task.FromResult(request);
+    return await Task.FromResult(JsonSerializer.Serialize(request, SerializerOptions));
   }
 }
