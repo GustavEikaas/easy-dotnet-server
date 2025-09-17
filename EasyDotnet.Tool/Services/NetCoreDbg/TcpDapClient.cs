@@ -49,7 +49,7 @@ public class TcpDapClient(ILogger<TcpDapClient> logger, Action<string> callback)
     var stream = _client?.GetStream();
     if (stream is null) return;
     await DapMessageWriter.WriteDapMessageAsync(json, stream, cancellationToken);
-    logger.LogDebug("Sent message: {Json}", json);
+    logger.LogDebug("[TCP]: Sent message: {Json}", json);
   }
 
   private void StartReadingLoop(TcpClient client, CancellationToken cancellationToken, Func<Task>? onDisconnect = null) => Task.Run(async () =>

@@ -76,14 +76,8 @@ public class NetcoreDbgClient : IDisposable
 
   private async Task WriteDapMessageAsync(string json, CancellationToken cancellationToken)
   {
-    var bytes = Encoding.UTF8.GetBytes(json);
-    var header = Encoding.UTF8.GetBytes($"Content-Length: {bytes.Length}\r\n\r\n");
-
-    await _process.StandardInput.BaseStream.WriteAsync(header, cancellationToken);
-    await _process.StandardInput.BaseStream.WriteAsync(bytes, cancellationToken);
-    await _process.StandardInput.BaseStream.FlushAsync(cancellationToken);
-
-    _logger.LogDebug("Sent message: {Json}", json);
+    await DapMessageWriter.WriteDapMessageAsync(json, _process.StandardInput.BaseStream, cancellationToken);
+    _logger.LogDebug("[NetCoreDbg]: Sent message: {Json}", json);
   }
 
   private void StartReadingLoop(CancellationToken? cancellationToken) => Task.Run(async () =>
