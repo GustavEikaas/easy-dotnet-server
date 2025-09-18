@@ -69,11 +69,9 @@ public class TestController(ClientService clientService, MtpService mtpService, 
     {
       return vsTestService.RunTests(project.TargetPath!, [.. filter.Select(x => Guid.Parse(x.Uid))]).AsAsyncEnumerable();
     }
-
-
   }
 
-  private static string GetExecutablePath(DotnetProjectProperties project) => OperatingSystem.IsWindows() ? Path.ChangeExtension(project.TargetPath!, ".exe") : Path.ChangeExtension(project.TargetPath!, "");
+  private static string GetExecutablePath(DotnetProjectProperties project) => OperatingSystem.IsWindows() ? Path.ChangeExtension(project.TargetPath!, ".exe") : project.TargetPath![..^4];
 
   private async Task<DotnetProjectProperties> GetProject(string projectPath, string? targetFrameworkMoniker, string? configuration, CancellationToken cancellationToken)
   {
