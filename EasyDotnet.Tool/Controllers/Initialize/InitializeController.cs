@@ -41,6 +41,7 @@ public class InitializeController(ClientService clientService, VisualStudioLocat
 
     if (request.Options is not null)
     {
+      clientService.Options = request.Options;
       clientService.UseVisualStudio = request.Options.UseVisualStudio;
     }
 

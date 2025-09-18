@@ -14,6 +14,7 @@ public class NetcoreDbgClient : IDisposable
 {
   private readonly ILogger<NetcoreDbgClient> _logger;
   private readonly Process _process;
+  private readonly string _binPath;
   private readonly ConcurrentDictionary<int, TaskCompletionSource<string>> _pendingRequests = new();
   private int _seqCounter = 0;
 
@@ -21,8 +22,9 @@ public class NetcoreDbgClient : IDisposable
 
   public bool IsRunning => !_process.HasExited;
 
-  public NetcoreDbgClient(ILogger<NetcoreDbgClient> logger, Action<string> callback, Action? exitHandler = null)
+  public NetcoreDbgClient(string binPath, ILogger<NetcoreDbgClient> logger, Action<string> callback, Action? exitHandler = null)
   {
+    _binPath = binPath;
     _logger = logger;
     _process = StartProcess();
     _globalMessageHandler = callback;
@@ -30,13 +32,13 @@ public class NetcoreDbgClient : IDisposable
     StartReadingLoop(CancellationToken.None);
   }
 
-  private static Process StartProcess()
+  private Process StartProcess()
   {
     var process = new Process
     {
       StartInfo = new ProcessStartInfo
       {
-        FileName = "netcoredbg",
+        FileName = _binPath,
         Arguments = "--interpreter=vscode",
         RedirectStandardInput = true,
         RedirectStandardOutput = true,

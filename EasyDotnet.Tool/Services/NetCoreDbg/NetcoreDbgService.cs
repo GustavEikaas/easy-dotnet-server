@@ -15,7 +15,9 @@ namespace EasyDotnet.Services.NetCoreDbg;
 public class NetcoreDbgService(
     ILogger<NetcoreDbgClient> netcoreDbgLogger,
     ILogger<TcpDapClient> tcpDapClientLogger,
-    ILogger<NetcoreDbgService> logger)
+    ILogger<NetcoreDbgService> logger,
+    ClientService clientService
+    )
 {
   private NetcoreDbgClient? _netcoreDbgClient;
   private TcpDapClient? _tcpDapClient;
@@ -56,6 +58,7 @@ public class NetcoreDbgService(
   }
 
   private void InitializeNetcoreDbgClient() => _netcoreDbgClient = new NetcoreDbgClient(
+            binPath: clientService.Options?.DebuggerOptions?.BinaryPath ?? throw new Exception("No binary path provided for debugger"),
             logger: netcoreDbgLogger,
             callback: async (message) => await RunWithLogging(async () =>
             {
