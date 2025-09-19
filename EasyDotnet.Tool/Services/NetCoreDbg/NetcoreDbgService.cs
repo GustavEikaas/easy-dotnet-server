@@ -1,9 +1,7 @@
 using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Text.Json;
-using System.Text.Json.Nodes;
-using System.Text.Json.Serialization;
+using System.Diagnostics;
+using System.Net;
+using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Controllers.LaunchProfile;
@@ -12,259 +10,128 @@ using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Services.NetCoreDbg;
 
-public class NetcoreDbgService(
-    ILogger<NetcoreDbgClient> netcoreDbgLogger,
-    ILogger<TcpDapClient> tcpDapClientLogger,
-    ILogger<NetcoreDbgService> logger,
-    ClientService clientService
-    )
+public class NetcoreDbgService(ILogger<NetcoreDbgService> logger)
 {
-  private NetcoreDbgClient? _netcoreDbgClient;
-  private TcpDapClient? _tcpDapClient;
+  private readonly TaskCompletionSource<bool> _completionSource = new();
+  private CancellationTokenSource? _cancellationTokenSource;
+  private Task? _sessionTask;
+  private TcpListener? _listener;
+  private Process? _process;
+
   private DotnetProjectProperties? _project;
   private LaunchProfile? _launchProfile;
   private string? _projectPath;
-  private readonly Dictionary<int, int> _clientToDebuggerSeq = [];
-  private int _seqCounter = 1;
-  private static readonly JsonSerializerOptions JsonSerializerOptions = new()
-  {
-    WriteIndented = true,
-    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-  };
+
+  public Task Completion => _completionSource.Task;
 
   public void Start(DotnetProjectProperties project, string projectPath, LaunchProfile? launchProfile)
   {
     _project = project;
     _projectPath = projectPath;
     _launchProfile = launchProfile;
-    _seqCounter = 1;
-    _clientToDebuggerSeq.Clear();
+    _cancellationTokenSource = new CancellationTokenSource();
 
-    var tpcDapClient = InitializeTcpClient();
-    _tcpDapClient = tpcDapClient;
-    Task.Run(async () =>
-    {
-      InitializeNetcoreDbgClient();
-      logger.LogInformation("Waiting for client...");
-
-      await RunWithLogging(async () => await _tcpDapClient.StartAndConnect(() =>
-      {
-        Stop();
-        return Task.CompletedTask;
-      }));
-    });
-
-  }
-
-  private void InitializeNetcoreDbgClient() => _netcoreDbgClient = new NetcoreDbgClient(
-            binPath: clientService.Options?.DebuggerOptions?.BinaryPath ?? throw new Exception("No binary path provided for debugger"),
-            logger: netcoreDbgLogger,
-            callback: async (message) => await RunWithLogging(async () =>
+    _sessionTask = Task.Run(async () =>
             {
-
-              var node = JsonNode.Parse(message) ?? throw new Exception("Messages cant be null");
-
-              switch (node["type"]?.GetValue<string>())
+              try
               {
-                case "response":
-                  await HandleResponseMessage(node);
-                  break;
-                case "event":
-                  await HandleEventMessage(node, MessageDirection.DebuggerToClient);
-                  break;
-                default:
-                  await HandleOtherMessage(node, MessageDirection.DebuggerToClient);
-                  break;
-              }
-            }),
-            exitHandler: () =>
+                logger.LogInformation("Waiting for client...");
+                _listener = new TcpListener(IPAddress.Any, 8086);
+                _listener.Start();
+                logger.LogInformation("Listening for client on port 8086.");
+
+                var client = await _listener.AcceptTcpClientAsync().WaitAsync(TimeSpan.FromSeconds(30), _cancellationTokenSource.Token);
+                logger.LogInformation("Client connected.");
+
+                var tcpStream = client.GetStream();
+                var clientDap = new Client(tcpStream, tcpStream, x =>
             {
-              logger.LogInformation("netcoredbg exited, shutting down TCP server...");
-              Stop();
-            }
-        );
+              logger.LogInformation("[TCP] message: {message}", x);
+              return x;
+            });
 
+                _process = new Process
+                {
+                  StartInfo = new ProcessStartInfo
+                  {
+                    FileName = "netcoredbg",
+                    Arguments = "--interpreter=vscode",
+                    RedirectStandardInput = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                  },
+                  EnableRaisingEvents = true,
+                };
+                _process.Start();
 
-  private TcpDapClient InitializeTcpClient()
-  {
-    var tcpClient = new TcpDapClient(tcpDapClientLogger, async (message) => await RunWithDapErrorHandling(async () =>
-                                          {
-                                            if (_netcoreDbgClient is null)
-                                            {
-                                              throw new Exception("NetcoreDbg client is null");
-                                            }
+                var debuggerDap = new Infrastructure.Dap.Debugger(_process.StandardInput.BaseStream, _process.StandardOutput.BaseStream, y =>
+            {
+              logger.LogInformation("[DBG] message: {message}", y);
+              return y;
+            });
 
-                                            var node = JsonNode.Parse(message) ?? throw new Exception("Message cannot be null");
+                var proxy = new DebuggerProxy(clientDap, debuggerDap);
+                proxy.Start(_cancellationTokenSource.Token);
 
-                                            switch (node["type"]?.GetValue<string>())
-                                            {
-                                              case "request":
-                                                await HandleRequestMessage(node);
-                                                break;
-                                              case "event":
-                                                await HandleEventMessage(node, MessageDirection.ClientToDebugger);
-                                                break;
-                                              default:
-                                                await HandleOtherMessage(node, MessageDirection.ClientToDebugger);
-                                                break;
-                                            }
-                                          }));
-    return tcpClient;
+                await proxy.Completion;
+
+                _completionSource.SetResult(true);
+              }
+              catch (OperationCanceledException)
+              {
+                logger.LogInformation("Operation was canceled.");
+                _completionSource.SetCanceled();
+              }
+              catch (Exception ex)
+              {
+                logger.LogError(ex, "An unhandled exception occurred in the debugging session.");
+                _completionSource.SetException(ex);
+                throw;
+              }
+            }, _cancellationTokenSource.Token);
+
   }
 
-  private async Task HandleRequestMessage(JsonNode node)
+  public async ValueTask DisposeAsync()
   {
-    var clientSeq = node["seq"]!.GetValue<int>();
-    var newSeq = _seqCounter++;
+    _cancellationTokenSource?.Cancel();
 
-    _clientToDebuggerSeq[newSeq] = clientSeq;
-    node["seq"] = newSeq;
-
-    logger.LogInformation("{Direction} {command}: {message}", DirectionLabel(MessageDirection.ClientToDebugger), node["command"], JsonSerializer.Serialize(node, JsonSerializerOptions));
-    var maybeModified = await RefineAttachRequestAsync(node);
-    var outbound = maybeModified ?? node.ToJsonString();
-
-    await _netcoreDbgClient!.SendMessageAsync(outbound, CancellationToken.None);
-  }
-
-  private async Task HandleResponseMessage(JsonNode node)
-  {
-    var dbgReqSeq = node["request_seq"]?.GetValue<int>();
-    if (dbgReqSeq is not null &&
-        _clientToDebuggerSeq.TryGetValue(dbgReqSeq.Value, out var clientSeq))
+    if (_sessionTask != null)
     {
-      node["request_seq"] = clientSeq;
-    }
-
-    node["seq"] = _seqCounter++;
-    var inbound = node.ToJsonString();
-    logger.LogInformation("{Direction} {command}: {message}", DirectionLabel(MessageDirection.DebuggerToClient), node["command"], JsonSerializer.Serialize(node, JsonSerializerOptions));
-    await _tcpDapClient!.SendMessageAsync(inbound, CancellationToken.None);
-  }
-
-  private async Task HandleEventMessage(JsonNode node, MessageDirection direction)
-  {
-    node["seq"] = _seqCounter++;
-    var serialized = node.ToJsonString();
-
-    if (direction == MessageDirection.DebuggerToClient)
-    {
-      // logger.LogInformation("INBOUND event {event}: {serialized}", node["event"], serialized);
-      await _tcpDapClient!.SendMessageAsync(serialized, CancellationToken.None);
-    }
-    else
-    {
-      // logger.LogInformation("OUTBOUND event {event}: {serialized}", node["event"], serialized);
-      await _netcoreDbgClient!.SendMessageAsync(serialized, CancellationToken.None);
-    }
-  }
-
-  private async Task HandleOtherMessage(JsonNode node, MessageDirection direction)
-  {
-    node["seq"] = _seqCounter++;
-    var serialized = node.ToJsonString();
-
-    if (direction == MessageDirection.DebuggerToClient)
-    {
-      logger.LogInformation("INBOUND other: {serialized}", serialized);
-      await _tcpDapClient!.SendMessageAsync(serialized, CancellationToken.None);
-    }
-    else
-    {
-      logger.LogInformation("OUTBOUND other: {serialized}", serialized);
-      await _netcoreDbgClient!.SendMessageAsync(serialized, CancellationToken.None);
-    }
-  }
-  public void Stop()
-  {
-    try
-    {
-      _tcpDapClient?.Dispose();
-    }
-    catch (Exception ex) { logger.LogError(ex, "Error disposing TcpDapClient"); }
-
-    try
-    {
-      _netcoreDbgClient?.Dispose();
-    }
-    catch (Exception ex) { logger.LogError(ex, "Error disposing NetcoreDbgClient"); }
-
-    _tcpDapClient = null;
-    _netcoreDbgClient = null;
-
-    logger.LogInformation("TCP proxy stopped.");
-  }
-
-  private async Task RunWithLogging(Func<Task> taskFunc)
-  {
-    try
-    {
-      await taskFunc();
-    }
-    catch (Exception ex)
-    {
-      logger.LogError(ex, "An error occurred");
-    }
-  }
-
-
-  private async Task RunWithDapErrorHandling(Func<Task> taskFunc)
-  {
-    try
-    {
-      await taskFunc();
-    }
-    catch (DapException dex)
-    {
-      logger.LogError(dex, "DAP exception during message processing");
-
-      if (_tcpDapClient is not null)
+      try
       {
-        try
-        {
-          await _tcpDapClient.SendMessageAsync(dex.DapErrorMessage.ToSerializedResponse(), CancellationToken.None);
-        }
-        catch (Exception innerEx)
-        {
-          logger.LogError(innerEx, "Failed to send DAP exception response");
-        }
+        await _sessionTask.WaitAsync(TimeSpan.FromSeconds(5));
+      }
+      catch (TimeoutException)
+      {
+        logger.LogWarning("Graceful shutdown timed out. Forcing cleanup.");
+      }
+      catch (Exception ex)
+      {
+        logger.LogError(ex, "An exception occurred during graceful shutdown.");
       }
     }
-    catch (Exception ex)
-    {
-      logger.LogError(ex, "An error occurred");
-    }
-  }
 
-  private async Task<string?> RefineAttachRequestAsync(JsonNode node)
-  {
-    if (node["type"]?.GetValue<string>() != "request" ||
-        node["command"]?.GetValue<string>() != "attach")
-      return null;
-
-    var args = node["arguments"];
-    if (args?["request"]?.GetValue<string>() != "attach")
+    if (_listener != null)
     {
-      return null;
+      _listener.Stop();
+      logger.LogInformation("TCP listener stopped.");
     }
 
-    var seq = node["seq"]?.GetValue<int>() ?? throw new InvalidOperationException("Sequence number (seq) is missing in DAP message");
-
-    var modifiedRequest = await InitializeRequestRewriter.CreateInitRequestBasedOnProjectType(_projectPath!, _project!, _launchProfile, Path.GetDirectoryName(_projectPath!)!, seq);
-
-    logger.LogInformation("[REFINED] attach request converted:\n{stringifiedMessage}", modifiedRequest);
-
-    return modifiedRequest;
+    if (_process != null && !_process.HasExited)
+    {
+      try
+      {
+        _process.Kill();
+        logger.LogInformation("Debugger process killed.");
+      }
+      catch (InvalidOperationException ex)
+      {
+        logger.LogWarning(ex, "Could not kill process, it may have already exited.");
+      }
+    }
+    _cancellationTokenSource?.Dispose();
   }
-
-  private static string DirectionLabel(MessageDirection direction) =>
-      direction == MessageDirection.ClientToDebugger ? "[REQUEST]: " : "[RESPONSE]: ";
-
-  private enum MessageDirection
-  {
-    ClientToDebugger,
-    DebuggerToClient
-  }
-
 }

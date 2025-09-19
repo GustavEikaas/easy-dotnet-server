@@ -13,22 +13,22 @@ namespace EasyDotnet.Services.NetCoreDbg;
 public class NetcoreDbgClient : IDisposable
 {
   private readonly ILogger<NetcoreDbgClient> _logger;
-  private readonly Process _process;
+  public readonly Process Process;
   private readonly string _binPath;
   private readonly ConcurrentDictionary<int, TaskCompletionSource<string>> _pendingRequests = new();
   private int _seqCounter = 0;
 
   private readonly Action<string>? _globalMessageHandler;
 
-  public bool IsRunning => !_process.HasExited;
+  public bool IsRunning => !Process.HasExited;
 
   public NetcoreDbgClient(string binPath, ILogger<NetcoreDbgClient> logger, Action<string> callback, Action? exitHandler = null)
   {
     _binPath = binPath;
     _logger = logger;
-    _process = StartProcess();
+    Process = StartProcess();
     _globalMessageHandler = callback;
-    _process.Exited += (_, _) => exitHandler?.Invoke();
+    Process.Exited += (_, _) => exitHandler?.Invoke();
     StartReadingLoop(CancellationToken.None);
   }
 
@@ -78,7 +78,7 @@ public class NetcoreDbgClient : IDisposable
 
   private async Task WriteDapMessageAsync(string json, CancellationToken cancellationToken)
   {
-    await DapMessageWriter.WriteDapMessageAsync(json, _process.StandardInput.BaseStream, cancellationToken);
+    await DapMessageWriter.WriteDapMessageAsync(json, Process.StandardInput.BaseStream, cancellationToken);
     _logger.LogDebug("[NetCoreDbg]: Sent message: {Json}", json);
   }
 
@@ -86,8 +86,8 @@ public class NetcoreDbgClient : IDisposable
                                       {
                                         try
                                         {
-                                          var stdout = _process.StandardOutput.BaseStream;
-                                          while (!_process.HasExited)
+                                          var stdout = Process.StandardOutput.BaseStream;
+                                          while (!Process.HasExited)
                                           {
                                             var json = await DapMessageReader.ReadDapMessageAsync(stdout, cancellationToken ?? CancellationToken.None);
                                             if (json == null) break;
@@ -121,10 +121,10 @@ public class NetcoreDbgClient : IDisposable
 
   public void Dispose()
   {
-    if (_process != null && !_process.HasExited)
+    if (Process != null && !Process.HasExited)
     {
-      _process.Kill();
-      _process.Dispose();
+      Process.Kill();
+      Process.Dispose();
     }
   }
 }
