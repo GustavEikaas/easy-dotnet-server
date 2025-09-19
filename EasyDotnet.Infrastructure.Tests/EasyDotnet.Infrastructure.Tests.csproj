@@ -12,6 +12,7 @@
     <PackageReference Include="Microsoft.Testing.Platform.MSBuild" Version="1.8.4" />
     <PackageReference Include="TUnit.Assertions" Version="0.57.65" />
     <PackageReference Include="TUnit" Version="0.57.65" />
+    <PackageReference Include="Nerdbank.Streams" Version="2.12.87" />
   </ItemGroup>
 
   <ItemGroup>

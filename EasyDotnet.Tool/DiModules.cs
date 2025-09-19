@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using DotNetOutdated.Core.Services;
 using EasyDotnet.Infrastructure.Process;
 using EasyDotnet.Services;
+using EasyDotnet.Services.NetCoreDbg;
 using EasyDotnet.Utils;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -38,11 +39,13 @@ public static class DiModules
     services.AddSingleton<SolutionService>();
     services.AddSingleton<IProcessQueue, ProcessQueue>();
     services.AddSingleton<TemplateEngineService>();
+    services.AddSingleton<NetcoreDbgService>();
 
     services.AddTransient<MsBuildService>();
     services.AddTransient<UserSecretsService>();
     services.AddTransient<NotificationService>();
     services.AddTransient<NugetService>();
+    services.AddTransient<LaunchProfileService>();
     services.AddTransient<VsTestService>();
     services.AddTransient<MtpService>();
     services.AddTransient<OutdatedService>();

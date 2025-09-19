@@ -2,6 +2,7 @@ using Microsoft.VisualStudio.TestPlatform.ObjectModel.Client;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Logging;
 
 namespace EasyDotnet.VSTest;
+
 internal class TestSessionHandler : ITestSessionEventsHandler
 {
   public TestSessionHandler() { }

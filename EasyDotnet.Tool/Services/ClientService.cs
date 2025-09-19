@@ -9,6 +9,7 @@ public class ClientService
   public bool UseVisualStudio { get; set; } = false;
   public ProjectInfo? ProjectInfo { get; set; }
   public ClientInfo? ClientInfo { get; set; }
+  public Options? Options { get; set; }
 
   public void ThrowIfNotInitialized()
   {
