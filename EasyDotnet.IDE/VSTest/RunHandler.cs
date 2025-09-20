@@ -1,14 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using EasyDotnet.Domain.Models.Test;
-using EasyDotnet.VSTest;
+
+using EasyDotnet.Types;
+
 using Microsoft.TestPlatform.VsTestConsole.TranslationLayer;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Client;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Logging;
 
-namespace EasyDotnet.Infrastructure.VSTest;
+namespace EasyDotnet.VSTest;
 
 public static class RunHandler
 {
