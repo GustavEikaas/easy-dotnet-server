@@ -3,9 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "EasyDotnet.Tool", "EasyDotnet.Tool", "{E05F8107-CDF2-E59D-F017-AA228D6755AE}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EasyDotnet", "EasyDotnet.Tool\EasyDotnet.csproj", "{88F10753-C6CE-42BD-BA96-02D760DF5635}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EasyDotnet.IDE", "EasyDotnet.IDE\EasyDotnet.csproj", "{88F10753-C6CE-42BD-BA96-02D760DF5635}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EasyDotnet.IntegrationTests", "EasyDotnet.IntegrationTests\EasyDotnet.IntegrationTests.csproj", "{B4204153-D501-42D2-BD80-A9644FE45825}"
 EndProject
