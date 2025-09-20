@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using DotNetOutdated.Core.Services;
 using EasyDotnet.Application.Interfaces;
+using EasyDotnet.IDE.Services;
 using EasyDotnet.Infrastructure.Process;
 using EasyDotnet.Infrastructure.Services;
 using EasyDotnet.Services;
@@ -45,7 +46,7 @@ public static class DiModules
     services.AddTransient<IJsonCodeGenService, JsonCodeGenService>();
     services.AddTransient<UserSecretsService>();
     services.AddTransient<ILaunchProfileService, LaunchProfileService>();
-    services.AddTransient<NotificationService>();
+    services.AddTransient<INotificationService, NotificationService>();
     services.AddTransient<NugetService>();
     services.AddTransient<VsTestService>();
     services.AddTransient<MtpService>();

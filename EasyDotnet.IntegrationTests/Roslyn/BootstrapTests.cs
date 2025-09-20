@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using EasyDotnet.Controllers.Roslyn;
+using EasyDotnet.IDE.Services;
 using EasyDotnet.Infrastructure.Process;
 using EasyDotnet.Infrastructure.Services;
 using EasyDotnet.Services;

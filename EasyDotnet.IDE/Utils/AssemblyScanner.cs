@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
-using EasyDotnet.Services;
 
 namespace EasyDotnet.Utils;
 
