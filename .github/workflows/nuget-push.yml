@@ -25,11 +25,11 @@ jobs:
         run: dotnet build -c Release --no-restore
 
       - name: Pack
-        run: dotnet pack ./EasyDotnet.Tool
+        run: dotnet pack ./EasyDotnet.IDE
 
       - name: Push to NuGet (ignore conflict errors)
         run: |
-          dotnet nuget push EasyDotnet.Tool/bin/Release/*.nupkg \
+          dotnet nuget push EasyDotnet.IDE/bin/Release/*.nupkg \
             --api-key ${{ secrets.NUGET_API_KEY }} \
             --source https://api.nuget.org/v3/index.json \
             --skip-duplicate
