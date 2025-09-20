@@ -1,9 +1,11 @@
 using System.IO;
 using System.Threading.Tasks;
-using EasyDotnet.Services;
+using EasyDotnet.Controllers;
+using EasyDotnet.Controllers.UserSecrets;
+using EasyDotnet.Infrastructure.Services;
 using StreamJsonRpc;
 
-namespace EasyDotnet.Controllers.UserSecrets;
+namespace EasyDotnet.IDE.Controllers.UserSecrets;
 
 public class UserSecretsController(UserSecretsService userSecretsService) : BaseController
 {
