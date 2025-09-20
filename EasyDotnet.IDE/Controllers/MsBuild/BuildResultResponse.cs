@@ -1,6 +1,6 @@
 using System.Collections.Generic;
-using EasyDotnet.Services;
+using EasyDotnet.Domain.Models.MsBuild.Build;
 
-namespace EasyDotnet.Controllers.MsBuild;
+namespace EasyDotnet.IDE.Controllers.MsBuild;
 
 public sealed record BuildResultResponse(bool Success, IAsyncEnumerable<BuildMessage> Errors, IAsyncEnumerable<BuildMessage> Warnings);

@@ -3,17 +3,20 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
+using EasyDotnet.Application.Interfaces;
+using EasyDotnet.Controllers;
+using EasyDotnet.Controllers.Initialize;
 using EasyDotnet.Notifications;
-using EasyDotnet.Services;
 using EasyDotnet.Utils;
 using StreamJsonRpc;
 
-namespace EasyDotnet.Controllers.Initialize;
+namespace EasyDotnet.IDE.Controllers.Initialize;
 
-public class InitializeController(ClientService clientService, VisualStudioLocator locator) : BaseController
+public class InitializeController(IClientService clientService, IVisualStudioLocator locator) : BaseController
 {
   [JsonRpcMethod("initialize")]
-  public InitializeResponse Initialize(InitializeRequest request)
+  public async Task<InitializeResponse> Initialize(InitializeRequest request)
   {
     var assembly = Assembly.GetExecutingAssembly();
     var serverVersion = assembly.GetName().Version ?? throw new NullReferenceException("Server version");
@@ -44,19 +47,18 @@ public class InitializeController(ClientService clientService, VisualStudioLocat
       clientService.UseVisualStudio = request.Options.UseVisualStudio;
     }
 
-
     return new InitializeResponse(
         new ServerInfo("EasyDotnet", serverVersion.ToString()),
         new ServerCapabilities(GetRpcPaths(), GetRpcNotifications()),
-        new ToolPaths(TryGetMsBuildPath(locator))
+        new ToolPaths(await TryGetMsBuildPath(locator))
         );
   }
 
-  private static string? TryGetMsBuildPath(VisualStudioLocator locator)
+  private static async Task<string?> TryGetMsBuildPath(IVisualStudioLocator locator)
   {
     try
     {
-      return locator.GetVisualStudioMSBuildPath();
+      return await locator.GetVisualStudioMSBuildPath();
     }
     catch
     {

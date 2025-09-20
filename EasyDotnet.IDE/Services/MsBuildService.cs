@@ -7,47 +7,17 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
+using EasyDotnet.Domain.Models.MsBuild.Build;
+using EasyDotnet.Domain.Models.MsBuild.Project;
+using EasyDotnet.Domain.Models.MsBuild.SDK;
 using Microsoft.Build.Locator;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace EasyDotnet.Services;
 
-public sealed record BuildMessage(string Type, string FilePath, int LineNumber, int ColumnNumber, string Code, string? Message);
-public sealed record SdkInstallation(string Name, string Moniker, Version Version, string MSBuildPath, string VisualStudioRootPath);
 public sealed record BuildResult(bool Success, List<BuildMessage> Errors, List<BuildMessage> Warnings);
 
-public sealed record DotnetProjectProperties(
-    string ProjectName,
-    string Language,
-    string? OutputPath,
-    string? OutputType,
-    string? TargetExt,
-    string? AssemblyName,
-    string? TargetFramework,
-    string[]? TargetFrameworks,
-    bool IsTestProject,
-    bool IsWebProject,
-    bool IsWorkerProject,
-    string? UserSecretsId,
-    bool TestingPlatformDotnetTestSupport,
-    string? TargetPath,
-    bool GeneratePackageOnBuild,
-    bool IsPackable,
-    string? LangVersion,
-    string? RootNamespace,
-    string? PackageId,
-    string? NugetVersion,
-    string? Version,
-    string? PackageOutputPath,
-    bool IsMultiTarget,
-    bool IsNetFramework,
-    bool UseIISExpress,
-    string RunCommand,
-    string BuildCommand,
-    string TestCommand
-);
-
-public partial class MsBuildService(VisualStudioLocator locator, ClientService clientService, IProcessQueue processQueue, IMemoryCache memoryCache, NotificationService notificationService)
+public partial class MsBuildService(IVisualStudioLocator locator, IClientService clientService, IProcessQueue processQueue, IMemoryCache memoryCache, NotificationService notificationService)
 {
   public static SdkInstallation[] QuerySdkInstallations()
   {
@@ -70,7 +40,7 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
       throw new ArgumentException("Target path must be provided", nameof(targetPath));
     }
 
-    var (command, args) = GetCommandAndArguments(clientService.UseVisualStudio ? MSBuildType.VisualStudio : MSBuildType.SDK, targetPath, targetFrameworkMoniker, configuration, buildArgs);
+    var (command, args) = await GetCommandAndArguments(clientService.UseVisualStudio ? MSBuildProjectType.VisualStudio : MSBuildProjectType.SDK, targetPath, targetFrameworkMoniker, configuration, buildArgs);
 
     var (success, stdout, stderr) = await processQueue.RunProcessAsync(command, args, new ProcessOptions(true), cancellationToken);
 
@@ -99,7 +69,7 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
     await notificationService.NotifyProjectChanged(projectPath, targetFrameworkMoniker, configuration);
   }
 
-  public async Task<DotnetProjectProperties> GetOrSetProjectPropertiesAsync(
+  public async Task<DotnetProject> GetOrSetProjectPropertiesAsync(
       string projectPath,
       string? targetFrameworkMoniker = null,
       string configuration = "Debug",
@@ -110,7 +80,7 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
 
   private static string GetCacheKeyProperties(string projectPath, string? targetFrameworkMoniker, string configuration) => $"{projectPath}-{targetFrameworkMoniker ?? ""}-{configuration ?? ""}";
 
-  public async Task<DotnetProjectProperties> GetProjectPropertiesAsync(
+  public async Task<DotnetProject> GetProjectPropertiesAsync(
       string projectPath,
       string? targetFrameworkMoniker = null,
       string configuration = "Debug",
@@ -130,8 +100,8 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
         "UsingMicrosoftNETSdkWorker", "UsingMicrosoftNETSdkWeb",  "UseIISExpress", "LangVersion", "RootNamespace"
     };
 
-    var (command, args) = GetCommandAndArguments(
-        clientService.UseVisualStudio ? MSBuildType.VisualStudio : MSBuildType.SDK,
+    var (command, args) = await GetCommandAndArguments(
+        clientService.UseVisualStudio ? MSBuildProjectType.VisualStudio : MSBuildProjectType.SDK,
         projectPath,
         targetFrameworkMoniker,
         configuration, "");
@@ -171,7 +141,7 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
     var targetPath = TryGet("TargetPath");
     var projectName = Path.GetFileNameWithoutExtension(projectPath);
 
-    return new DotnetProjectProperties(
+    return new DotnetProject(
         ProjectName: projectName,
         Language: GetLanguage(projectPath),
         IsWebProject: TryGetBool("UsingMicrosoftNETSdkWeb"),
@@ -199,7 +169,7 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
         UseIISExpress: useIISExpress,
         RunCommand: BuildRunCommand(!isNetFramework, useIISExpress, targetPath, projectPath, projectName),
         TestCommand: BuildTestCommand(!isNetFramework, targetPath, projectPath),
-        BuildCommand: BuildBuildCommand(!isNetFramework, projectPath)
+        BuildCommand: await BuildBuildCommand(!isNetFramework, projectPath)
     );
   }
 
@@ -277,18 +247,18 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
     false => $"dotnet vstest \"{targetPath}\""
   };
 
-  private string BuildBuildCommand(bool isSdk, string projectPath)
+  private async Task<string> BuildBuildCommand(bool isSdk, string projectPath)
   {
     var normalizedPath = Path.GetFullPath(projectPath)
         .Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
 
     return isSdk
         ? $"dotnet build \"{normalizedPath}\""
-        : $"& \"{locator.GetVisualStudioMSBuildPath()}\" \"{normalizedPath}\"";
+        : $"& \"{await locator.GetVisualStudioMSBuildPath()}\" \"{normalizedPath}\"";
   }
 
-  private (string Command, string Arguments) GetCommandAndArguments(
-      MSBuildType type,
+  private async Task<(string Command, string Arguments)> GetCommandAndArguments(
+      MSBuildProjectType type,
       string targetPath,
       string? targetFrameworkMoniker,
       string configuration, string? args)
@@ -299,8 +269,8 @@ public partial class MsBuildService(VisualStudioLocator locator, ClientService c
 
     return type switch
     {
-      MSBuildType.SDK => ("dotnet", $"msbuild \"{targetPath}\" /p:Configuration={configuration} {tfmArg} {args ?? ""}"),
-      MSBuildType.VisualStudio => (locator.GetVisualStudioMSBuildPath(), $"\"{targetPath}\" /p:Configuration={configuration} {tfmArg} {args ?? ""}"),
+      MSBuildProjectType.SDK => ("dotnet", $"msbuild \"{targetPath}\" /p:Configuration={configuration} {tfmArg} {args ?? ""}"),
+      MSBuildProjectType.VisualStudio => (await locator.GetVisualStudioMSBuildPath(), $"\"{targetPath}\" /p:Configuration={configuration} {tfmArg} {args ?? ""}"),
       _ => throw new InvalidOperationException("Unknown MSBuild type")
     };
   }

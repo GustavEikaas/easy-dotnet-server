@@ -5,7 +5,6 @@ using Microsoft.Build.Construction;
 
 namespace EasyDotnet.Infrastructure.Services;
 
-
 public class SolutionService : ISolutionService
 {
   public List<SolutionFileProject> GetProjectsFromSolutionFile(string solutionFilePath)

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
+using EasyDotnet.Domain.Models.MsBuild.Project;
 using Microsoft.Extensions.Logging;
 using NuGet.Common;
 using NuGet.Configuration;
@@ -17,21 +18,21 @@ namespace EasyDotnet.Services;
 
 public sealed record RestoreResult(bool Success, IAsyncEnumerable<string> Errors, IAsyncEnumerable<string> Warnings);
 
-public class NugetService(ClientService clientService, ILogger<NugetService> logger, IProcessQueue processLimiter)
+public class NugetService(IClientService clientService, ILogger<NugetService> logger, IProcessQueue processLimiter)
 {
 
   private static (string Command, string Arguments) GetCommandAndArguments(
-      MSBuildType type,
+      MSBuildProjectType type,
       string targetPath) => type switch
       {
-        MSBuildType.SDK => ("dotnet", $"restore \"{targetPath}\" "),
-        MSBuildType.VisualStudio => ("nuget", $"restore \"{targetPath}\""),
+        MSBuildProjectType.SDK => ("dotnet", $"restore \"{targetPath}\" "),
+        MSBuildProjectType.VisualStudio => ("nuget", $"restore \"{targetPath}\""),
         _ => throw new InvalidOperationException("Unknown MSBuild type")
       };
 
   public async Task<RestoreResult> RestorePackagesAsync(string targetPath, CancellationToken cancellationToken)
   {
-    var (command, args) = GetCommandAndArguments(clientService.UseVisualStudio ? MSBuildType.VisualStudio : MSBuildType.SDK, targetPath);
+    var (command, args) = GetCommandAndArguments(clientService.UseVisualStudio ? MSBuildProjectType.VisualStudio : MSBuildProjectType.SDK, targetPath);
     logger.LogInformation("Starting restore `{command} {args}`", command, args);
     var (success, stdout, stderr) = await processLimiter.RunProcessAsync(command, args, new ProcessOptions(KillOnTimeout: true), cancellationToken);
 

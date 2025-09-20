@@ -1,9 +1,9 @@
-using System;
-using EasyDotnet.Controllers.Initialize;
+using EasyDotnet.Application.Interfaces;
+using EasyDotnet.Domain.Models.Client;
 
-namespace EasyDotnet.Services;
+namespace EasyDotnet.Infrastructure.Services;
 
-public class ClientService
+public class ClientService : IClientService
 {
   public bool IsInitialized { get; set; }
   public bool UseVisualStudio { get; set; } = false;

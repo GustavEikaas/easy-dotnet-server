@@ -1,27 +1,20 @@
-using System;
-using System.Diagnostics;
-using System.IO;
-using System.Linq;
+using EasyDotnet.Application.Interfaces;
 using Microsoft.Extensions.Caching.Memory;
 
-namespace EasyDotnet.Services;
+namespace EasyDotnet.Infrastructure.Services;
 
-public enum MSBuildType
+public class VisualStudioLocator(IMemoryCache cache, IClientService clientService, IProcessQueue processQueue) : IVisualStudioLocator
 {
-  SDK,
-  VisualStudio
-}
+  public async Task<string> GetVisualStudioMSBuildPath()
+  {
+    var vsCommand = await cache.GetOrCreateAsync("MSBuildInfo", async entry =>
+    {
+      var result = await GetVisualStudioMSBuild();
+      return string.IsNullOrWhiteSpace(result) ? throw new InvalidOperationException("Could not locate MSBuild on this machine.") : result;
+    });
 
-public record MSBuildInfo(MSBuildType Type, string Command);
-
-public class VisualStudioLocator(IMemoryCache cache, ClientService clientService)
-{
-  public string GetVisualStudioMSBuildPath() => cache.GetOrCreate("MSBuildInfo", entry =>
-                                      {
-                                        var vsCommand = GetVisualStudioMSBuild();
-                                        return !string.IsNullOrEmpty(vsCommand) ? vsCommand
-                                           : throw new InvalidOperationException("Could not locate MSBuild on this machine.");
-                                      }) ?? throw new InvalidOperationException("Could not locate MSBuild on this machine.");
+    return vsCommand ?? throw new InvalidOperationException("Could not locate MSBuild on this machine.");
+  }
 
   public string? GetApplicationHostConfig() => cache.GetOrCreate("ApplicationHostConfig", entry =>
                                                 {
@@ -46,11 +39,11 @@ public class VisualStudioLocator(IMemoryCache cache, ClientService clientService
 
   public string? GetIisExpressExe() => cache.GetOrCreate("IisExpressExe", entry => new[]
   {
-    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "IIS Express", "iisexpress.exe"),
-    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "IIS Express", "iisexpress.exe")
-  }.FirstOrDefault(File.Exists));
+  Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "IIS Express", "iisexpress.exe"),
+  Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "IIS Express", "iisexpress.exe")
+}.FirstOrDefault(File.Exists));
 
-  private static string? GetVisualStudioMSBuild()
+  private async Task<string?> GetVisualStudioMSBuild()
   {
     try
     {
@@ -58,26 +51,23 @@ public class VisualStudioLocator(IMemoryCache cache, ClientService clientService
       var vswhere = Path.Combine(programFiles, "Microsoft Visual Studio", "Installer", "vswhere.exe");
 
       if (!File.Exists(vswhere))
-        return null;
-
-      var process = Process.Start(new ProcessStartInfo
-      {
-        FileName = vswhere,
-        Arguments = "-latest -property installationPath",
-        RedirectStandardOutput = true,
-        UseShellExecute = false,
-        CreateNoWindow = true
-      });
-
-      var output = process?.StandardOutput.ReadToEnd()?.Trim();
-      process?.WaitForExit();
-
-      if (string.IsNullOrEmpty(output) || !Directory.Exists(output))
       {
         return null;
       }
 
-      var msbuildPath = Path.Combine(output, "MSBuild", "Current", "Bin", "MSBuild.exe");
+      var (success, stdout, stderr) = await processQueue.RunProcessAsync(vswhere, "-latest -property installationPath", new ProcessOptions(true));
+      if (!success)
+      {
+        var message = $"Failed to find Visual Studio installation path.\nStdOut: {stdout}\nStdErr: {stderr}";
+        throw new InvalidOperationException(message);
+      }
+
+      if (string.IsNullOrEmpty(stdout) || !Directory.Exists(stdout))
+      {
+        return null;
+      }
+
+      var msbuildPath = Path.Combine(stdout, "MSBuild", "Current", "Bin", "MSBuild.exe");
       return File.Exists(msbuildPath) ? msbuildPath : null;
     }
     catch
