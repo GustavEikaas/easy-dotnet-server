@@ -6,4 +6,3 @@ public interface IUserSecretsService
 {
   Task<ProjectUserSecret> AddUserSecretsId(string projectPath);
 }
-
