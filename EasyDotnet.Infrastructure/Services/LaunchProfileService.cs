@@ -13,11 +13,12 @@ public class LaunchProfileService : ILaunchProfileService
 
   public Dictionary<string, LaunchProfile>? GetLaunchProfiles(string targetPath)
   {
-    var launchSettingsPath = Path.Combine(
-        targetPath,
-        "Properties",
-        "launchSettings.json"
-    );
+    var baseDir = File.Exists(targetPath) &&
+                      string.Equals(Path.GetExtension(targetPath), ".csproj", StringComparison.OrdinalIgnoreCase)
+            ? Path.GetDirectoryName(targetPath)!
+            : targetPath;
+
+    var launchSettingsPath = Path.Combine(baseDir, "Properties", "launchSettings.json");
 
     if (!File.Exists(launchSettingsPath))
     {
