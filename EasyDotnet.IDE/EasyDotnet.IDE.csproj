@@ -35,8 +35,6 @@
     <PackageReference Include="Microsoft.TestPlatform" Version="17.13.0" />
     <PackageReference Include="Microsoft.TestPlatform.ObjectModel" Version="17.13.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    <PackageReference Include="NJsonSchema" Version="11.3.2" />
-    <PackageReference Include="NJsonSchema.CodeGeneration.CSharp" Version="11.3.2" />
     <PackageReference Include="Microsoft.Build.Locator" Version="1.9.1" />
     <PackageReference Include="NuGet.Configuration" Version="6.14.0" />
     <PackageReference Include="NuGet.Protocol" Version="6.14.0" />

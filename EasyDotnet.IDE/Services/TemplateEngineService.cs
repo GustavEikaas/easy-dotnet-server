@@ -6,6 +6,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+using EasyDotnet.Application.Interfaces;
 using Microsoft.TemplateEngine.Abstractions;
 using Microsoft.TemplateEngine.Abstractions.Installer;
 using Microsoft.TemplateEngine.Edge.Settings;
@@ -14,7 +15,7 @@ using Microsoft.TemplateEngine.Utils;
 
 namespace EasyDotnet.Services;
 
-public class TemplateEngineService(MsBuildService msBuildService)
+public class TemplateEngineService(IMsBuildService msBuildService)
 {
   private readonly Microsoft.TemplateEngine.Edge.DefaultTemplateEngineHost _host = new(
         hostIdentifier: "easy-dotnet",
@@ -76,7 +77,7 @@ public class TemplateEngineService(MsBuildService msBuildService)
 
     var template = templates.FirstOrDefault(x => x.Identity == identity) ?? throw new Exception($"Failed to find template with id {identity}");
 
-    var monikers = MsBuildService.QuerySdkInstallations().Select(x => x.Moniker).ToList();
+    var monikers = msBuildService.QuerySdkInstallations().Select(x => x.Moniker).ToList();
 
     var parameters = template.ParameterDefinitions
         .Where(p => p.Precedence.PrecedenceDefinition != PrecedenceDefinition.Implicit)

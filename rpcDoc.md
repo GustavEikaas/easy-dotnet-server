@@ -1,3 +1,16 @@
+## JsonCodeGen
+
+### `json-code-gen`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| jsonData | string |   |
+| filePath | string |   |
+| preferFileScopedNamespace | bool |   |
+
+**Returns:** `Task<BootstrapFileResultResponse>`
+
+---
+
 ## InitializeController
 
 ### `initialize`
@@ -212,19 +225,6 @@ _No parameters_
 | targetPath | string |   |
 
 **Returns:** `IAsyncEnumerable<LaunchProfileResponse>`
-
----
-
-## JsonCodeGen
-
-### `json-code-gen`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| jsonData | string |   |
-| filePath | string |   |
-| preferFileScopedNamespace | bool |   |
-
-**Returns:** `Task<BootstrapFileResultResponse>`
 
 ---
 
