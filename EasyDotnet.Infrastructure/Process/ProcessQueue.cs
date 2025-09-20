@@ -7,7 +7,7 @@ namespace EasyDotnet.Infrastructure.Process;
 /// <summary>
 /// Provides a queue-based implementation for running external processes with concurrency limits.
 /// </summary>
-public class ProcessQueue(int maxConcurrent = 35, ILogger<ProcessQueue>? logger = null): IProcessQueue
+public class ProcessQueue(int maxConcurrent = 35, ILogger<ProcessQueue>? logger = null) : IProcessQueue
 {
   private readonly SemaphoreSlim _semaphore = new(maxConcurrent, maxConcurrent);
   private readonly TimeSpan _maxTimeout = TimeSpan.FromMinutes(2);
