@@ -44,6 +44,7 @@ public static class DiModules
     services.AddTransient<IMsBuildService, MsBuildService>();
     services.AddTransient<IJsonCodeGenService, JsonCodeGenService>();
     services.AddTransient<UserSecretsService>();
+    services.AddTransient<ILaunchProfileService, LaunchProfileService>();
     services.AddTransient<NotificationService>();
     services.AddTransient<NugetService>();
     services.AddTransient<VsTestService>();

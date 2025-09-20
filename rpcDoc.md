@@ -1,3 +1,14 @@
+## LaunchProfileController
+
+### `launch-profiles`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| targetPath | string |   |
+
+**Returns:** `IAsyncEnumerable<LaunchProfileResponse>`
+
+---
+
 ## JsonCodeGen
 
 ### `json-code-gen`
@@ -214,17 +225,6 @@ _No parameters_
 | targetPath | string |   |
 
 **Returns:** `Task<bool>`
-
----
-
-## LaunchProfileController
-
-### `launch-profiles`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| targetPath | string |   |
-
-**Returns:** `IAsyncEnumerable<LaunchProfileResponse>`
 
 ---
 

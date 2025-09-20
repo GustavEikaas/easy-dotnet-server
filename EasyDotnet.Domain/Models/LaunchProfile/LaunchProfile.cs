@@ -1,7 +1,6 @@
-using System.Collections.Generic;
 using System.Text.Json;
 
-namespace EasyDotnet.Controllers.LaunchProfile;
+namespace EasyDotnet.Domain.Models.LaunchProfile;
 
 public sealed record LaunchSettings
 {
