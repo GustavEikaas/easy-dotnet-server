@@ -1,6 +1,5 @@
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Infrastructure.Roslyn;
-using Microsoft.CodeAnalysis.MSBuild;
 using NJsonSchema;
 using NJsonSchema.CodeGeneration.CSharp;
 
