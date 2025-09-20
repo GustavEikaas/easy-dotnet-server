@@ -62,12 +62,14 @@ public class VisualStudioLocator(IMemoryCache cache, IClientService clientServic
         throw new InvalidOperationException(message);
       }
 
-      if (string.IsNullOrEmpty(stdout) || !Directory.Exists(stdout))
+      var basePath = stdout.Trim(Environment.NewLine.ToCharArray());
+
+      if (string.IsNullOrEmpty(basePath) || !Directory.Exists(basePath))
       {
         return null;
       }
 
-      var msbuildPath = Path.Combine(stdout, "MSBuild", "Current", "Bin", "MSBuild.exe");
+      var msbuildPath = Path.Combine(basePath, "MSBuild", "Current", "Bin", "MSBuild.exe");
       return File.Exists(msbuildPath) ? msbuildPath : null;
     }
     catch
