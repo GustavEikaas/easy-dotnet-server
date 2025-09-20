@@ -1,12 +1,10 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using EasyDotnet.Types;
+using EasyDotnet.Domain.Models.Test;
+using EasyDotnet.Infrastructure.VSTest;
+using EasyDotnet.Services;
 using EasyDotnet.VSTest;
 using Microsoft.Extensions.Logging;
 
-namespace EasyDotnet.Services;
+namespace EasyDotnet.Infrastructure.Services;
 
 public class VsTestService(ILogger<VsTestService> logService)
 {

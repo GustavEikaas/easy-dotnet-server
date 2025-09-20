@@ -1,4 +1,5 @@
 using System.Threading.Tasks;
+using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Notifications;
 using StreamJsonRpc;
 
@@ -6,8 +7,7 @@ namespace EasyDotnet.Services;
 
 public sealed record ServerRestoreRequest(string TargetPath);
 public sealed record ProjectChangedNotification(string ProjectPath, string? TargetFrameworkMoniker = null, string? Configuration = null);
-//marker interface
-public interface INotificationService { }
+
 public class NotificationService(JsonRpc jsonRpc) : INotificationService
 {
   [RpcNotification("request/restore")]

@@ -1,9 +1,9 @@
 using System;
+using EasyDotnet.Domain.Models.Test;
 using EasyDotnet.MTP.RPC.Models;
-using EasyDotnet.Types;
 using StreamJsonRpc;
 
-namespace EasyDotnet.Extensions;
+namespace EasyDotnet.IDE.Extensions;
 
 public static class TestNodeExtensions
 {

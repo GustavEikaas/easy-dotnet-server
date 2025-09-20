@@ -1,8 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
-
-using EasyDotnet.Types;
-
+using EasyDotnet.Domain.Models.Test;
+using EasyDotnet.Infrastructure.VSTest;
 using Microsoft.TestPlatform.VsTestConsole.TranslationLayer;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Client;

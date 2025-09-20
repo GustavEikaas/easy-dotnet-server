@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace EasyDotnet.Types;
+namespace EasyDotnet.IDE.Models.Test;
 
 public sealed record TestRunResult
 {

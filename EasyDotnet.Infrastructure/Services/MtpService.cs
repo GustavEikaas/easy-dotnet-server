@@ -1,14 +1,6 @@
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using EasyDotnet.Extensions;
-using EasyDotnet.MTP;
-using EasyDotnet.MTP.RPC;
-using EasyDotnet.Types;
+using EasyDotnet.Domain.Models.Test;
 
-namespace EasyDotnet.Services;
+namespace EasyDotnet.Infrastructure.Services;
 
 public class MtpService
 {

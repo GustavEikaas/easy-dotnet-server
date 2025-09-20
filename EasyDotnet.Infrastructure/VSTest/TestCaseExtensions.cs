@@ -1,11 +1,9 @@
 using System;
 using System.Linq;
-using EasyDotnet.Types;
-
+using EasyDotnet.Domain.Models.Test;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel;
-using StreamJsonRpc;
 
-namespace EasyDotnet.VSTest;
+namespace EasyDotnet.Infrastructure.VSTest;
 
 public static class TestCaseExtensions
 {
@@ -27,11 +25,11 @@ public static class TestCaseExtensions
   public static TestRunResult ToTestRunResult(this TestResult x) => new()
   {
     Duration = (long?)x.Duration.TotalMilliseconds,
-    StackTrace = (x.ErrorStackTrace?.Split(Environment.NewLine) ?? []).AsAsyncEnumerable(),
+    StackTrace = x.ErrorStackTrace?.Split(Environment.NewLine) ?? [],
     ErrorMessage = x.ErrorMessage?.Split(Environment.NewLine) ?? [],
     Id = x.TestCase.Id.ToString(),
     Outcome = GetTestOutcome(x.Outcome),
-    StdOut = (x.GetStandardOutput()?.Split(Environment.NewLine) ?? []).AsAsyncEnumerable()
+    StdOut = x.GetStandardOutput()?.Split(Environment.NewLine) ?? []
   };
 
   public static string GetTestOutcome(TestOutcome outcome) => outcome switch

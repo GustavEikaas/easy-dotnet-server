@@ -15,9 +15,9 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace EasyDotnet.Services;
 
-public sealed record BuildResult(bool Success, List<BuildMessage> Errors, List<BuildMessage> Warnings);
 
-public partial class MsBuildService(IVisualStudioLocator locator, IClientService clientService, IProcessQueue processQueue, IMemoryCache memoryCache, NotificationService notificationService)
+
+public partial class MsBuildService(IVisualStudioLocator locator, IClientService clientService, IProcessQueue processQueue, IMemoryCache memoryCache, INotificationService notificationService) : IMsBuildService
 {
   public static SdkInstallation[] QuerySdkInstallations()
   {

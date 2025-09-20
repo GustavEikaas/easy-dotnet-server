@@ -5,13 +5,15 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
+using EasyDotnet.Controllers;
 using EasyDotnet.Domain.Models.MsBuild.Project;
+using EasyDotnet.Domain.Models.Test;
+using EasyDotnet.Infrastructure.Services;
 using EasyDotnet.MTP;
 using EasyDotnet.Services;
-using EasyDotnet.Types;
 using StreamJsonRpc;
 
-namespace EasyDotnet.Controllers.Test;
+namespace EasyDotnet.IDE.Controllers.Test;
 
 public class TestController(IClientService clientService, MtpService mtpService, VsTestService vsTestService, MsBuildService msBuildService) : BaseController
 {
@@ -43,7 +45,7 @@ public class TestController(IClientService clientService, MtpService mtpService,
   }
 
   [JsonRpcMethod("test/run")]
-  public async Task<IAsyncEnumerable<TestRunResult>> Run(
+  public async Task<IAsyncEnumerable<TestRunResultResponse>> Run(
     string projectPath,
     string targetFrameworkMoniker,
     string configuration,
