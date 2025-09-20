@@ -5,12 +5,11 @@ using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Domain.Models.MsBuild.Project;
 using EasyDotnet.IDE.Controllers.MsBuild;
-using EasyDotnet.Services;
 using StreamJsonRpc;
 
 namespace EasyDotnet.Controllers.MsBuild;
 
-public class MsBuildController(IClientService clientService, MsBuildService msBuild) : BaseController
+public class MsBuildController(IClientService clientService, IMsBuildService msBuild) : BaseController
 {
   [JsonRpcMethod("msbuild/build")]
   public async Task<BuildResultResponse> Build(BuildRequest request)

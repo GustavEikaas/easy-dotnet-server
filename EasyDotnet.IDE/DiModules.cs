@@ -41,7 +41,8 @@ public static class DiModules
     services.AddSingleton<IProcessQueue, ProcessQueue>();
     services.AddSingleton<TemplateEngineService>();
 
-    services.AddTransient<MsBuildService>();
+    services.AddTransient<IMsBuildService, MsBuildService>();
+    services.AddTransient<IJsonCodeGenService, JsonCodeGenService>();
     services.AddTransient<UserSecretsService>();
     services.AddTransient<NotificationService>();
     services.AddTransient<NugetService>();

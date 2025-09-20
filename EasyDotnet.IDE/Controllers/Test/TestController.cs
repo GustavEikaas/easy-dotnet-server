@@ -13,7 +13,7 @@ using StreamJsonRpc;
 
 namespace EasyDotnet.Controllers.Test;
 
-public class TestController(IClientService clientService, MtpService mtpService, VsTestService vsTestService, MsBuildService msBuildService) : BaseController
+public class TestController(IClientService clientService, MtpService mtpService, VsTestService vsTestService, IMsBuildService msBuildService) : BaseController
 {
 
   [JsonRpcMethod("test/discover")]

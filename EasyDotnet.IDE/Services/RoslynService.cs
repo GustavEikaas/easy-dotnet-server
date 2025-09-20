@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
+using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers.Roslyn;
 using EasyDotnet.Extensions;
 using Microsoft.CodeAnalysis;
@@ -17,7 +18,7 @@ namespace EasyDotnet.Services;
 
 public sealed record VariableResult(string Identifier, int LineStart, int LineEnd, int ColumnStart, int ColumnEnd);
 
-public class RoslynService(MsBuildService service, ILogger<RoslynService> logService)
+public class RoslynService(IMsBuildService service, ILogger<RoslynService> logService)
 {
   public async Task<List<VariableResult>> AnalyzeAsync(string sourceFilePath, int lineNumber)
   {

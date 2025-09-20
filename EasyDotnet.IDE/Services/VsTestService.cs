@@ -2,13 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Types;
 using EasyDotnet.VSTest;
 using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Services;
 
-public class VsTestService(ILogger<VsTestService> logService)
+public class VsTestService(IMsBuildService msBuildService, ILogger<VsTestService> logService)
 {
   public List<DiscoveredTest> RunDiscover(string dllPath)
   {
@@ -27,10 +28,10 @@ public class VsTestService(ILogger<VsTestService> logService)
     return testResults;
   }
 
-  private static string GetVsTestPath()
+  private string GetVsTestPath()
   {
-    var x = MsBuildService.QuerySdkInstallations();
-    return Path.Join(x.ToList()[0].MSBuildPath, "vstest.console.dll");
+    var sdk = msBuildService.QuerySdkInstallations();
+    return Path.Join(sdk.ToList()[0].MSBuildPath, "vstest.console.dll");
   }
 
 }
