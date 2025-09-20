@@ -1,11 +1,12 @@
 using System.Collections.Generic;
-using EasyDotnet.Services;
+using System.Linq;
+using EasyDotnet.Application.Interfaces;
 using StreamJsonRpc;
 
 namespace EasyDotnet.Controllers.Solution;
 
-public class SolutionController(SolutionService solutionService) : BaseController
+public class SolutionController(ISolutionService solutionService) : BaseController
 {
   [JsonRpcMethod("solution/list-projects")]
-  public List<SolutionFileProjectResponse> ListProjects(string solutionFilePath) => solutionService.GetProjectsFromSolutionFile(solutionFilePath);
+  public List<SolutionFileProjectResponse> ListProjects(string solutionFilePath) => [.. solutionService.GetProjectsFromSolutionFile(solutionFilePath).Select(x => new SolutionFileProjectResponse(x.ProjectName, x.AbsolutePath))];
 }

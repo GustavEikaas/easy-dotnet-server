@@ -48,5 +48,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\EasyDotnet.Infrastructure\EasyDotnet.Infrastructure.csproj" />
+    <ProjectReference Include="..\EasyDotnet.Application\EasyDotnet.Application.csproj" />
   </ItemGroup>
 </Project>

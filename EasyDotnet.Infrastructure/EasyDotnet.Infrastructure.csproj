@@ -8,6 +8,14 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.9" />
+    <PackageReference Include="Microsoft.CodeAnalysis" Version="4.13.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.13.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="4.13.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\EasyDotnet.Domain\EasyDotnet.Domain.csproj" />
+    <ProjectReference Include="..\EasyDotnet.Application\EasyDotnet.Application.csproj" />
   </ItemGroup>
 
 </Project>

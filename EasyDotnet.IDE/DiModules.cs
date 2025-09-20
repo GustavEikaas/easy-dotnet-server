@@ -5,7 +5,9 @@ using System.IO.Abstractions;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using DotNetOutdated.Core.Services;
+using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Infrastructure.Process;
+using EasyDotnet.Infrastructure.Services;
 using EasyDotnet.Services;
 using EasyDotnet.Utils;
 using Microsoft.Extensions.DependencyInjection;
@@ -35,7 +37,7 @@ public static class DiModules
     services.AddSingleton<VisualStudioLocator>();
     services.AddSingleton<IFileSystem, FileSystem>();
     services.AddSingleton<RoslynService>();
-    services.AddSingleton<SolutionService>();
+    services.AddSingleton<ISolutionService, SolutionService>();
     services.AddSingleton<IProcessQueue, ProcessQueue>();
     services.AddSingleton<TemplateEngineService>();
 

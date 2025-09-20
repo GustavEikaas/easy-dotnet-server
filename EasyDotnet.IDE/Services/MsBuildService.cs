@@ -6,7 +6,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using EasyDotnet.Infrastructure.Process;
+using EasyDotnet.Application.Interfaces;
 using Microsoft.Build.Locator;
 using Microsoft.Extensions.Caching.Memory;
 

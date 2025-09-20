@@ -1,26 +1,23 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Xml.Linq;
-using EasyDotnet.Controllers.Solution;
+using EasyDotnet.Application.Interfaces;
+using EasyDotnet.Domain.Models.Solution;
 using Microsoft.Build.Construction;
 
-namespace EasyDotnet.Services;
+namespace EasyDotnet.Infrastructure.Services;
 
-public class SolutionService
+
+public class SolutionService : ISolutionService
 {
-  public List<SolutionFileProjectResponse> GetProjectsFromSolutionFile(string solutionFilePath)
+  public List<SolutionFileProject> GetProjectsFromSolutionFile(string solutionFilePath)
   {
     var fullSolutionPath = Path.GetFullPath(solutionFilePath);
     return Path.GetExtension(fullSolutionPath) == ".slnx" ? GetProjectsFromSlnx(fullSolutionPath) : GetProjectsFromSln(fullSolutionPath) ?? throw new Exception($"Failed to resolve {fullSolutionPath}");
   }
 
-  private static List<SolutionFileProjectResponse> GetProjectsFromSln(string slnPath) => [.. SolutionFile.Parse(slnPath).ProjectsInOrder
-        .Where(p => p.ProjectType == SolutionProjectType.KnownToBeMSBuildFormat)
-        .Select(x => x.ToResponse())];
+  private static List<SolutionFileProject> GetProjectsFromSln(string slnPath) => [.. SolutionFile.Parse(slnPath).ProjectsInOrder
+        .Where(p => p.ProjectType == SolutionProjectType.KnownToBeMSBuildFormat).Select(x => new SolutionFileProject(x.ProjectName, x.AbsolutePath))];
 
-  private static List<SolutionFileProjectResponse> GetProjectsFromSlnx(string slnxPath)
+  private static List<SolutionFileProject> GetProjectsFromSlnx(string slnxPath)
   {
     var doc = XDocument.Load(slnxPath);
     var solutionDir = Path.GetDirectoryName(slnxPath) ?? Directory.GetCurrentDirectory();
@@ -28,7 +25,7 @@ public class SolutionService
     return [.. GetProjectsRecursive(doc.Root, solutionDir)];
   }
 
-  private static IEnumerable<SolutionFileProjectResponse> GetProjectsRecursive(XElement? element, string solutionDir) =>
+  private static IEnumerable<SolutionFileProject> GetProjectsRecursive(XElement? element, string solutionDir) =>
       element == null
           ? []
           : element.Elements("Project")
@@ -38,7 +35,7 @@ public class SolutionService
               {
                 var absolutePath = Path.GetFullPath(Path.Combine(solutionDir, relativePath!));
                 var projectName = Path.GetFileNameWithoutExtension(relativePath);
-                return new SolutionFileProjectResponse(projectName ?? "", absolutePath);
+                return new SolutionFileProject(projectName ?? "", absolutePath);
               })
               .Concat(
                   element.Elements("Folder")

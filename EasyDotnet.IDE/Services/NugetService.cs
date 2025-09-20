@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using EasyDotnet.Infrastructure.Process;
+using EasyDotnet.Application.Interfaces;
 using Microsoft.Extensions.Logging;
 using NuGet.Common;
 using NuGet.Configuration;

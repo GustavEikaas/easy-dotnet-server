@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
-using EasyDotnet.Infrastructure.Process;
+using EasyDotnet.Application.Interfaces;
 
 namespace EasyDotnet.Services;
 

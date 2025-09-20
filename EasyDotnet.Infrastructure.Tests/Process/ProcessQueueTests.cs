@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Infrastructure.Process;
 using Microsoft.Extensions.Logging.Abstractions;
 
