@@ -26,7 +26,7 @@ jobs:
         run: dotnet build 
 
       - name: Generate RPC docs
-        run: dotnet run --project ./EasyDotnet.Tool/EasyDotnet.csproj --generate-rpc-docs-md
+        run: dotnet run --project ./EasyDotnet.IDE/EasyDotnet.IDE.csproj --generate-rpc-docs-md
 
       - name: Check for uncommitted changes (rpcDoc.md)
         run: |

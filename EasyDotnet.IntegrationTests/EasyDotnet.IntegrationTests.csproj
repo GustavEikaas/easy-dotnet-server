@@ -21,7 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\EasyDotnet.Tool\EasyDotnet.csproj" />
+    <ProjectReference Include="..\EasyDotnet.IDE\EasyDotnet.IDE.csproj" />
   </ItemGroup>
 
 </Project>

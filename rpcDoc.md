@@ -1,3 +1,14 @@
+## InitializeController
+
+### `initialize`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | InitializeRequest |   |
+
+**Returns:** `Task<InitializeResponse>`
+
+---
+
 ## UserSecretsController
 
 ### `user-secrets/init`
@@ -166,7 +177,7 @@ _No parameters_
 |-----------|------|----------|
 | request | ProjectPropertiesRequest |   |
 
-**Returns:** `Task<DotnetProjectProperties>`
+**Returns:** `Task<DotnetProject>`
 
 ### `msbuild/list-project-reference`
 | Parameter | Type | Optional |
@@ -214,17 +225,6 @@ _No parameters_
 | preferFileScopedNamespace | bool |   |
 
 **Returns:** `Task<BootstrapFileResultResponse>`
-
----
-
-## InitializeController
-
-### `initialize`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| request | InitializeRequest |   |
-
-**Returns:** `InitializeResponse`
 
 ---
 

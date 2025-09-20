@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using EasyDotnet.Controllers.Roslyn;
 using EasyDotnet.Infrastructure.Process;
+using EasyDotnet.Infrastructure.Services;
 using EasyDotnet.Services;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -127,7 +128,7 @@ public class BootstrapTests
 
     var mockLogService = NullLogger<RoslynService>.Instance;
     var memoryCache = new MemoryCache(new MemoryCacheOptions());
-    var roslynService = new RoslynService(new MsBuildService(new VisualStudioLocator(memoryCache, new ClientService()), new ClientService(), new ProcessQueue(35, NullLogger<ProcessQueue>.Instance), memoryCache, new TestNotificationService()), mockLogService);
+    var roslynService = new RoslynService(new MsBuildService(new VisualStudioLocator(memoryCache, new ClientService(), new ProcessQueue()), new ClientService(), new ProcessQueue(35, NullLogger<ProcessQueue>.Instance), memoryCache, new TestNotificationService()), mockLogService);
     await roslynService.BootstrapFile(
         controllerFilePath,
         kind,
