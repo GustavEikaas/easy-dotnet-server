@@ -57,24 +57,15 @@ public class DebuggerProxy(Client client, Debugger debugger, ILogger<DebuggerPro
       {
         while (!cancellationToken.IsCancellationRequested)
         {
-          var json = await DapMessageReader.ReadDapMessageAsync(outputStream, cancellationToken);
-
-          if (json == null)
-          {
-            throw new IOException("Stream closed - received null message");
-          }
+          var json = await DapMessageReader.ReadDapMessageAsync(outputStream, cancellationToken) ?? throw new IOException("Stream closed - received null message");
 
           var message = messageRefiner != null ? await messageRefiner(json) : json;
           await DapMessageWriter.WriteDapMessageAsync(message, inputStream, cancellationToken);
         }
       }
-      catch (OperationCanceledException)
-      {
-        /* Expected on cancellation */
-      }
+      catch (OperationCanceledException) { }
       catch (IOException ex)
       {
-        // Stream disconnection
         throw new Exception($"Stream disconnected: {ex.Message}", ex);
       }
       catch (Exception ex)

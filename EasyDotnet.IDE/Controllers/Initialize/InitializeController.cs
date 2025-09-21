@@ -42,10 +42,10 @@ public class InitializeController(IClientService clientService, IVisualStudioLoc
     clientService.ProjectInfo = request.ProjectInfo;
     clientService.ClientInfo = request.ClientInfo;
 
-    if (request.ClientOptions is not null)
+    if (request.Options is not null)
     {
-      clientService.UseVisualStudio = request.ClientOptions.UseVisualStudio;
-      clientService.ClientOptions = request.ClientOptions;
+      clientService.UseVisualStudio = request.Options.UseVisualStudio;
+      clientService.ClientOptions = request.Options;
     }
 
     return new InitializeResponse(
