@@ -1,3 +1,14 @@
+## UserSecretsController
+
+### `user-secrets/init`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+
+**Returns:** `Task<ProjectUserSecretsInitResponse>`
+
+---
+
 ## LaunchProfileController
 
 ### `launch-profiles`
@@ -30,17 +41,6 @@
 | request | InitializeRequest |   |
 
 **Returns:** `Task<InitializeResponse>`
-
----
-
-## UserSecretsController
-
-### `user-secrets/init`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| projectPath | string |   |
-
-**Returns:** `Task<ProjectUserSecretsInitResponse>`
 
 ---
 
