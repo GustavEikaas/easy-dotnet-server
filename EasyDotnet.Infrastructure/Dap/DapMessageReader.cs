@@ -2,8 +2,28 @@ using System.Text;
 
 namespace EasyDotnet.Infrastructure.Dap;
 
-public class DapMessageReader
+public static class DapMessageReader
 {
+  /// <summary>
+  /// Reads a single DAP message from the specified stream asynchronously.
+  /// </summary>
+  /// <param name="stream">
+  /// The <see cref="Stream"/> to read the message from. The stream must contain a valid 
+  /// DAP message prefixed with a <c>Content-Length</c> header followed by <c>\r\n\r\n</c>.
+  /// </param>
+  /// <param name="cancellationToken">
+  /// A <see cref="CancellationToken"/> that may be used to cancel the asynchronous operation.
+  /// </param>
+  /// <returns>
+  /// A <see cref="Task{TResult}"/> representing the asynchronous read operation.
+  /// The result contains the JSON string body of the DAP message if successfully read;
+  /// otherwise, <c>null</c> if the stream ended before a complete message could be read.
+  /// </returns>
+  /// <remarks>
+  /// This method reads the <c>Content-Length</c> header to determine how many bytes
+  /// to read for the message body. The header and body are expected to follow the
+  /// Debug Adapter Protocol message framing convention.
+  /// </remarks>
   public static async Task<string?> ReadDapMessageAsync(Stream stream, CancellationToken cancellationToken)
   {
     var headerBuilder = new StringBuilder();
