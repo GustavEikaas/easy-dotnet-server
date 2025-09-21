@@ -16,6 +16,8 @@ public class DapMessageReaderTests
     DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
   };
 
+  private record InitializeRequest(int Seq, string Type, string Command);
+
   private static async Task WriteDapMessageAsync(Stream stream, string json) => await DapMessageWriter.WriteDapMessageAsync(json, stream, default);
 
   [Test]
@@ -133,5 +135,62 @@ public class DapMessageReaderTests
     var result = await DapMessageReader.ReadDapMessageAsync(server, default);
 
     await Assert.That(result).IsNull();
+  }
+
+  [Test]
+  public async Task DeserializedMessageIsReadCorrectly()
+  {
+    var (client, server) = CreateStreamPair();
+
+    var obj = new InitializeRequest(1, "request", "initialize");
+
+    await DapMessageWriter.WriteDapMessageAsync(obj, client, default);
+
+    var result = await DapMessageReader.ReadDapMessageDeserializedAsync<InitializeRequest>(server, default);
+
+    await Assert.That(result).IsNotNull();
+    await Assert.That(result!.Seq).IsEqualTo(1);
+    await Assert.That(result.Type).IsEqualTo("request");
+    await Assert.That(result.Command).IsEqualTo("initialize");
+  }
+
+
+  [Test]
+  public async Task DeserializedMessageWithUnexpectedShapeYieldsDefaultValues()
+  {
+    var (client, server) = CreateStreamPair();
+
+    var msg = JsonSerializer.Serialize(new { foo = "bar" }, SerializerOptions);
+    await WriteDapMessageAsync(client, msg);
+
+    var result = await DapMessageReader.ReadDapMessageDeserializedAsync<InitializeRequest>(server, default);
+
+    await Assert.That(result).IsNotNull();
+    await Assert.That(result!.Seq).IsEqualTo(0);
+    await Assert.That(result.Type).IsNull();
+    await Assert.That(result.Command).IsNull();
+  }
+
+  [Test]
+  public async Task DeserializedMessageThrowsOnInvalidJson()
+  {
+    var (client, server) = CreateStreamPair();
+
+    var badJson = "{ not-valid-json }";
+    await DapMessageWriter.WriteDapMessageAsync(badJson, client, default);
+
+    await Assert.ThrowsAsync<JsonException>(
+      async () => await DapMessageReader.ReadDapMessageDeserializedAsync<InitializeRequest>(server, default));
+  }
+
+  [Test]
+  public void DeserializedMessageRespectsCancellation()
+  {
+    var (client, server) = CreateStreamPair();
+    var cts = new CancellationTokenSource();
+    cts.Cancel();
+
+    Assert.ThrowsAsync<OperationCanceledException>(
+      async () => await DapMessageReader.ReadDapMessageDeserializedAsync<InitializeRequest>(server, cts.Token));
   }
 }

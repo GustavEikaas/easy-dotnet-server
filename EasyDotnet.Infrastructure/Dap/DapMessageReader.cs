@@ -1,11 +1,17 @@
 using System.Text;
+using System.Text.Json;
 
 namespace EasyDotnet.Infrastructure.Dap;
 
 public static class DapMessageReader
 {
+  private static readonly JsonSerializerOptions DeserializerOptions = new()
+  {
+    PropertyNameCaseInsensitive = true
+  };
+
   /// <summary>
-  /// Reads a single DAP message from the specified stream asynchronously.
+  /// Reads a single DAP message from the specified stream asynchronously and returns the raw JSON string.
   /// </summary>
   /// <param name="stream">
   /// The <see cref="Stream"/> to read the message from. The stream must contain a valid 
@@ -19,11 +25,15 @@ public static class DapMessageReader
   /// The result contains the JSON string body of the DAP message if successfully read;
   /// otherwise, <c>null</c> if the stream ended before a complete message could be read.
   /// </returns>
-  /// <remarks>
-  /// This method reads the <c>Content-Length</c> header to determine how many bytes
-  /// to read for the message body. The header and body are expected to follow the
-  /// Debug Adapter Protocol message framing convention.
-  /// </remarks>
+  /// <exception cref="OperationCanceledException">
+  /// Thrown if the operation was canceled via the <paramref name="cancellationToken"/>.
+  /// </exception>
+  /// <exception cref="IOException">
+  /// Thrown if an I/O error occurs while reading from the stream.
+  /// </exception>
+  /// <exception cref="ObjectDisposedException">
+  /// Thrown if the <paramref name="stream"/> has been disposed.
+  /// </exception>
   public static async Task<string?> ReadDapMessageAsync(Stream stream, CancellationToken cancellationToken)
   {
     var headerBuilder = new StringBuilder();
@@ -59,5 +69,38 @@ public static class DapMessageReader
     }
 
     return Encoding.UTF8.GetString(messageBytes);
+  }
+  /// <summary>
+  /// Reads a single DAP message from the specified stream asynchronously and 
+  /// deserializes it into the given type <typeparamref name="T"/>.
+  /// </summary>
+  /// <typeparam name="T">The target type to deserialize the JSON message into.</typeparam>
+  /// <param name="stream">The <see cref="Stream"/> to read the message from.</param>
+  /// <param name="cancellationToken">
+  /// A <see cref="CancellationToken"/> that may be used to cancel the asynchronous operation.
+  /// </param>
+  /// <returns>
+  /// A <typeparamref name="T"/> instance if the message was successfully read and deserialized; 
+  /// otherwise <c>default</c> if the stream ended before a complete message could be read.
+  /// </returns>
+  /// <exception cref="OperationCanceledException">
+  /// Thrown if the operation was canceled via the <paramref name="cancellationToken"/>.
+  /// </exception>
+  /// <exception cref="IOException">
+  /// Thrown if an I/O error occurs while reading from the stream.
+  /// </exception>
+  /// <exception cref="ObjectDisposedException">
+  /// Thrown if the <paramref name="stream"/> has been disposed.
+  /// </exception>
+  /// <exception cref="JsonException">
+  /// Thrown if the JSON is invalid, or cannot be deserialized into the target type <typeparamref name="T"/>.
+  /// </exception>
+  /// <exception cref="InvalidOperationException">
+  /// Thrown if the deserializer encounters an unexpected condition while materializing the object.
+  /// </exception>
+  public static async Task<T?> ReadDapMessageDeserializedAsync<T>(Stream stream, CancellationToken cancellationToken)
+  {
+    var json = await ReadDapMessageAsync(stream, cancellationToken);
+    return json == null ? default : JsonSerializer.Deserialize<T>(json, DeserializerOptions);
   }
 }
