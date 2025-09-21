@@ -1,0 +1,130 @@
+using System;
+using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Text;
+using System.Text.Json.Nodes;
+using System.Threading;
+using System.Threading.Tasks;
+using EasyDotnet.Infrastructure.Dap;
+using Microsoft.Extensions.Logging;
+
+namespace EasyDotnet.Services.NetCoreDbg;
+
+public class NetcoreDbgClient : IDisposable
+{
+  private readonly ILogger<NetcoreDbgClient> _logger;
+  public readonly Process Process;
+  private readonly string _binPath;
+  private readonly ConcurrentDictionary<int, TaskCompletionSource<string>> _pendingRequests = new();
+  private int _seqCounter = 0;
+
+  private readonly Action<string>? _globalMessageHandler;
+
+  public bool IsRunning => !Process.HasExited;
+
+  public NetcoreDbgClient(string binPath, ILogger<NetcoreDbgClient> logger, Action<string> callback, Action? exitHandler = null)
+  {
+    _binPath = binPath;
+    _logger = logger;
+    Process = StartProcess();
+    _globalMessageHandler = callback;
+    Process.Exited += (_, _) => exitHandler?.Invoke();
+    StartReadingLoop(CancellationToken.None);
+  }
+
+  private Process StartProcess()
+  {
+    var process = new Process
+    {
+      StartInfo = new ProcessStartInfo
+      {
+        FileName = _binPath,
+        Arguments = "--interpreter=vscode",
+        RedirectStandardInput = true,
+        RedirectStandardOutput = true,
+        RedirectStandardError = true,
+        UseShellExecute = false,
+        CreateNoWindow = true
+      },
+      EnableRaisingEvents = true,
+    };
+
+    process.Start();
+    return process;
+  }
+
+  /// <summary>
+  /// Sends a raw message to netcoredbg
+  /// </summary>
+  public async Task SendMessageAsync(string json, CancellationToken? cancellationToken = null) => await WriteDapMessageAsync(json, cancellationToken ?? CancellationToken.None);
+
+  /// <summary>
+  /// Sends a request and waits for its response
+  /// </summary>
+  public async Task<string> SendRequestAsync(JsonObject request, CancellationToken? cancellationToken = null)
+  {
+    var seq = ++_seqCounter;
+    request["seq"] = seq;
+    request["type"] = "request";
+
+    var tcs = new TaskCompletionSource<string>();
+    _pendingRequests[seq] = tcs;
+
+    var message = request.ToJsonString();
+    await WriteDapMessageAsync(message, cancellationToken ?? CancellationToken.None);
+
+    return await tcs.Task;
+  }
+
+  private async Task WriteDapMessageAsync(string json, CancellationToken cancellationToken)
+  {
+    await DapMessageWriter.WriteDapMessageAsync(json, Process.StandardInput.BaseStream, cancellationToken);
+    _logger.LogDebug("[NetCoreDbg]: Sent message: {Json}", json);
+  }
+
+  private void StartReadingLoop(CancellationToken? cancellationToken) => Task.Run(async () =>
+                                      {
+                                        try
+                                        {
+                                          var stdout = Process.StandardOutput.BaseStream;
+                                          while (!Process.HasExited)
+                                          {
+                                            var json = await DapMessageReader.ReadDapMessageAsync(stdout, cancellationToken ?? CancellationToken.None);
+                                            if (json == null) break;
+
+                                            try
+                                            {
+                                              var node = JsonNode.Parse(json);
+                                              if (node?["type"]?.GetValue<string>() == "response" &&
+                                                      node["request_seq"]?.GetValue<int>() is int requestSeq &&
+                                                      _pendingRequests.TryRemove(requestSeq, out var tcs))
+                                              {
+                                                tcs.SetResult(json);
+                                              }
+                                              else
+                                              {
+                                                _globalMessageHandler?.Invoke(json);
+                                              }
+                                            }
+                                            catch (Exception ex)
+                                            {
+                                              _logger.LogError(ex, "Error parsing message: {Json}", json);
+                                              _globalMessageHandler?.Invoke(json);
+                                            }
+                                          }
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                          _logger.LogError(ex, "Error in reading loop");
+                                        }
+                                      });
+
+  public void Dispose()
+  {
+    if (Process != null && !Process.HasExited)
+    {
+      Process.Kill();
+      Process.Dispose();
+    }
+  }
+}
