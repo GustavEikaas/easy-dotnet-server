@@ -9,6 +9,17 @@
 
 ---
 
+## NetCoreDbgController
+
+### `debugger/start`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | DebuggerStartRequest |   |
+
+**Returns:** `Task<DebuggerStartResponse>`
+
+---
+
 ## LaunchProfileController
 
 ### `launch-profiles`
