@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Domain.Models.LaunchProfile;
@@ -281,6 +282,8 @@ public record class InterceptableAttachRequest
   public string Command { get; set; } = string.Empty;
   public int Seq { get; set; }
   public string Type { get; set; } = string.Empty;
+  [JsonExtensionData]
+  public Dictionary<string, JsonElement>? ExtraProperties { get; set; }
 }
 
 public record class InterceptableAttachRequestArguments
@@ -291,4 +294,6 @@ public record class InterceptableAttachRequestArguments
   public string Program { get; set; } = string.Empty;
   public string Type { get; set; } = string.Empty;
   public Dictionary<string, string>? Env { get; set; }
+  [JsonExtensionData]
+  public Dictionary<string, JsonElement>? ExtraProperties { get; set; }
 }
