@@ -3,7 +3,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
-using EasyDotnet.Infrastructure.Services;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Controllers.NetCoreDbg;
@@ -17,7 +16,7 @@ public sealed record DebuggerStartRequest(
 
 public sealed record DebuggerStartResponse(bool Success);
 
-public class NetCoreDbgController(IMsBuildService msBuildService, ILaunchProfileService launchProfileService, NetcoreDbgService netcoreDbgService) : BaseController
+public class NetCoreDbgController(IMsBuildService msBuildService, ILaunchProfileService launchProfileService, INetcoreDbgService netcoreDbgService) : BaseController
 {
   [JsonRpcMethod("debugger/start")]
   public async Task<DebuggerStartResponse> StartDebugger(DebuggerStartRequest request, CancellationToken cancellationToken)

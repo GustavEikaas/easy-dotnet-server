@@ -1,7 +1,7 @@
 namespace EasyDotnet.Infrastructure.Dap;
 
-public record Client(Stream Input, Stream Output, Func<string, string>? MessageRefiner);
-public record Debugger(Stream Input, Stream Output, Func<string, string>? MessageRefiner);
+public record Client(Stream Input, Stream Output, Func<string, Task<string>>? MessageRefiner);
+public record Debugger(Stream Input, Stream Output, Func<string, Task<string>>? MessageRefiner);
 
 public class DebuggerProxy(Client client, Debugger debugger)
 {
@@ -35,7 +35,7 @@ public class DebuggerProxy(Client client, Debugger debugger)
     }, cancellationToken);
   }
 
-  private static Task StartReadingLoop(Stream outputStream, Stream inputStream, Func<string, string>? messageRefiner, CancellationToken cancellationToken, Action? onDisconnect = null) =>
+  private static Task StartReadingLoop(Stream outputStream, Stream inputStream, Func<string, Task<string>>? messageRefiner, CancellationToken cancellationToken, Action? onDisconnect = null) =>
     Task.Run(async () =>
      {
        try
@@ -43,7 +43,7 @@ public class DebuggerProxy(Client client, Debugger debugger)
          while (!cancellationToken.IsCancellationRequested)
          {
            var json = (await DapMessageReader.ReadDapMessageAsync(outputStream, cancellationToken) ?? throw new IOException("Json from reader was null, Stream closed")) ?? throw new IOException("Client disconnected, stream closed.");
-           var message = messageRefiner != null ? messageRefiner(json) : json;
+           var message = messageRefiner != null ? await messageRefiner(json) : json;
            await DapMessageWriter.WriteDapMessageAsync(message, inputStream, cancellationToken);
          }
        }

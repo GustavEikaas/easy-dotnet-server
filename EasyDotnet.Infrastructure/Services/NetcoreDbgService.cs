@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Domain.Models.LaunchProfile;
 using EasyDotnet.Domain.Models.MsBuild.Project;
@@ -9,25 +11,24 @@ using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Infrastructure.Services;
 
-public class NetcoreDbgService(ILogger<NetcoreDbgService> logger) : INetcoreDbgService
+
+public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger) : INetcoreDbgService
 {
+  private static readonly JsonSerializerOptions SeralizerOptions = new()
+  {
+    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+  };
+
   private readonly TaskCompletionSource<bool> _completionSource = new();
   private CancellationTokenSource? _cancellationTokenSource;
   private Task? _sessionTask;
   private TcpListener? _listener;
   private System.Diagnostics.Process? _process;
 
-  private DotnetProject? _project;
-  private LaunchProfile? _launchProfile;
-  private string? _projectPath;
-
   public Task Completion => _completionSource.Task;
 
   public void Start(DotnetProject project, string projectPath, LaunchProfile? launchProfile)
   {
-    _project = project;
-    _projectPath = projectPath;
-    _launchProfile = launchProfile;
     _cancellationTokenSource = new CancellationTokenSource();
 
     _sessionTask = Task.Run(async () =>
@@ -43,9 +44,37 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger) : INetcoreDbgS
                 logger.LogInformation("Client connected.");
 
                 var tcpStream = client.GetStream();
-                var clientDap = new Client(tcpStream, tcpStream, x =>
+                var clientDap = new Client(tcpStream, tcpStream, async (x) =>
             {
               logger.LogInformation("[TCP] message: {message}", x);
+
+              if (AttachRequestPattern().IsMatch(x))
+              {
+                try
+                {
+                  var message = JsonSerializer.Deserialize<AttachMessage>(x, SeralizerOptions);
+                  if (message?.Arguments?.Request == "attach" && message.Command?.Trim() == "attach")
+                  {
+                    var seq = message.Seq;
+
+                    var modified = await InitializeRequestRewriter.CreateInitRequestBasedOnProjectType(
+                        projectPath,
+                        project,
+                        launchProfile,
+                        Path.GetDirectoryName(projectPath)!,
+                        seq
+                    );
+
+                    logger.LogInformation("[TCP] Intercepted attach request: {modified}", modified);
+                    return modified;
+                  }
+                }
+                catch (JsonException ex)
+                {
+                  logger.LogError(ex, "Failed to deserialize message (likely not attach): {message}", x);
+                }
+              }
+
               return x;
             });
 
@@ -68,7 +97,7 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger) : INetcoreDbgS
                 var debuggerDap = new Dap.Debugger(_process.StandardInput.BaseStream, _process.StandardOutput.BaseStream, y =>
             {
               logger.LogInformation("[DBG] message: {message}", y);
-              return y;
+              return Task.FromResult(y);
             });
 
                 var proxy = new DebuggerProxy(clientDap, debuggerDap);
@@ -133,4 +162,10 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger) : INetcoreDbgS
     }
     _cancellationTokenSource?.Dispose();
   }
+
+  private record AttachMessage(Arguments Arguments, string Command, int Seq);
+  private record Arguments(string Request);
+
+  [GeneratedRegex(@"""select_project"":\s*""REWRITE_ATTACH""")]
+  private static partial Regex AttachRequestPattern();
 }
