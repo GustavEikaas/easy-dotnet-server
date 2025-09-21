@@ -10,6 +10,12 @@ public class DapMessageReaderTests
   private static (Stream client, Stream server) CreateStreamPair()
          => FullDuplexStream.CreatePair();
 
+  private static readonly JsonSerializerOptions SerializerOptions = new()
+  {
+    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+  };
+
   private static async Task WriteDapMessageAsync(Stream stream, string json) => await DapMessageWriter.WriteDapMessageAsync(json, stream, default);
 
   [Test]
@@ -28,6 +34,27 @@ public class DapMessageReaderTests
     var result = await DapMessageReader.ReadDapMessageAsync(server, default);
 
     await Assert.That(result).IsEqualTo(message);
+  }
+
+  [Test]
+  public async Task DapMessageObjectOverloadSerializesCorrectly()
+  {
+    var (client, server) = CreateStreamPair();
+
+    var obj = new
+    {
+      Seq = 1,
+      Type = "request",
+      Command = "initialize"
+    };
+
+    await DapMessageWriter.WriteDapMessageAsync(obj, client, default);
+
+    var result = await DapMessageReader.ReadDapMessageAsync(server, default);
+
+    var expected = JsonSerializer.Serialize(obj, SerializerOptions);
+
+    await Assert.That(result).IsEqualTo(expected);
   }
 
   [Test]
