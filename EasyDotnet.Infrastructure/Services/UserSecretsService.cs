@@ -1,15 +1,10 @@
-using System;
-using System.IO;
-using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
+using EasyDotnet.Domain.Models.Secrets;
 
-namespace EasyDotnet.Services;
+namespace EasyDotnet.Infrastructure.Services;
 
-public sealed record ProjectUserSecret(string Id, string FilePath);
-
-public class UserSecretsService(IMsBuildService msBuildService, IProcessQueue processQueue)
+public class UserSecretsService(IMsBuildService msBuildService, IProcessQueue processQueue) : IUserSecretsService
 {
-
   private readonly string _basePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Microsoft", "UserSecrets");
 
   public async Task<ProjectUserSecret> AddUserSecretsId(string projectPath)
