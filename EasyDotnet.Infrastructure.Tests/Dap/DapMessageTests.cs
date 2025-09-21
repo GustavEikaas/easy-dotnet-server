@@ -154,7 +154,6 @@ public class DapMessageReaderTests
     await Assert.That(result.Command).IsEqualTo("initialize");
   }
 
-
   [Test]
   public async Task DeserializedMessageWithUnexpectedShapeYieldsDefaultValues()
   {
