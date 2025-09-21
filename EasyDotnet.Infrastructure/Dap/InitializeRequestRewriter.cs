@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text.Json;
 using EasyDotnet.Domain.Models.LaunchProfile;
 using EasyDotnet.Domain.Models.MsBuild.Project;
@@ -7,7 +6,6 @@ namespace EasyDotnet.Infrastructure.Dap;
 
 public static class InitializeRequestRewriter
 {
-
   private static readonly JsonSerializerOptions SerializerOptions = new()
   {
     PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -15,58 +13,11 @@ public static class InitializeRequestRewriter
     DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
   };
 
-  private static int StartTestProcess(string projectPath)
+  public static Task<string> CreateInitRequestBasedOnProjectType(DotnetProject project, LaunchProfile? launchProfile, string cwd, int seq, int? processId)
   {
-    var startInfo = new ProcessStartInfo
+    if (project.IsTestProject && project.TestingPlatformDotnetTestSupport != true && processId is not null)
     {
-      FileName = "dotnet",
-      Arguments = $"test \"{projectPath}\" --environment VSTEST_HOST_DEBUG=1",
-      RedirectStandardOutput = true,
-      RedirectStandardError = true,
-      UseShellExecute = false,
-      CreateNoWindow = true
-    };
-
-    startInfo.EnvironmentVariables["VSTEST_HOST_DEBUG"] = "1";
-
-    using var process = new System.Diagnostics.Process { StartInfo = startInfo };
-
-    var processId = 0;
-
-    var outputReceived = new TaskCompletionSource<bool>();
-
-    process.OutputDataReceived += (sender, e) =>
-    {
-      if (string.IsNullOrEmpty(e.Data))
-        return;
-
-      // Look for "Process Id: 12345"
-      var match = System.Text.RegularExpressions.Regex.Match(e.Data, @"Process Id:\s*(\d+)");
-      if (match.Success && int.TryParse(match.Groups[1].Value, out var pid))
-      {
-        processId = pid;
-        outputReceived.TrySetResult(true);
-      }
-    };
-
-    process.Start();
-    process.BeginOutputReadLine();
-    process.BeginErrorReadLine();
-
-    if (!outputReceived.Task.Wait(TimeSpan.FromSeconds(10)))
-    {
-      throw new InvalidOperationException("Failed to start test process or retrieve process ID.");
-    }
-
-    return processId;
-  }
-
-  public static Task<string> CreateInitRequestBasedOnProjectType(string projectPath, DotnetProject project, LaunchProfile? launchProfile, string cwd, int seq)
-  {
-    if (project.IsTestProject && project.TestingPlatformDotnetTestSupport != true)
-    {
-      var processId = StartTestProcess(projectPath);
-      return CreateAttachRequestAsync(processId, cwd, seq);
+      return CreateAttachRequestAsync(processId.Value, cwd, seq);
     }
     else
     {

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using EasyDotnet.Domain.Models.LaunchProfile;
 using EasyDotnet.Domain.Models.MsBuild.Project;
 
@@ -8,5 +9,5 @@ public interface INetcoreDbgService
   Task Completion { get; }
 
   ValueTask DisposeAsync();
-  void Start(string binaryPath, DotnetProject project, string projectPath, LaunchProfile? launchProfile);
+  void Start(string binaryPath, DotnetProject project, string projectPath, LaunchProfile? launchProfile, (Process, int)? vsTestAttach);
 }

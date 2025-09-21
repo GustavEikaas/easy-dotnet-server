@@ -24,11 +24,13 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
   private TcpListener? _listener;
   private System.Diagnostics.Process? _process;
   private TcpClient? _client;
+  private (System.Diagnostics.Process, int)? _vsTestAttach;
 
   public Task Completion => _completionSource.Task;
 
-  public void Start(string binaryPath, DotnetProject project, string projectPath, LaunchProfile? launchProfile)
+  public void Start(string binaryPath, DotnetProject project, string projectPath, LaunchProfile? launchProfile, (System.Diagnostics.Process, int)? vsTestAttach)
   {
+    _vsTestAttach = vsTestAttach;
     _cancellationTokenSource = new CancellationTokenSource();
 
     _sessionTask = Task.Run(async () =>
@@ -40,8 +42,18 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
         _listener.Start();
         logger.LogInformation("Listening for client on port 8086.");
 
-        _client = await _listener.AcceptTcpClientAsync().WaitAsync(TimeSpan.FromSeconds(30), _cancellationTokenSource.Token);
-        logger.LogInformation("Client connected.");
+        try
+        {
+          _client = await _listener.AcceptTcpClientAsync().WaitAsync(TimeSpan.FromSeconds(30), _cancellationTokenSource.Token);
+          logger.LogInformation("Client connected.");
+        }
+        catch (TimeoutException)
+        {
+          logger.LogWarning("No client connected within 30 seconds. Triggering cleanup.");
+          TriggerCleanup();
+          _completionSource.SetCanceled();
+          return;
+        }
 
         var tcpStream = _client.GetStream();
         var clientDap = new Client(tcpStream, tcpStream, async (x) =>
@@ -58,11 +70,11 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
                 var seq = message.Seq;
 
                 var modified = await InitializeRequestRewriter.CreateInitRequestBasedOnProjectType(
-                    projectPath,
                     project,
                     launchProfile,
                     Path.GetDirectoryName(projectPath)!,
-                    seq
+                    seq,
+                    vsTestAttach?.Item2
                 );
 
                 logger.LogInformation("[TCP] Intercepted attach request: {modified}", modified);
@@ -191,21 +203,70 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
       logger.LogInformation("TCP listener stopped.");
     }
 
-    if (_process != null && !_process.HasExited)
+    SafeDisposeProcess(_process, "Debugger");
+
+    if (_vsTestAttach.HasValue)
+    {
+      var (process, pid) = _vsTestAttach.Value;
+
+      SafeDisposeProcess(process, "VsTest");
+      SafeDisposeProcessById(pid, "VsTestHost");
+    }
+    _cancellationTokenSource?.Dispose();
+  }
+
+  private void SafeDisposeProcess(System.Diagnostics.Process? process, string processName)
+  {
+    if (process == null) return;
+
+    try
+    {
+      if (!process.HasExited)
+      {
+        process.Kill();
+        logger.LogInformation("Killed {processName} process", processName);
+      }
+      else
+      {
+        logger.LogInformation("{processName} process already exited", processName);
+      }
+    }
+    catch (InvalidOperationException)
+    {
+      logger.LogInformation("{processName} process already exited", processName);
+    }
+    catch (Exception ex)
+    {
+      logger.LogWarning(ex, "Failed to kill {processName} process", processName);
+    }
+    finally
     {
       try
       {
-        _process.Kill();
-        logger.LogInformation("Debugger process killed.");
+        process.Dispose();
       }
-      catch (InvalidOperationException ex)
+      catch (Exception ex)
       {
-        logger.LogWarning(ex, "Could not kill process, it may have already exited.");
+        logger.LogWarning(ex, "Failed to dispose {processName} process", processName);
       }
     }
+  }
 
-    _process?.Dispose();
-    _cancellationTokenSource?.Dispose();
+  private void SafeDisposeProcessById(int pid, string processName)
+  {
+    try
+    {
+      var process = System.Diagnostics.Process.GetProcessById(pid);
+      SafeDisposeProcess(process, $"{processName} (PID: {pid})");
+    }
+    catch (ArgumentException)
+    {
+      logger.LogInformation("{processName} (PID: {pid}) not found", processName, pid);
+    }
+    catch (Exception ex)
+    {
+      logger.LogWarning(ex, "Failed to get {processName} process by PID: {pid}", processName, pid);
+    }
   }
 
   private record AttachMessage(Arguments Arguments, string Command, int Seq);

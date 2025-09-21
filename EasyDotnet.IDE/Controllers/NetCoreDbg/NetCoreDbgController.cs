@@ -1,9 +1,12 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
+using EasyDotnet.Domain.Models.MsBuild.Project;
+using EasyDotnet.Infrastructure.Dap;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Controllers.NetCoreDbg;
@@ -35,7 +38,12 @@ public class NetCoreDbgController(IMsBuildService msBuildService, ILaunchProfile
     {
       throw new Exception("Failed to start debugger, no binary path provided");
     }
-    netcoreDbgService.Start(binaryPath, project, request.TargetPath, launchProfile);
+
+    var res = StartVsTestIfApplicable(project, request.TargetPath);
+
+    netcoreDbgService.Start(binaryPath, project, request.TargetPath, launchProfile, res);
     return new DebuggerStartResponse(true);
   }
+
+  private static (Process, int)? StartVsTestIfApplicable(DotnetProject project, string projectPath) => project.IsTestProject && !project.TestingPlatformDotnetTestSupport ? VsTestHelper.StartTestProcess(projectPath) : null;
 }
