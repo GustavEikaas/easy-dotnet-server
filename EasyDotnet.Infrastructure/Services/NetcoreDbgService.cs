@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Domain.Models.LaunchProfile;
@@ -64,7 +65,7 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
           {
             try
             {
-              var message = JsonSerializer.Deserialize<AttachMessage>(x, SeralizerOptions);
+              var message = JsonSerializer.Deserialize<InterceptableAttachRequest>(x, SeralizerOptions);
               if (message?.Arguments?.Request == "attach" && message.Command?.Trim() == "attach")
               {
                 var seq = message.Seq;
@@ -72,6 +73,7 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
                 var modified = await InitializeRequestRewriter.CreateInitRequestBasedOnProjectType(
                     project,
                     launchProfile,
+                    message,
                     Path.GetDirectoryName(projectPath)!,
                     seq,
                     vsTestAttach?.Item2
@@ -269,9 +271,29 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
     }
   }
 
-  private record AttachMessage(Arguments Arguments, string Command, int Seq);
-  private record Arguments(string Request);
 
   [GeneratedRegex(@"""select_project"":\s*""REWRITE_ATTACH""")]
   private static partial Regex AttachRequestPattern();
+}
+
+public record class InterceptableAttachRequest
+{
+  public InterceptableAttachRequestArguments Arguments { get; set; } = default!;
+  public string Command { get; set; } = string.Empty;
+  public int Seq { get; set; }
+  public string Type { get; set; } = string.Empty;
+  [JsonExtensionData]
+  public Dictionary<string, JsonElement>? ExtraProperties { get; set; }
+}
+
+public record class InterceptableAttachRequestArguments
+{
+  public string Request { get; set; } = string.Empty;
+  public string Cwd { get; set; } = string.Empty;
+  public int ProcessId { get; set; }
+  public string Program { get; set; } = string.Empty;
+  public string Type { get; set; } = string.Empty;
+  public Dictionary<string, string>? Env { get; set; }
+  [JsonExtensionData]
+  public Dictionary<string, JsonElement>? ExtraProperties { get; set; }
 }

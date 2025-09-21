@@ -1,6 +1,7 @@
 using System.Text.Json;
 using EasyDotnet.Domain.Models.LaunchProfile;
 using EasyDotnet.Domain.Models.MsBuild.Project;
+using EasyDotnet.Infrastructure.Services;
 
 namespace EasyDotnet.Infrastructure.Dap;
 
@@ -13,33 +14,17 @@ public static class InitializeRequestRewriter
     DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
   };
 
-  public static Task<string> CreateInitRequestBasedOnProjectType(DotnetProject project, LaunchProfile? launchProfile, string cwd, int seq, int? processId)
+  public static Task<string> CreateInitRequestBasedOnProjectType(DotnetProject project, LaunchProfile? launchProfile, InterceptableAttachRequest request, string cwd, int seq, int? processId)
   {
     if (project.IsTestProject && project.TestingPlatformDotnetTestSupport != true && processId is not null)
     {
-      return CreateAttachRequestAsync(processId.Value, cwd, seq);
+      return CreateAttachRequestAsync(request, processId.Value, cwd);
     }
     else
     {
-      return CreateLaunchRequestAsync(project, launchProfile, cwd, seq);
+      return CreateLaunchRequestAsync(request, project, launchProfile, cwd);
     }
   }
-
-  public record LaunchRequestArguments(
-      string Cwd,
-      string Program,
-      string Request = "launch",
-      string Type = "coreclr",
-      Dictionary<string, string>? Env = null
-  );
-
-  public record LaunchRequest(
-      string Type = "request",
-      int Seq = 0,
-      string Command = "launch",
-      LaunchRequestArguments Arguments = null!
-  );
-
 
   private static Dictionary<string, string> BuildEnvironmentVariables(LaunchProfile? launchProfile) => launchProfile == null
         ? []
@@ -51,31 +36,30 @@ public static class InitializeRequestRewriter
             )
             .ToDictionary(kv => kv.Key, kv => kv.Value);
 
-  private static async Task<string> CreateLaunchRequestAsync(DotnetProject project, LaunchProfile? launchProfile, string cwd, int seq)
+  private static async Task<string> CreateLaunchRequestAsync(InterceptableAttachRequest request, DotnetProject project, LaunchProfile? launchProfile, string cwd)
   {
     var env = BuildEnvironmentVariables(launchProfile);
-    var request = new LaunchRequest("request", seq, "launch", new LaunchRequestArguments(cwd, project.TargetPath!, "launch", "coreclr", env));
+    request.Type = "request";
+    request.Arguments.Cwd = cwd;
+    request.Command = "launch";
+    request.Arguments.Request = "launch";
+    request.Arguments.Program = project.TargetPath!;
+
+    request.Arguments.Env =
+        (request.Arguments.Env ?? [])
+        .Concat(env ?? Enumerable.Empty<KeyValuePair<string, string>>())
+        .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
 
     return await Task.FromResult(JsonSerializer.Serialize(request, SerializerOptions));
   }
 
-  public record AttachRequestArguments(
-      string Cwd,
-      int ProcessId,
-      string Request = "attach",
-      string Type = "coreclr"
-  );
-
-  public record AttachRequest(
-      string Type = "request",
-      int Seq = 0,
-      string Command = "attach",
-      AttachRequestArguments Arguments = null!
-  );
-
-  private static async Task<string> CreateAttachRequestAsync(int processId, string cwd, int seq)
+  private static async Task<string> CreateAttachRequestAsync(InterceptableAttachRequest request, int processId, string cwd)
   {
-    var request = new AttachRequest("request", seq, "attach", new AttachRequestArguments(cwd, processId, "attach", "coreclr"));
+    request.Type = "request";
+    request.Command = "attach";
+    request.Arguments.Request = "attach";
+    request.Arguments.ProcessId = processId;
+    request.Arguments.Cwd = cwd;
 
     return await Task.FromResult(JsonSerializer.Serialize(request, SerializerOptions));
   }
