@@ -24,7 +24,7 @@ public class NetCoreDbgController(IMsBuildService msBuildService, ILaunchProfile
   {
     var project = await msBuildService.GetOrSetProjectPropertiesAsync(request.TargetPath, request.TargetFramework, request.Configuration ?? "Debug", cancellationToken);
     var launchProfile = !string.IsNullOrEmpty(request.LaunchProfileName)
-        ? (launchProfileService.GetLaunchProfiles(Path.GetDirectoryName(request.TargetPath)!)
+        ? (launchProfileService.GetLaunchProfiles(request.TargetPath)
            is { } profiles && profiles.TryGetValue(request.LaunchProfileName, out var profile)
               ? profile
               : null)
