@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -16,7 +17,7 @@ public sealed record DebuggerStartRequest(
 
 public sealed record DebuggerStartResponse(bool Success);
 
-public class NetCoreDbgController(IMsBuildService msBuildService, ILaunchProfileService launchProfileService, INetcoreDbgService netcoreDbgService) : BaseController
+public class NetCoreDbgController(IMsBuildService msBuildService, ILaunchProfileService launchProfileService, INetcoreDbgService netcoreDbgService, IClientService clientService) : BaseController
 {
   [JsonRpcMethod("debugger/start")]
   public async Task<DebuggerStartResponse> StartDebugger(DebuggerStartRequest request, CancellationToken cancellationToken)
@@ -29,7 +30,12 @@ public class NetCoreDbgController(IMsBuildService msBuildService, ILaunchProfile
               : null)
         : null;
 
-    netcoreDbgService.Start(project, request.TargetPath, launchProfile);
+    var binaryPath = clientService.ClientOptions?.DebuggerOptions?.BinaryPath;
+    if (string.IsNullOrEmpty(binaryPath))
+    {
+      throw new Exception("Failed to start debugger, no binary path provided");
+    }
+    netcoreDbgService.Start(binaryPath, project, request.TargetPath, launchProfile);
     return new DebuggerStartResponse(true);
   }
 }

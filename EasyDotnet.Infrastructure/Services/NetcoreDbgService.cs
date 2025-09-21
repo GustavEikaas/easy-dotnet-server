@@ -27,7 +27,7 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
 
   public Task Completion => _completionSource.Task;
 
-  public void Start(DotnetProject project, string projectPath, LaunchProfile? launchProfile)
+  public void Start(string binaryPath, DotnetProject project, string projectPath, LaunchProfile? launchProfile)
   {
     _cancellationTokenSource = new CancellationTokenSource();
 
@@ -82,7 +82,7 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
         {
           StartInfo = new ProcessStartInfo
           {
-            FileName = "netcoredbg",
+            FileName = binaryPath,
             Arguments = "--interpreter=vscode",
             RedirectStandardInput = true,
             RedirectStandardOutput = true,

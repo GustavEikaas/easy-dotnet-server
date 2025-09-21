@@ -8,6 +8,7 @@ public interface IClientService
   bool UseVisualStudio { get; set; }
   ProjectInfo? ProjectInfo { get; set; }
   ClientInfo? ClientInfo { get; set; }
+  ClientOptions? ClientOptions { get; set; }
 
   void ThrowIfNotInitialized();
 }
