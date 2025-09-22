@@ -135,6 +135,7 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
                 var pattern = @"System\.Collections\.Generic\.List(?:<.*?>|\\u003C.*?\\u003E)";
                 var x = varsRes.Body.Variables.Find(x => x.VariablesReference != 0 && Regex.Match(x.Type, pattern).Success);
 
+                //TODO: this request id is long used because im +1 after the response is recieved. Need to track every single request for this to work
                 var seq = varsRes.Seq + 1;
 
                   logger.LogInformation("[TCP] Expanding variables: {x}", JsonSerializer.Serialize(x, LoggingSerializerOptions));
