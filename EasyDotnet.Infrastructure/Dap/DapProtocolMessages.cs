@@ -87,3 +87,19 @@ public class InterceptableVariable
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? NamedVariables { get; set; }
 }
+
+public record InternalVariablesRequest
+{
+    public int Seq { get; init; }
+
+    public string Type { get; init; } = "request";
+
+    public string Command { get; init; } = "variables";
+
+    public InternalVariablesArguments Arguments { get; init; } = new();
+}
+
+public record InternalVariablesArguments
+{
+    public int VariablesReference { get; init; }
+}
