@@ -62,12 +62,28 @@ public class InterceptableAttachArguments
     public Dictionary<string, string>? Env { get; set; }
 }
 
-public class InterceptableVariablesRequest : Request
+public class InterceptableVariablesResponse : Response
 {
-    public new InterceptableVariablesArguments Arguments { get; set; } = new();
+    public new InterceptableVariablesResponseBody Body { get; set; } = new();
 }
 
-public class InterceptableVariablesArguments
+public class InterceptableVariablesResponseBody
 {
+    public List<InterceptableVariable> Variables { get; set; } = new();
+}
+
+public class InterceptableVariable
+{
+    public string? EvaluateName { get; set; }
+
+    public string Name { get; set; } = string.Empty;
+
+    public string? Type { get; set; }
+
+    public string? Value { get; set; }
+
     public int VariablesReference { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? NamedVariables { get; set; }
 }

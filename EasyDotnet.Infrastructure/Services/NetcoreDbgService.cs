@@ -32,8 +32,9 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
   private TcpListener? _listener;
   private System.Diagnostics.Process? _process;
   private TcpClient? _client;
+  private DebuggerProxy? _debuggerProxy;
   private (System.Diagnostics.Process, int)? _vsTestAttach;
-  private readonly Dictionary<int, InterceptableVariablesRequest> _pendingVariablesRequests = new();
+  private readonly Dictionary<int, InterceptableVariablesResponse> _pendingVariablesRequests = new();
 
   public Task Completion => _completionSource.Task;
 
@@ -65,12 +66,10 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
         }
 
         var tcpStream = _client.GetStream();
-        var clientDap = new Client(tcpStream, tcpStream, async (x) =>
+        var clientDap = new Client(tcpStream, tcpStream, async (msg) =>
         {
           try
           {
-            var msg = DapMessageDeserializer.Parse(x);
-
             switch (msg)
             {
               case InterceptableAttachRequest attachReq:
@@ -85,19 +84,13 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
                 logger.LogInformation("[TCP] Intercepted attach request: {modified}", JsonSerializer.Serialize(modified, LoggingSerializerOptions));
                 return JsonSerializer.Serialize(modified, SerializerOptions);
 
-              case InterceptableVariablesRequest varsReq:
-                //TODO: send the var request to debugger without sending result back to client, 
-                //Parse result and either send back request raw or send more requests to "unwrap" the type
-                logger.LogInformation("[TCP] Intercepted variables request: {x}", JsonSerializer.Serialize(varsReq, LoggingSerializerOptions));
-                return x;
-                break;
-
               case Request req:
                 logger.LogInformation("[TCP] request: {message}", JsonSerializer.Serialize(req, LoggingSerializerOptions));
                 Console.WriteLine($"Request command: {req.Command}");
-                return x;
+                return JsonSerializer.Serialize(req, SerializerOptions);
+
               default:
-                throw new Exception($"Unsupported DAP message from client: {x}");
+                throw new Exception($"Unsupported DAP message from client: {msg}");
             }
           }
           catch (Exception e)
@@ -130,25 +123,28 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
 
         _process.Start();
 
-        var debuggerDap = new Dap.Debugger(_process.StandardInput.BaseStream, _process.StandardOutput.BaseStream, async (y) =>
+        var debuggerDap = new Dap.Debugger(_process.StandardInput.BaseStream, _process.StandardOutput.BaseStream, async (msg) =>
         {
           try
           {
-            var msg = DapMessageDeserializer.Parse(y);
-            logger.LogDebug("[DBG] Parsed message type={Type}, runtime={RuntimeType}",
-                msg.Type,
-                msg.GetType().Name);
-
             switch (msg)
             {
+              case InterceptableVariablesResponse varsRes:
+              
+                logger.LogInformation("[TCP] Intercepted variables response: {x}", JsonSerializer.Serialize(varsRes, LoggingSerializerOptions));
+                // var res = await _debuggerProxy!.RunInternalDebuggerRequestAsync(JsonSerializer.Serialize(varsReq, SerializerOptions), varsReq.Seq, CancellationToken.None);
+                // logger.LogInformation("[TCP] Intercepted variables response: {x}", JsonSerializer.Serialize(res, LoggingSerializerOptions));
+                //TODO: send the var request to debugger without sending result back to client, 
+                //Parse result and either send back request raw or send more requests to "unwrap" the type
+                return JsonSerializer.Serialize(varsRes, SerializerOptions);
               case Response res:
                 logger.LogInformation("[DBG] response: {message}", JsonSerializer.Serialize(res, LoggingSerializerOptions));
-                return y;
+                return JsonSerializer.Serialize(res, SerializerOptions);
               case Event e:
                 logger.LogInformation("[DBG] event: {message}", JsonSerializer.Serialize(e, LoggingSerializerOptions));
-                return y;
+                return JsonSerializer.Serialize(e, SerializerOptions);
               default:
-                throw new Exception($"Unsupported DAP message from debugger: {y}");
+                throw new Exception($"Unsupported DAP message from debugger: {msg}");
             }
           }
           catch (Exception e)
@@ -158,11 +154,11 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
           }
         });
 
-        var proxy = new DebuggerProxy(clientDap, debuggerDap, debuggerProxyLogger);
+        _debuggerProxy = new DebuggerProxy(clientDap, debuggerDap, debuggerProxyLogger);
 
-        proxy.Start(_cancellationTokenSource.Token, TriggerCleanup);
+        _debuggerProxy.Start(_cancellationTokenSource.Token, TriggerCleanup);
 
-        await proxy.Completion;
+        await _debuggerProxy.Completion;
 
         _completionSource.SetResult(true);
       }

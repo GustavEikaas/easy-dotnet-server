@@ -33,7 +33,9 @@ public static class DapMessageDeserializer
       var root = doc.RootElement;
 
       if (!root.TryGetProperty("type", out var typeProperty))
+      {
         throw new JsonException("Missing type property");
+      }
 
       var type = typeProperty.GetString();
       if (type is null) throw new JsonException("Type property was null");
@@ -42,26 +44,39 @@ public static class DapMessageDeserializer
       {
         "request" => DeserializeRequest(root, options),
         "event" => JsonSerializer.Deserialize<Event>(root.GetRawText(), options)!,
-        "response" => JsonSerializer.Deserialize<Response>(root.GetRawText(), options)!,
+        "response" => DeserializeResponse(root, options),
         _ => JsonSerializer.Deserialize<ProtocolMessage>(root.GetRawText(), options)!
       };
     }
 
-private static ProtocolMessage DeserializeRequest(JsonElement root, JsonSerializerOptions options)
-{
-    if (root.TryGetProperty("command", out var cmdProp))
+
+    private static ProtocolMessage DeserializeResponse(JsonElement root, JsonSerializerOptions options)
     {
+      if (root.TryGetProperty("command", out var cmdProp))
+      {
         var cmd = cmdProp.GetString();
-        if (string.Equals(cmd, "attach", StringComparison.OrdinalIgnoreCase)){
-          return JsonSerializer.Deserialize<InterceptableAttachRequest>(root.GetRawText(), options)!;
+        if (string.Equals(cmd, "variables", StringComparison.OrdinalIgnoreCase))
+        {
+          return JsonSerializer.Deserialize<InterceptableVariablesResponse>(root.GetRawText(), options)!;
         }
-        if (string.Equals(cmd, "variables", StringComparison.OrdinalIgnoreCase)){
-          return JsonSerializer.Deserialize<InterceptableVariablesRequest>(root.GetRawText(), options)!;
-        }
+      }
+
+      return JsonSerializer.Deserialize<Response>(root.GetRawText(), options)!;
     }
 
-    return JsonSerializer.Deserialize<Request>(root.GetRawText(), options)!;
-}
+    private static ProtocolMessage DeserializeRequest(JsonElement root, JsonSerializerOptions options)
+    {
+      if (root.TryGetProperty("command", out var cmdProp))
+      {
+        var cmd = cmdProp.GetString();
+        if (string.Equals(cmd, "attach", StringComparison.OrdinalIgnoreCase))
+        {
+          return JsonSerializer.Deserialize<InterceptableAttachRequest>(root.GetRawText(), options)!;
+        }
+      }
+
+      return JsonSerializer.Deserialize<Request>(root.GetRawText(), options)!;
+    }
 
     public override void Write(Utf8JsonWriter writer, ProtocolMessage value, JsonSerializerOptions options) =>
         JsonSerializer.Serialize(writer, value, value.GetType(), options);
