@@ -14,9 +14,16 @@ namespace EasyDotnet.Infrastructure.Services;
 
 public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<DebuggerProxy> debuggerProxyLogger) : INetcoreDbgService
 {
-  private static readonly JsonSerializerOptions SeralizerOptions = new()
+  private static readonly JsonSerializerOptions SerializerOptions = new()
   {
-    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+  };
+
+  private static readonly JsonSerializerOptions LoggingSerializerOptions = new()
+  {
+    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    WriteIndented = true
   };
 
   private readonly TaskCompletionSource<bool> _completionSource = new();
@@ -26,6 +33,7 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
   private System.Diagnostics.Process? _process;
   private TcpClient? _client;
   private (System.Diagnostics.Process, int)? _vsTestAttach;
+  private readonly Dictionary<int, InterceptableVariablesRequest> _pendingVariablesRequests = new();
 
   public Task Completion => _completionSource.Task;
 
@@ -59,37 +67,44 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
         var tcpStream = _client.GetStream();
         var clientDap = new Client(tcpStream, tcpStream, async (x) =>
         {
-          logger.LogInformation("[TCP] message: {message}", x);
-
-          if (AttachRequestPattern().IsMatch(x))
+          try
           {
-            try
-            {
-              var message = JsonSerializer.Deserialize<InterceptableAttachRequest>(x, SeralizerOptions);
-              if (message?.Arguments?.Request == "attach" && message.Command?.Trim() == "attach")
-              {
-                var seq = message.Seq;
+            var msg = DapMessageDeserializer.Parse(x);
 
+            switch (msg)
+            {
+              case InterceptableAttachRequest attachReq:
                 var modified = await InitializeRequestRewriter.CreateInitRequestBasedOnProjectType(
                     project,
                     launchProfile,
-                    message,
+                    attachReq,
                     Path.GetDirectoryName(projectPath)!,
-                    seq,
+                    attachReq.Seq,
                     vsTestAttach?.Item2
                 );
+                logger.LogInformation("[TCP] Intercepted attach request: {modified}", JsonSerializer.Serialize(modified, LoggingSerializerOptions));
+                return JsonSerializer.Serialize(modified, SerializerOptions);
 
-                logger.LogInformation("[TCP] Intercepted attach request: {modified}", modified);
-                return modified;
-              }
-            }
-            catch (JsonException ex)
-            {
-              logger.LogError(ex, "Failed to deserialize message (likely not attach): {message}", x);
+              case InterceptableVariablesRequest varsReq:
+                //TODO: send the var request to debugger without sending result back to client, 
+                //Parse result and either send back request raw or send more requests to "unwrap" the type
+                logger.LogInformation("[TCP] Intercepted variables request: {x}", JsonSerializer.Serialize(varsReq, LoggingSerializerOptions));
+                return x;
+                break;
+
+              case Request req:
+                logger.LogInformation("[TCP] request: {message}", JsonSerializer.Serialize(req, LoggingSerializerOptions));
+                Console.WriteLine($"Request command: {req.Command}");
+                return x;
+              default:
+                throw new Exception($"Unsupported DAP message from client: {x}");
             }
           }
-
-          return x;
+          catch (Exception e)
+          {
+            logger.LogError("Exception {e}", e);
+            throw;
+          }
         });
 
         _process = new System.Diagnostics.Process
@@ -115,10 +130,32 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
 
         _process.Start();
 
-        var debuggerDap = new Dap.Debugger(_process.StandardInput.BaseStream, _process.StandardOutput.BaseStream, y =>
+        var debuggerDap = new Dap.Debugger(_process.StandardInput.BaseStream, _process.StandardOutput.BaseStream, async (y) =>
         {
-          logger.LogInformation("[DBG] message: {message}", y);
-          return Task.FromResult(y);
+          try
+          {
+            var msg = DapMessageDeserializer.Parse(y);
+            logger.LogDebug("[DBG] Parsed message type={Type}, runtime={RuntimeType}",
+                msg.Type,
+                msg.GetType().Name);
+
+            switch (msg)
+            {
+              case Response res:
+                logger.LogInformation("[DBG] response: {message}", JsonSerializer.Serialize(res, LoggingSerializerOptions));
+                return y;
+              case Event e:
+                logger.LogInformation("[DBG] event: {message}", JsonSerializer.Serialize(e, LoggingSerializerOptions));
+                return y;
+              default:
+                throw new Exception($"Unsupported DAP message from debugger: {y}");
+            }
+          }
+          catch (Exception e)
+          {
+            logger.LogError("Exception {e}", e);
+            throw;
+          }
         });
 
         var proxy = new DebuggerProxy(clientDap, debuggerDap, debuggerProxyLogger);
@@ -271,29 +308,6 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
     }
   }
 
-
   [GeneratedRegex(@"""select_project"":\s*""REWRITE_ATTACH""")]
   private static partial Regex AttachRequestPattern();
-}
-
-public record class InterceptableAttachRequest
-{
-  public InterceptableAttachRequestArguments Arguments { get; set; } = default!;
-  public string Command { get; set; } = string.Empty;
-  public int Seq { get; set; }
-  public string Type { get; set; } = string.Empty;
-  [JsonExtensionData]
-  public Dictionary<string, JsonElement>? ExtraProperties { get; set; }
-}
-
-public record class InterceptableAttachRequestArguments
-{
-  public string Request { get; set; } = string.Empty;
-  public string Cwd { get; set; } = string.Empty;
-  public int ProcessId { get; set; }
-  public string Program { get; set; } = string.Empty;
-  public string Type { get; set; } = string.Empty;
-  public Dictionary<string, string>? Env { get; set; }
-  [JsonExtensionData]
-  public Dictionary<string, JsonElement>? ExtraProperties { get; set; }
 }

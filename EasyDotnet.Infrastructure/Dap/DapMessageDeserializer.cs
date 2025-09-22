@@ -8,7 +8,7 @@ public static class DapMessageDeserializer
   private static readonly JsonSerializerOptions Options = new()
   {
     PropertyNameCaseInsensitive = true,
-    Converters = { new InternalConverter() }
+    Converters = { new InternalConverter(), new FlexibleIntConverter() }
   };
 
   /// <summary>
@@ -36,26 +36,46 @@ public static class DapMessageDeserializer
         throw new JsonException("Missing type property");
 
       var type = typeProperty.GetString();
-
-      if (string.IsNullOrWhiteSpace(type))
-      {
-        throw new JsonException("Type property is null or empty.");
-      }
+      if (type is null) throw new JsonException("Type property was null");
 
       return type switch
       {
-        "request" => JsonSerializer.Deserialize<Request>(root.GetRawText(), options)
-                      ?? throw new JsonException("Failed to deserialize Request."),
-        "event" => JsonSerializer.Deserialize<Event>(root.GetRawText(), options)
-                    ?? throw new JsonException("Failed to deserialize Event."),
-        "response" => JsonSerializer.Deserialize<Response>(root.GetRawText(), options)
-                       ?? throw new JsonException("Failed to deserialize Response."),
-        _ => JsonSerializer.Deserialize<ProtocolMessage>(root.GetRawText(), options)
-             ?? throw new JsonException("Failed to deserialize ProtocolMessage.")
+        "request" => DeserializeRequest(root, options),
+        "event" => JsonSerializer.Deserialize<Event>(root.GetRawText(), options)!,
+        "response" => JsonSerializer.Deserialize<Response>(root.GetRawText(), options)!,
+        _ => JsonSerializer.Deserialize<ProtocolMessage>(root.GetRawText(), options)!
       };
     }
 
+private static ProtocolMessage DeserializeRequest(JsonElement root, JsonSerializerOptions options)
+{
+    if (root.TryGetProperty("command", out var cmdProp))
+    {
+        var cmd = cmdProp.GetString();
+        if (string.Equals(cmd, "attach", StringComparison.OrdinalIgnoreCase)){
+          return JsonSerializer.Deserialize<InterceptableAttachRequest>(root.GetRawText(), options)!;
+        }
+        if (string.Equals(cmd, "variables", StringComparison.OrdinalIgnoreCase)){
+          return JsonSerializer.Deserialize<InterceptableVariablesRequest>(root.GetRawText(), options)!;
+        }
+    }
+
+    return JsonSerializer.Deserialize<Request>(root.GetRawText(), options)!;
+}
+
     public override void Write(Utf8JsonWriter writer, ProtocolMessage value, JsonSerializerOptions options) =>
         JsonSerializer.Serialize(writer, value, value.GetType(), options);
+  }
+
+  private class FlexibleIntConverter : JsonConverter<int>
+  {
+    public override int Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) => reader.TokenType switch
+    {
+      JsonTokenType.Number => reader.GetInt32(),
+      JsonTokenType.String when int.TryParse(reader.GetString(), out var val) => val,
+      _ => throw new JsonException("Invalid number format")
+    };
+
+    public override void Write(Utf8JsonWriter writer, int value, JsonSerializerOptions options) => writer.WriteNumberValue(value);
   }
 }

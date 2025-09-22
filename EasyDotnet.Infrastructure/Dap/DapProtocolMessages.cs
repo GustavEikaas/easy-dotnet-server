@@ -27,6 +27,7 @@ public class Event : ProtocolMessage
 
 public class Response : ProtocolMessage
 {
+  [JsonPropertyName("request_seq")]
   public required int RequestSeq { get; set; }
   public required bool Success { get; set; }
   public required string Command { get; set; }
@@ -45,4 +46,28 @@ public class ErrorBody
 
   [JsonExtensionData]
   public Dictionary<string, JsonElement>? ExtraProperties { get; set; } = [];
+}
+
+public class InterceptableAttachRequest : Request
+{
+    public new InterceptableAttachArguments Arguments { get; set; } = new();
+}
+
+public class InterceptableAttachArguments
+{
+    public string? Request { get; set; }
+    public string? Program { get; set; }
+    public int? ProcessId { get; set; }
+    public string? Cwd { get; set; }
+    public Dictionary<string, string>? Env { get; set; }
+}
+
+public class InterceptableVariablesRequest : Request
+{
+    public new InterceptableVariablesArguments Arguments { get; set; } = new();
+}
+
+public class InterceptableVariablesArguments
+{
+    public int VariablesReference { get; set; }
 }
