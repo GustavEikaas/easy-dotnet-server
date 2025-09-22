@@ -159,7 +159,7 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
         IsMultiTarget: (TryGet("TargetFrameworks")?.Split(';', StringSplitOptions.RemoveEmptyEntries).Length ?? 0) > 1,
         IsNetFramework: isNetFramework,
         UseIISExpress: useIISExpress,
-        RunCommand: BuildRunCommand(!isNetFramework, useIISExpress, targetPath, projectPath, projectName),
+        RunCommand: await BuildRunCommand(!isNetFramework, useIISExpress, targetPath, projectPath, projectName),
         TestCommand: BuildTestCommand(!isNetFramework, targetPath, projectPath),
         BuildCommand: await BuildBuildCommand(!isNetFramework, projectPath)
     );
@@ -218,9 +218,9 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
     return success;
   }
 
-  private string BuildRunCommand(bool isSdk, bool useIISExpress, string? targetPath, string projectPath, string projectName)
+  private async Task<string> BuildRunCommand(bool isSdk, bool useIISExpress, string? targetPath, string projectPath, string projectName)
   {
-    var buildCmd = BuildBuildCommand(isSdk, projectPath);
+    var buildCmd = await BuildBuildCommand(isSdk, projectPath);
 
     return (isSdk, useIISExpress) switch
     {
