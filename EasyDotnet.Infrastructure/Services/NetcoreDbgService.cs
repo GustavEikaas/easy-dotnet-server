@@ -153,18 +153,19 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
             {
               case InterceptableVariablesResponse varsRes:
                 var pattern = @"System\.Collections\.Generic\.List(?:<.*?>|\\u003C.*?\\u003E)";
-                var x = varsRes.Body.Variables.Find(x => x.VariablesReference != 0 && Regex.Match(x.Type, pattern).Success);
+                var dummyVar = varsRes.Body.Variables.Find(x => x.VariablesReference != 0 && !string.IsNullOrEmpty(x.Type) && Regex.Match(x.Type, pattern).Success);
 
                 var seq = GetNextSequence();
                 logger.LogInformation("[TCP] Creating internal request with sequence: {seq}", seq);
+                logger.LogInformation("[TCP] Expanding: {seq}", JsonSerializer.Serialize(dummyVar, LoggingSerializerOptions));
 
-                if (x is not null)
+                if (dummyVar is not null)
                 {
-                  var req = new InternalVariablesRequest { Seq = seq, Command = "variables", Type = "request", Arguments = new InternalVariablesArguments { VariablesReference = x.VariablesReference } };
+                  var req = new InternalVariablesRequest { Seq = seq, Command = "variables", Type = "request", Arguments = new InternalVariablesArguments { VariablesReference = dummyVar.VariablesReference } };
 
                   try
                   {
-                    var res = await _debuggerProxy!.RunInternalDebuggerRequestAsync(JsonSerializer.Serialize(req, SerializerOptions), seq, CancellationToken.None);
+                    var res = await _debuggerProxy!.RunInternalDebuggerRequestAsync<InterceptableVariablesResponse>(JsonSerializer.Serialize(req, SerializerOptions), seq, CancellationToken.None);
                     logger.LogInformation("[TCP] Expanding variables response: {res}", JsonSerializer.Serialize(res, LoggingSerializerOptions));
                   }
                   catch (Exception ex)

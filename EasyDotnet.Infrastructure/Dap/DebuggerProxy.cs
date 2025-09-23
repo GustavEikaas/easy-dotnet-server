@@ -50,7 +50,8 @@ public class DebuggerProxy(Client client, Debugger debugger, ILogger<DebuggerPro
     }, cancellationToken);
   }
 
-  public async Task<Response> RunInternalDebuggerRequestAsync(string message, int sequence, CancellationToken cancellationToken)
+  public async Task<T> RunInternalDebuggerRequestAsync<T>(string message, int sequence, CancellationToken cancellationToken)
+      where T : Response
   {
     logger?.LogInformation("Running internal request for sequence {seq} {msg}", sequence, message);
     var t = new TaskCompletionSource<Response>();
@@ -69,7 +70,9 @@ public class DebuggerProxy(Client client, Debugger debugger, ILogger<DebuggerPro
 
       var res = await t.Task.WaitAsync(combinedCts.Token);
       logger?.LogInformation("Received response for internal request: {seq}", sequence);
-      return res;
+      return res is T typedResponse
+        ? typedResponse
+        : throw new InvalidOperationException($"Response could not be cast to {typeof(T).Name}. Actual type: {res.GetType().Name}");
     }
     catch (OperationCanceledException)
     {
@@ -94,7 +97,6 @@ public class DebuggerProxy(Client client, Debugger debugger, ILogger<DebuggerPro
           var msg = DapMessageDeserializer.Parse(json);
           if (msg is Response response && _requestQueue.TryGetValue(response.RequestSeq, out var taskCompletionSource))
           {
-            logger?.LogInformation("Responding to internal request for sequence {seq}", response.RequestSeq);
             _requestQueue.TryRemove(response.RequestSeq, out _);
             taskCompletionSource.SetResult(response);
           }
@@ -102,19 +104,6 @@ public class DebuggerProxy(Client client, Debugger debugger, ILogger<DebuggerPro
           {
             onMessage(msg, inputStream);
           }
-
-          // // Check if this is a response to an internal request FIRST
-          // if (msg is Response response && _requestQueue.TryGetValue(response.RequestSeq, out var taskCompletionSource))
-          // {
-          //   logger?.LogInformation("Responding to internal request for sequence {seq}", response.RequestSeq);
-          //   _requestQueue.TryRemove(response.RequestSeq, out _);
-          //   taskCompletionSource.SetResult(response);
-          //   // Don't forward this response to the client - it was our internal request
-          //   continue;
-          // }
-          //
-          // This is a normal message, process with refiner and forward
-          // await DapMessageWriter.WriteDapMessageAsync(message, inputStream, cancellationToken);
         }
       }
       catch (OperationCanceledException) { }
