@@ -35,11 +35,23 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
   private DebuggerProxy? _debuggerProxy;
   private (System.Diagnostics.Process, int)? _vsTestAttach;
   private readonly Dictionary<int, InterceptableVariablesResponse> _pendingVariablesRequests = new();
+  private Task? _disposeTask;
 
   public Task Completion => _completionSource.Task;
 
-  public void Start(string binaryPath, DotnetProject project, string projectPath, LaunchProfile? launchProfile, (System.Diagnostics.Process, int)? vsTestAttach)
+  public async Task Start(string binaryPath, DotnetProject project, string projectPath, LaunchProfile? launchProfile, (System.Diagnostics.Process, int)? vsTestAttach)
   {
+    if (_disposeTask != null)
+    {
+      logger.LogInformation("Waiting for previous debugger session to fully dispose...");
+      try
+      {
+        await _disposeTask;
+      }
+      catch
+      {
+      }
+    }
     _vsTestAttach = vsTestAttach;
     _cancellationTokenSource = new CancellationTokenSource();
 
@@ -217,56 +229,45 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
 
   public async ValueTask DisposeAsync()
   {
-    _cancellationTokenSource?.Cancel();
-
-    if (_sessionTask != null)
+    if (_cancellationTokenSource?.IsCancellationRequested == false)
     {
-      try
-      {
-        await _sessionTask.WaitAsync(TimeSpan.FromSeconds(10));
-      }
-      catch (TimeoutException)
-      {
-        logger.LogWarning("Graceful shutdown timed out. Forcing cleanup.");
-      }
-      catch (Exception ex)
-      {
-        logger.LogError(ex, "An exception occurred during graceful shutdown.");
-      }
+      _cancellationTokenSource.Cancel();
     }
 
-    if (_client != null)
+    _disposeTask = Task.Run(async () =>
     {
-      try
+      if (_sessionTask != null)
       {
-        _client.Close();
-        _client.Dispose();
-        logger.LogInformation("TCP client closed.");
+        try
+        {
+          await _sessionTask.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        catch (TimeoutException)
+        {
+          logger.LogWarning("Graceful shutdown timed out. Forcing cleanup.");
+        }
+        catch (Exception ex)
+        {
+          logger.LogError(ex, "Exception during graceful shutdown.");
+        }
       }
-      catch (Exception ex)
+
+      _client?.Close();
+      _listener?.Stop();
+      SafeDisposeProcess(_process, "Debugger");
+
+      if (_vsTestAttach.HasValue)
       {
-        logger.LogWarning(ex, "Error closing TCP client.");
+        var (process, pid) = _vsTestAttach.Value;
+        SafeDisposeProcess(process, "VsTest");
+        SafeDisposeProcessById(pid, "VsTestHost");
       }
-    }
 
-    if (_listener != null)
-    {
-      _listener.Stop();
-      logger.LogInformation("TCP listener stopped.");
-    }
+      _cancellationTokenSource?.Dispose();
+    });
 
-    SafeDisposeProcess(_process, "Debugger");
-
-    if (_vsTestAttach.HasValue)
-    {
-      var (process, pid) = _vsTestAttach.Value;
-
-      SafeDisposeProcess(process, "VsTest");
-      SafeDisposeProcessById(pid, "VsTestHost");
-    }
-    _cancellationTokenSource?.Dispose();
+    await _disposeTask;
   }
-
   private void SafeDisposeProcess(System.Diagnostics.Process? process, string processName)
   {
     if (process == null) return;
