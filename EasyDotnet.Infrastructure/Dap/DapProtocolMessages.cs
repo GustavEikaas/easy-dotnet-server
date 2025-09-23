@@ -50,14 +50,14 @@ public class ErrorBody
 
 public class InterceptableAttachRequest : Request
 {
-    public new InterceptableAttachArguments Arguments { get; set; } = new();
+  public new InterceptableAttachArguments Arguments { get; set; } = new();
 }
 
 public class InterceptableAttachArguments
 {
-    public string? Request { get; set; }
-    public string? Program { get; set; }
-    public int? ProcessId { get; set; }
-    public string? Cwd { get; set; }
-    public Dictionary<string, string>? Env { get; set; }
+  public string? Request { get; set; }
+  public string? Program { get; set; }
+  public int? ProcessId { get; set; }
+  public string? Cwd { get; set; }
+  public Dictionary<string, string>? Env { get; set; }
 }
