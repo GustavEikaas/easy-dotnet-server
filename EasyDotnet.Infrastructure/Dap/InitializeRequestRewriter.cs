@@ -1,20 +1,11 @@
-using System.Text.Json;
 using EasyDotnet.Domain.Models.LaunchProfile;
 using EasyDotnet.Domain.Models.MsBuild.Project;
-using EasyDotnet.Infrastructure.Services;
 
 namespace EasyDotnet.Infrastructure.Dap;
 
 public static class InitializeRequestRewriter
 {
-  private static readonly JsonSerializerOptions SerializerOptions = new()
-  {
-    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-    WriteIndented = false,
-    DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-  };
-
-  public static Task<string> CreateInitRequestBasedOnProjectType(DotnetProject project, LaunchProfile? launchProfile, InterceptableAttachRequest request, string cwd, int seq, int? processId)
+  public static Task<InterceptableAttachRequest> CreateInitRequestBasedOnProjectType(DotnetProject project, LaunchProfile? launchProfile, InterceptableAttachRequest request, string cwd, int seq, int? processId)
   {
     if (project.IsTestProject && project.TestingPlatformDotnetTestSupport != true && processId is not null)
     {
@@ -36,7 +27,7 @@ public static class InitializeRequestRewriter
             )
             .ToDictionary(kv => kv.Key, kv => kv.Value);
 
-  private static async Task<string> CreateLaunchRequestAsync(InterceptableAttachRequest request, DotnetProject project, LaunchProfile? launchProfile, string cwd)
+  private static async Task<InterceptableAttachRequest> CreateLaunchRequestAsync(InterceptableAttachRequest request, DotnetProject project, LaunchProfile? launchProfile, string cwd)
   {
     var env = BuildEnvironmentVariables(launchProfile);
     request.Type = "request";
@@ -50,10 +41,10 @@ public static class InitializeRequestRewriter
         .Concat(env ?? Enumerable.Empty<KeyValuePair<string, string>>())
         .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
 
-    return await Task.FromResult(JsonSerializer.Serialize(request, SerializerOptions));
+    return await Task.FromResult(request);
   }
 
-  private static async Task<string> CreateAttachRequestAsync(InterceptableAttachRequest request, int processId, string cwd)
+  private static async Task<InterceptableAttachRequest> CreateAttachRequestAsync(InterceptableAttachRequest request, int processId, string cwd)
   {
     request.Type = "request";
     request.Command = "attach";
@@ -61,6 +52,6 @@ public static class InitializeRequestRewriter
     request.Arguments.ProcessId = processId;
     request.Arguments.Cwd = cwd;
 
-    return await Task.FromResult(JsonSerializer.Serialize(request, SerializerOptions));
+    return await Task.FromResult(request);
   }
 }
