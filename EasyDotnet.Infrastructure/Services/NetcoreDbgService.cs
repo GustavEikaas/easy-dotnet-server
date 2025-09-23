@@ -36,6 +36,13 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
   private (System.Diagnostics.Process, int)? _vsTestAttach;
   private readonly Dictionary<int, InterceptableVariablesResponse> _pendingVariablesRequests = new();
   private Task? _disposeTask;
+  private int _clientSeq;
+
+  private int GetNextSequence()
+  {
+    _clientSeq++;
+    return _clientSeq;
+  }
 
   public Task Completion => _completionSource.Task;
 
@@ -78,8 +85,9 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
         }
 
         var tcpStream = _client.GetStream();
-        var clientDap = new Client(tcpStream, tcpStream, async (msg) =>
+        var clientDap = new Client(tcpStream, tcpStream, async (msg, stream) =>
         {
+          msg.Seq = GetNextSequence();
           try
           {
             switch (msg)
@@ -94,12 +102,14 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
                     vsTestAttach?.Item2
                 );
                 logger.LogInformation("[TCP] Intercepted attach request: {modified}", JsonSerializer.Serialize(modified, LoggingSerializerOptions));
-                return JsonSerializer.Serialize(modified, SerializerOptions);
+                await DapMessageWriter.WriteDapMessageAsync(modified, stream, CancellationToken.None);
+                break;
 
               case Request req:
                 logger.LogInformation("[TCP] request: {message}", JsonSerializer.Serialize(req, LoggingSerializerOptions));
                 Console.WriteLine($"Request command: {req.Command}");
-                return JsonSerializer.Serialize(req, SerializerOptions);
+                await DapMessageWriter.WriteDapMessageAsync(req, stream, CancellationToken.None);
+                break;
 
               default:
                 throw new Exception($"Unsupported DAP message from client: {msg}");
@@ -135,43 +145,44 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
 
         _process.Start();
 
-        var debuggerDap = new Dap.Debugger(_process.StandardInput.BaseStream, _process.StandardOutput.BaseStream, async (msg) =>
+        var debuggerDap = new Dap.Debugger(_process.StandardInput.BaseStream, _process.StandardOutput.BaseStream, async (msg, stream) =>
         {
           try
           {
             switch (msg)
             {
               case InterceptableVariablesResponse varsRes:
-
-
                 var pattern = @"System\.Collections\.Generic\.List(?:<.*?>|\\u003C.*?\\u003E)";
                 var x = varsRes.Body.Variables.Find(x => x.VariablesReference != 0 && Regex.Match(x.Type, pattern).Success);
 
-                //TODO: this request id is long used because im +1 after the response is recieved. Need to track every single request for this to work
-                var seq = varsRes.Seq + 1;
+                var seq = GetNextSequence();
+                logger.LogInformation("[TCP] Creating internal request with sequence: {seq}", seq);
 
-                  logger.LogInformation("[TCP] Expanding variables: {x}", JsonSerializer.Serialize(x, LoggingSerializerOptions));
                 if (x is not null)
                 {
                   var req = new InternalVariablesRequest { Seq = seq, Command = "variables", Type = "request", Arguments = new InternalVariablesArguments { VariablesReference = x.VariablesReference } };
-                  var res = await _debuggerProxy!.RunInternalDebuggerRequestAsync(JsonSerializer.Serialize(req), seq, CancellationToken.None);
-                  //next sequence
 
-                  logger.LogInformation("[TCP] Expanding variables response: {x}", JsonSerializer.Serialize(res, LoggingSerializerOptions));
+                  try
+                  {
+                    var res = await _debuggerProxy!.RunInternalDebuggerRequestAsync(JsonSerializer.Serialize(req, SerializerOptions), seq, CancellationToken.None);
+                    logger.LogInformation("[TCP] Expanding variables response: {res}", JsonSerializer.Serialize(res, LoggingSerializerOptions));
+                  }
+                  catch (Exception ex)
+                  {
+                    logger.LogError(ex, "Failed to get internal variables response");
+                  }
                 }
 
-                logger.LogInformation("[TCP] Intercepted variables response: {x}", JsonSerializer.Serialize(varsRes, LoggingSerializerOptions));
-                // var res = await _debuggerProxy!.RunInternalDebuggerRequestAsync(JsonSerializer.Serialize(varsReq, SerializerOptions), varsReq.Seq, CancellationToken.None);
-                // logger.LogInformation("[TCP] Intercepted variables response: {x}", JsonSerializer.Serialize(res, LoggingSerializerOptions));
-                //TODO: send the var request to debugger without sending result back to client, 
-                //Parse result and either send back request raw or send more requests to "unwrap" the type
-                return JsonSerializer.Serialize(varsRes, SerializerOptions);
+                await DapMessageWriter.WriteDapMessageAsync(varsRes, stream, CancellationToken.None);
+                break;
               case Response res:
                 logger.LogInformation("[DBG] response: {message}", JsonSerializer.Serialize(res, LoggingSerializerOptions));
-                return JsonSerializer.Serialize(res, SerializerOptions);
+                await DapMessageWriter.WriteDapMessageAsync(res, stream, CancellationToken.None);
+                break;
               case Event e:
                 logger.LogInformation("[DBG] event: {message}", JsonSerializer.Serialize(e, LoggingSerializerOptions));
-                return JsonSerializer.Serialize(e, SerializerOptions);
+                await DapMessageWriter.WriteDapMessageAsync(e, stream, CancellationToken.None);
+                break;
               default:
                 throw new Exception($"Unsupported DAP message from debugger: {msg}");
             }
