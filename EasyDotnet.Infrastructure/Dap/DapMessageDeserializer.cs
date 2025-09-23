@@ -51,7 +51,6 @@ public static class DapMessageDeserializer
       };
     }
 
-
     private static Response DeserializeResponse(JsonElement root, JsonSerializerOptions options) => JsonSerializer.Deserialize<Response>(root.GetRawText(), options)!;
 
     private static ProtocolMessage DeserializeRequest(JsonElement root, JsonSerializerOptions options)

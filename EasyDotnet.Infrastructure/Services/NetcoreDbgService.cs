@@ -32,7 +32,6 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
   private TcpListener? _listener;
   private System.Diagnostics.Process? _process;
   private TcpClient? _client;
-  private DebuggerProxy? _debuggerProxy;
   private (System.Diagnostics.Process, int)? _vsTestAttach;
   private Task? _disposeTask;
 
@@ -157,11 +156,11 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
           }
         });
 
-        _debuggerProxy = new DebuggerProxy(clientDap, debuggerDap, debuggerProxyLogger);
+        var proxy = new DebuggerProxy(clientDap, debuggerDap, debuggerProxyLogger);
 
-        _debuggerProxy.Start(_cancellationTokenSource.Token, TriggerCleanup);
+        proxy.Start(_cancellationTokenSource.Token, TriggerCleanup);
 
-        await _debuggerProxy.Completion;
+        await proxy.Completion;
 
         _completionSource.SetResult(true);
       }
