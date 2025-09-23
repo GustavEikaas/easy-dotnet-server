@@ -2,8 +2,8 @@ using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Infrastructure.Dap;
 
-public record Client(Stream Input, Stream Output, Func<string, Task<string>>? MessageRefiner);
-public record Debugger(Stream Input, Stream Output, Func<string, Task<string>>? MessageRefiner);
+public record Client(Stream Input, Stream Output, Func<ProtocolMessage, Task<string>>? MessageRefiner);
+public record Debugger(Stream Input, Stream Output, Func<ProtocolMessage, Task<string>>? MessageRefiner);
 
 public class DebuggerProxy(Client client, Debugger debugger, ILogger<DebuggerProxy>? logger)
 {
@@ -48,8 +48,8 @@ public class DebuggerProxy(Client client, Debugger debugger, ILogger<DebuggerPro
     }, cancellationToken);
   }
 
-  private static Task StartReadingLoop(Stream outputStream, Stream inputStream,
-      Func<string, Task<string>>? messageRefiner, CancellationToken cancellationToken,
+  private Task StartReadingLoop(Stream outputStream, Stream inputStream,
+      Func<ProtocolMessage, Task<string>>? messageRefiner, CancellationToken cancellationToken,
       Action? onDisconnect = null) =>
     Task.Run(async () =>
     {
@@ -59,7 +59,8 @@ public class DebuggerProxy(Client client, Debugger debugger, ILogger<DebuggerPro
         {
           var json = await DapMessageReader.ReadDapMessageAsync(outputStream, cancellationToken) ?? throw new IOException("Stream closed - received null message");
 
-          var message = messageRefiner != null ? await messageRefiner(json) : json;
+          var msg = DapMessageDeserializer.Parse(json);
+          var message = messageRefiner != null ? await messageRefiner(msg) : json;
           await DapMessageWriter.WriteDapMessageAsync(message, inputStream, cancellationToken);
         }
       }
