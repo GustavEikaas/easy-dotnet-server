@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
@@ -41,7 +40,7 @@ public class NetCoreDbgController(IMsBuildService msBuildService, ILaunchProfile
 
     var res = StartVsTestIfApplicable(project, request.TargetPath);
 
-    netcoreDbgService.Start(binaryPath, project, request.TargetPath, launchProfile, res);
+    await netcoreDbgService.Start(binaryPath, project, request.TargetPath, launchProfile, res);
     return new DebuggerStartResponse(true);
   }
 
