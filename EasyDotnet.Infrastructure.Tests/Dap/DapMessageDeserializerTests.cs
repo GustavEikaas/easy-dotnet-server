@@ -51,7 +51,7 @@ public class DapMessageDeserializerTests
     var json = @"{
                 ""seq"": 3,
                 ""type"": ""response"",
-                ""requestSeq"": 1,
+                ""request_seq"": 1,
                 ""success"": true,
                 ""command"": ""initialize"",
                 ""body"": { ""capabilities"": {} }

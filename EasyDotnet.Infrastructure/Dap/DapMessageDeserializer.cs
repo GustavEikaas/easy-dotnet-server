@@ -18,7 +18,9 @@ public static class DapMessageDeserializer
   public static ProtocolMessage Parse(string json)
   {
     if (string.IsNullOrWhiteSpace(json))
+    {
       throw new ArgumentNullException(nameof(json));
+    }
 
     var result = JsonSerializer.Deserialize<ProtocolMessage>(json, Options);
 
