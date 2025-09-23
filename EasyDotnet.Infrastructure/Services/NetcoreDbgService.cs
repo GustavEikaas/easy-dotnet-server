@@ -152,29 +152,8 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
             switch (msg)
             {
               case InterceptableVariablesResponse varsRes:
-                var pattern = @"System\.Collections\.Generic\.List(?:<.*?>|\\u003C.*?\\u003E)";
-                var dummyVar = varsRes.Body.Variables.Find(x => x.VariablesReference != 0 && !string.IsNullOrEmpty(x.Type) && Regex.Match(x.Type, pattern).Success);
-
-                var seq = GetNextSequence();
-                logger.LogInformation("[TCP] Creating internal request with sequence: {seq}", seq);
-                logger.LogInformation("[TCP] Expanding: {seq}", JsonSerializer.Serialize(dummyVar, LoggingSerializerOptions));
-
-                if (dummyVar is not null)
-                {
-                  var req = new InternalVariablesRequest { Seq = seq, Command = "variables", Type = "request", Arguments = new InternalVariablesArguments { VariablesReference = dummyVar.VariablesReference } };
-
-                  try
-                  {
-                    var res = await _debuggerProxy!.RunInternalDebuggerRequestAsync<InterceptableVariablesResponse>(JsonSerializer.Serialize(req, SerializerOptions), seq, CancellationToken.None);
-                    logger.LogInformation("[TCP] Expanding variables response: {res}", JsonSerializer.Serialize(res, LoggingSerializerOptions));
-                  }
-                  catch (Exception ex)
-                  {
-                    logger.LogError(ex, "Failed to get internal variables response");
-                  }
-                }
-
-                await DapMessageWriter.WriteDapMessageAsync(varsRes, stream, CancellationToken.None);
+                var modifiedResponse = await TryExpandListVariablesAsync(varsRes);
+                await DapMessageWriter.WriteDapMessageAsync(modifiedResponse, stream, CancellationToken.None);
                 break;
               case Response res:
                 logger.LogInformation("[DBG] response: {message}", JsonSerializer.Serialize(res, LoggingSerializerOptions));
@@ -215,6 +194,133 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
         throw;
       }
     }, _cancellationTokenSource.Token);
+  }
+
+  private static readonly Regex ListTypePattern = new(@"System\.Collections\.Generic\.List(?:<.*?>|\\u003C.*?\\u003E)");
+
+  private static bool IsExpandableListType(InterceptableVariable variable) => variable.VariablesReference != 0 &&
+           !string.IsNullOrEmpty(variable.Type) &&
+           ListTypePattern.IsMatch(variable.Type);
+
+  private async Task<InterceptableVariablesResponse?> GetVariableExpansionAsync(int variablesReference)
+  {
+    var seq = GetNextSequence();
+    var req = new InternalVariablesRequest
+    {
+      Seq = seq,
+      Command = "variables",
+      Type = "request",
+      Arguments = new InternalVariablesArguments { VariablesReference = variablesReference }
+    };
+
+    try
+    {
+      return await _debuggerProxy!.RunInternalDebuggerRequestAsync<InterceptableVariablesResponse>(
+          JsonSerializer.Serialize(req, SerializerOptions), seq, CancellationToken.None);
+    }
+    catch (Exception ex)
+    {
+      logger.LogError(ex, "Failed to expand variables reference {reference}", variablesReference);
+      return null;
+    }
+  }
+
+  private async Task<List<InterceptableVariable>?> ExtractListItemsAsync(InterceptableVariable listVariable, InterceptableVariablesResponse listExpansion)
+  {
+    // Find the _items array
+    var itemsVar = listExpansion.Body.Variables.Find(x => x.Name == "_items" && x.VariablesReference != 0);
+    if (itemsVar == null)
+    {
+      logger.LogWarning("Could not find _items in List expansion for {name}", listVariable.Name);
+      return null;
+    }
+
+    // Get the actual array contents
+    var itemsExpansion = await GetVariableExpansionAsync(itemsVar.VariablesReference);
+    if (itemsExpansion == null)
+    {
+      return null;
+    }
+
+    // Get the actual count of items (not array capacity)
+    var countVar = listExpansion.Body.Variables.Find(x => x.Name == "_size" || x.Name == "Count");
+    var count = countVar != null && int.TryParse(countVar.Value, out var c) ? c : itemsExpansion.Body.Variables.Count;
+
+    var listItems = new List<InterceptableVariable>();
+
+    // Take only the actual items (not empty slots)
+    for (var i = 0; i < Math.Min(count, itemsExpansion.Body.Variables.Count); i++)
+    {
+      var item = itemsExpansion.Body.Variables[i];
+      listItems.Add(new InterceptableVariable
+      {
+        Name = $"[{i}]",
+        Value = item.Value,
+        Type = item.Type,
+        EvaluateName = $"{listVariable.EvaluateName}[{i}]",
+        VariablesReference = item.VariablesReference,
+        NamedVariables = item.NamedVariables
+      });
+    }
+
+    return listItems;
+  }
+
+  private InterceptableVariablesResponse CreateModifiedResponse(InterceptableVariablesResponse original,
+      InterceptableVariable originalListVar, List<InterceptableVariable> expandedItems)
+  {
+    var modifiedVariables = original.Body.Variables.ToList();
+    var listIndex = modifiedVariables.FindIndex(x => x == originalListVar);
+
+    if (listIndex != -1)
+    {
+      // Remove the original List variable and insert expanded items
+      modifiedVariables.RemoveAt(listIndex);
+      modifiedVariables.InsertRange(listIndex, expandedItems);
+    }
+
+    return new InterceptableVariablesResponse
+    {
+      Seq = original.Seq,
+      Type = original.Type,
+      RequestSeq = original.RequestSeq,
+      Success = original.Success,
+      Command = original.Command,
+      Message = original.Message,
+      Body = new InterceptableVariablesResponseBody
+      {
+        Variables = modifiedVariables
+      }
+    };
+  }
+
+  private async Task<InterceptableVariablesResponse> TryExpandListVariablesAsync(InterceptableVariablesResponse varsRes)
+  {
+    var listVar = varsRes.Body.Variables.Find(IsExpandableListType);
+    if (listVar == null)
+    {
+      return varsRes; // No expandable lists found
+    }
+
+    logger.LogInformation("[TCP] Found expandable List: {name} ({type})", listVar.Name, listVar.Type);
+
+    // Get the List internals (_items, _size, etc.)
+    var listExpansion = await GetVariableExpansionAsync(listVar.VariablesReference);
+    if (listExpansion == null)
+    {
+      return varsRes; // Couldn't expand, return original
+    }
+
+    // Extract the actual list items
+    var listItems = await ExtractListItemsAsync(listVar, listExpansion);
+    if (listItems == null || listItems.Count == 0)
+    {
+      return varsRes; // Couldn't get items, return original
+    }
+
+    logger.LogInformation("[TCP] Expanded List<T> '{name}' with {count} items", listVar.Name, listItems.Count);
+
+    return CreateModifiedResponse(varsRes, listVar, listItems);
   }
 
   private void TriggerCleanup()

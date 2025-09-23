@@ -56,7 +56,6 @@ public class DebuggerProxy(Client client, Debugger debugger, ILogger<DebuggerPro
     logger?.LogInformation("Running internal request for sequence {seq} {msg}", sequence, message);
     var t = new TaskCompletionSource<Response>();
 
-    // Add to queue BEFORE sending the request
     _requestQueue[sequence] = t;
 
     try
@@ -64,8 +63,7 @@ public class DebuggerProxy(Client client, Debugger debugger, ILogger<DebuggerPro
       await DapMessageWriter.WriteDapMessageAsync(message, debugger.Input, cancellationToken);
       logger?.LogInformation("Sent internal request, waiting for response with RequestSeq: {seq}", sequence);
 
-      // Add timeout to prevent hanging
-      using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+      using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(180));
       using var combinedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
 
       var res = await t.Task.WaitAsync(combinedCts.Token);
@@ -81,7 +79,7 @@ public class DebuggerProxy(Client client, Debugger debugger, ILogger<DebuggerPro
     }
     finally
     {
-      _requestQueue.TryRemove(sequence, out _); // Clean up
+      _requestQueue.TryRemove(sequence, out _);
     }
   }
 
