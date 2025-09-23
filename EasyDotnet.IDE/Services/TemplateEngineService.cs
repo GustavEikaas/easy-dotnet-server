@@ -13,7 +13,7 @@ using Microsoft.TemplateEngine.Edge.Settings;
 using Microsoft.TemplateEngine.IDE;
 using Microsoft.TemplateEngine.Utils;
 
-namespace EasyDotnet.Services;
+namespace EasyDotnet.IDE.Services;
 
 public class TemplateEngineService(IMsBuildService msBuildService)
 {
@@ -24,7 +24,9 @@ public class TemplateEngineService(IMsBuildService msBuildService)
   private const string FrameworkParamKey = "Framework";
   private const string TargetFrameworkOverrideParamKey = "TargetFrameworkOverride";
 
-  private static string GetTemplatesRoot() => RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? @"C:\Program Files\dotnet\templates" : "/usr/share/dotnet/templates";
+  private static string GetTemplatesRoot() => RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+      ? @"C:\Program Files\dotnet\templates"
+      : Directory.Exists("/usr/share/dotnet/templates") ? "/usr/share/dotnet/templates" : "/usr/local/share/dotnet/templates";
 
   public async Task EnsureInstalled()
   {

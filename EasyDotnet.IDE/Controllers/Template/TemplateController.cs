@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using EasyDotnet.Services;
+using EasyDotnet.IDE.Services;
 using Microsoft.TemplateEngine.Utils;
 using StreamJsonRpc;
 
