@@ -58,9 +58,14 @@ public static class DapMessageDeserializer
       if (root.TryGetProperty("command", out var cmdProp))
       {
         var cmd = cmdProp.GetString();
-        if (string.Equals(cmd, "attach", StringComparison.OrdinalIgnoreCase))
+
+        switch (cmd?.ToLowerInvariant())
         {
-          return JsonSerializer.Deserialize<InterceptableAttachRequest>(root.GetRawText(), options)!;
+          case "attach":
+            return JsonSerializer.Deserialize<InterceptableAttachRequest>(root.GetRawText(), options)!;
+
+          case "setbreakpoints":
+            return JsonSerializer.Deserialize<SetBreakpointsRequest>(root.GetRawText(), options)!;
         }
       }
 

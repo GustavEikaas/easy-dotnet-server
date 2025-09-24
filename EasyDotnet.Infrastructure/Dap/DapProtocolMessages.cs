@@ -61,3 +61,27 @@ public class InterceptableAttachArguments
   public string? Cwd { get; set; }
   public Dictionary<string, string>? Env { get; set; }
 }
+
+public class SetBreakpointsRequest : Request
+{
+    public new required SetBreakpointsArguments Arguments { get; set; }
+}
+
+public class SetBreakpointsArguments
+{
+    public required List<Breakpoint> Breakpoints { get; set; }
+    public required List<int> Lines { get; set; }
+    public required Source Source { get; set; }
+    public required bool SourceModified { get; set; }
+}
+
+public class Breakpoint
+{
+    public required int Line { get; set; }
+}
+
+public class Source
+{
+    public required string Name { get; set; }
+    public required string Path { get; set; }
+}
