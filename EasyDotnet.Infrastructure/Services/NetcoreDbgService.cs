@@ -3,16 +3,16 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Text.RegularExpressions;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Domain.Models.LaunchProfile;
 using EasyDotnet.Domain.Models.MsBuild.Project;
 using EasyDotnet.Infrastructure.Dap;
+using EasyDotnet.Infrastructure.Dap.ValueConverters;
 using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Infrastructure.Services;
 
-public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<DebuggerProxy> debuggerProxyLogger) : INetcoreDbgService
+public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<DebuggerProxy> debuggerProxyLogger) : INetcoreDbgService
 {
   private static readonly JsonSerializerOptions SerializerOptions = new()
   {
@@ -36,21 +36,12 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
   private TcpClient? _client;
   private DebuggerProxy? _debuggerProxy;
   private (System.Diagnostics.Process, int)? _vsTestAttach;
-  private readonly Dictionary<int, InterceptableVariablesResponse> _pendingVariablesRequests = new();
-
-  private readonly Dictionary<int, int> _internalVariablesReferenceMap = new();
+  private readonly Dictionary<int, int> _internalVariablesReferenceMap = [];
   private Task? _disposeTask;
-  private int _internalVarRef = InternalVarRefBase;
-
-  private int GetNextVarInternalVarRef()
-  {
-    _internalVarRef++;
-    return _internalVarRef;
-  }
 
   private int _clientSeq;
 
-  private int GetNextSequence()
+  public int GetNextSequence()
   {
     _clientSeq++;
     return _clientSeq;
@@ -199,7 +190,7 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
             switch (msg)
             {
               case InterceptableVariablesResponse varsRes:
-                var modifiedResponse = TryExpandListVariablesAsync(varsRes);
+                var modifiedResponse = await ApplyVariableUnwrappingAsync(varsRes);
                 await DapMessageWriter.WriteDapMessageAsync(modifiedResponse, stream, CancellationToken.None);
                 break;
               case Response res:
@@ -243,134 +234,23 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
     }, _cancellationTokenSource.Token);
   }
 
-  private static readonly Regex ListTypePattern = new(@"System\.Collections\.Generic\.List(?:<.*?>|\\u003C.*?\\u003E)");
+  private Task<InterceptableVariablesResponse> ResolveVariable(InternalVariablesRequest request, int sequence, CancellationToken cancellationToken) => _debuggerProxy!.RunInternalDebuggerRequestAsync<InterceptableVariablesResponse>(JsonSerializer.Serialize(request, SerializerOptions), sequence, cancellationToken);
 
-  private static bool IsExpandableListType(InterceptableVariable variable) => variable.VariablesReference != 0 &&
-           !string.IsNullOrEmpty(variable.Type) &&
-           ListTypePattern.IsMatch(variable.Type);
+  private readonly List<IVariableConverter> _variableConverters =
+  [
+    new GuidVariableConverter()
+  ];
 
-  private async Task<InterceptableVariablesResponse?> GetVariableExpansionAsync(int variablesReference)
+  private async Task<InterceptableVariablesResponse> ApplyVariableUnwrappingAsync(InterceptableVariablesResponse varsRes)
   {
-    // Check if this is a fake negative reference
-    if (variablesReference < 0 && _internalVariablesReferenceMap.TryGetValue(variablesReference, out var realRef))
-    {
-      variablesReference = realRef; // Replace with the real underlying reference
-    }
+    var convertedVariables = await Task.WhenAll(
+        varsRes.Body.Variables.Select(async variable =>
+        {
+          var converter = _variableConverters.SingleOrDefault(c => c.CanConvert(variable));
 
-    var seq = GetNextSequence();
-    var req = new InternalVariablesRequest
-    {
-      Seq = seq,
-      Command = "variables",
-      Type = "request",
-      Arguments = new InternalVariablesArguments { VariablesReference = variablesReference }
-    };
-
-    try
-    {
-      return await _debuggerProxy!.RunInternalDebuggerRequestAsync<InterceptableVariablesResponse>(
-          JsonSerializer.Serialize(req, SerializerOptions), seq, CancellationToken.None
-      );
-    }
-    catch (Exception ex)
-    {
-      logger.LogError(ex, "Failed to expand variables reference {reference}", variablesReference);
-      return null;
-    }
-  }
-
-  // private async Task<List<InterceptableVariable>?> ExtractListItemsAsync(InterceptableVariable listVariable, InterceptableVariablesResponse listExpansion)
-  // {
-  //   // Find the _items array
-  //   var itemsVar = listExpansion.Body.Variables.Find(x => x.Name == "_items" && x.VariablesReference != 0);
-  //   if (itemsVar == null)
-  //   {
-  //     logger.LogWarning("Could not find _items in List expansion for {name}", listVariable.Name);
-  //     return null;
-  //   }
-  //
-  //   // Get the actual array contents
-  //   var itemsExpansion = await GetVariableExpansionAsync(itemsVar.VariablesReference);
-  //   if (itemsExpansion == null)
-  //   {
-  //     return null;
-  //   }
-  //
-  //   // Get the actual count of items (not array capacity)
-  //   var countVar = listExpansion.Body.Variables.Find(x => x.Name == "_size" || x.Name == "Count");
-  //   var count = countVar != null && int.TryParse(countVar.Value, out var c) ? c : itemsExpansion.Body.Variables.Count;
-  //
-  //   var listItems = new List<InterceptableVariable>();
-  //
-  //   // Take only the actual items (not empty slots)
-  //   for (var i = 0; i < Math.Min(count, itemsExpansion.Body.Variables.Count); i++)
-  //   {
-  //     var item = itemsExpansion.Body.Variables[i];
-  //     listItems.Add(new InterceptableVariable
-  //     {
-  //       Name = $"[{i}]",
-  //       Value = item.Value,
-  //       Type = item.Type,
-  //       EvaluateName = $"{listVariable.EvaluateName}[{i}]",
-  //       VariablesReference = item.VariablesReference,
-  //       NamedVariables = item.NamedVariables
-  //     });
-  //   }
-  //
-  //   return listItems;
-  // }
-
-  // private InterceptableVariablesResponse CreateModifiedResponse(InterceptableVariablesResponse original,
-  //     InterceptableVariable originalListVar, List<InterceptableVariable> expandedItems)
-  // {
-  //   var modifiedVariables = original.Body.Variables.ToList();
-  //   var listIndex = modifiedVariables.FindIndex(x => x == originalListVar);
-  //
-  //   if (listIndex != -1)
-  //   {
-  //     // Remove the original List variable and insert expanded items
-  //     modifiedVariables.RemoveAt(listIndex);
-  //     modifiedVariables.InsertRange(listIndex, expandedItems);
-  //   }
-  //
-  //   return new InterceptableVariablesResponse
-  //   {
-  //     Seq = original.Seq,
-  //     Type = original.Type,
-  //     RequestSeq = original.RequestSeq,
-  //     Success = original.Success,
-  //     Command = original.Command,
-  //     Message = original.Message,
-  //     Body = new InterceptableVariablesResponseBody
-  //     {
-  //       Variables = modifiedVariables
-  //     }
-  //   };
-  // }
-
-  private InterceptableVariablesResponse TryExpandListVariablesAsync(InterceptableVariablesResponse varsRes)
-  {
-    var modifiedVariables = varsRes.Body.Variables.ToList();
-
-    foreach (var variable in modifiedVariables)
-    {
-      if (IsExpandableListType(variable))
-      {
-        // Generate a negative fake VariablesReference
-        var fakeRef = GetNextVarInternalVarRef();
-
-        // Map the fake reference to the real list's reference
-        _internalVariablesReferenceMap[fakeRef] = variable.VariablesReference;
-
-        // Rewrite the variable reference to the negative one
-        variable.VariablesReference = fakeRef;
-
-        logger.LogInformation(
-            "[TCP] Rewriting List<T> variable '{name}' to fake VariablesReference {fakeRef}",
-            variable.Name, fakeRef
-        );
-      }
-    }
+          return converter != null ? await converter.ConvertAsync(variable, GetNextSequence, ResolveVariable) : variable;
+        })
+    );
 
     return new InterceptableVariablesResponse
     {
@@ -382,7 +262,7 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
       Message = varsRes.Message,
       Body = new InterceptableVariablesResponseBody
       {
-        Variables = modifiedVariables
+        Variables = [.. convertedVariables]
       }
     };
   }
@@ -452,7 +332,10 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
   }
   private void SafeDisposeProcess(System.Diagnostics.Process? process, string processName)
   {
-    if (process == null) return;
+    if (process == null)
+    {
+      return;
+    }
 
     try
     {
@@ -503,7 +386,4 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
       logger.LogWarning(ex, "Failed to get {processName} process by PID: {pid}", processName, pid);
     }
   }
-
-  [GeneratedRegex(@"""select_project"":\s*""REWRITE_ATTACH""")]
-  private static partial Regex AttachRequestPattern();
 }

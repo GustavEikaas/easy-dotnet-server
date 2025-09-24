@@ -73,31 +73,11 @@ public class InterceptableVariablesResponseBody
   public List<InterceptableVariable> Variables { get; set; } = [];
 }
 
-public class InterceptableVariable
+public record InterceptableVariable(string? EvaluateName, string Name, string? Type, string? Value, int VariablesReference, int? NamedVariables);
+
+public class InternalVariablesRequest : Request
 {
-  public string? EvaluateName { get; set; }
-
-  public string Name { get; set; } = string.Empty;
-
-  public string? Type { get; set; }
-
-  public string? Value { get; set; }
-
-  public int VariablesReference { get; set; }
-
-  [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-  public int? NamedVariables { get; set; }
-}
-
-public record InternalVariablesRequest
-{
-  public int Seq { get; init; }
-
-  public string Type { get; init; } = "request";
-
-  public string Command { get; init; } = "variables";
-
-  public InternalVariablesArguments Arguments { get; init; } = new();
+  public new InternalVariablesArguments Arguments { get; init; } = new();
 }
 
 public record InternalVariablesArguments
@@ -141,4 +121,39 @@ public class Source
 {
   public required string Name { get; set; }
   public required string Path { get; set; }
+}
+
+public class EvaluateResponse : Response
+{
+  public new EvaluateResponseBody Body { get; set; } = new();
+}
+
+public class EvaluateResponseBody
+{
+  [JsonPropertyName("result")]
+  public string Result { get; set; } = string.Empty;
+
+  [JsonPropertyName("type")]
+  public string Type { get; set; } = string.Empty;
+
+  [JsonPropertyName("variablesReference")]
+  public int VariablesReference { get; set; }
+}
+
+public class EvaluateRequest : Request
+{
+  public new EvaluateRequestArguments Arguments { get; set; } = new();
+}
+
+// Arguments specific to an "evaluate" request
+public class EvaluateRequestArguments
+{
+  [JsonPropertyName("expression")]
+  public string Expression { get; set; } = string.Empty;
+
+  [JsonPropertyName("frameId")]
+  public int FrameId { get; set; }
+
+  [JsonPropertyName("context")]
+  public string? Context { get; set; }
 }
