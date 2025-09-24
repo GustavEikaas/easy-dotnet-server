@@ -2,27 +2,26 @@ namespace EasyDotnet.Infrastructure.Dap;
 
 public static partial class DAP
 {
-  public class SetBreakpointsRequest : Request
-  {
-    public required SetBreakpointsArguments Arguments { get; set; }
-  }
+  public record SetBreakpointsRequest(
+      int Seq,
+      string Type,
+      string Command,
+      SetBreakpointsArguments Arguments,
+      Dictionary<string, System.Text.Json.JsonElement>? AdditionalProperties = null
+  ) : Request(Seq, Type, AdditionalProperties, Command);
 
-  public class SetBreakpointsArguments
-  {
-    public required List<Breakpoint> Breakpoints { get; set; }
-    public required List<int> Lines { get; set; }
-    public required Source Source { get; set; }
-    public required bool SourceModified { get; set; }
-  }
+  public record Breakpoint(int Line);
 
-  public class Breakpoint
-  {
-    public required int Line { get; set; }
-  }
+  public record Source(
+      string Name,
+      string Path
+  );
 
-  public class Source
-  {
-    public required string Name { get; set; }
-    public required string Path { get; set; }
-  }
+  public record SetBreakpointsArguments(
+      List<Breakpoint> Breakpoints,
+      List<int> Lines,
+      Source Source,
+      bool SourceModified
+  );
+
 }

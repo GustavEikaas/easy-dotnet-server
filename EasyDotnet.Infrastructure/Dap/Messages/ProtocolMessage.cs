@@ -5,12 +5,5 @@ namespace EasyDotnet.Infrastructure.Dap;
 
 public static partial class DAP
 {
-  public class ProtocolMessage
-  {
-    public required int Seq { get; set; }
-    public required string Type { get; set; }
-
-    [JsonExtensionData]
-    public Dictionary<string, JsonElement>? AdditionalProperties { get; set; }
-  }
+  public record ProtocolMessage(int Seq, string Type, [property: JsonExtensionData] Dictionary<string, JsonElement>? AdditionalProperties);
 }

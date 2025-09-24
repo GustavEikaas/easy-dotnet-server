@@ -1,5 +1,6 @@
 using System.Text.Json;
 using EasyDotnet.Infrastructure.Dap;
+using Namotion.Reflection;
 
 namespace EasyDotnet.Infrastructure.Tests.Dap;
 

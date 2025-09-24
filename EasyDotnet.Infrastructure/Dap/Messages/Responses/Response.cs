@@ -4,12 +4,5 @@ namespace EasyDotnet.Infrastructure.Dap;
 
 public static partial class DAP
 {
-  public class Response : ProtocolMessage
-  {
-    [JsonPropertyName("request_seq")]
-    public required int RequestSeq { get; set; }
-    public required bool Success { get; set; }
-    public required string Command { get; set; }
-    public string? Message { get; set; }
-  }
+  public record Response(int Seq, string Type, Dictionary<string, System.Text.Json.JsonElement>? AdditionalProperties, [property: JsonPropertyName("request_seq")] int RequestSeq, bool Success, string Command, string? Message) : ProtocolMessage(Seq, Type, AdditionalProperties);
 }

@@ -5,7 +5,7 @@ namespace EasyDotnet.Infrastructure.Dap;
 
 public static class InitializeRequestRewriter
 {
-  public static Task<DAP.InterceptableAttachRequest> CreateInitRequestBasedOnProjectType(DotnetProject project, LaunchProfile? launchProfile, DAP.InterceptableAttachRequest request, string cwd, int seq, int? processId)
+  public static Task<DAP.InterceptableAttachRequest> CreateInitRequestBasedOnProjectType(DotnetProject project, LaunchProfile? launchProfile, DAP.InterceptableAttachRequest request, string cwd, int? processId)
   {
     if (project.IsTestProject && project.TestingPlatformDotnetTestSupport != true && processId is not null)
     {
@@ -30,28 +30,41 @@ public static class InitializeRequestRewriter
   private static async Task<DAP.InterceptableAttachRequest> CreateLaunchRequestAsync(DAP.InterceptableAttachRequest request, DotnetProject project, LaunchProfile? launchProfile, string cwd)
   {
     var env = BuildEnvironmentVariables(launchProfile);
-    request.Type = "request";
-    request.Arguments.Cwd = cwd;
-    request.Command = "launch";
-    request.Arguments.Request = "launch";
-    request.Arguments.Program = project.TargetPath!;
-
-    request.Arguments.Env =
-        (request.Arguments.Env ?? [])
-        .Concat(env ?? Enumerable.Empty<KeyValuePair<string, string>>())
-        .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+    var updatedRequest = request with
+    {
+      Type = "request",
+      Command = "launch",
+      Arguments = request.Arguments with
+      {
+        Cwd = cwd,
+        Request = "launch",
+        Program = project.TargetPath!,
+        Env = (request.Arguments.Env ?? [])
+                   .Concat(env ?? Enumerable.Empty<KeyValuePair<string, string>>())
+                   .ToDictionary(kvp => kvp.Key, kvp => kvp.Value)
+      }
+    };
 
     return await Task.FromResult(request);
   }
 
-  private static async Task<DAP.InterceptableAttachRequest> CreateAttachRequestAsync(DAP.InterceptableAttachRequest request, int processId, string cwd)
+  private static Task<DAP.InterceptableAttachRequest> CreateAttachRequestAsync(
+      DAP.InterceptableAttachRequest request,
+      int processId,
+      string cwd)
   {
-    request.Type = "request";
-    request.Command = "attach";
-    request.Arguments.Request = "attach";
-    request.Arguments.ProcessId = processId;
-    request.Arguments.Cwd = cwd;
+    var updatedRequest = request with
+    {
+      Type = "request",
+      Command = "attach",
+      Arguments = request.Arguments with
+      {
+        Request = "attach",
+        ProcessId = processId,
+        Cwd = cwd
+      }
+    };
 
-    return await Task.FromResult(request);
+    return Task.FromResult(updatedRequest);
   }
 }

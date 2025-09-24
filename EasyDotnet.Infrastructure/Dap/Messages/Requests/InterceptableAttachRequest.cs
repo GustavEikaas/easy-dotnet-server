@@ -2,17 +2,19 @@ namespace EasyDotnet.Infrastructure.Dap;
 
 public static partial class DAP
 {
-  public class InterceptableAttachRequest : Request
-  {
-    public InterceptableAttachArguments Arguments { get; set; } = new();
-  }
+  public record InterceptableAttachRequest(
+      int Seq,
+      string Type,
+      string Command,
+      InterceptableAttachArguments Arguments,
+      Dictionary<string, System.Text.Json.JsonElement>? AdditionalProperties = null
+  ) : Request(Seq, Type, AdditionalProperties, Command);
 
-  public class InterceptableAttachArguments
-  {
-    public string? Request { get; set; }
-    public string? Program { get; set; }
-    public int? ProcessId { get; set; }
-    public string? Cwd { get; set; }
-    public Dictionary<string, string>? Env { get; set; }
-  }
+  public record InterceptableAttachArguments(
+      string? Request = null,
+      string? Program = null,
+      int? ProcessId = null,
+      string? Cwd = null,
+      Dictionary<string, string>? Env = null
+  );
 }

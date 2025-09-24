@@ -2,13 +2,13 @@ namespace EasyDotnet.Infrastructure.Dap;
 
 public static partial class DAP
 {
-  public class VariablesRequest : Request
-  {
-    public VariablesRequestArguments Arguments { get; set; } = new();
-  }
+  public record VariablesRequest(
+      int Seq,
+      string Type,
+      string Command,
+      VariablesRequestArguments Arguments,
+      Dictionary<string, System.Text.Json.JsonElement>? AdditionalProperties = null
+  ) : Request(Seq, Type, AdditionalProperties, Command);
 
-  public class VariablesRequestArguments
-  {
-    public int VariablesReference { get; set; }
-  }
+  public record VariablesRequestArguments(int VariablesReference);
 }

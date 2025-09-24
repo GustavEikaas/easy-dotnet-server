@@ -4,9 +4,10 @@ namespace EasyDotnet.Infrastructure.Dap;
 
 public static partial class DAP
 {
-  public class Event : ProtocolMessage
-  {
-    [JsonPropertyName("event")]
-    public required string EventName { get; set; }
-  }
+  public record Event(
+    int Seq,
+    string Type,
+    Dictionary<string, System.Text.Json.JsonElement>? AdditionalProperties,
+    [property: JsonPropertyName("event")] string EventName
+    ) : ProtocolMessage(Seq, Type, AdditionalProperties);
 }

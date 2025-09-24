@@ -36,7 +36,6 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
   private TcpClient? _client;
   private DebuggerProxy? _debuggerProxy;
   private (System.Diagnostics.Process, int)? _vsTestAttach;
-  private readonly Dictionary<int, int> _internalVariablesReferenceMap = [];
   private Task? _disposeTask;
 
   private int _clientSeq;
@@ -90,10 +89,10 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
         var tcpStream = _client.GetStream();
         var clientDap = new Client(tcpStream, tcpStream, async (msg, stream) =>
         {
-          msg.Seq = GetNextSequence();
+          var msgWithSeq = msg with { Seq = GetNextSequence() };
           try
           {
-            switch (msg)
+            switch (msgWithSeq)
             {
               case DAP.InterceptableAttachRequest attachReq:
                 var modified = await InitializeRequestRewriter.CreateInitRequestBasedOnProjectType(
@@ -101,7 +100,6 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
                     launchProfile,
                     attachReq,
                     Path.GetDirectoryName(projectPath)!,
-                    attachReq.Seq,
                     vsTestAttach?.Item2
                 );
                 logger.LogInformation("[TCP] Intercepted attach request: {modified}", JsonSerializer.Serialize(modified, LoggingSerializerOptions));
@@ -129,12 +127,18 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
               //   break;
 
               case DAP.SetBreakpointsRequest setBpReq:
-                if (OperatingSystem.IsWindows())
-                {
-                  logger.LogInformation("[TCP] Intercepted set breakpoints request: Normalizing path separators");
-                  setBpReq.Arguments.Source.Path =
-                      setBpReq.Arguments.Source.Path.Replace('/', '\\');
-                }
+                var updatedReq = OperatingSystem.IsWindows()
+                       ? setBpReq with
+                       {
+                         Arguments = setBpReq.Arguments with
+                         {
+                           Source = setBpReq.Arguments.Source with
+                           {
+                             Path = setBpReq.Arguments.Source.Path.Replace('/', '\\')
+                           }
+                         }
+                       }
+                       : setBpReq;
 
                 logger.LogInformation(
                     "[TCP] setBreakpoints request: {message}",
@@ -150,7 +154,7 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
                 break;
 
               default:
-                throw new Exception($"Unsupported DAP message from client: {msg}");
+                throw new Exception($"Unsupported DAP message from client: {msgWithSeq}");
             }
           }
           catch (Exception e)
@@ -258,19 +262,16 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
       }
     }
 
-    return new DAP.VariablesResponse
-    {
-      Seq = varsRes.Seq,
-      Type = varsRes.Type,
-      RequestSeq = varsRes.RequestSeq,
-      Success = varsRes.Success,
-      Command = varsRes.Command,
-      Message = varsRes.Message,
-      Body = new DAP.InterceptableVariablesResponseBody
-      {
-        Variables = [.. convertedVariables]
-      }
-    };
+    return new DAP.VariablesResponse(
+        Seq: varsRes.Seq,
+        Type: varsRes.Type,
+        AdditionalProperties: null,
+        RequestSeq: varsRes.RequestSeq,
+        Success: varsRes.Success,
+        Command: varsRes.Command,
+        Message: varsRes.Message,
+        Body: new DAP.InterceptableVariablesResponseBody(Variables: [.. convertedVariables])
+    );
   }
 
   private void TriggerCleanup()

@@ -18,16 +18,15 @@ public class GuidVariableConverter : IVariableConverter
 
     var seq = getNextSequence();
 
-    var req = new DAP.VariablesRequest
-    {
-      Seq = seq,
-      Command = "variables",
-      Type = "request",
-      Arguments = new DAP.VariablesRequestArguments
-      {
-        VariablesReference = variable.VariablesReference
-      }
-    };
+    var req = new DAP.VariablesRequest(
+        Seq: seq,
+        Type: "request",
+        AdditionalProperties: null,
+        Command: "variables",
+        Arguments: new DAP.VariablesRequestArguments(
+            VariablesReference: variable.VariablesReference
+        )
+    );
 
     var res = await resolveVariable(req, seq, CancellationToken.None);
 

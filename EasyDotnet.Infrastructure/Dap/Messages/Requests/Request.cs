@@ -2,8 +2,10 @@ namespace EasyDotnet.Infrastructure.Dap;
 
 public static partial class DAP
 {
-  public class Request : ProtocolMessage
-  {
-    public required string Command { get; set; }
-  }
+  public record Request(
+    int Seq,
+    string Type,
+    Dictionary<string, System.Text.Json.JsonElement>? AdditionalProperties,
+    string Command
+    ) : ProtocolMessage(Seq, Type, AdditionalProperties);
 }
