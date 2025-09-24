@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using EasyDotnet.Infrastructure.Services;
 
 namespace EasyDotnet.Infrastructure.Dap;
 
@@ -109,7 +110,7 @@ public class VariablesRequest : Request
   public new VariablesRequestArguments Arguments { get; set; } = new();
 
   [JsonIgnore]
-  public bool IsInternalVarRequest => Arguments.VariablesReference >= 100_000;
+  public bool IsInternalVarRequest => Arguments.VariablesReference >= NetcoreDbgService.InternalVarRefBase;
 }
 
 public class VariablesRequestArguments

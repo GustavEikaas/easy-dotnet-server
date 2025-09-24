@@ -26,6 +26,8 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
     WriteIndented = true
   };
 
+  public const int InternalVarRefBase = 100_000;
+
   private readonly TaskCompletionSource<bool> _completionSource = new();
   private CancellationTokenSource? _cancellationTokenSource;
   private Task? _sessionTask;
@@ -38,7 +40,7 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
 
   private readonly Dictionary<int, int> _internalVariablesReferenceMap = new();
   private Task? _disposeTask;
-  private int _internalVarRef = 100_000;
+  private int _internalVarRef = InternalVarRefBase;
 
   private int GetNextVarInternalVarRef()
   {
