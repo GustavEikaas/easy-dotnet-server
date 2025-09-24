@@ -64,42 +64,56 @@ public class InterceptableAttachArguments
 
 public class InterceptableVariablesResponse : Response
 {
-    public new InterceptableVariablesResponseBody Body { get; set; } = new();
+  public new InterceptableVariablesResponseBody Body { get; set; } = new();
 }
 
 public class InterceptableVariablesResponseBody
 {
-    public List<InterceptableVariable> Variables { get; set; } = new();
+  public List<InterceptableVariable> Variables { get; set; } = new();
 }
 
 public class InterceptableVariable
 {
-    public string? EvaluateName { get; set; }
+  public string? EvaluateName { get; set; }
 
-    public string Name { get; set; } = string.Empty;
+  public string Name { get; set; } = string.Empty;
 
-    public string? Type { get; set; }
+  public string? Type { get; set; }
 
-    public string? Value { get; set; }
+  public string? Value { get; set; }
 
-    public int VariablesReference { get; set; }
+  public int VariablesReference { get; set; }
 
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public int? NamedVariables { get; set; }
+  [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+  public int? NamedVariables { get; set; }
 }
 
 public record InternalVariablesRequest
 {
-    public int Seq { get; init; }
+  public int Seq { get; init; }
 
-    public string Type { get; init; } = "request";
+  public string Type { get; init; } = "request";
 
-    public string Command { get; init; } = "variables";
+  public string Command { get; init; } = "variables";
 
-    public InternalVariablesArguments Arguments { get; init; } = new();
+  public InternalVariablesArguments Arguments { get; init; } = new();
 }
 
 public record InternalVariablesArguments
 {
-    public int VariablesReference { get; init; }
+  public int VariablesReference { get; init; }
+}
+
+public class VariablesRequest : Request
+{
+  public new VariablesRequestArguments Arguments { get; set; } = new();
+
+  [JsonIgnore]
+  public bool IsInternalVarRequest => Arguments.VariablesReference >= 100_000;
+}
+
+public class VariablesRequestArguments
+{
+  [JsonPropertyName("variablesReference")]
+  public int VariablesReference { get; set; }
 }

@@ -35,7 +35,17 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
   private DebuggerProxy? _debuggerProxy;
   private (System.Diagnostics.Process, int)? _vsTestAttach;
   private readonly Dictionary<int, InterceptableVariablesResponse> _pendingVariablesRequests = new();
+
+  private readonly Dictionary<int, int> _internalVariablesReferenceMap = new();
   private Task? _disposeTask;
+  private int _internalVarRef = 100_000;
+
+  private int GetNextVarInternalVarRef()
+  {
+    _internalVarRef++;
+    return _internalVarRef;
+  }
+
   private int _clientSeq;
 
   private int GetNextSequence()
@@ -105,6 +115,26 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
                 await DapMessageWriter.WriteDapMessageAsync(modified, stream, CancellationToken.None);
                 break;
 
+              case VariablesRequest varReq:
+                if (varReq.IsInternalVarRequest)
+                {
+                  logger.LogInformation("[TCP] Intercepted internal variables request: {message}", JsonSerializer.Serialize(varReq, LoggingSerializerOptions));
+                  if (!_internalVariablesReferenceMap.TryGetValue(varReq.Arguments.VariablesReference, out var realRef))
+                  {
+                    throw new InvalidOperationException($"Unknown internal VariablesReference: {varReq.Arguments.VariablesReference}");
+                  }
+
+                  logger.LogInformation("[TCP] Translating {negRef} - {ref}", varReq.Arguments.VariablesReference, realRef);
+                  varReq.Arguments.VariablesReference = realRef;
+                  await DapMessageWriter.WriteDapMessageAsync(varReq, stream, CancellationToken.None);
+                }
+                else
+                {
+                  logger.LogInformation("[TCP] Intercepted variables request: {message}", JsonSerializer.Serialize(varReq, LoggingSerializerOptions));
+                  await DapMessageWriter.WriteDapMessageAsync(varReq, stream, CancellationToken.None);
+                }
+                break;
+
               case Request req:
                 logger.LogInformation("[TCP] request: {message}", JsonSerializer.Serialize(req, LoggingSerializerOptions));
                 Console.WriteLine($"Request command: {req.Command}");
@@ -152,7 +182,7 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
             switch (msg)
             {
               case InterceptableVariablesResponse varsRes:
-                var modifiedResponse = await TryExpandListVariablesAsync(varsRes);
+                var modifiedResponse = TryExpandListVariablesAsync(varsRes);
                 await DapMessageWriter.WriteDapMessageAsync(modifiedResponse, stream, CancellationToken.None);
                 break;
               case Response res:
@@ -204,6 +234,12 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
 
   private async Task<InterceptableVariablesResponse?> GetVariableExpansionAsync(int variablesReference)
   {
+    // Check if this is a fake negative reference
+    if (variablesReference < 0 && _internalVariablesReferenceMap.TryGetValue(variablesReference, out var realRef))
+    {
+      variablesReference = realRef; // Replace with the real underlying reference
+    }
+
     var seq = GetNextSequence();
     var req = new InternalVariablesRequest
     {
@@ -216,7 +252,8 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
     try
     {
       return await _debuggerProxy!.RunInternalDebuggerRequestAsync<InterceptableVariablesResponse>(
-          JsonSerializer.Serialize(req, SerializerOptions), seq, CancellationToken.None);
+          JsonSerializer.Serialize(req, SerializerOptions), seq, CancellationToken.None
+      );
     }
     catch (Exception ex)
     {
@@ -225,102 +262,112 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
     }
   }
 
-  private async Task<List<InterceptableVariable>?> ExtractListItemsAsync(InterceptableVariable listVariable, InterceptableVariablesResponse listExpansion)
+  // private async Task<List<InterceptableVariable>?> ExtractListItemsAsync(InterceptableVariable listVariable, InterceptableVariablesResponse listExpansion)
+  // {
+  //   // Find the _items array
+  //   var itemsVar = listExpansion.Body.Variables.Find(x => x.Name == "_items" && x.VariablesReference != 0);
+  //   if (itemsVar == null)
+  //   {
+  //     logger.LogWarning("Could not find _items in List expansion for {name}", listVariable.Name);
+  //     return null;
+  //   }
+  //
+  //   // Get the actual array contents
+  //   var itemsExpansion = await GetVariableExpansionAsync(itemsVar.VariablesReference);
+  //   if (itemsExpansion == null)
+  //   {
+  //     return null;
+  //   }
+  //
+  //   // Get the actual count of items (not array capacity)
+  //   var countVar = listExpansion.Body.Variables.Find(x => x.Name == "_size" || x.Name == "Count");
+  //   var count = countVar != null && int.TryParse(countVar.Value, out var c) ? c : itemsExpansion.Body.Variables.Count;
+  //
+  //   var listItems = new List<InterceptableVariable>();
+  //
+  //   // Take only the actual items (not empty slots)
+  //   for (var i = 0; i < Math.Min(count, itemsExpansion.Body.Variables.Count); i++)
+  //   {
+  //     var item = itemsExpansion.Body.Variables[i];
+  //     listItems.Add(new InterceptableVariable
+  //     {
+  //       Name = $"[{i}]",
+  //       Value = item.Value,
+  //       Type = item.Type,
+  //       EvaluateName = $"{listVariable.EvaluateName}[{i}]",
+  //       VariablesReference = item.VariablesReference,
+  //       NamedVariables = item.NamedVariables
+  //     });
+  //   }
+  //
+  //   return listItems;
+  // }
+
+  // private InterceptableVariablesResponse CreateModifiedResponse(InterceptableVariablesResponse original,
+  //     InterceptableVariable originalListVar, List<InterceptableVariable> expandedItems)
+  // {
+  //   var modifiedVariables = original.Body.Variables.ToList();
+  //   var listIndex = modifiedVariables.FindIndex(x => x == originalListVar);
+  //
+  //   if (listIndex != -1)
+  //   {
+  //     // Remove the original List variable and insert expanded items
+  //     modifiedVariables.RemoveAt(listIndex);
+  //     modifiedVariables.InsertRange(listIndex, expandedItems);
+  //   }
+  //
+  //   return new InterceptableVariablesResponse
+  //   {
+  //     Seq = original.Seq,
+  //     Type = original.Type,
+  //     RequestSeq = original.RequestSeq,
+  //     Success = original.Success,
+  //     Command = original.Command,
+  //     Message = original.Message,
+  //     Body = new InterceptableVariablesResponseBody
+  //     {
+  //       Variables = modifiedVariables
+  //     }
+  //   };
+  // }
+
+  private InterceptableVariablesResponse TryExpandListVariablesAsync(InterceptableVariablesResponse varsRes)
   {
-    // Find the _items array
-    var itemsVar = listExpansion.Body.Variables.Find(x => x.Name == "_items" && x.VariablesReference != 0);
-    if (itemsVar == null)
+    var modifiedVariables = varsRes.Body.Variables.ToList();
+
+    foreach (var variable in modifiedVariables)
     {
-      logger.LogWarning("Could not find _items in List expansion for {name}", listVariable.Name);
-      return null;
-    }
-
-    // Get the actual array contents
-    var itemsExpansion = await GetVariableExpansionAsync(itemsVar.VariablesReference);
-    if (itemsExpansion == null)
-    {
-      return null;
-    }
-
-    // Get the actual count of items (not array capacity)
-    var countVar = listExpansion.Body.Variables.Find(x => x.Name == "_size" || x.Name == "Count");
-    var count = countVar != null && int.TryParse(countVar.Value, out var c) ? c : itemsExpansion.Body.Variables.Count;
-
-    var listItems = new List<InterceptableVariable>();
-
-    // Take only the actual items (not empty slots)
-    for (var i = 0; i < Math.Min(count, itemsExpansion.Body.Variables.Count); i++)
-    {
-      var item = itemsExpansion.Body.Variables[i];
-      listItems.Add(new InterceptableVariable
+      if (IsExpandableListType(variable))
       {
-        Name = $"[{i}]",
-        Value = item.Value,
-        Type = item.Type,
-        EvaluateName = $"{listVariable.EvaluateName}[{i}]",
-        VariablesReference = item.VariablesReference,
-        NamedVariables = item.NamedVariables
-      });
-    }
+        // Generate a negative fake VariablesReference
+        var fakeRef = GetNextVarInternalVarRef();
 
-    return listItems;
-  }
+        // Map the fake reference to the real list's reference
+        _internalVariablesReferenceMap[fakeRef] = variable.VariablesReference;
 
-  private InterceptableVariablesResponse CreateModifiedResponse(InterceptableVariablesResponse original,
-      InterceptableVariable originalListVar, List<InterceptableVariable> expandedItems)
-  {
-    var modifiedVariables = original.Body.Variables.ToList();
-    var listIndex = modifiedVariables.FindIndex(x => x == originalListVar);
+        // Rewrite the variable reference to the negative one
+        variable.VariablesReference = fakeRef;
 
-    if (listIndex != -1)
-    {
-      // Remove the original List variable and insert expanded items
-      modifiedVariables.RemoveAt(listIndex);
-      modifiedVariables.InsertRange(listIndex, expandedItems);
+        logger.LogInformation(
+            "[TCP] Rewriting List<T> variable '{name}' to fake VariablesReference {fakeRef}",
+            variable.Name, fakeRef
+        );
+      }
     }
 
     return new InterceptableVariablesResponse
     {
-      Seq = original.Seq,
-      Type = original.Type,
-      RequestSeq = original.RequestSeq,
-      Success = original.Success,
-      Command = original.Command,
-      Message = original.Message,
+      Seq = varsRes.Seq,
+      Type = varsRes.Type,
+      RequestSeq = varsRes.RequestSeq,
+      Success = varsRes.Success,
+      Command = varsRes.Command,
+      Message = varsRes.Message,
       Body = new InterceptableVariablesResponseBody
       {
         Variables = modifiedVariables
       }
     };
-  }
-
-  private async Task<InterceptableVariablesResponse> TryExpandListVariablesAsync(InterceptableVariablesResponse varsRes)
-  {
-    var listVar = varsRes.Body.Variables.Find(IsExpandableListType);
-    if (listVar == null)
-    {
-      return varsRes; // No expandable lists found
-    }
-
-    logger.LogInformation("[TCP] Found expandable List: {name} ({type})", listVar.Name, listVar.Type);
-
-    // Get the List internals (_items, _size, etc.)
-    var listExpansion = await GetVariableExpansionAsync(listVar.VariablesReference);
-    if (listExpansion == null)
-    {
-      return varsRes; // Couldn't expand, return original
-    }
-
-    // Extract the actual list items
-    var listItems = await ExtractListItemsAsync(listVar, listExpansion);
-    if (listItems == null || listItems.Count == 0)
-    {
-      return varsRes; // Couldn't get items, return original
-    }
-
-    logger.LogInformation("[TCP] Expanded List<T> '{name}' with {count} items", listVar.Name, listItems.Count);
-
-    return CreateModifiedResponse(varsRes, listVar, listItems);
   }
 
   private void TriggerCleanup()

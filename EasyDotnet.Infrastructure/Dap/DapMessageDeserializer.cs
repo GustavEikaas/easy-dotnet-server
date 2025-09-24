@@ -52,7 +52,7 @@ public static class DapMessageDeserializer
     }
 
 
-    private static ProtocolMessage DeserializeResponse(JsonElement root, JsonSerializerOptions options)
+    private static Response DeserializeResponse(JsonElement root, JsonSerializerOptions options)
     {
       if (root.TryGetProperty("command", out var cmdProp))
       {
@@ -66,18 +66,19 @@ public static class DapMessageDeserializer
       return JsonSerializer.Deserialize<Response>(root.GetRawText(), options)!;
     }
 
-    private static ProtocolMessage DeserializeRequest(JsonElement root, JsonSerializerOptions options)
+    private static Request DeserializeRequest(JsonElement root, JsonSerializerOptions options)
     {
-      if (root.TryGetProperty("command", out var cmdProp))
+      if (!root.TryGetProperty("command", out var cmdProp) || cmdProp.GetString() is not { } cmd)
       {
-        var cmd = cmdProp.GetString();
-        if (string.Equals(cmd, "attach", StringComparison.OrdinalIgnoreCase))
-        {
-          return JsonSerializer.Deserialize<InterceptableAttachRequest>(root.GetRawText(), options)!;
-        }
+        return JsonSerializer.Deserialize<Request>(root.GetRawText(), options)!;
       }
 
-      return JsonSerializer.Deserialize<Request>(root.GetRawText(), options)!;
+      return cmd.ToLowerInvariant() switch
+      {
+        "attach" => JsonSerializer.Deserialize<InterceptableAttachRequest>(root.GetRawText(), options)!,
+        "variables" => JsonSerializer.Deserialize<VariablesRequest>(root.GetRawText(), options)!,
+        _ => JsonSerializer.Deserialize<Request>(root.GetRawText(), options)!
+      };
     }
 
     public override void Write(Utf8JsonWriter writer, ProtocolMessage value, JsonSerializerOptions options) =>
