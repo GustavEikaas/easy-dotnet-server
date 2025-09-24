@@ -1,14 +1,15 @@
+
 namespace EasyDotnet.Infrastructure.Dap.ValueConverters;
 
 public class GuidVariableConverter : IVariableConverter
 {
-  public bool CanConvert(InterceptableVariable variable)
+  public bool CanConvert(DAP.Variable variable)
       => variable.Type == "System.Guid";
 
-  public async Task<InterceptableVariable> ConvertAsync(
-      InterceptableVariable variable,
+  public async Task<DAP.Variable> ConvertAsync(
+      DAP.Variable variable,
       Func<int> getNextSequence,
-      Func<InternalVariablesRequest, int, CancellationToken, Task<InterceptableVariablesResponse>> resolveVariable)
+      Func<DAP.VariablesRequest, int, CancellationToken, Task<DAP.VariablesResponse>> resolveVariable)
   {
     if (variable.VariablesReference == 0)
     {
@@ -17,12 +18,12 @@ public class GuidVariableConverter : IVariableConverter
 
     var seq = getNextSequence();
 
-    var req = new InternalVariablesRequest
+    var req = new DAP.VariablesRequest
     {
       Seq = seq,
       Command = "variables",
       Type = "request",
-      Arguments = new InternalVariablesArguments
+      Arguments = new DAP.VariablesRequestArguments
       {
         VariablesReference = variable.VariablesReference
       }
@@ -70,7 +71,7 @@ public class GuidVariableConverter : IVariableConverter
     throw new ArgumentException($"Missing or invalid value for {key}");
   }
 
-  private static string ConstructGuidFromVariables(List<InterceptableVariable> variables)
+  private static string ConstructGuidFromVariables(List<DAP.Variable> variables)
   {
     var dict = variables.ToDictionary(v => v.Name, v => v.Value);
 

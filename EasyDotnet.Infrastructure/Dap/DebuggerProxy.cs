@@ -3,13 +3,13 @@ using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Infrastructure.Dap;
 
-public record Client(Stream Input, Stream Output, Action<ProtocolMessage, Stream> OnMessage);
-public record Debugger(Stream Input, Stream Output, Action<ProtocolMessage, Stream> OnMessage);
+public record Client(Stream Input, Stream Output, Action<DAP.ProtocolMessage, Stream> OnMessage);
+public record Debugger(Stream Input, Stream Output, Action<DAP.ProtocolMessage, Stream> OnMessage);
 
 public class DebuggerProxy(Client client, Debugger debugger, ILogger<DebuggerProxy>? logger)
 {
   private readonly TaskCompletionSource<bool> _completionSource = new();
-  private readonly ConcurrentDictionary<int, TaskCompletionSource<Response>> _requestQueue = new();
+  private readonly ConcurrentDictionary<int, TaskCompletionSource<DAP.Response>> _requestQueue = new();
   public Task Completion => _completionSource.Task;
 
   public void Start(CancellationToken cancellationToken, Action? onDisconnect = null)
@@ -51,10 +51,10 @@ public class DebuggerProxy(Client client, Debugger debugger, ILogger<DebuggerPro
   }
 
   public async Task<T> RunInternalDebuggerRequestAsync<T>(string message, int sequence, CancellationToken cancellationToken)
-      where T : Response
+      where T : DAP.Response
   {
     logger?.LogInformation("Running internal request for sequence {seq} {msg}", sequence, message);
-    var t = new TaskCompletionSource<Response>();
+    var t = new TaskCompletionSource<DAP.Response>();
 
     _requestQueue[sequence] = t;
 
@@ -83,7 +83,7 @@ public class DebuggerProxy(Client client, Debugger debugger, ILogger<DebuggerPro
     }
   }
 
-  private Task StartReadingLoop(Stream outputStream, Stream inputStream, Action<ProtocolMessage, Stream> onMessage, CancellationToken cancellationToken,
+  private Task StartReadingLoop(Stream outputStream, Stream inputStream, Action<DAP.ProtocolMessage, Stream> onMessage, CancellationToken cancellationToken,
       Action? onDisconnect = null) =>
     Task.Run(async () =>
     {
@@ -93,7 +93,7 @@ public class DebuggerProxy(Client client, Debugger debugger, ILogger<DebuggerPro
         {
           var json = await DapMessageReader.ReadDapMessageAsync(outputStream, cancellationToken) ?? throw new IOException("Stream closed - received null message");
           var msg = DapMessageDeserializer.Parse(json);
-          if (msg is Response response && _requestQueue.TryGetValue(response.RequestSeq, out var taskCompletionSource))
+          if (msg is DAP.Response response && _requestQueue.TryGetValue(response.RequestSeq, out var taskCompletionSource))
           {
             _requestQueue.TryRemove(response.RequestSeq, out _);
             taskCompletionSource.SetResult(response);

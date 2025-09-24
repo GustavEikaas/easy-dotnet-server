@@ -95,7 +95,7 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
           {
             switch (msg)
             {
-              case InterceptableAttachRequest attachReq:
+              case DAP.InterceptableAttachRequest attachReq:
                 var modified = await InitializeRequestRewriter.CreateInitRequestBasedOnProjectType(
                     project,
                     launchProfile,
@@ -108,27 +108,27 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
                 await DapMessageWriter.WriteDapMessageAsync(modified, stream, CancellationToken.None);
                 break;
 
-              case VariablesRequest varReq:
-                if (varReq.IsInternalVarRequest)
-                {
-                  logger.LogInformation("[TCP] Intercepted internal variables request: {message}", JsonSerializer.Serialize(varReq, LoggingSerializerOptions));
-                  if (!_internalVariablesReferenceMap.TryGetValue(varReq.Arguments.VariablesReference, out var realRef))
-                  {
-                    throw new InvalidOperationException($"Unknown internal VariablesReference: {varReq.Arguments.VariablesReference}");
-                  }
+              // case DAP.VariablesRequest varReq:
+              //   // if (varReq.IsInternalVarRequest)
+              //   // {
+              //   //   logger.LogInformation("[TCP] Intercepted internal variables request: {message}", JsonSerializer.Serialize(varReq, LoggingSerializerOptions));
+              //   //   if (!_internalVariablesReferenceMap.TryGetValue(varReq.Arguments.VariablesReference, out var realRef))
+              //   //   {
+              //   //     throw new InvalidOperationException($"Unknown internal VariablesReference: {varReq.Arguments.VariablesReference}");
+              //   //   }
+              //   //
+              //   //   logger.LogInformation("[TCP] Translating {negRef} - {ref}", varReq.Arguments.VariablesReference, realRef);
+              //   //   varReq.Arguments.VariablesReference = realRef;
+              //   //   await DapMessageWriter.WriteDapMessageAsync(varReq, stream, CancellationToken.None);
+              //   // }
+              //   // else
+              //   // {
+              //   logger.LogInformation("[TCP] Intercepted variables request: {message}", JsonSerializer.Serialize(varReq, LoggingSerializerOptions));
+              //   await DapMessageWriter.WriteDapMessageAsync(varReq, stream, CancellationToken.None);
+              //   // }
+              //   break;
 
-                  logger.LogInformation("[TCP] Translating {negRef} - {ref}", varReq.Arguments.VariablesReference, realRef);
-                  varReq.Arguments.VariablesReference = realRef;
-                  await DapMessageWriter.WriteDapMessageAsync(varReq, stream, CancellationToken.None);
-                }
-                else
-                {
-                  logger.LogInformation("[TCP] Intercepted variables request: {message}", JsonSerializer.Serialize(varReq, LoggingSerializerOptions));
-                  await DapMessageWriter.WriteDapMessageAsync(varReq, stream, CancellationToken.None);
-                }
-                break;
-
-              case SetBreakpointsRequest setBpReq:
+              case DAP.SetBreakpointsRequest setBpReq:
                 if (OperatingSystem.IsWindows())
                 {
                   logger.LogInformation("[TCP] Intercepted set breakpoints request: Normalizing path separators");
@@ -143,7 +143,7 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
                 await DapMessageWriter.WriteDapMessageAsync(setBpReq, stream, CancellationToken.None);
                 break;
 
-              case Request req:
+              case DAP.Request req:
                 logger.LogInformation("[TCP] request: {message}", JsonSerializer.Serialize(req, LoggingSerializerOptions));
                 Console.WriteLine($"Request command: {req.Command}");
                 await DapMessageWriter.WriteDapMessageAsync(req, stream, CancellationToken.None);
@@ -189,17 +189,17 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
           {
             switch (msg)
             {
-              case InterceptableVariablesResponse varsRes:
-                var modifiedResponse = await ApplyVariableUnwrappingAsync(varsRes);
-                await DapMessageWriter.WriteDapMessageAsync(modifiedResponse, stream, CancellationToken.None);
-                break;
-              case Response res:
+              // case DAP.VariablesResponse varsRes:
+              //   logger.LogInformation("[DBG] response: {message}", JsonSerializer.Serialize(varsRes, LoggingSerializerOptions));
+              //   await DapMessageWriter.WriteDapMessageAsync(varsRes, stream, _cancellationTokenSource.Token);
+              //   break;
+              case DAP.Response res:
                 logger.LogInformation("[DBG] response: {message}", JsonSerializer.Serialize(res, LoggingSerializerOptions));
-                await DapMessageWriter.WriteDapMessageAsync(res, stream, CancellationToken.None);
+                await DapMessageWriter.WriteDapMessageAsync(res, stream, _cancellationTokenSource.Token);
                 break;
-              case Event e:
+              case DAP.Event e:
                 logger.LogInformation("[DBG] event: {message}", JsonSerializer.Serialize(e, LoggingSerializerOptions));
-                await DapMessageWriter.WriteDapMessageAsync(e, stream, CancellationToken.None);
+                await DapMessageWriter.WriteDapMessageAsync(e, stream, _cancellationTokenSource.Token);
                 break;
               default:
                 throw new Exception($"Unsupported DAP message from debugger: {msg}");
@@ -234,25 +234,31 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
     }, _cancellationTokenSource.Token);
   }
 
-  private Task<InterceptableVariablesResponse> ResolveVariable(InternalVariablesRequest request, int sequence, CancellationToken cancellationToken) => _debuggerProxy!.RunInternalDebuggerRequestAsync<InterceptableVariablesResponse>(JsonSerializer.Serialize(request, SerializerOptions), sequence, cancellationToken);
+  private Task<DAP.VariablesResponse> ResolveVariable(DAP.VariablesRequest request, int sequence, CancellationToken cancellationToken) => _debuggerProxy!.RunInternalDebuggerRequestAsync<DAP.VariablesResponse>(JsonSerializer.Serialize(request, SerializerOptions), sequence, cancellationToken);
 
   private readonly List<IVariableConverter> _variableConverters =
   [
     new GuidVariableConverter()
   ];
 
-  private async Task<InterceptableVariablesResponse> ApplyVariableUnwrappingAsync(InterceptableVariablesResponse varsRes)
+  private async Task<DAP.VariablesResponse> ApplyVariableUnwrappingAsync(DAP.VariablesResponse varsRes)
   {
-    var convertedVariables = await Task.WhenAll(
-        varsRes.Body.Variables.Select(async variable =>
-        {
-          var converter = _variableConverters.SingleOrDefault(c => c.CanConvert(variable));
+    var convertedVariables = new List<DAP.Variable>();
+    foreach (var variable in varsRes.Body.Variables)
+    {
+      var converter = _variableConverters.SingleOrDefault(c => c.CanConvert(variable));
+      if (converter != null)
+      {
+        var converted = await converter.ConvertAsync(variable, GetNextSequence, ResolveVariable);
+        convertedVariables.Add(converted);
+      }
+      else
+      {
+        convertedVariables.Add(variable);
+      }
+    }
 
-          return converter != null ? await converter.ConvertAsync(variable, GetNextSequence, ResolveVariable) : variable;
-        })
-    );
-
-    return new InterceptableVariablesResponse
+    return new DAP.VariablesResponse
     {
       Seq = varsRes.Seq,
       Type = varsRes.Type,
@@ -260,7 +266,7 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
       Success = varsRes.Success,
       Command = varsRes.Command,
       Message = varsRes.Message,
-      Body = new InterceptableVariablesResponseBody
+      Body = new DAP.InterceptableVariablesResponseBody
       {
         Variables = [.. convertedVariables]
       }

@@ -5,7 +5,7 @@ namespace EasyDotnet.Infrastructure.Dap;
 
 public static class InitializeRequestRewriter
 {
-  public static Task<InterceptableAttachRequest> CreateInitRequestBasedOnProjectType(DotnetProject project, LaunchProfile? launchProfile, InterceptableAttachRequest request, string cwd, int seq, int? processId)
+  public static Task<DAP.InterceptableAttachRequest> CreateInitRequestBasedOnProjectType(DotnetProject project, LaunchProfile? launchProfile, DAP.InterceptableAttachRequest request, string cwd, int seq, int? processId)
   {
     if (project.IsTestProject && project.TestingPlatformDotnetTestSupport != true && processId is not null)
     {
@@ -27,7 +27,7 @@ public static class InitializeRequestRewriter
             )
             .ToDictionary(kv => kv.Key, kv => kv.Value);
 
-  private static async Task<InterceptableAttachRequest> CreateLaunchRequestAsync(InterceptableAttachRequest request, DotnetProject project, LaunchProfile? launchProfile, string cwd)
+  private static async Task<DAP.InterceptableAttachRequest> CreateLaunchRequestAsync(DAP.InterceptableAttachRequest request, DotnetProject project, LaunchProfile? launchProfile, string cwd)
   {
     var env = BuildEnvironmentVariables(launchProfile);
     request.Type = "request";
@@ -44,7 +44,7 @@ public static class InitializeRequestRewriter
     return await Task.FromResult(request);
   }
 
-  private static async Task<InterceptableAttachRequest> CreateAttachRequestAsync(InterceptableAttachRequest request, int processId, string cwd)
+  private static async Task<DAP.InterceptableAttachRequest> CreateAttachRequestAsync(DAP.InterceptableAttachRequest request, int processId, string cwd)
   {
     request.Type = "request";
     request.Command = "attach";

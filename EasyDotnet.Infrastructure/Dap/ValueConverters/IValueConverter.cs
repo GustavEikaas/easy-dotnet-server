@@ -2,12 +2,12 @@ namespace EasyDotnet.Infrastructure.Dap.ValueConverters;
 
 public interface IVariableConverter
 {
-    bool CanConvert(InterceptableVariable variable);
+    bool CanConvert(DAP.Variable variable);
 
-    Task<InterceptableVariable> ConvertAsync(
-        InterceptableVariable variable,
+    Task<DAP.Variable> ConvertAsync(
+        DAP.Variable variable,
         Func<int> getNextSequence,
-        Func<InternalVariablesRequest, int, CancellationToken, Task<InterceptableVariablesResponse>> resolveVariable
+        Func<DAP.VariablesRequest, int, CancellationToken, Task<DAP.VariablesResponse>> resolveVariable
     );
      
 }
