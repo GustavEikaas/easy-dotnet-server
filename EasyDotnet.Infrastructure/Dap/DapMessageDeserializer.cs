@@ -80,8 +80,10 @@ public static class DapMessageDeserializer
         {
           case "attach":
             return JsonSerializer.Deserialize<InterceptableAttachRequest>(root.GetRawText(), options)!;
+
           case "setbreakpoints":
             return JsonSerializer.Deserialize<SetBreakpointsRequest>(root.GetRawText(), options)!;
+
           case "variables":
             return JsonSerializer.Deserialize<VariablesRequest>(root.GetRawText(), options)!;
         }

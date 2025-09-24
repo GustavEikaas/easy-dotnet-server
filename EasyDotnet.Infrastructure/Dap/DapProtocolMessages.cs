@@ -70,7 +70,7 @@ public class InterceptableVariablesResponse : Response
 
 public class InterceptableVariablesResponseBody
 {
-  public List<InterceptableVariable> Variables { get; set; } = new();
+  public List<InterceptableVariable> Variables { get; set; } = [];
 }
 
 public class InterceptableVariable
@@ -117,6 +117,8 @@ public class VariablesRequestArguments
 {
   [JsonPropertyName("variablesReference")]
   public int VariablesReference { get; set; }
+}
+
 public class SetBreakpointsRequest : Request
 {
   public new required SetBreakpointsArguments Arguments { get; set; }

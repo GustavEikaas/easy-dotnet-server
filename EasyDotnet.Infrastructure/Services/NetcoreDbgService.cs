@@ -138,20 +138,19 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
                 break;
 
               case SetBreakpointsRequest setBpReq:
+                if (OperatingSystem.IsWindows())
                 {
-                  if (OperatingSystem.IsWindows())
-                  {
-                    logger.LogInformation("[TCP] Intercepted set breakpoints request: Normalizing path separators");
-                    setBpReq.Arguments.Source.Path =
-                        setBpReq.Arguments.Source.Path.Replace('/', '\\');
-                  }
-
-                  logger.LogInformation(
-                      "[TCP] setBreakpoints request: {message}",
-                      JsonSerializer.Serialize(setBpReq, LoggingSerializerOptions));
-
-                  return JsonSerializer.Serialize(setBpReq, SerializerOptions);
+                  logger.LogInformation("[TCP] Intercepted set breakpoints request: Normalizing path separators");
+                  setBpReq.Arguments.Source.Path =
+                      setBpReq.Arguments.Source.Path.Replace('/', '\\');
                 }
+
+                logger.LogInformation(
+                    "[TCP] setBreakpoints request: {message}",
+                    JsonSerializer.Serialize(setBpReq, LoggingSerializerOptions));
+
+                await DapMessageWriter.WriteDapMessageAsync(setBpReq, stream, CancellationToken.None);
+                break;
 
               case Request req:
                 logger.LogInformation("[TCP] request: {message}", JsonSerializer.Serialize(req, LoggingSerializerOptions));
