@@ -15,21 +15,21 @@ public static class DapMessageDeserializer
   /// Parses a JSON string into the correct ProtocolMessage subtype.
   /// Throws JsonException if parsing fails or required fields are missing.
   /// </summary>
-  public static ProtocolMessage Parse(string json)
+  public static Messages.DAP.ProtocolMessage Parse(string json)
   {
     if (string.IsNullOrWhiteSpace(json))
     {
       throw new ArgumentNullException(nameof(json));
     }
 
-    var result = JsonSerializer.Deserialize<ProtocolMessage>(json, Options);
+    var result = JsonSerializer.Deserialize<Messages.DAP.ProtocolMessage>(json, Options);
 
     return result is null ? throw new JsonException("Failed to deserialize JSON into ProtocolMessage.") : result;
   }
 
-  private class InternalConverter : JsonConverter<ProtocolMessage>
+  private class InternalConverter : JsonConverter<Messages.DAP.ProtocolMessage>
   {
-    public override ProtocolMessage Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    public override Messages.DAP.ProtocolMessage Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
       using var doc = JsonDocument.ParseValue(ref reader);
       var root = doc.RootElement;
@@ -47,13 +47,13 @@ public static class DapMessageDeserializer
         "request" => DeserializeRequest(root, options),
         "event" => JsonSerializer.Deserialize<Event>(root.GetRawText(), options)!,
         "response" => DeserializeResponse(root, options),
-        _ => JsonSerializer.Deserialize<ProtocolMessage>(root.GetRawText(), options)!
+        _ => JsonSerializer.Deserialize<Messages.DAP.ProtocolMessage>(root.GetRawText(), options)!
       };
     }
 
     private static Response DeserializeResponse(JsonElement root, JsonSerializerOptions options) => JsonSerializer.Deserialize<Response>(root.GetRawText(), options)!;
 
-    private static ProtocolMessage DeserializeRequest(JsonElement root, JsonSerializerOptions options)
+    private static Messages.DAP.ProtocolMessage DeserializeRequest(JsonElement root, JsonSerializerOptions options)
     {
       if (root.TryGetProperty("command", out var cmdProp))
       {
@@ -72,7 +72,7 @@ public static class DapMessageDeserializer
       return JsonSerializer.Deserialize<Request>(root.GetRawText(), options)!;
     }
 
-    public override void Write(Utf8JsonWriter writer, ProtocolMessage value, JsonSerializerOptions options) =>
+    public override void Write(Utf8JsonWriter writer, Messages.DAP.ProtocolMessage value, JsonSerializerOptions options) =>
         JsonSerializer.Serialize(writer, value, value.GetType(), options);
   }
 

@@ -2,8 +2,8 @@ using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Infrastructure.Dap;
 
-public record Client(Stream Input, Stream Output, Func<ProtocolMessage, Task<string>>? MessageRefiner);
-public record Debugger(Stream Input, Stream Output, Func<ProtocolMessage, Task<string>>? MessageRefiner);
+public record Client(Stream Input, Stream Output, Func<Messages.DAP.ProtocolMessage, Task<string>>? MessageRefiner);
+public record Debugger(Stream Input, Stream Output, Func<Messages.DAP.ProtocolMessage, Task<string>>? MessageRefiner);
 
 public class DebuggerProxy(Client client, Debugger debugger, ILogger<DebuggerProxy>? logger)
 {
@@ -49,7 +49,7 @@ public class DebuggerProxy(Client client, Debugger debugger, ILogger<DebuggerPro
   }
 
   private Task StartReadingLoop(Stream outputStream, Stream inputStream,
-      Func<ProtocolMessage, Task<string>>? messageRefiner, CancellationToken cancellationToken,
+      Func<Messages.DAP.ProtocolMessage, Task<string>>? messageRefiner, CancellationToken cancellationToken,
       Action? onDisconnect = null) =>
     Task.Run(async () =>
     {

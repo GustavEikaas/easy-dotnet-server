@@ -3,29 +3,15 @@ using System.Text.Json.Serialization;
 
 namespace EasyDotnet.Infrastructure.Dap;
 
-public class ProtocolMessage
-{
-  public required int Seq { get; set; }
-  public required string Type { get; set; }
 
-  [JsonExtensionData]
-  public Dictionary<string, JsonElement> ExtraProperties { get; set; } = [];
-}
-
-public class Request : ProtocolMessage
-{
-  public required string Command { get; set; }
-  public JsonElement? Arguments { get; set; }
-}
-
-public class Event : ProtocolMessage
+public class Event : Messages.DAP.ProtocolMessage
 {
   [JsonPropertyName("event")]
   public required string EventName { get; set; }
   public JsonElement? Body { get; set; }
 }
 
-public class Response : ProtocolMessage
+public class Response : Messages.DAP.ProtocolMessage
 {
   [JsonPropertyName("request_seq")]
   public required int RequestSeq { get; set; }
