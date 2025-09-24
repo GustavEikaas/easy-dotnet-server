@@ -64,24 +64,24 @@ public class InterceptableAttachArguments
 
 public class SetBreakpointsRequest : Request
 {
-    public new required SetBreakpointsArguments Arguments { get; set; }
+  public new required SetBreakpointsArguments Arguments { get; set; }
 }
 
 public class SetBreakpointsArguments
 {
-    public required List<Breakpoint> Breakpoints { get; set; }
-    public required List<int> Lines { get; set; }
-    public required Source Source { get; set; }
-    public required bool SourceModified { get; set; }
+  public required List<Breakpoint> Breakpoints { get; set; }
+  public required List<int> Lines { get; set; }
+  public required Source Source { get; set; }
+  public required bool SourceModified { get; set; }
 }
 
 public class Breakpoint
 {
-    public required int Line { get; set; }
+  public required int Line { get; set; }
 }
 
 public class Source
 {
-    public required string Name { get; set; }
-    public required string Path { get; set; }
+  public required string Name { get; set; }
+  public required string Path { get; set; }
 }
