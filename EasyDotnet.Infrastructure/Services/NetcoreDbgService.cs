@@ -94,6 +94,22 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
                 logger.LogInformation("[TCP] Intercepted attach request: {modified}", JsonSerializer.Serialize(modified, LoggingSerializerOptions));
                 return JsonSerializer.Serialize(modified, SerializerOptions);
 
+              case SetBreakpointsRequest setBpReq:
+                {
+                  if (OperatingSystem.IsWindows())
+                  {
+                    logger.LogInformation("[TCP] Intercepted set breakpoints request: Normalizing path separators");
+                    setBpReq.Arguments.Source.Path =
+                        setBpReq.Arguments.Source.Path.Replace('/', '\\');
+                  }
+
+                  logger.LogInformation(
+                      "[TCP] setBreakpoints request: {message}",
+                      JsonSerializer.Serialize(setBpReq, LoggingSerializerOptions));
+
+                  return JsonSerializer.Serialize(setBpReq, SerializerOptions);
+                }
+
               case Request req:
                 logger.LogInformation("[TCP] request: {message}", JsonSerializer.Serialize(req, LoggingSerializerOptions));
                 Console.WriteLine($"Request command: {req.Command}");
