@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using static EasyDotnet.Infrastructure.Dap.VariablesRequestArguments;
 
 namespace EasyDotnet.Infrastructure.Dap;
 
@@ -57,9 +58,11 @@ public static class DapMessageDeserializer
       if (root.TryGetProperty("command", out var cmdProp))
       {
         var cmd = cmdProp.GetString();
-        if (string.Equals(cmd, "variables", StringComparison.OrdinalIgnoreCase))
+
+        switch (cmd?.ToLowerInvariant())
         {
-          return JsonSerializer.Deserialize<InterceptableVariablesResponse>(root.GetRawText(), options)!;
+          case "variables":
+            return JsonSerializer.Deserialize<InterceptableVariablesResponse>(root.GetRawText(), options)!;
         }
       }
 
@@ -68,17 +71,23 @@ public static class DapMessageDeserializer
 
     private static Request DeserializeRequest(JsonElement root, JsonSerializerOptions options)
     {
-      if (!root.TryGetProperty("command", out var cmdProp) || cmdProp.GetString() is not { } cmd)
+
+      if (root.TryGetProperty("command", out var cmdProp))
       {
-        return JsonSerializer.Deserialize<Request>(root.GetRawText(), options)!;
+        var cmd = cmdProp.GetString();
+
+        switch (cmd?.ToLowerInvariant())
+        {
+          case "attach":
+            return JsonSerializer.Deserialize<InterceptableAttachRequest>(root.GetRawText(), options)!;
+          case "setbreakpoints":
+            return JsonSerializer.Deserialize<SetBreakpointsRequest>(root.GetRawText(), options)!;
+          case "variables":
+            return JsonSerializer.Deserialize<VariablesRequest>(root.GetRawText(), options)!;
+        }
       }
 
-      return cmd.ToLowerInvariant() switch
-      {
-        "attach" => JsonSerializer.Deserialize<InterceptableAttachRequest>(root.GetRawText(), options)!,
-        "variables" => JsonSerializer.Deserialize<VariablesRequest>(root.GetRawText(), options)!,
-        _ => JsonSerializer.Deserialize<Request>(root.GetRawText(), options)!
-      };
+      return JsonSerializer.Deserialize<Request>(root.GetRawText(), options)!;
     }
 
     public override void Write(Utf8JsonWriter writer, ProtocolMessage value, JsonSerializerOptions options) =>
