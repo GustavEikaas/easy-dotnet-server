@@ -9,12 +9,15 @@ using EasyDotnet.Controllers;
 using EasyDotnet.Controllers.Initialize;
 using EasyDotnet.Notifications;
 using EasyDotnet.Utils;
+using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Controllers.Initialize;
 
-public class InitializeController(IClientService clientService, IVisualStudioLocator locator) : BaseController
+public class InitializeController(ILogger<InitializeController> logger, IClientService clientService, IVisualStudioLocator locator, INotificationService notificationService) : BaseController
 {
+  private const string RoslynDllPath = @"C:\Users\gusta\Desktop\Roslyn\content\LanguageServer\neutral\Microsoft.CodeAnalysis.LanguageServer.dll";
+
   [JsonRpcMethod("initialize")]
   public async Task<InitializeResponse> Initialize(InitializeRequest request)
   {
@@ -38,6 +41,11 @@ public class InitializeController(IClientService clientService, IVisualStudioLoc
       }
     }
     Directory.SetCurrentDirectory(request.ProjectInfo.RootDir);
+    _ = Task.Run(async () =>
+    {
+      var proxy = new RoslynProxy("EasyDotnet_ClientPipe", RoslynDllPath, logger, clientService, notificationService);
+      await proxy.StartAsync();
+    });
     clientService.IsInitialized = true;
     clientService.ProjectInfo = request.ProjectInfo;
     clientService.ClientInfo = request.ClientInfo;
