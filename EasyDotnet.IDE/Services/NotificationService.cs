@@ -15,4 +15,7 @@ public class NotificationService(JsonRpc jsonRpc) : INotificationService
 
   [RpcNotification("project/changed")]
   public async Task NotifyProjectChanged(string projectPath, string? targetFrameworkMoniker = null, string configuration = "Debug") => await jsonRpc.NotifyWithParameterObjectAsync("project/changed", new ProjectChangedNotification(projectPath, targetFrameworkMoniker, configuration));
+
+  [RpcNotification("lsp/ready")]
+  public async Task LspReady() => await jsonRpc.NotifyAsync("lsp/ready");
 }

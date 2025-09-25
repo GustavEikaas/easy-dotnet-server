@@ -3,12 +3,12 @@ using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet;
 
-public class JsonRpcLogger(ILogger logger) : TraceListener
+public class JsonRpcLogger(ILogger logger, string who) : TraceListener
 {
   public override void Write(string? message)
   {
     if (!string.IsNullOrWhiteSpace(message))
-      logger.LogInformation("{Message}", message);
+      logger.LogInformation("[{who}]: {Message}", who, message);
   }
 
   public override void WriteLine(string? message) => Write(message);
@@ -21,19 +21,19 @@ public class JsonRpcLogger(ILogger logger) : TraceListener
     {
       case TraceEventType.Critical:
       case TraceEventType.Error:
-        logger.LogError("{Source}: {Message}", source, message);
+        logger.LogError("[{who}]: {Source}: {Message}", who, source, message);
         break;
       case TraceEventType.Warning:
-        logger.LogWarning("{Source}: {Message}", source, message);
+        logger.LogWarning("[{who}]:{Source}: {Message}", who, source, message);
         break;
       case TraceEventType.Information:
-        logger.LogInformation("{Source}: {Message}", source, message);
+        logger.LogInformation("[{who}]:{Source}: {Message}", who, source, message);
         break;
       case TraceEventType.Verbose:
-        logger.LogDebug("{Source}: {Message}", source, message);
+        logger.LogDebug("[{who}]:{Source}: {Message}", who, source, message);
         break;
       default:
-        logger.LogTrace("{Source}: {Message}", source, message);
+        logger.LogTrace("[{who}]:{Source}: {Message}", who, source, message);
         break;
     }
   }
