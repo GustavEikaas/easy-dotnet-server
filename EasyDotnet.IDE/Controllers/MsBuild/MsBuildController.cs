@@ -3,11 +3,12 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
+using EasyDotnet.Controllers;
+using EasyDotnet.Controllers.MsBuild;
 using EasyDotnet.Domain.Models.MsBuild.Project;
-using EasyDotnet.IDE.Controllers.MsBuild;
 using StreamJsonRpc;
 
-namespace EasyDotnet.Controllers.MsBuild;
+namespace EasyDotnet.IDE.Controllers.MsBuild;
 
 public class MsBuildController(IClientService clientService, IMsBuildService msBuild) : BaseController
 {
