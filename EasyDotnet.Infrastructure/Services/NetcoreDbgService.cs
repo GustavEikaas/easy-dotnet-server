@@ -34,6 +34,8 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
   private TcpClient? _client;
   private (System.Diagnostics.Process, int)? _vsTestAttach;
   private Task? _disposeTask;
+  private int _clientSeq = 0;
+  private int GetNextSequence() => Interlocked.Increment(ref _clientSeq);
 
   public Task Completion => _completionSource.Task;
 
@@ -80,6 +82,7 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
         {
           try
           {
+            msg.Seq = GetNextSequence();
             switch (msg)
             {
               case InterceptableAttachRequest attachReq:
