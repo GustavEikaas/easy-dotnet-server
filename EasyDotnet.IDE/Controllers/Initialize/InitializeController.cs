@@ -13,7 +13,7 @@ using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Controllers.Initialize;
 
-public class InitializeController(IClientService clientService, IVisualStudioLocator locator) : BaseController
+public class InitializeController(IClientService clientService, IVisualStudioLocator locator, IMsBuildService msBuildService) : BaseController
 {
   [JsonRpcMethod("initialize")]
   public async Task<InitializeResponse> Initialize(InitializeRequest request)
@@ -48,9 +48,11 @@ public class InitializeController(IClientService clientService, IVisualStudioLoc
       clientService.ClientOptions = request.Options;
     }
 
+    var supportsSingleFileExecution = msBuildService.QuerySdkInstallations().Any(x => x.Version.Major >= 10);
+
     return new InitializeResponse(
         new ServerInfo("EasyDotnet", serverVersion.ToString()),
-        new ServerCapabilities(GetRpcPaths(), GetRpcNotifications()),
+        new ServerCapabilities(GetRpcPaths(), GetRpcNotifications(), supportsSingleFileExecution),
         new ToolPaths(await TryGetMsBuildPath(locator))
         );
   }
