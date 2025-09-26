@@ -20,6 +20,47 @@
 
 ---
 
+## MsBuildController
+
+### `msbuild/build`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | BuildRequest |   |
+
+**Returns:** `Task<BuildResultResponse>`
+
+### `msbuild/project-properties`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | ProjectPropertiesRequest |   |
+
+**Returns:** `Task<DotnetProject>`
+
+### `msbuild/list-project-reference`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+
+**Returns:** `Task<List<string>>`
+
+### `msbuild/add-project-reference`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+| targetPath | string |   |
+
+**Returns:** `Task<bool>`
+
+### `msbuild/remove-project-reference`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+| targetPath | string |   |
+
+**Returns:** `Task<bool>`
+
+---
+
 ## LaunchProfileController
 
 ### `launch-profiles`
@@ -198,6 +239,7 @@ _No parameters_
 
 ---
 
+<<<<<<< HEAD
 ## MsBuildController
 
 ### `msbuild/add-project-reference`
@@ -239,3 +281,47 @@ _No parameters_
 
 ---
 
+||||||| accca39
+## MsBuildController
+
+### `msbuild/build`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | BuildRequest |   |
+
+**Returns:** `Task<BuildResultResponse>`
+
+### `msbuild/project-properties`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | ProjectPropertiesRequest |   |
+
+**Returns:** `Task<DotnetProject>`
+
+### `msbuild/list-project-reference`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+
+**Returns:** `Task<List<string>>`
+
+### `msbuild/add-project-reference`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+| targetPath | string |   |
+
+**Returns:** `Task<bool>`
+
+### `msbuild/remove-project-reference`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+| targetPath | string |   |
+
+**Returns:** `Task<bool>`
+
+---
+
+=======
+>>>>>>> 21690272ab08ed1f866c5041b1fee0e42ffd36f5

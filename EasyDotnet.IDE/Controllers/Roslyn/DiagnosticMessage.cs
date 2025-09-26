@@ -9,5 +9,6 @@ public sealed record DiagnosticMessage(
     string Message,
     string Code,
     string Source = "roslyn",
-    string? Category = null
+    string? Category = null,
+    string? Project = null
 );
