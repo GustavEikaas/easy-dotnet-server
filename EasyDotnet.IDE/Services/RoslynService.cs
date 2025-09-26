@@ -222,14 +222,14 @@ public class RoslynService(IMsBuildService service, ILogger<RoslynService> logSe
   }
 
   public async IAsyncEnumerable<DiagnosticMessage> GetWorkspaceDiagnosticsAsync(
-    string projectPath,
+    string targetPath,
     bool includeWarnings)
   {
-    if (string.IsNullOrWhiteSpace(projectPath))
-      throw new ArgumentException("Project path must be provided", nameof(projectPath));
+    if (string.IsNullOrWhiteSpace(targetPath))
+      throw new ArgumentException("Project path must be provided", nameof(targetPath));
 
-    if (!File.Exists(projectPath))
-      throw new FileNotFoundException($"Project or solution file not found: {projectPath}");
+    if (!File.Exists(targetPath))
+      throw new FileNotFoundException($"Project or solution file not found: {targetPath}");
 
     using var workspace = MSBuildWorkspace.Create();
 
@@ -237,24 +237,24 @@ public class RoslynService(IMsBuildService service, ILogger<RoslynService> logSe
 
     try
     {
-      if (projectPath.EndsWith(".sln", StringComparison.OrdinalIgnoreCase))
+      if (targetPath.EndsWith(".sln", StringComparison.OrdinalIgnoreCase))
       {
-        solution = await workspace.OpenSolutionAsync(projectPath).ConfigureAwait(false);
+        solution = await workspace.OpenSolutionAsync(targetPath).ConfigureAwait(false);
       }
-      else if (projectPath.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) ||
-               projectPath.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase))
+      else if (targetPath.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) ||
+               targetPath.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase))
       {
-        var project = await workspace.OpenProjectAsync(projectPath).ConfigureAwait(false);
+        var project = await workspace.OpenProjectAsync(targetPath).ConfigureAwait(false);
         solution = project.Solution;
       }
       else
       {
-        throw new ArgumentException($"Path must be a .sln or project file (.csproj, .fsproj): {projectPath}");
+        throw new ArgumentException($"Path must be a .sln or project file (.csproj, .fsproj): {targetPath}");
       }
     }
     catch (InvalidOperationException ex)
     {
-      throw new InvalidOperationException($"Failed to open {(projectPath.EndsWith(".sln") ? "solution" : "project")}: {ex.Message}", ex);
+      throw new InvalidOperationException($"Failed to open {(targetPath.EndsWith(".sln") ? "solution" : "project")}: {ex.Message}", ex);
     }
     catch (FileNotFoundException ex)
     {
@@ -262,11 +262,11 @@ public class RoslynService(IMsBuildService service, ILogger<RoslynService> logSe
     }
     catch (IOException ex)
     {
-      throw new IOException($"IO error while opening {(projectPath.EndsWith(".sln") ? "solution" : "project")}: {ex.Message}", ex);
+      throw new IOException($"IO error while opening {(targetPath.EndsWith(".sln") ? "solution" : "project")}: {ex.Message}", ex);
     }
     catch (UnauthorizedAccessException ex)
     {
-      throw new UnauthorizedAccessException($"Access denied to {(projectPath.EndsWith(".sln") ? "solution" : "project")}: {ex.Message}", ex);
+      throw new UnauthorizedAccessException($"Access denied to {(targetPath.EndsWith(".sln") ? "solution" : "project")}: {ex.Message}", ex);
     }
 
     var allDocuments = solution.Projects.SelectMany(project => project.Documents);
@@ -300,7 +300,8 @@ public class RoslynService(IMsBuildService service, ILogger<RoslynService> logSe
               Message: diagnostic.GetMessage(),
               Code: diagnostic.Id,
               Source: "roslyn",
-              Category: diagnostic.Descriptor.Category
+              Category: diagnostic.Descriptor.Category,
+              Project: document.Project.Name
             );
 
             await writer.WriteAsync(diagnosticMessage, cancellationToken).ConfigureAwait(false);
