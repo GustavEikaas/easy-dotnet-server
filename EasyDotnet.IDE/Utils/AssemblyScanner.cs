@@ -5,7 +5,7 @@ using System.Reflection;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
 
-namespace EasyDotnet.Utils;
+namespace EasyDotnet.IDE.Utils;
 
 public static class AssemblyScanner
 {

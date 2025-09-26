@@ -8,6 +8,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 using EasyDotnet;
+using EasyDotnet.IDE;
 
 class Program
 {
