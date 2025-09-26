@@ -1,5 +1,5 @@
+using EasyDotnet.IDE.Utils;
 using EasyDotnet.IntegrationTests.Utils;
-using EasyDotnet.Utils;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace EasyDotnet.IntegrationTests;

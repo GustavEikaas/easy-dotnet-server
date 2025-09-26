@@ -1,7 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
-using EasyDotnet.Utils;
+using EasyDotnet.IDE.Utils;
 using Microsoft.Extensions.DependencyInjection;
 using Newtonsoft.Json.Serialization;
 using StreamJsonRpc;
