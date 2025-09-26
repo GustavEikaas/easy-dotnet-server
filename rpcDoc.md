@@ -80,6 +80,16 @@
 
 ## TemplateController
 
+### `template/instantiate`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| identity | string |   |
+| name | string |   |
+| outputPath | string |   |
+| parameters | Dictionary<string, string> |   |
+
+**Returns:** `Task`
+
 ### `template/list`
 _No parameters_
 
@@ -91,16 +101,6 @@ _No parameters_
 | identity | string |   |
 
 **Returns:** `Task<IAsyncEnumerable<DotnetNewParameterResponse>>`
-
-### `template/instantiate`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| identity | string |   |
-| name | string |   |
-| outputPath | string |   |
-| parameters | Dictionary<string, string> |   |
-
-**Returns:** `Task`
 
 ---
 
@@ -126,14 +126,6 @@ _No parameters_
 
 **Returns:** `Task<BootstrapFileResultResponse>`
 
-### `roslyn/scope-variables`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| sourceFilePath | string |   |
-| lineNumber | int |   |
-
-**Returns:** `Task<IAsyncEnumerable<VariableResultResponse>>`
-
 ### `roslyn/get-workspace-diagnostics`
 | Parameter | Type | Optional |
 |-----------|------|----------|
@@ -141,6 +133,14 @@ _No parameters_
 | includeWarnings | bool | ✅  |
 
 **Returns:** `IAsyncEnumerable<DiagnosticMessage>`
+
+### `roslyn/scope-variables`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| sourceFilePath | string |   |
+| lineNumber | int |   |
+
+**Returns:** `Task<IAsyncEnumerable<VariableResultResponse>>`
 
 ---
 
@@ -158,12 +158,14 @@ _No parameters_
 
 ## NugetController
 
-### `nuget/restore`
+### `nuget/get-package-versions`
 | Parameter | Type | Optional |
 |-----------|------|----------|
-| targetPath | string |   |
+| packageId | string |   |
+| sources | List<string> | ✅  |
+| includePrerelease | bool | ✅  |
 
-**Returns:** `Task<RestoreResult>`
+**Returns:** `Task<IAsyncEnumerable<string>>`
 
 ### `nuget/list-sources`
 _No parameters_
@@ -179,14 +181,12 @@ _No parameters_
 
 **Returns:** `Task<NugetPushResponse>`
 
-### `nuget/get-package-versions`
+### `nuget/restore`
 | Parameter | Type | Optional |
 |-----------|------|----------|
-| packageId | string |   |
-| sources | List<string> | ✅  |
-| includePrerelease | bool | ✅  |
+| targetPath | string |   |
 
-**Returns:** `Task<IAsyncEnumerable<string>>`
+**Returns:** `Task<RestoreResult>`
 
 ### `nuget/search-packages`
 | Parameter | Type | Optional |
@@ -200,19 +200,20 @@ _No parameters_
 
 ## MsBuildController
 
+### `msbuild/add-project-reference`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+| targetPath | string |   |
+
+**Returns:** `Task<bool>`
+
 ### `msbuild/build`
 | Parameter | Type | Optional |
 |-----------|------|----------|
 | request | BuildRequest |   |
 
 **Returns:** `Task<BuildResultResponse>`
-
-### `msbuild/project-properties`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| request | ProjectPropertiesRequest |   |
-
-**Returns:** `Task<DotnetProject>`
 
 ### `msbuild/list-project-reference`
 | Parameter | Type | Optional |
@@ -221,13 +222,12 @@ _No parameters_
 
 **Returns:** `Task<List<string>>`
 
-### `msbuild/add-project-reference`
+### `msbuild/project-properties`
 | Parameter | Type | Optional |
 |-----------|------|----------|
-| projectPath | string |   |
-| targetPath | string |   |
+| request | ProjectPropertiesRequest |   |
 
-**Returns:** `Task<bool>`
+**Returns:** `Task<DotnetProject>`
 
 ### `msbuild/remove-project-reference`
 | Parameter | Type | Optional |
