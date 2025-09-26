@@ -9,7 +9,7 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace EasyDotnet.Services;
 
-public partial class MsBuildService(IVisualStudioLocator locator, IClientService clientService, IProcessQueue processQueue, IMemoryCache memoryCache, INotificationService notificationService) : IMsBuildService
+public partial class MsBuildService(IVisualStudioLocator locator, IClientService clientService, IProcessQueue processQueue, IMemoryCache memoryCache, INotificationService notificationService, ISolutionService solutionService) : IMsBuildService
 {
   public SdkInstallation[] QuerySdkInstallations()
   {
@@ -37,13 +37,97 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
     var (success, stdout, stderr) = await processQueue.RunProcessAsync(command, args, new ProcessOptions(true), cancellationToken);
 
     var (errors, warnings) = ParseBuildOutput(stdout, stderr);
+    var (errorsWithProject, warningsWithProject) = AddProjectToBuildMessages(targetPath, errors, warnings);
+
+    var orderedErrors = errorsWithProject
+        .OrderBy(e => e.Project)
+        .ThenBy(e => e.FilePath)
+        .ThenBy(e => e.LineNumber)
+        .ThenBy(e => e.ColumnNumber)
+        .ToList();
+
+    var orderedWarnings = warningsWithProject
+        .OrderBy(w => w.Project)
+        .ThenBy(w => w.FilePath)
+        .ThenBy(w => w.LineNumber)
+        .ThenBy(w => w.ColumnNumber)
+        .ToList();
 
     return new BuildResult(
-        success,
-        errors,
-        warnings
-    );
+            success,
+            orderedErrors,
+            orderedWarnings
+        );
   }
+
+  private static string NormalizePath(string path)
+  {
+    var fullPath = Path.GetFullPath(path);
+    return fullPath.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+  }
+
+  private (List<BuildMessageWithProject>, List<BuildMessageWithProject>) AddProjectToBuildMessages(
+    string targetPath,
+    IEnumerable<BuildMessage> errors,
+    IEnumerable<BuildMessage> warnings)
+  {
+    if (!errors.Any() && !warnings.Any())
+    {
+      return ([], []);
+    }
+
+    var projectMap = GetProjectMap(targetPath);
+
+    var map = new Func<IEnumerable<BuildMessage>, List<BuildMessageWithProject>>(messages =>
+        messages.Select(m => new BuildMessageWithProject(
+            m.Type,
+            m.FilePath,
+            m.LineNumber,
+            m.ColumnNumber,
+            m.Code,
+            m.Message,
+            AssignProject(m.FilePath, targetPath, projectMap)
+        )).ToList()
+    );
+
+    return (map(errors), map(warnings));
+  }
+
+
+  private static string? AssignProject(string filePath, string targetPath, Dictionary<string, string> projectMap)
+  {
+    var normalizedFilePath = NormalizePath(filePath);
+    var ext = Path.GetExtension(targetPath);
+
+    if (ext.Equals(".csproj", StringComparison.OrdinalIgnoreCase))
+      return Path.GetFileNameWithoutExtension(targetPath);
+
+    if (ext.Equals(".sln", StringComparison.OrdinalIgnoreCase))
+    {
+      return projectMap
+        .Where(kvp => normalizedFilePath.StartsWith(kvp.Value, StringComparison.OrdinalIgnoreCase))
+        .OrderByDescending(kvp => kvp.Value.Length)
+        .Select(kvp => kvp.Key)
+        .FirstOrDefault();
+    }
+
+    return null;
+  }
+
+  private Dictionary<string, string> GetProjectMap(string targetPath) =>
+    Path.GetExtension(targetPath).ToLowerInvariant() switch
+    {
+      ".csproj" => new Dictionary<string, string>
+      {
+        [Path.GetFileNameWithoutExtension(targetPath)] = NormalizePath(Path.GetDirectoryName(targetPath) ?? "")
+      },
+      ".sln" => solutionService.GetProjectsFromSolutionFile(targetPath)
+               .ToDictionary(
+                   p => Path.GetFileNameWithoutExtension(p.AbsolutePath),
+                   p => NormalizePath(Path.GetDirectoryName(p.AbsolutePath) ?? "")
+               ),
+      _ => throw new InvalidOperationException("Target must be a .csproj or .sln file")
+    };
 
   private class MsBuildPropertiesResponse
   {
