@@ -20,6 +20,47 @@
 
 ---
 
+## MsBuildController
+
+### `msbuild/build`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | BuildRequest |   |
+
+**Returns:** `Task<BuildResultResponse>`
+
+### `msbuild/project-properties`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | ProjectPropertiesRequest |   |
+
+**Returns:** `Task<DotnetProject>`
+
+### `msbuild/list-project-reference`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+
+**Returns:** `Task<List<string>>`
+
+### `msbuild/add-project-reference`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+| targetPath | string |   |
+
+**Returns:** `Task<bool>`
+
+### `msbuild/remove-project-reference`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+| targetPath | string |   |
+
+**Returns:** `Task<bool>`
+
+---
+
 ## LaunchProfileController
 
 ### `launch-profiles`
@@ -195,47 +236,6 @@ _No parameters_
 | sources | List<string> | ✅  |
 
 **Returns:** `Task<IAsyncEnumerable<NugetPackageMetadata>>`
-
----
-
-## MsBuildController
-
-### `msbuild/build`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| request | BuildRequest |   |
-
-**Returns:** `Task<BuildResultResponse>`
-
-### `msbuild/project-properties`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| request | ProjectPropertiesRequest |   |
-
-**Returns:** `Task<DotnetProject>`
-
-### `msbuild/list-project-reference`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| projectPath | string |   |
-
-**Returns:** `Task<List<string>>`
-
-### `msbuild/add-project-reference`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| projectPath | string |   |
-| targetPath | string |   |
-
-**Returns:** `Task<bool>`
-
-### `msbuild/remove-project-reference`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| projectPath | string |   |
-| targetPath | string |   |
-
-**Returns:** `Task<bool>`
 
 ---
 
