@@ -24,10 +24,6 @@ public class TemplateEngineService(IMsBuildService msBuildService)
   private const string FrameworkParamKey = "Framework";
   private const string TargetFrameworkOverrideParamKey = "TargetFrameworkOverride";
 
-  private static string GetTemplatesRoot() => RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-      ? @"C:\Program Files\dotnet\templates"
-      : Directory.Exists("/usr/share/dotnet/templates") ? "/usr/share/dotnet/templates" : "/usr/local/share/dotnet/templates";
-
   public async Task EnsureInstalled()
   {
     using var bootstrapper = new Bootstrapper(
@@ -35,11 +31,10 @@ public class TemplateEngineService(IMsBuildService msBuildService)
         loadDefaultComponents: true,
         virtualizeConfiguration: false);
 
-
-    var paths = Directory.GetDirectories(GetTemplatesRoot()).ToList().Select(Path.GetFileName);
+    var templatesFolder = Path.Join(msBuildService.GetDotnetSdkBasePath(), "templates");
 
     var highestVersionDir =
-      Directory.GetDirectories(GetTemplatesRoot()).ToList()
+      Directory.GetDirectories(templatesFolder).ToList()
         .Select(Path.GetFileName)
         .Where(name => Version.TryParse(name, out _))
         .OrderByDescending(name => Version.Parse(name ?? ""))
@@ -50,7 +45,7 @@ public class TemplateEngineService(IMsBuildService msBuildService)
       return;
     }
 
-    var fullPath = Path.Combine(GetTemplatesRoot(), highestVersionDir);
+    var fullPath = Path.Combine(templatesFolder, highestVersionDir);
     var nupkgs = Directory.GetFiles(fullPath, "*.nupkg");
 
     var existingPackageNames = new HashSet<string>(

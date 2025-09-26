@@ -20,6 +20,8 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
     return monikers;
   }
 
+  public string GetDotnetSdkBasePath() => Path.GetDirectoryName(Path.GetDirectoryName(QuerySdkInstallations().First().MSBuildPath)!)!;
+
   public async Task<BuildResult> RequestBuildAsync(
          string targetPath,
          string? targetFrameworkMoniker,
