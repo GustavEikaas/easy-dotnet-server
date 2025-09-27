@@ -1,0 +1,50 @@
+name: Build Release with Roslyn
+description: "Build .NET tool in Release and inject Roslyn LSP DLLs into Tools folder"
+
+inputs:
+  roslynPackageId:
+    description: 'NuGet package ID for Roslyn LSP'
+    required: true
+    default: 'Microsoft.CodeAnalysis.LanguageServer.neutral'
+  roslynPackageVersion:
+    description: 'NuGet package version for Roslyn LSP'
+    required: true
+    default: '5.1.0-1.25477.1'
+  roslynOutputPath:
+    description: 'Where to copy Roslyn DLLs inside project output'
+    required: true
+    default: './EasyDotnet.IDE/bin/Release/net8.0/Tools'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Restore dependencies
+      shell: bash
+      run: dotnet restore
+
+    - name: Build Release
+      shell: bash
+      run: dotnet build -c Release --no-restore
+
+    - name: Download Roslyn LSP package
+      shell: bash
+      run: |
+        mkdir -p artifacts/roslyn
+        curl -L -o artifacts/roslyn/roslyn.nupkg \
+          "https://pkgs.dev.azure.com/azure-public/vside/_apis/packaging/feeds/vs-impl/nuget/packages/${{ inputs.roslynPackageId }}/versions/${{ inputs.roslynPackageVersion }}/content?api-version=6.0-preview.1"
+
+    - name: Extract Roslyn LSP content to Tools folder
+      shell: bash
+      run: |
+        mkdir -p ${{ inputs.roslynOutputPath }}
+        unzip -o artifacts/roslyn/roslyn.nupkg -d artifacts/roslyn/extracted
+        cp -r artifacts/roslyn/extracted/content/LanguageServer/neutral/* ${{ inputs.roslynOutputPath }}
+

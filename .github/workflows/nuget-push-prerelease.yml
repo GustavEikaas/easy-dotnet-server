@@ -24,8 +24,8 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
-      - name: Build
-        run: dotnet build -c Release --no-restore
+      - name: Build Release + Inject Roslyn
+        uses: ./.github/actions/build-release-with-roslyn
 
       - name: Resolve version
         id: get_version

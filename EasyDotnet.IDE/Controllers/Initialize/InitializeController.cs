@@ -6,14 +6,15 @@ using System.Reflection;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
-using EasyDotnet.Controllers.Initialize;
 using EasyDotnet.IDE.Utils;
+using EasyDotnet.Infrastructure.Services;
 using EasyDotnet.Notifications;
+using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Controllers.Initialize;
 
-public class InitializeController(IClientService clientService, IVisualStudioLocator locator, IMsBuildService msBuildService) : BaseController
+public class InitializeController(ILogger<InitializeController> logger, ILogger<RoslynProxy> logger1, IClientService clientService, IVisualStudioLocator locator, IMsBuildService msBuildService) : BaseController
 {
   [JsonRpcMethod("initialize")]
   public async Task<InitializeResponse> Initialize(InitializeRequest request)
@@ -38,6 +39,7 @@ public class InitializeController(IClientService clientService, IVisualStudioLoc
       }
     }
     Directory.SetCurrentDirectory(request.ProjectInfo.RootDir);
+    var roslynPipe = StartLspAndReturnPipenameIfEnabled(request.Options?.UseRoslynLsp ?? false);
     clientService.IsInitialized = true;
     clientService.ProjectInfo = request.ProjectInfo;
     clientService.ClientInfo = request.ClientInfo;
@@ -52,9 +54,31 @@ public class InitializeController(IClientService clientService, IVisualStudioLoc
 
     return new InitializeResponse(
         new ServerInfo("EasyDotnet", serverVersion.ToString()),
-        new ServerCapabilities(GetRpcPaths(), GetRpcNotifications(), supportsSingleFileExecution),
+        new ServerCapabilities(GetRpcPaths(), GetRpcNotifications(), supportsSingleFileExecution, roslynPipe),
         new ToolPaths(await TryGetMsBuildPath(locator))
         );
+  }
+
+  private string? StartLspAndReturnPipenameIfEnabled(bool startLsp)
+  {
+    if (startLsp)
+    {
+      var pipeName = PipeUtils.GeneratePipeName();
+      var proxy = new RoslynProxy(pipeName, logger1);
+      _ = Task.Run(async () =>
+      {
+        try
+        {
+          await proxy.StartAsync();
+        }
+        catch (Exception e)
+        {
+          logger1.LogError("Failed to start roslyn {e}", e);
+        }
+      });
+      return pipeName;
+    }
+    return null;
   }
 
   private static async Task<string?> TryGetMsBuildPath(IVisualStudioLocator locator)

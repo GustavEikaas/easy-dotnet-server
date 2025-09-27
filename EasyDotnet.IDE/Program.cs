@@ -4,7 +4,6 @@ using System.IO;
 using System.IO.Pipes;
 using System.Linq;
 using System.Reflection;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 using EasyDotnet;
@@ -12,8 +11,6 @@ using EasyDotnet.IDE;
 
 class Program
 {
-  private const int MaxPipeNameLength = 104;
-
   public static async Task<int> Main(string[] args)
   {
     if (args.Contains("-v"))
@@ -72,12 +69,11 @@ class Program
   private static string GeneratePipeName()
   {
 #if DEBUG 
-    return "EasyDotnet_ROcrjwn9kiox3tKvRWcQg";
+    var pipe = "EasyDotnet_ROcrjwn9kiox3tKvRWcQg";
+    return pipe;
 #else
-    var pipePrefix = "CoreFxPipe_";
-    var pipeName = "EasyDotnet_" + Regex.Replace(Convert.ToBase64String(Guid.NewGuid().ToByteArray()), "[/+=]", "");
-    var maxNameLength = MaxPipeNameLength - Path.GetTempPath().Length - pipePrefix.Length - 1;
-    return pipeName[..Math.Min(pipeName.Length, maxNameLength)];
+    var pipe = PipeUtils.GeneratePipeName();
+    return pipe;
 #endif
   }
 
