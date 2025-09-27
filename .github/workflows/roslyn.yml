@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore NuGet packages
+        run: dotnet restore
+
+      # --- Download Roslyn LSP DLL directly ---
+      - name: Download Microsoft.CodeAnalysis.LanguageServer.dll
+        run: |
+          mkdir -p bin/Debug/net8.0
+          curl -L -o bin/Debug/net8.0/Microsoft.CodeAnalysis.LanguageServer.dll "https://pkgs.dev.azure.com/azure-public/vside/_apis/packaging/feeds/vs-impl/nuget/packages/Microsoft.CodeAnalysis.LanguageServer.neutral/versions/5.1.0-1.25477.1/content?api-version=6.0-preview.1"
+
+      - name: List build output folder
+        run: |
+          echo "Contents of bin/Debug/net8.0:"
+          ls -la bin/Debug/net8.0/
