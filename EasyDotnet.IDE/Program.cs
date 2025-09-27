@@ -9,7 +9,6 @@ using System.Threading.Tasks;
 
 using EasyDotnet;
 using EasyDotnet.IDE;
-using EasyDotnet.Infrastructure.Services;
 
 class Program
 {
@@ -22,12 +21,6 @@ class Program
       var assembly = Assembly.GetExecutingAssembly();
       var version = assembly.GetName().Version;
       Console.WriteLine($"Assembly Version: {version}");
-      return 0;
-    }
-
-    if (args.Contains("--roslyn"))
-    {
-      Console.WriteLine(RoslynLocator.GetRoslynDllPath());
       return 0;
     }
 

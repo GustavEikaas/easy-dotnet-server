@@ -17,8 +17,6 @@ namespace EasyDotnet.IDE.Controllers.Initialize;
 
 public class InitializeController(ILogger<InitializeController> logger, IClientService clientService, IVisualStudioLocator locator, IMsBuildService msBuildService) : BaseController
 {
-  // private const string RoslynDllPath = @"C:\Users\Gustav\AppData\Local\nvim-data\mason\packages\roslyn\libexec\Microsoft.CodeAnalysis.LanguageServer.dll";
-
   [JsonRpcMethod("initialize")]
   public async Task<InitializeResponse> Initialize(InitializeRequest request)
   {

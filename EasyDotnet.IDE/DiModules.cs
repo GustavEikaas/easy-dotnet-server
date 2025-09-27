@@ -68,7 +68,7 @@ public static class DiModules
     var logger = serviceProvider.GetRequiredService<ILogger<JsonRpc>>();
     jsonRpc.TraceSource.Switch.Level = levels;
     jsonRpc.TraceSource.Listeners.Clear();
-    jsonRpc.TraceSource.Listeners.Add(new JsonRpcLogger(logger, "easy-dotnet-server"));
+    jsonRpc.TraceSource.Listeners.Add(new JsonRpcLogger(logger));
 
     return serviceProvider;
   }
