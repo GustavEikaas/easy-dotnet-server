@@ -4,10 +4,10 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
-using EasyDotnet.Utils;
+using EasyDotnet.IDE.Utils;
 using StreamJsonRpc;
 
-namespace EasyDotnet;
+namespace EasyDotnet.IDE;
 
 public static class RpcDocGenerator
 {
@@ -98,6 +98,7 @@ public static class RpcDocGenerator
                   ReturnType = GetFriendlyTypeName(m.ReturnType)
                 };
               })
+              .OrderBy(m => m.RpcPath)
               .ToList();
 
           return new RpcApiDoc

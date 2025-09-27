@@ -25,6 +25,6 @@ public class LaunchProfileService : ILaunchProfileService
     var json = File.ReadAllText(launchSettingsPath) ?? throw new Exception($"Failed to read file {launchSettingsPath}");
 
     var settings = JsonSerializer.Deserialize<LaunchSettings>(json, DeserializerOptions);
-    return settings?.Profiles ?? [];
+    return settings?.Profiles?.OrderBy(p => p.Key).ToDictionary(p => p.Key, p => p.Value) ?? [];
   }
 }

@@ -7,14 +7,14 @@ using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
 using EasyDotnet.Controllers.Initialize;
+using EasyDotnet.IDE.Utils;
 using EasyDotnet.Notifications;
-using EasyDotnet.Utils;
 using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Controllers.Initialize;
 
-public class InitializeController(ILogger<InitializeController> logger, IClientService clientService, IVisualStudioLocator locator, INotificationService notificationService) : BaseController
+public class InitializeController(ILogger<InitializeController> logger, IClientService clientService, IVisualStudioLocator locator, IMsBuildService msBuildService) : BaseController
 {
   private const string RoslynDllPath = @"C:\Users\Gustav\AppData\Local\nvim-data\mason\packages\roslyn\libexec\Microsoft.CodeAnalysis.LanguageServer.dll";
 
@@ -56,9 +56,11 @@ public class InitializeController(ILogger<InitializeController> logger, IClientS
       clientService.ClientOptions = request.Options;
     }
 
+    var supportsSingleFileExecution = msBuildService.QuerySdkInstallations().Any(x => x.Version.Major >= 10);
+
     return new InitializeResponse(
         new ServerInfo("EasyDotnet", serverVersion.ToString()),
-        new ServerCapabilities(GetRpcPaths(), GetRpcNotifications()),
+        new ServerCapabilities(GetRpcPaths(), GetRpcNotifications(), supportsSingleFileExecution),
         new ToolPaths(await TryGetMsBuildPath(locator))
         );
   }

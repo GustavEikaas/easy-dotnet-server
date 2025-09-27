@@ -221,6 +221,7 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
 
   public async ValueTask DisposeAsync()
   {
+    _clientSeq = 0;
     if (_cancellationTokenSource?.IsCancellationRequested == false)
     {
       _cancellationTokenSource.Cancel();

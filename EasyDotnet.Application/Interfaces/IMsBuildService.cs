@@ -6,6 +6,13 @@ namespace EasyDotnet.Application.Interfaces;
 
 public interface IMsBuildService
 {
+  /// <summary>
+  /// Retrieves the base installation path for the .NET runtime (dotnet root).
+  /// This path is typically two directory levels above the MSBuild path, such as 
+  /// "C:\Program Files\dotnet" on Windows or "/usr/share/dotnet" on Unix systems.
+  /// </summary>
+  /// <returns>The root path of the dotnet installation.</returns>
+  string GetDotnetSdkBasePath();
   SdkInstallation[] QuerySdkInstallations();
   Task<bool> AddProjectReferenceAsync(string projectPath, string targetPath, CancellationToken cancellationToken = default);
   Task<DotnetProject> GetOrSetProjectPropertiesAsync(string projectPath, string? targetFrameworkMoniker = null, string configuration = "Debug", CancellationToken cancellationToken = default);
