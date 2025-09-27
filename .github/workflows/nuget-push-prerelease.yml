@@ -11,10 +11,6 @@ on:
 jobs:
   publish-prerelease:
     runs-on: ubuntu-latest
-    env:
-      ROSLYN_PACKAGE_ID: Microsoft.CodeAnalysis.LanguageServer.neutral
-      ROSLYN_PACKAGE_VERSION: 5.1.0-1.25477.1
-      ROSLYN_OUTPUT_PATH: ./EasyDotnet.IDE/bin/Release/net8.0/Tools
 
     steps:
       - name: Checkout repo
@@ -28,25 +24,8 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
-      - name: Build
-        run: dotnet build -c Release --no-restore
-
-      - name: Download Roslyn LSP package
-        run: |
-          mkdir -p artifacts/roslyn
-          curl -L -o artifacts/roslyn/roslyn.nupkg \
-            "https://pkgs.dev.azure.com/azure-public/vside/_apis/packaging/feeds/vs-impl/nuget/packages/${ROSLYN_PACKAGE_ID}/versions/${ROSLYN_PACKAGE_VERSION}/content?api-version=6.0-preview.1"
-
-      - name: Extract Roslyn LSP content to Tools folder
-        run: |
-          mkdir -p $ROSLYN_OUTPUT_PATH
-          unzip -o artifacts/roslyn/roslyn.nupkg -d artifacts/roslyn/extracted
-          cp -r artifacts/roslyn/extracted/content/LanguageServer/neutral/* $ROSLYN_OUTPUT_PATH
-
-      - name: List Tools folder contents
-        run: |
-          echo "Contents of Tools folder:"
-          ls -la $ROSLYN_OUTPUT_PATH
+      - name: Build Release + Inject Roslyn
+        uses: ./.github/actions/build-release-with-roslyn
 
       - name: Resolve version
         id: get_version
