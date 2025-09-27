@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.IDE;
 
-public sealed class RoslynProxy(string clientPipeName, string roslynDllPath, ILogger logger) : IAsyncDisposable
+public sealed class RoslynProxy(string clientPipeName, ILogger logger) : IAsyncDisposable
 {
   private NamedPipeServerStream? _clientPipe;
   private Process? _roslynProcess;
@@ -46,13 +46,13 @@ public sealed class RoslynProxy(string clientPipeName, string roslynDllPath, ILo
         "RoslynLogs");
     Directory.CreateDirectory(roslynLogDir);
     logger.LogInformation("Logging to {dir}", roslynLogDir);
-
+    var (fileName, arguments) = GetRoslynProcessStartInfo(roslynLogDir);
     _roslynProcess = new Process
     {
       StartInfo = new ProcessStartInfo
       {
-        FileName = "dotnet",
-        Arguments = $"\"{roslynDllPath}\" --stdio --logLevel=Information --extensionLogDirectory=\"{roslynLogDir}\"",
+        FileName = fileName,
+        Arguments = arguments,
         RedirectStandardInput = true,
         RedirectStandardOutput = true,
         RedirectStandardError = true,
@@ -75,6 +75,17 @@ public sealed class RoslynProxy(string clientPipeName, string roslynDllPath, ILo
     _roslynToClientTask = Task.Run(() => PumpAsync(_roslynProcess.StandardOutput.BaseStream, _clientPipe, _cts.Token));
 
     logger.LogInformation("Roslyn proxy attached and forwarding messages");
+  }
+
+
+  private (string FileName, string Arguments) GetRoslynProcessStartInfo(string roslynLogDir)
+  {
+#if DEBUG
+    return (@"C:\Users\Gustav\AppData\Local\nvim-data\mason\bin\roslyn.cmd", $"--stdio --logLevel=Information --extensionLogDirectory=\"{roslynLogDir}\"");
+#else
+    var roslynDllPath = RoslynLocator.GetRoslynDllPath();
+    return ("dotnet", $"\"{roslynDllPath}\" --stdio --logLevel=Information --extensionLogDirectory=\"{roslynLogDir}\"");
+#endif
   }
 
   private async Task PumpAsync(Stream input, Stream output, CancellationToken token)
