@@ -16,7 +16,7 @@ namespace EasyDotnet.IDE.Controllers.Initialize;
 
 public class InitializeController(ILogger<InitializeController> logger, IClientService clientService, IVisualStudioLocator locator, INotificationService notificationService) : BaseController
 {
-  private const string RoslynDllPath = @"C:\Users\gusta\Desktop\Roslyn\content\LanguageServer\neutral\Microsoft.CodeAnalysis.LanguageServer.dll";
+  private const string RoslynDllPath = @"C:\Users\Gustav\AppData\Local\nvim-data\mason\packages\roslyn\libexec\Microsoft.CodeAnalysis.LanguageServer.dll";
 
   [JsonRpcMethod("initialize")]
   public async Task<InitializeResponse> Initialize(InitializeRequest request)
@@ -43,7 +43,7 @@ public class InitializeController(ILogger<InitializeController> logger, IClientS
     Directory.SetCurrentDirectory(request.ProjectInfo.RootDir);
     _ = Task.Run(async () =>
     {
-      var proxy = new RoslynProxy("EasyDotnet_ClientPipe", RoslynDllPath, logger, clientService, notificationService);
+      var proxy = new RoslynProxy("EasyDotnet_ClientPipe", RoslynDllPath, logger);
       await proxy.StartAsync();
     });
     clientService.IsInitialized = true;

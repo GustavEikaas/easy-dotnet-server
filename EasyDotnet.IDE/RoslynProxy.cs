@@ -1,128 +1,154 @@
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
+using System.Threading;
 using System.Threading.Tasks;
-using EasyDotnet.Application.Interfaces;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json.Serialization;
-using StreamJsonRpc;
 
 namespace EasyDotnet.IDE;
 
-public class RoslynProxy(string clientPipeName, string roslynDllPath, ILogger logger, IClientService clientService, INotificationService notificationService)
+public sealed class RoslynProxy(string clientPipeName, string roslynDllPath, ILogger logger) : IAsyncDisposable
 {
+    private NamedPipeServerStream? _clientPipe;
+    private Process? _roslynProcess;
+    private Task? _clientToRoslynTask;
+    private Task? _roslynToClientTask;
+    private readonly CancellationTokenSource _cts = new();
+    private Task? _disposeTask;
 
-  private static JsonMessageFormatter CreateJsonMessageFormatter() => new()
-  {
-    JsonSerializer = { ContractResolver = new DefaultContractResolver
+    public async Task StartAsync()
+    {
+        if (_disposeTask != null)
+        {
+            logger.LogInformation("Waiting for previous Roslyn session to fully dispose...");
+            try
             {
-                NamingStrategy = new CamelCaseNamingStrategy()
-            }}
-  };
-  private NamedPipeServerStream? _clientPipe;
-  private JsonRpc? _clientRpc;
-  private JsonRpc? _roslynRpc;
+                await _disposeTask;
+            }
+            catch { }
+        }
 
-  public async Task StartAsync()
-  {
-    logger.LogInformation("Waiting for EasyDotnet client...");
-    _clientPipe = new NamedPipeServerStream(clientPipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
-    await _clientPipe.WaitForConnectionAsync();
-    logger.LogInformation("Client connected");
-    var roslynLogDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "EasyDotnet", "RoslynLogs");
-    logger.LogInformation("Logging to {dir}", roslynLogDir);
-    Directory.CreateDirectory(roslynLogDir);
-    var roslynProcess = new Process
+        logger.LogInformation("Waiting for EasyDotnet client...");
+        _clientPipe = new NamedPipeServerStream(
+            clientPipeName,
+            PipeDirection.InOut,
+            1,
+            PipeTransmissionMode.Byte,
+            PipeOptions.Asynchronous);
+
+        await _clientPipe.WaitForConnectionAsync(_cts.Token);
+        logger.LogInformation("Client connected");
+
+        var roslynLogDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "EasyDotnet",
+            "RoslynLogs");
+        Directory.CreateDirectory(roslynLogDir);
+        logger.LogInformation("Logging to {dir}", roslynLogDir);
+
+        _roslynProcess = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "dotnet",
+                Arguments = $"\"{roslynDllPath}\" --stdio --logLevel=Information --extensionLogDirectory=\"{roslynLogDir}\"",
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            },
+            EnableRaisingEvents = true
+        };
+
+        _roslynProcess.ErrorDataReceived += (s, e) =>
+        {
+            if (!string.IsNullOrEmpty(e.Data))
+                logger.LogError("[Roslyn-STDERR] {Message}", e.Data);
+        };
+
+        _roslynProcess.Start();
+        _roslynProcess.BeginErrorReadLine();
+
+        _clientToRoslynTask = Task.Run(() => PumpAsync(_clientPipe, _roslynProcess.StandardInput.BaseStream, _cts.Token));
+        _roslynToClientTask = Task.Run(() => PumpAsync(_roslynProcess.StandardOutput.BaseStream, _clientPipe, _cts.Token));
+
+        logger.LogInformation("Roslyn proxy attached and forwarding messages");
+    }
+
+    private async Task PumpAsync(Stream input, Stream output, CancellationToken token)
     {
-      StartInfo = new ProcessStartInfo
-      {
-        FileName = "dotnet",
-        Arguments = $"\"{roslynDllPath}\" --stdio --logLevel=Information --extensionLogDirectory=\"{roslynLogDir}\"",
-        RedirectStandardInput = true,
-        RedirectStandardOutput = true,
-        RedirectStandardError = true,
-        UseShellExecute = false,
-        CreateNoWindow = true
-      },
-      EnableRaisingEvents = true
-    };
-    // Capture stderr
-    roslynProcess.ErrorDataReceived += (s, e) =>
+        try
+        {
+            await input.CopyToAsync(output, 81920, token);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Stream pump failed between {input} and {output}", input, output);
+        }
+    }
+
+    private void SafeDisposeProcess(Process? process, string processName)
     {
-      if (!string.IsNullOrEmpty(e.Data))
-        logger.LogError("[Roslyn-STDERR] {Message}", e.Data);
-    };
-    roslynProcess.Start();
-    roslynProcess.BeginErrorReadLine(); // optional logging
-    roslynProcess.ErrorDataReceived += (s, e) =>
+        if (process == null) return;
+
+        try
+        {
+            if (!process.HasExited)
+            {
+                process.Kill();
+                logger.LogInformation("Killed {processName} process", processName);
+            }
+            else
+            {
+                logger.LogInformation("{processName} process already exited", processName);
+            }
+        }
+        catch (InvalidOperationException)
+        {
+            logger.LogInformation("{processName} process already exited", processName);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to kill {processName} process", processName);
+        }
+        finally
+        {
+            try
+            {
+                process.Dispose();
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to dispose {processName} process", processName);
+            }
+        }
+    }
+
+    public async ValueTask DisposeAsync()
     {
-      if (!string.IsNullOrEmpty(e.Data))
-        logger.LogError("[Roslyn LSP] {Message}", e.Data);
-    };
+        _disposeTask = Task.Run(async () =>
+        {
+            _cts.Cancel();
 
-    // Attach JSON-RPC
-    //
-    var clientHandler = new HeaderDelimitedMessageHandler(_clientPipe, _clientPipe, CreateJsonMessageFormatter());
-    _clientRpc = new JsonRpc(clientHandler);
+            if (_clientToRoslynTask != null)
+                await Task.WhenAny(_clientToRoslynTask, Task.Delay(2000));
 
-    var handler = new HeaderDelimitedMessageHandler(roslynProcess.StandardInput.BaseStream, roslynProcess.StandardOutput.BaseStream, CreateJsonMessageFormatter());
-    _roslynRpc = new JsonRpc(handler);
+            if (_roslynToClientTask != null)
+                await Task.WhenAny(_roslynToClientTask, Task.Delay(2000));
 
-    _clientRpc.AddRemoteRpcTarget(_roslynRpc);
-    _roslynRpc.AddRemoteRpcTarget(_clientRpc);
-    // var sln = Path.GetFullPath(clientService.ProjectInfo!.SolutionFile!);
-    var sln = clientService.ProjectInfo!.SolutionFile!;
-    _clientRpc.AddLocalRpcTarget(new ClientInitializedHandler(_roslynRpc, sln, logger));
-    _roslynRpc.AddLocalRpcTarget(new RoslynNotificationInterceptor(_clientRpc, logger, notificationService));
+            SafeDisposeProcess(_roslynProcess, "roslyn");
 
-    _roslynRpc.TraceSource.Switch.Level = SourceLevels.Verbose;
-    _clientRpc.TraceSource.Switch.Level = SourceLevels.Verbose;
-    // var serverToClientRpc = new JsonRpc(clientStream, new ClientTarget());
-    // var serverToRemoteRpc = new JsonRpc(remoteStream, new RemoteTarget());
-    //
-    // // Forward all messages from client to Roslyn
-    // serverToClientRpc.AddRemoteTarget(serverToRemoteRpc);
-    //
-    // // Forward all messages from Roslyn to client
-    // serverToRemoteRpc.AddRemoteTarget(serverToClientRpc);
-    // Forward messages client -> Roslyn
-    // _clientRpc.AddLocalRpcTarget(new ProxyForwarder(_roslynRpc));
-    // // Forward messages Roslyn -> client
-    // _roslynRpc.AddLocalRpcTarget(new ProxyForwarder(_clientRpc));
+            if (_clientPipe is not null)
+            {
+                await _clientPipe.DisposeAsync();
+            }
 
-    _roslynRpc.TraceSource.Listeners.Add(new JsonRpcLogger(logger, "roslyn"));
-    _clientRpc.TraceSource.Listeners.Add(new JsonRpcLogger(logger, "neovim-client"));
-    _clientRpc.StartListening();
-    _roslynRpc.StartListening();
-    logger.LogInformation("Roslyn proxy attached and forwarding messages");
-  }
-}
+            _cts.Dispose();
+        });
 
-public sealed record SolutionOpenNotification(string Solution);
-
-public class ClientInitializedHandler(JsonRpc roslynRpc, string solutionPath, ILogger logger)
-{
-  [JsonRpcMethod("initialized")]
-  public async Task OnClientInitialized()
-  {
-    logger.LogInformation("Client initialized, sending solution/open to Roslyn: {solution}", solutionPath);
-    await roslynRpc.NotifyWithParameterObjectAsync("solution/open", new SolutionOpenNotification("file:///C:/Users/gusta/repo/easy-dotnet-server-test/EasyDotnet.sln"));
-  }
-}
-
-public class RoslynNotificationInterceptor(JsonRpc clientRpc, ILogger logger, INotificationService notificationService)
-{
-  [JsonRpcMethod("workspace/projectInitializationComplete")]
-  public async Task OnProjectInitializationComplete()
-  {
-    logger.LogInformation("Roslyn finished loading solution/project.");
-
-    // Forward to client
-    await notificationService.LspReady();
-    await clientRpc.NotifyAsync("workspace/projectInitializationComplete", new { });
-
-    // Additional server-side logic here
-  }
+        await _disposeTask;
+    }
 }
