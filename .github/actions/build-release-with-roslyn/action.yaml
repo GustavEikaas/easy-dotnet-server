@@ -34,17 +34,27 @@ runs:
       shell: bash
       run: dotnet build -c Release --no-restore
 
-    - name: Download Roslyn LSP package
+    - name: Download and Extract Roslyn DLLs
       shell: bash
       run: |
+        ROSLYN_PACKAGE_ID="${{ inputs.roslynPackageId }}"
+        ROSLYN_PACKAGE_VERSION="${{ inputs.roslynPackageVersion }}"
+        ROSLYNATOR_VERSION=4.14.0
+        OUTPUT_PATH="${{ inputs.roslynOutputPath }}/Roslyn"
+        
+        mkdir -p "$OUTPUT_PATH/LanguageServer"
+        mkdir -p "$OUTPUT_PATH/Analyzers"
+
         mkdir -p artifacts/roslyn
         curl -L -o artifacts/roslyn/roslyn.nupkg \
-          "https://pkgs.dev.azure.com/azure-public/vside/_apis/packaging/feeds/vs-impl/nuget/packages/${{ inputs.roslynPackageId }}/versions/${{ inputs.roslynPackageVersion }}/content?api-version=6.0-preview.1"
+          "https://pkgs.dev.azure.com/azure-public/vside/_apis/packaging/feeds/vs-impl/nuget/packages/${ROSLYN_PACKAGE_ID}/versions/${ROSLYN_PACKAGE_VERSION}/content?api-version=6.0-preview.1"
 
-    - name: Extract Roslyn LSP content to Tools folder
-      shell: bash
-      run: |
-        mkdir -p ${{ inputs.roslynOutputPath }}
         unzip -o artifacts/roslyn/roslyn.nupkg -d artifacts/roslyn/extracted
-        cp -r artifacts/roslyn/extracted/content/LanguageServer/neutral/* ${{ inputs.roslynOutputPath }}
+        cp -r artifacts/roslyn/extracted/content/LanguageServer/neutral/* "$OUTPUT_PATH/LanguageServer/"
 
+        mkdir -p artifacts/roslynator
+        curl -L -o artifacts/roslynator/roslynator.nupkg \
+          "https://www.nuget.org/api/v2/package/Roslynator.Analyzers/${ROSLYNATOR_VERSION}"
+
+        unzip -o artifacts/roslynator/roslynator.nupkg -d artifacts/roslynator/extracted
+        cp artifacts/roslynator/extracted/analyzers/dotnet/roslyn4.7/cs/*.dll "$OUTPUT_PATH/Analyzers/"
