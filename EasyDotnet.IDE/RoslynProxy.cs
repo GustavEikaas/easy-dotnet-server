@@ -2,9 +2,11 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 #if RELEASE
+using System.Linq;
 using EasyDotnet.Infrastructure.Services;
 #endif
 using Microsoft.Extensions.Logging;
