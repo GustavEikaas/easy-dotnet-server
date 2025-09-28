@@ -80,14 +80,18 @@ public sealed class RoslynProxy(string clientPipeName, ILogger logger) : IAsyncD
     logger.LogInformation("Roslyn proxy attached and forwarding messages");
   }
 
-
-  private (string FileName, string Arguments) GetRoslynProcessStartInfo(string roslynLogDir)
+  private static (string FileName, string Arguments) GetRoslynProcessStartInfo(string roslynLogDir)
   {
 #if DEBUG
     return (@"C:\Users\Gustav\AppData\Local\nvim-data\mason\bin\roslyn.cmd", $"--stdio --logLevel=Information --extensionLogDirectory=\"{roslynLogDir}\"");
 #else
     var roslynDllPath = RoslynLocator.GetRoslynDllPath();
-    return ("dotnet", $"\"{roslynDllPath}\" --stdio --logLevel=Information --extensionLogDirectory=\"{roslynLogDir}\"");
+    var analyzerArgs = string.Join(" ", 
+        RoslynLocator.GetRoslynatorAnalyzers()
+                      .Select(dll => $"--extension \"{dll}\""));
+
+    var args = $"\"{roslynDllPath}\" --stdio --logLevel=Information --extensionLogDirectory=\"{roslynLogDir}\" {analyzerArgs}";
+    return ("dotnet", args);
 #endif
   }
 
