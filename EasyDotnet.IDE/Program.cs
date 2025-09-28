@@ -5,6 +5,9 @@ using System.IO.Pipes;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
+#if RELEASE
+using EasyDotnet.IDE.Utils;
+#endif
 
 using EasyDotnet;
 using EasyDotnet.IDE;

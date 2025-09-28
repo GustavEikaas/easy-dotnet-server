@@ -4,6 +4,9 @@ using System.IO;
 using System.IO.Pipes;
 using System.Threading;
 using System.Threading.Tasks;
+#if RELEASE
+using EasyDotnet.Infrastructure.Services;
+#endif
 using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.IDE;
