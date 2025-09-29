@@ -2,7 +2,6 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 #if RELEASE
@@ -82,6 +81,7 @@ public sealed class RoslynProxy(string clientPipeName, ILogger logger) : IAsyncD
     logger.LogInformation("Roslyn proxy attached and forwarding messages");
   }
 
+
   private static (string FileName, string Arguments) GetRoslynProcessStartInfo(string roslynLogDir)
   {
 #if DEBUG
@@ -107,6 +107,11 @@ public sealed class RoslynProxy(string clientPipeName, ILogger logger) : IAsyncD
     catch (Exception ex)
     {
       logger.LogWarning(ex, "Stream pump failed between {input} and {output}", input, output);
+    }
+    finally
+    {
+      logger.LogInformation("Disposing Roslyn LSP");
+      await DisposeAsync();
     }
   }
 
