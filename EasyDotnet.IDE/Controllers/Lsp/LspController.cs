@@ -11,7 +11,7 @@ public class LspController(ILogger<LspController> logger) : BaseController
 {
   public sealed record LspStartResponse(string Pipe);
   [JsonRpcMethod("lsp/start")]
-  public async Task<LspStartResponse> StartLsp(bool useRoslynator, string[] analyzerAssemblies, CancellationToken cancellationToken)
+  public async Task<LspStartResponse> StartLsp(bool useRoslynator = true, string[]? analyzerAssemblies = null, CancellationToken cancellationToken = default)
   {
     var pipeName = PipeUtils.GeneratePipeName();
     var proxy = new RoslynProxy(pipeName, logger);
