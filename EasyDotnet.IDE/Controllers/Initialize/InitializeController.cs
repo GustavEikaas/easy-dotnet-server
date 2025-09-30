@@ -6,7 +6,6 @@ using System.Reflection;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
-using EasyDotnet.Controllers.Initialize;
 using EasyDotnet.IDE.Utils;
 using EasyDotnet.Notifications;
 using StreamJsonRpc;

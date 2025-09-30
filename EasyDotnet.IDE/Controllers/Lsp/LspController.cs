@@ -1,0 +1,23 @@
+using System.Threading;
+using System.Threading.Tasks;
+using EasyDotnet.Controllers;
+using EasyDotnet.IDE.Utils;
+using Microsoft.Extensions.Logging;
+using StreamJsonRpc;
+
+namespace EasyDotnet.IDE.Controllers.Lsp;
+
+public class LspController(ILogger<LspController> logger) : BaseController
+{
+  public sealed record LspStartResponse(string Pipe);
+  [JsonRpcMethod("lsp/start")]
+  public async Task<LspStartResponse> StartLsp(bool useRoslynator = true, string[]? analyzerAssemblies = null, CancellationToken cancellationToken = default)
+  {
+    var pipeName = PipeUtils.GeneratePipeName();
+    var proxy = new RoslynProxy(pipeName, logger);
+
+    await proxy.StartAsync(new(useRoslynator, analyzerAssemblies));
+
+    return new(pipeName);
+  }
+}

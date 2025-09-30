@@ -6,7 +6,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>dotnet-easydotnet</ToolCommandName>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
-    <Version>2.2.29</Version>
+    <Version>2.3.0</Version>
     <Authors>Gustav Eikaas</Authors>
     <PackageId>EasyDotnet</PackageId>
     <Nullable>enable</Nullable>
@@ -17,6 +17,7 @@
   <ItemGroup>
     <None Include="..\LICENSE" Pack="true" PackagePath="" />
     <None Include="..\README.md" Pack="true" PackagePath="" />
+    <None Include="bin\Release\net8.0\Tools\**\*" Pack="true" PackagePath="tools/" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="DotNetOutdatedTool.Core" Version="4.6.8" />

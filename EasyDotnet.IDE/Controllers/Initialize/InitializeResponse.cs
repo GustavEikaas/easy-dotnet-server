@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace EasyDotnet.Controllers.Initialize;
+namespace EasyDotnet.IDE.Controllers.Initialize;
 
 public sealed record ServerInfo(string Name, string Version);
 

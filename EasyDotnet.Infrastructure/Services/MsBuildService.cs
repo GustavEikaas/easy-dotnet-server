@@ -15,12 +15,10 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
   {
     MSBuildLocator.AllowQueryAllRuntimeVersions = true;
     var instances = MSBuildLocator.QueryVisualStudioInstances().Where(x => x.DiscoveryType == DiscoveryType.DotNetSdk).ToList();
-    var monikers = instances.Select(x => new SdkInstallation(x.Name, $"net{x.Version.Major}.0", x.Version, x.MSBuildPath, x.VisualStudioRootPath)).ToArray();
-
-    return monikers;
+    return [.. instances.Select(x => new SdkInstallation(x.Name, $"net{x.Version.Major}.0", x.Version, x.MSBuildPath, x.VisualStudioRootPath))];
   }
 
-  public string GetDotnetSdkBasePath() => Path.GetDirectoryName(Path.GetDirectoryName(QuerySdkInstallations().First().MSBuildPath)!)!;
+  public string GetDotnetSdkBasePath() => Path.GetDirectoryName(Path.GetDirectoryName(QuerySdkInstallations().First().MSBuildPath))!;
 
   public async Task<BuildResult> RequestBuildAsync(
          string targetPath,
@@ -153,7 +151,7 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
       string configuration = "Debug",
       CancellationToken cancellationToken = default) => await memoryCache.GetOrCreateAsync(
         GetCacheKeyProperties(projectPath, targetFrameworkMoniker, configuration),
-        entry => GetProjectPropertiesAsync(projectPath, targetFrameworkMoniker, configuration, cancellationToken)
+        _ => GetProjectPropertiesAsync(projectPath, targetFrameworkMoniker, configuration, cancellationToken)
     ) ?? throw new Exception("Failed to get project properties");
 
   private static string GetCacheKeyProperties(string projectPath, string? targetFrameworkMoniker, string configuration) => $"{projectPath}-{targetFrameworkMoniker ?? ""}-{configuration ?? ""}";
@@ -214,7 +212,7 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
 
     var nugetVersion = TryGet("Version");
     var targetFrameworkVersion = TryGet("TargetFrameworkVersion");
-    var isNetFramework = targetFrameworkVersion is not null && targetFrameworkVersion.StartsWith("v4");
+    var isNetFramework = targetFrameworkVersion?.StartsWith("v4") == true;
     var useIISExpress = TryGetBool("UseIISExpress");
     var targetPath = TryGet("TargetPath");
     var projectName = Path.GetFileNameWithoutExtension(projectPath);
@@ -222,8 +220,6 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
     return new DotnetProject(
         ProjectName: projectName,
         Language: GetLanguage(projectPath),
-        IsWebProject: TryGetBool("UsingMicrosoftNETSdkWeb"),
-        IsWorkerProject: TryGetBool("UsingMicrosoftNETSdkWorker"),
         OutputPath: TryGet("OutputPath"),
         OutputType: TryGet("OutputType"),
         TargetExt: TryGet("TargetExt"),
@@ -231,13 +227,15 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
         TargetFramework: tfm,
         TargetFrameworks: TryGet("TargetFrameworks")?.Split(';', StringSplitOptions.RemoveEmptyEntries),
         IsTestProject: TryGetBool("IsTestProject"),
+        IsWebProject: TryGetBool("UsingMicrosoftNETSdkWeb"),
+        IsWorkerProject: TryGetBool("UsingMicrosoftNETSdkWorker"),
         UserSecretsId: TryGet("UserSecretsId"),
         TestingPlatformDotnetTestSupport: TryGetBool("TestingPlatformDotnetTestSupport"),
         TargetPath: TryGet("TargetPath"),
-        LangVersion: TryGet("LangVersion"),
-        RootNamespace: TryGet("RootNamespace"),
         GeneratePackageOnBuild: TryGetBool("GeneratePackageOnBuild"),
         IsPackable: TryGetBool("IsPackable"),
+        LangVersion: TryGet("LangVersion"),
+        RootNamespace: TryGet("RootNamespace"),
         PackageId: TryGet("PackageId"),
         NugetVersion: string.IsNullOrWhiteSpace(nugetVersion) ? null : nugetVersion,
         Version: targetFrameworkVersion,
@@ -246,9 +244,8 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
         IsNetFramework: isNetFramework,
         UseIISExpress: useIISExpress,
         RunCommand: await BuildRunCommand(!isNetFramework, useIISExpress, targetPath, projectPath, projectName),
-        TestCommand: BuildTestCommand(!isNetFramework, targetPath, projectPath),
-        BuildCommand: await BuildBuildCommand(!isNetFramework, projectPath)
-    );
+        BuildCommand: await BuildBuildCommand(!isNetFramework, projectPath),
+        TestCommand: BuildTestCommand(!isNetFramework, targetPath, projectPath));
   }
 
   public async Task<List<string>> GetProjectReferencesAsync(string projectPath, CancellationToken cancellationToken = default)
@@ -271,14 +268,11 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
 
     var projectDir = Path.GetDirectoryName(projectPath)!;
 
-    var references = stdOut
+    return [.. stdOut
         .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
         .Select(line => line.Trim())
         .Where(line => line.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) || line.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase))
-        .Select(relativePath => Path.GetFullPath(Path.Combine(projectDir, relativePath)))
-        .ToList();
-
-    return references;
+        .Select(relativePath => Path.GetFullPath(Path.Combine(projectDir, relativePath)))];
   }
 
 

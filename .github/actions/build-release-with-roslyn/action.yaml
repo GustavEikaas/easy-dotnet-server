@@ -1,0 +1,60 @@
+name: Build Release with Roslyn
+description: "Build .NET tool in Release and inject Roslyn LSP DLLs into Tools folder"
+
+inputs:
+  roslynPackageId:
+    description: 'NuGet package ID for Roslyn LSP'
+    required: true
+    default: 'Microsoft.CodeAnalysis.LanguageServer.neutral'
+  roslynPackageVersion:
+    description: 'NuGet package version for Roslyn LSP'
+    required: true
+    default: '5.1.0-1.25477.1'
+  roslynOutputPath:
+    description: 'Where to copy Roslyn DLLs inside project output'
+    required: true
+    default: './EasyDotnet.IDE/bin/Release/net8.0/Tools'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Restore dependencies
+      shell: bash
+      run: dotnet restore
+
+    - name: Build Release
+      shell: bash
+      run: dotnet build -c Release --no-restore
+
+    - name: Download and Extract Roslyn DLLs
+      shell: bash
+      run: |
+        ROSLYN_PACKAGE_ID="${{ inputs.roslynPackageId }}"
+        ROSLYN_PACKAGE_VERSION="${{ inputs.roslynPackageVersion }}"
+        ROSLYNATOR_VERSION=4.14.0
+        OUTPUT_PATH="${{ inputs.roslynOutputPath }}/Roslyn"
+        
+        mkdir -p "$OUTPUT_PATH/LanguageServer"
+        mkdir -p "$OUTPUT_PATH/Analyzers"
+
+        mkdir -p artifacts/roslyn
+        curl -L -o artifacts/roslyn/roslyn.nupkg \
+          "https://pkgs.dev.azure.com/azure-public/vside/_apis/packaging/feeds/vs-impl/nuget/packages/${ROSLYN_PACKAGE_ID}/versions/${ROSLYN_PACKAGE_VERSION}/content?api-version=6.0-preview.1"
+
+        unzip -o artifacts/roslyn/roslyn.nupkg -d artifacts/roslyn/extracted
+        cp -r artifacts/roslyn/extracted/content/LanguageServer/neutral/* "$OUTPUT_PATH/LanguageServer/"
+
+        mkdir -p artifacts/roslynator
+        curl -L -o artifacts/roslynator/roslynator.nupkg \
+          "https://www.nuget.org/api/v2/package/Roslynator.Analyzers/${ROSLYNATOR_VERSION}"
+
+        unzip -o artifacts/roslynator/roslynator.nupkg -d artifacts/roslynator/extracted
+        cp artifacts/roslynator/extracted/analyzers/dotnet/roslyn4.7/cs/*.dll "$OUTPUT_PATH/Analyzers/"
