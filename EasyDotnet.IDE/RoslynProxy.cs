@@ -1,9 +1,13 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using EasyDotnet.Infrastructure.Services;
+
 #if RELEASE
 using System.Linq;
 using EasyDotnet.Infrastructure.Services;
@@ -11,6 +15,8 @@ using EasyDotnet.Infrastructure.Services;
 using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.IDE;
+
+public sealed record RoslynProxyOptions(bool UseRoslynator, string[] AnalyzerAssemblies);
 
 public sealed class RoslynProxy(string clientPipeName, ILogger logger) : IAsyncDisposable
 {
@@ -21,7 +27,7 @@ public sealed class RoslynProxy(string clientPipeName, ILogger logger) : IAsyncD
   private readonly CancellationTokenSource _cts = new();
   private Task? _disposeTask;
 
-  public async Task StartAsync()
+  public async Task StartAsync(RoslynProxyOptions options)
   {
     if (_disposeTask != null)
     {
@@ -50,7 +56,7 @@ public sealed class RoslynProxy(string clientPipeName, ILogger logger) : IAsyncD
         "RoslynLogs");
     Directory.CreateDirectory(roslynLogDir);
     logger.LogInformation("Logging to {dir}", roslynLogDir);
-    var (fileName, arguments) = GetRoslynProcessStartInfo(roslynLogDir);
+    var (fileName, arguments) = GetRoslynProcessStartInfo(roslynLogDir, options);
     _roslynProcess = new Process
     {
       StartInfo = new ProcessStartInfo
@@ -82,19 +88,29 @@ public sealed class RoslynProxy(string clientPipeName, ILogger logger) : IAsyncD
   }
 
 
-  private static (string FileName, string Arguments) GetRoslynProcessStartInfo(string roslynLogDir)
+  private static (string FileName, string Arguments) GetRoslynProcessStartInfo(string roslynLogDir, RoslynProxyOptions options)
   {
 #if DEBUG
     return (@"C:\Users\Gustav\AppData\Local\nvim-data\mason\bin\roslyn.cmd", $"--stdio --logLevel=Information --extensionLogDirectory=\"{roslynLogDir}\"");
 #else
     var roslynDllPath = RoslynLocator.GetRoslynDllPath();
-    var analyzerArgs = string.Join(" ", 
-        RoslynLocator.GetRoslynatorAnalyzers()
-                      .Select(dll => $"--extension \"{dll}\""));
+    var analyzerArgs = string.Join(" ", GetAnalyzers(options).Select(dll => $"--extension \"{dll}\"")
+    );
 
     var args = $"\"{roslynDllPath}\" --stdio --logLevel=Information --extensionLogDirectory=\"{roslynLogDir}\" {analyzerArgs}";
     return ("dotnet", args);
 #endif
+  }
+
+  private static IEnumerable<string> GetAnalyzers(RoslynProxyOptions options)
+  {
+    var roslynatorAnalyzers = options.UseRoslynator
+        ? RoslynLocator.GetRoslynatorAnalyzers()
+        : Enumerable.Empty<string>();
+
+    var additionalAnalyzers = options.AnalyzerAssemblies ?? [];
+
+    return roslynatorAnalyzers.Concat(additionalAnalyzers);
   }
 
   private async Task PumpAsync(Stream input, Stream output, CancellationToken token)

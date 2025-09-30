@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Controllers;
@@ -13,12 +11,12 @@ public class LspController(ILogger<LspController> logger) : BaseController
 {
   public sealed record LspStartResponse(string Pipe);
   [JsonRpcMethod("lsp/start")]
-  public async Task<LspStartResponse> StartLsp(bool useRoslynator, List<string> analyzerAssemblies, CancellationToken cancellationToken)
+  public async Task<LspStartResponse> StartLsp(bool useRoslynator, string[] analyzerAssemblies, CancellationToken cancellationToken)
   {
     var pipeName = PipeUtils.GeneratePipeName();
     var proxy = new RoslynProxy(pipeName, logger);
 
-    _ = Task.Run(async () => await proxy.StartAsync(), cancellationToken);
+    _ = Task.Run(async () => await proxy.StartAsync(new(useRoslynator, analyzerAssemblies)), cancellationToken);
 
     return new(pipeName);
   }
