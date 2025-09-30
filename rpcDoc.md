@@ -67,7 +67,7 @@
 | Parameter | Type | Optional |
 |-----------|------|----------|
 | useRoslynator | bool |   |
-| analyzerAssemblies | List<string> |   |
+| analyzerAssemblies | String[] |   |
 
 **Returns:** `Task<LspStartResponse>`
 
