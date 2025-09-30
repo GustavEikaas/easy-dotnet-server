@@ -19,9 +19,9 @@ public class TestController(IClientService clientService, MtpService mtpService,
   [JsonRpcMethod("test/discover")]
   public async Task<IAsyncEnumerable<DiscoveredTest>> Discover(
     string projectPath,
-    string? targetFrameworkMoniker,
-    string? configuration,
-    CancellationToken token)
+    string? targetFrameworkMoniker = null,
+    string? configuration = null,
+    CancellationToken token = default)
   {
 
     if (!clientService.IsInitialized)
@@ -37,18 +37,17 @@ public class TestController(IClientService clientService, MtpService mtpService,
     }
     else
     {
-      return vsTestService.RunDiscover(project.TargetPath!).AsAsyncEnumerable();
+      return vsTestService.RunDiscover(project.TargetPath!).AsAsyncEnumerable().WithJsonRpcSettings(new JsonRpcEnumerableSettings() { MinBatchSize = 30 });
     }
-
   }
 
   [JsonRpcMethod("test/run")]
   public async Task<IAsyncEnumerable<TestRunResult>> Run(
     string projectPath,
-    string targetFrameworkMoniker,
     string configuration,
     RunRequestNode[] filter,
-    CancellationToken token
+    string? targetFrameworkMoniker = null,
+    CancellationToken token = default
   )
   {
     if (!clientService.IsInitialized)
@@ -69,7 +68,7 @@ public class TestController(IClientService clientService, MtpService mtpService,
     }
     else
     {
-      return vsTestService.RunTests(project.TargetPath!, [.. filter.Select(x => Guid.Parse(x.Uid))]).AsAsyncEnumerable();
+      return vsTestService.RunTests(project.TargetPath!, [.. filter.Select(x => Guid.Parse(x.Uid))]).AsAsyncEnumerable().WithJsonRpcSettings(new JsonRpcEnumerableSettings() { MinBatchSize = 30 });
     }
   }
 
