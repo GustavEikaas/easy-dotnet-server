@@ -61,6 +61,18 @@
 
 ---
 
+## LspController
+
+### `lsp/start`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| useRoslynator | bool |   |
+| analyzerAssemblies | List<string> |   |
+
+**Returns:** `Task<LspStartResponse>`
+
+---
+
 ## LaunchProfileController
 
 ### `launch-profiles`
