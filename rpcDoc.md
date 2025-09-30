@@ -102,8 +102,8 @@
 | Parameter | Type | Optional |
 |-----------|------|----------|
 | projectPath | string |   |
-| targetFrameworkMoniker | string |   |
-| configuration | string |   |
+| targetFrameworkMoniker | string | ✅  |
+| configuration | string | ✅  |
 
 **Returns:** `Task<IAsyncEnumerable<DiscoveredTest>>`
 
@@ -111,9 +111,9 @@
 | Parameter | Type | Optional |
 |-----------|------|----------|
 | projectPath | string |   |
-| targetFrameworkMoniker | string |   |
 | configuration | string |   |
 | filter | RunRequestNode[] |   |
+| targetFrameworkMoniker | string | ✅  |
 
 **Returns:** `Task<IAsyncEnumerable<TestRunResult>>`
 
