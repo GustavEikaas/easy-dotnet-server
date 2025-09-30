@@ -16,7 +16,7 @@ public class LspController(ILogger<LspController> logger) : BaseController
     var pipeName = PipeUtils.GeneratePipeName();
     var proxy = new RoslynProxy(pipeName, logger);
 
-    _ = Task.Run(async () => await proxy.StartAsync(new(useRoslynator, analyzerAssemblies)), cancellationToken);
+    await proxy.StartAsync(new(useRoslynator, analyzerAssemblies));
 
     return new(pipeName);
   }

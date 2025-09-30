@@ -47,9 +47,6 @@ public sealed class RoslynProxy(string clientPipeName, ILogger logger) : IAsyncD
         PipeTransmissionMode.Byte,
         PipeOptions.Asynchronous);
 
-    await _clientPipe.WaitForConnectionAsync(_cts.Token);
-    logger.LogInformation("Client connected");
-
     var roslynLogDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "EasyDotnet",
@@ -81,17 +78,23 @@ public sealed class RoslynProxy(string clientPipeName, ILogger logger) : IAsyncD
     _roslynProcess.Start();
     _roslynProcess.BeginErrorReadLine();
 
-    _clientToRoslynTask = Task.Run(() => PumpAsync(_clientPipe, _roslynProcess.StandardInput.BaseStream, _cts.Token));
-    _roslynToClientTask = Task.Run(() => PumpAsync(_roslynProcess.StandardOutput.BaseStream, _clientPipe, _cts.Token));
+    _ = Task.Run(async () =>
+       {
+         await _clientPipe.WaitForConnectionAsync(_cts.Token);
+         logger.LogInformation("Client connected");
 
-    logger.LogInformation("Roslyn proxy attached and forwarding messages");
+         _clientToRoslynTask = PumpAsync(_clientPipe, _roslynProcess.StandardInput.BaseStream, _cts.Token);
+         _roslynToClientTask = PumpAsync(_roslynProcess.StandardOutput.BaseStream, _clientPipe, _cts.Token);
+
+         logger.LogInformation("Roslyn proxy attached and forwarding messages");
+       });
   }
 
 
   private static (string FileName, string Arguments) GetRoslynProcessStartInfo(string roslynLogDir, RoslynProxyOptions options)
   {
 #if DEBUG
-    return (@"C:\Users\Gustav\AppData\Local\nvim-data\mason\bin\roslyn.cmd", $"--stdio --logLevel=Information --extensionLogDirectory=\"{roslynLogDir}\"");
+    return (@"C:\Users\gustav.eikaas\AppData\Local\nvim-data\mason\bin\roslyn.cmd", $"--stdio --logLevel=Information --extensionLogDirectory=\"{roslynLogDir}\"");
 #else
     var roslynDllPath = RoslynLocator.GetRoslynDllPath();
     var analyzerArgs = string.Join(" ", GetAnalyzers(options).Select(dll => $"--extension \"{dll}\"")
