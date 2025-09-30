@@ -1,10 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Controllers;
 using EasyDotnet.IDE.Utils;
 using Microsoft.Extensions.Logging;
-using System.Collections.Generic;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Controllers.Lsp;
