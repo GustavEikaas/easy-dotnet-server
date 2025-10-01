@@ -54,17 +54,17 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
     _vsTestAttach = vsTestAttach;
     _cancellationTokenSource = new CancellationTokenSource();
 
-    logger.LogInformation("Waiting for client...");
     _listener = new TcpListener(IPAddress.Any, 0);
     _listener.Start();
-    logger.LogInformation("Listening for client on port 8086.");
     var assignedPort = ((IPEndPoint)_listener.LocalEndpoint).Port;
+    logger.LogInformation("Listening for client on port {port}.", assignedPort);
     _sessionTask = Task.Run(async () =>
     {
       try
       {
         try
         {
+          logger.LogInformation("Waiting for client...");
           _client = await _listener.AcceptTcpClientAsync().WaitAsync(TimeSpan.FromSeconds(30), _cancellationTokenSource.Token);
           logger.LogInformation("Client connected.");
         }
