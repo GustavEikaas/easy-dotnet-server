@@ -3,7 +3,6 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Text.RegularExpressions;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Domain.Models.LaunchProfile;
 using EasyDotnet.Domain.Models.MsBuild.Project;
@@ -12,7 +11,7 @@ using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Infrastructure.Services;
 
-public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<DebuggerProxy> debuggerProxyLogger) : INetcoreDbgService
+public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<DebuggerProxy> debuggerProxyLogger) : INetcoreDbgService
 {
   private static readonly JsonSerializerOptions SerializerOptions = new()
   {
@@ -34,12 +33,12 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
   private TcpClient? _client;
   private (System.Diagnostics.Process, int)? _vsTestAttach;
   private Task? _disposeTask;
-  private int _clientSeq = 0;
+  private int _clientSeq;
   private int GetNextSequence() => Interlocked.Increment(ref _clientSeq);
 
   public Task Completion => _completionSource.Task;
 
-  public async Task Start(string binaryPath, DotnetProject project, string projectPath, LaunchProfile? launchProfile, (System.Diagnostics.Process, int)? vsTestAttach)
+  public async Task<int> Start(string binaryPath, DotnetProject project, string projectPath, LaunchProfile? launchProfile, (System.Diagnostics.Process, int)? vsTestAttach)
   {
     if (_disposeTask != null)
     {
@@ -55,15 +54,15 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
     _vsTestAttach = vsTestAttach;
     _cancellationTokenSource = new CancellationTokenSource();
 
+    logger.LogInformation("Waiting for client...");
+    _listener = new TcpListener(IPAddress.Any, 0);
+    _listener.Start();
+    logger.LogInformation("Listening for client on port 8086.");
+    var assignedPort = ((IPEndPoint)_listener.LocalEndpoint).Port;
     _sessionTask = Task.Run(async () =>
     {
       try
       {
-        logger.LogInformation("Waiting for client...");
-        _listener = new TcpListener(IPAddress.Any, 8086);
-        _listener.Start();
-        logger.LogInformation("Listening for client on port 8086.");
-
         try
         {
           _client = await _listener.AcceptTcpClientAsync().WaitAsync(TimeSpan.FromSeconds(30), _cancellationTokenSource.Token);
@@ -98,20 +97,18 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
                 return JsonSerializer.Serialize(modified, SerializerOptions);
 
               case SetBreakpointsRequest setBpReq:
+                if (OperatingSystem.IsWindows())
                 {
-                  if (OperatingSystem.IsWindows())
-                  {
-                    logger.LogInformation("[TCP] Intercepted set breakpoints request: Normalizing path separators");
-                    setBpReq.Arguments.Source.Path =
-                        setBpReq.Arguments.Source.Path.Replace('/', '\\');
-                  }
-
-                  logger.LogInformation(
-                      "[TCP] setBreakpoints request: {message}",
-                      JsonSerializer.Serialize(setBpReq, LoggingSerializerOptions));
-
-                  return JsonSerializer.Serialize(setBpReq, SerializerOptions);
+                  logger.LogInformation("[TCP] Intercepted set breakpoints request: Normalizing path separators");
+                  setBpReq.Arguments.Source.Path =
+                      setBpReq.Arguments.Source.Path.Replace('/', '\\');
                 }
+
+                logger.LogInformation(
+                    "[TCP] setBreakpoints request: {message}",
+                    JsonSerializer.Serialize(setBpReq, LoggingSerializerOptions));
+
+                return JsonSerializer.Serialize(setBpReq, SerializerOptions);
 
               case Request req:
                 logger.LogInformation("[TCP] request: {message}", JsonSerializer.Serialize(req, LoggingSerializerOptions));
@@ -195,6 +192,8 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
         throw;
       }
     }, _cancellationTokenSource.Token);
+
+    return assignedPort;
   }
 
   private void TriggerCleanup()
@@ -314,7 +313,4 @@ public partial class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogge
       logger.LogWarning(ex, "Failed to get {processName} process by PID: {pid}", processName, pid);
     }
   }
-
-  [GeneratedRegex(@"""select_project"":\s*""REWRITE_ATTACH""")]
-  private static partial Regex AttachRequestPattern();
 }
