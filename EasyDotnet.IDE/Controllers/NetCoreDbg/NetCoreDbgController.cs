@@ -17,7 +17,7 @@ public sealed record DebuggerStartRequest(
   string? LaunchProfileName
 );
 
-public sealed record DebuggerStartResponse(bool Success);
+public sealed record DebuggerStartResponse(bool Success, int Port);
 
 public class NetCoreDbgController(IMsBuildService msBuildService, ILaunchProfileService launchProfileService, INetcoreDbgService netcoreDbgService, IClientService clientService) : BaseController
 {
@@ -40,8 +40,8 @@ public class NetCoreDbgController(IMsBuildService msBuildService, ILaunchProfile
 
     var res = StartVsTestIfApplicable(project, request.TargetPath);
 
-    await netcoreDbgService.Start(binaryPath, project, request.TargetPath, launchProfile, res);
-    return new DebuggerStartResponse(true);
+    var port = await netcoreDbgService.Start(binaryPath, project, request.TargetPath, launchProfile, res);
+    return new DebuggerStartResponse(true, port);
   }
 
   private static (Process, int)? StartVsTestIfApplicable(DotnetProject project, string projectPath) => project.IsTestProject && !project.TestingPlatformDotnetTestSupport ? VsTestHelper.StartTestProcess(projectPath) : null;
