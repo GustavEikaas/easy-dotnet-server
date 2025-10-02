@@ -133,6 +133,7 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
             FileName = binaryPath,
             Arguments = "--interpreter=vscode",
             RedirectStandardInput = true,
+            WorkingDirectory = Path.GetDirectoryName(projectPath)!,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
