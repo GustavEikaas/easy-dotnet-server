@@ -51,6 +51,7 @@ public sealed class RoslynProxy(string clientPipeName, ILogger logger) : IAsyncD
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "EasyDotnet",
         "RoslynLogs");
+
     Directory.CreateDirectory(roslynLogDir);
 
     logger.LogInformation("Logging to {dir}", roslynLogDir);
@@ -61,6 +62,14 @@ public sealed class RoslynProxy(string clientPipeName, ILogger logger) : IAsyncD
     {
       StartInfo = startInfo,
       EnableRaisingEvents = true
+    };
+
+    _roslynProcess.Exited += (s, e) =>
+    {
+      if (_roslynProcess != null)
+      {
+        logger.LogError("Roslyn process exited unexpectedly with code {ExitCode}", _roslynProcess.ExitCode);
+      }
     };
 
     _roslynProcess.ErrorDataReceived += (s, e) =>
@@ -77,8 +86,8 @@ public sealed class RoslynProxy(string clientPipeName, ILogger logger) : IAsyncD
          await _clientPipe.WaitForConnectionAsync(_cts.Token);
          logger.LogInformation("Client connected");
 
-         _clientToRoslynTask = PumpAsync(_clientPipe, _roslynProcess.StandardInput.BaseStream, _cts.Token);
-         _roslynToClientTask = PumpAsync(_roslynProcess.StandardOutput.BaseStream, _clientPipe, _cts.Token);
+         _clientToRoslynTask = PumpAsync(_clientPipe, _roslynProcess.StandardInput.BaseStream, _cts.Token, "client");
+         _roslynToClientTask = PumpAsync(_roslynProcess.StandardOutput.BaseStream, _clientPipe, _cts.Token, "roslyn");
 
          logger.LogInformation("Roslyn proxy attached and forwarding messages");
        });
@@ -142,20 +151,28 @@ public sealed class RoslynProxy(string clientPipeName, ILogger logger) : IAsyncD
     return roslynatorAnalyzers.Concat(additionalAnalyzers);
   }
 
-  private async Task PumpAsync(Stream input, Stream output, CancellationToken token)
+  private async Task PumpAsync(Stream input, Stream output, CancellationToken token, string pumpName)
   {
     try
     {
       await input.CopyToAsync(output, 81920, token);
+      logger.LogInformation("{pumpName} finished naturally", pumpName);
     }
-    catch (OperationCanceledException) { }
+    catch (OperationCanceledException)
+    {
+      logger.LogInformation("{pumpName} canceled", pumpName);
+    }
+    catch (IOException ioEx)
+    {
+      logger.LogWarning(ioEx, "{pumpName} failed due to pipe closure", pumpName);
+    }
     catch (Exception ex)
     {
-      logger.LogWarning(ex, "Stream pump failed between {input} and {output}", input, output);
+      logger.LogError(ex, "{pumpName} failed unexpectedly", pumpName);
     }
     finally
     {
-      logger.LogInformation("Disposing Roslyn LSP");
+      logger.LogInformation("Disposing Roslyn LSP due to {pumpName} termination", pumpName);
       await DisposeAsync();
     }
   }
