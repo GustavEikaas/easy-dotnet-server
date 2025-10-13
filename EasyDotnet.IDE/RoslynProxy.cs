@@ -52,20 +52,14 @@ public sealed class RoslynProxy(string clientPipeName, ILogger logger) : IAsyncD
         "EasyDotnet",
         "RoslynLogs");
     Directory.CreateDirectory(roslynLogDir);
+
     logger.LogInformation("Logging to {dir}", roslynLogDir);
-    var (fileName, arguments) = GetRoslynProcessStartInfo(roslynLogDir, options);
+
+    var startInfo = GetRoslynProcessStartInfo(roslynLogDir, options);
+
     _roslynProcess = new Process
     {
-      StartInfo = new ProcessStartInfo
-      {
-        FileName = fileName,
-        Arguments = arguments,
-        RedirectStandardInput = true,
-        RedirectStandardOutput = true,
-        RedirectStandardError = true,
-        UseShellExecute = false,
-        CreateNoWindow = true
-      },
+      StartInfo = startInfo,
       EnableRaisingEvents = true
     };
 
@@ -91,17 +85,49 @@ public sealed class RoslynProxy(string clientPipeName, ILogger logger) : IAsyncD
   }
 
 
-  private static (string FileName, string Arguments) GetRoslynProcessStartInfo(string roslynLogDir, RoslynProxyOptions options)
+  private static ProcessStartInfo GetRoslynProcessStartInfo(string roslynLogDir, RoslynProxyOptions options)
   {
 #if DEBUG
-    return (@"C:\Users\gustav.eikaas\AppData\Local\nvim-data\mason\bin\roslyn.cmd", $"--stdio --logLevel=Information --extensionLogDirectory=\"{roslynLogDir}\"");
+    var psi = new ProcessStartInfo(
+        @"C:\Users\gustav.eikaas\AppData\Local\nvim-data\mason\bin\roslyn.cmd")
+    {
+      RedirectStandardInput = true,
+      RedirectStandardOutput = true,
+      RedirectStandardError = true,
+      UseShellExecute = false,
+      CreateNoWindow = true
+    };
+
+    psi.ArgumentList.Add("--stdio");
+    psi.ArgumentList.Add("--logLevel=Information");
+    psi.ArgumentList.Add("--extensionLogDirectory");
+    psi.ArgumentList.Add(roslynLogDir);
+
+    return psi;
 #else
     var roslynDllPath = RoslynLocator.GetRoslynDllPath();
-    var analyzerArgs = string.Join(" ", GetAnalyzers(options).Select(dll => $"--extension \"{dll}\"")
-    );
+    var psi = new ProcessStartInfo("dotnet")
+    {
+        RedirectStandardInput = true,
+        RedirectStandardOutput = true,
+        RedirectStandardError = true,
+        UseShellExecute = false,
+        CreateNoWindow = true
+    };
 
-    var args = $"\"{roslynDllPath}\" --stdio --logLevel=Information --extensionLogDirectory=\"{roslynLogDir}\" {analyzerArgs}";
-    return ("dotnet", args);
+    psi.ArgumentList.Add(roslynDllPath);
+    psi.ArgumentList.Add("--stdio");
+    psi.ArgumentList.Add("--logLevel=Information");
+    psi.ArgumentList.Add("--extensionLogDirectory");
+    psi.ArgumentList.Add(roslynLogDir);
+
+    foreach (var dll in GetAnalyzers(options))
+    {
+        psi.ArgumentList.Add("--extension");
+        psi.ArgumentList.Add(dll);
+    }
+
+    return psi;
 #endif
   }
 
