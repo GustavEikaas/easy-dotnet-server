@@ -51,22 +51,25 @@ public sealed class RoslynProxy(string clientPipeName, ILogger logger) : IAsyncD
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "EasyDotnet",
         "RoslynLogs");
+
     Directory.CreateDirectory(roslynLogDir);
+
     logger.LogInformation("Logging to {dir}", roslynLogDir);
-    var (fileName, arguments) = GetRoslynProcessStartInfo(roslynLogDir, options);
+
+    var startInfo = GetRoslynProcessStartInfo(roslynLogDir, options);
+
     _roslynProcess = new Process
     {
-      StartInfo = new ProcessStartInfo
-      {
-        FileName = fileName,
-        Arguments = arguments,
-        RedirectStandardInput = true,
-        RedirectStandardOutput = true,
-        RedirectStandardError = true,
-        UseShellExecute = false,
-        CreateNoWindow = true
-      },
+      StartInfo = startInfo,
       EnableRaisingEvents = true
+    };
+
+    _roslynProcess.Exited += (s, e) =>
+    {
+      if (_roslynProcess != null)
+      {
+        logger.LogError("Roslyn process exited unexpectedly with code {ExitCode}", _roslynProcess.ExitCode);
+      }
     };
 
     _roslynProcess.ErrorDataReceived += (s, e) =>
@@ -83,25 +86,57 @@ public sealed class RoslynProxy(string clientPipeName, ILogger logger) : IAsyncD
          await _clientPipe.WaitForConnectionAsync(_cts.Token);
          logger.LogInformation("Client connected");
 
-         _clientToRoslynTask = PumpAsync(_clientPipe, _roslynProcess.StandardInput.BaseStream, _cts.Token);
-         _roslynToClientTask = PumpAsync(_roslynProcess.StandardOutput.BaseStream, _clientPipe, _cts.Token);
+         _clientToRoslynTask = PumpAsync(_clientPipe, _roslynProcess.StandardInput.BaseStream, _cts.Token, "client");
+         _roslynToClientTask = PumpAsync(_roslynProcess.StandardOutput.BaseStream, _clientPipe, _cts.Token, "roslyn");
 
          logger.LogInformation("Roslyn proxy attached and forwarding messages");
        });
   }
 
 
-  private static (string FileName, string Arguments) GetRoslynProcessStartInfo(string roslynLogDir, RoslynProxyOptions options)
+  private static ProcessStartInfo GetRoslynProcessStartInfo(string roslynLogDir, RoslynProxyOptions options)
   {
 #if DEBUG
-    return (@"C:\Users\gustav.eikaas\AppData\Local\nvim-data\mason\bin\roslyn.cmd", $"--stdio --logLevel=Information --extensionLogDirectory=\"{roslynLogDir}\"");
+    var psi = new ProcessStartInfo(
+        @"C:\Users\gustav.eikaas\AppData\Local\nvim-data\mason\bin\roslyn.cmd")
+    {
+      RedirectStandardInput = true,
+      RedirectStandardOutput = true,
+      RedirectStandardError = true,
+      UseShellExecute = false,
+      CreateNoWindow = true
+    };
+
+    psi.ArgumentList.Add("--stdio");
+    psi.ArgumentList.Add("--logLevel=Information");
+    psi.ArgumentList.Add("--extensionLogDirectory");
+    psi.ArgumentList.Add(roslynLogDir);
+
+    return psi;
 #else
     var roslynDllPath = RoslynLocator.GetRoslynDllPath();
-    var analyzerArgs = string.Join(" ", GetAnalyzers(options).Select(dll => $"--extension \"{dll}\"")
-    );
+    var psi = new ProcessStartInfo("dotnet")
+    {
+        RedirectStandardInput = true,
+        RedirectStandardOutput = true,
+        RedirectStandardError = true,
+        UseShellExecute = false,
+        CreateNoWindow = true
+    };
 
-    var args = $"\"{roslynDllPath}\" --stdio --logLevel=Information --extensionLogDirectory=\"{roslynLogDir}\" {analyzerArgs}";
-    return ("dotnet", args);
+    psi.ArgumentList.Add(roslynDllPath);
+    psi.ArgumentList.Add("--stdio");
+    psi.ArgumentList.Add("--logLevel=Information");
+    psi.ArgumentList.Add("--extensionLogDirectory");
+    psi.ArgumentList.Add(roslynLogDir);
+
+    foreach (var dll in GetAnalyzers(options))
+    {
+        psi.ArgumentList.Add("--extension");
+        psi.ArgumentList.Add(dll);
+    }
+
+    return psi;
 #endif
   }
 
@@ -116,20 +151,28 @@ public sealed class RoslynProxy(string clientPipeName, ILogger logger) : IAsyncD
     return roslynatorAnalyzers.Concat(additionalAnalyzers);
   }
 
-  private async Task PumpAsync(Stream input, Stream output, CancellationToken token)
+  private async Task PumpAsync(Stream input, Stream output, CancellationToken token, string pumpName)
   {
     try
     {
       await input.CopyToAsync(output, 81920, token);
+      logger.LogInformation("{pumpName} finished naturally", pumpName);
     }
-    catch (OperationCanceledException) { }
+    catch (OperationCanceledException)
+    {
+      logger.LogInformation("{pumpName} canceled", pumpName);
+    }
+    catch (IOException ioEx)
+    {
+      logger.LogWarning(ioEx, "{pumpName} failed due to pipe closure", pumpName);
+    }
     catch (Exception ex)
     {
-      logger.LogWarning(ex, "Stream pump failed between {input} and {output}", input, output);
+      logger.LogError(ex, "{pumpName} failed unexpectedly", pumpName);
     }
     finally
     {
-      logger.LogInformation("Disposing Roslyn LSP");
+      logger.LogInformation("Disposing Roslyn LSP due to {pumpName} termination", pumpName);
       await DisposeAsync();
     }
   }
