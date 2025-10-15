@@ -97,8 +97,8 @@ public sealed class RoslynProxy(string clientPipeName, ILogger logger) : IAsyncD
   private static ProcessStartInfo GetRoslynProcessStartInfo(string roslynLogDir, RoslynProxyOptions options)
   {
 #if DEBUG
-    var psi = new ProcessStartInfo(
-        @"C:\Users\gustav.eikaas\AppData\Local\nvim-data\mason\bin\roslyn.cmd")
+    var psi = new ProcessStartInfo(@"C:\Users\Gustav\AppData\Local\nvim-data\mason\bin\roslyn.cmd")
+
     {
       RedirectStandardInput = true,
       RedirectStandardOutput = true,
