@@ -28,5 +28,7 @@ public sealed record DotnetProject(
     bool UseIISExpress,
     string RunCommand,
     string BuildCommand,
-    string TestCommand
+    string TestCommand,
+    bool IsAspireHost,
+    Version? AspireHostingSdkVersion
 );

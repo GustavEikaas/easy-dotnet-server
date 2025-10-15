@@ -173,7 +173,8 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
         "TargetFramework", "TargetFrameworks", "IsTestProject", "UserSecretsId",
         "TestingPlatformDotnetTestSupport", "TargetPath", "GeneratePackageOnBuild",
         "IsPackable", "PackageId", "Version", "PackageOutputPath", "TargetFrameworkVersion",
-        "UsingMicrosoftNETSdkWorker", "UsingMicrosoftNETSdkWeb",  "UseIISExpress", "LangVersion", "RootNamespace"
+        "UsingMicrosoftNETSdkWorker", "UsingMicrosoftNETSdkWeb",  "UseIISExpress", "LangVersion",
+        "RootNamespace", "IsAspireHost", "AspireHostingSDKVersion"
     };
 
     var (command, args) = await GetCommandAndArguments(
@@ -216,6 +217,8 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
     var useIISExpress = TryGetBool("UseIISExpress");
     var targetPath = TryGet("TargetPath");
     var projectName = Path.GetFileNameWithoutExtension(projectPath);
+    var aspireSdkVersionString = TryGet("AspireHostingSDKVersion");
+    var aspireSdkVersion = TryParseVersion(aspireSdkVersionString);
 
     return new DotnetProject(
         ProjectName: projectName,
@@ -245,8 +248,12 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
         UseIISExpress: useIISExpress,
         RunCommand: await BuildRunCommand(!isNetFramework, useIISExpress, targetPath, projectPath, projectName),
         BuildCommand: await BuildBuildCommand(!isNetFramework, projectPath),
-        TestCommand: BuildTestCommand(!isNetFramework, targetPath, projectPath));
+        TestCommand: BuildTestCommand(!isNetFramework, targetPath, projectPath),
+        IsAspireHost: TryGetBool("IsAspireHost"),
+        AspireHostingSdkVersion: aspireSdkVersion);
   }
+  private static Version? TryParseVersion(string? versionString) =>
+    string.IsNullOrWhiteSpace(versionString) ? null : Version.TryParse(versionString, out var version) ? version : null;
 
   public async Task<List<string>> GetProjectReferencesAsync(string projectPath, CancellationToken cancellationToken = default)
   {
