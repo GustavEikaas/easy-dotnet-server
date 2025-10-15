@@ -47,9 +47,11 @@ public static class AspireServer
     var psi = new ProcessStartInfo
     {
       FileName = "aspire",
-      Arguments = @"run --debug --project C:\Users\Gustav\repo\aspire\aspire.ApiService\aspire.ApiService.csproj",
+      // Arguments = @"run --debug --project C:\Users\Gustav\repo\aspire\aspire.ApiService\aspire.ApiService.csproj",
+      Arguments = "run --debug",
       UseShellExecute = false,
       RedirectStandardOutput = true,
+      WorkingDirectory = @"C:\Users\Gustav\repo\aspire",
       RedirectStandardError = true
     };
 
