@@ -18,14 +18,14 @@ public class NotificationService(JsonRpc jsonRpc) : INotificationService
   public async Task NotifyProjectChanged(string projectPath, string? targetFrameworkMoniker = null, string configuration = "Debug") => await jsonRpc.NotifyWithParameterObjectAsync("project/changed", new ProjectChangedNotification(projectPath, targetFrameworkMoniker, configuration));
 
   [RpcNotification("displayError")]
-  public async Task DisplayErrorAsync(string message) =>
+  public async Task DisplayError(string message) =>
       await jsonRpc.NotifyWithParameterObjectAsync("displayError", new DisplayMessage(message));
 
   [RpcNotification("displayWarning")]
-  public async Task DisplayWarningAsync(string message) =>
+  public async Task DisplayWarning(string message) =>
     await jsonRpc.NotifyWithParameterObjectAsync("displayWarning", new DisplayMessage(message));
 
   [RpcNotification("displayMessage")]
-  public async Task DisplayMessageAsync(string message) =>
+  public async Task DisplayMessage(string message) =>
     await jsonRpc.NotifyWithParameterObjectAsync("displayMessage", new DisplayMessage(message));
 }
