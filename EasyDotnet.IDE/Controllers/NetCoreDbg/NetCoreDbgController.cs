@@ -62,8 +62,11 @@ public class NetCoreDbgController(IMsBuildService msBuildService, ILaunchProfile
       var controller = new DebuggingController();
       rpcServer.AddLocalRpcTarget(controller);
 
+      var debugSessionId = await rpcServer.InvokeAsync<string?>("getDebugSessionId");
+
       var sessionCompletionTcs = new TaskCompletionSource<bool>();
       var portTcs = new TaskCompletionSource<int>();
+
 
       controller.OnDebugSessionStarted = async (workingDir, projectFile, debug) =>
        {

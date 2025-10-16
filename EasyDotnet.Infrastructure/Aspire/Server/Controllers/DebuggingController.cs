@@ -14,6 +14,24 @@ public class DebuggingController
     Console.WriteLine($"[{token}] Start debug session {projectFile}");
     _ = OnDebugSessionStarted?.Invoke(workingDirectory, projectFile, debug);
     _ = await _debugSessionTcs.Task; // DO NOT return immediately!
+
+    // async startDebugSession(workingDirectory: string, projectFile: string | null, debug: boolean): Promise<void> {
+    //     this.clearProgressNotification();
+    //
+    //     const debugConfiguration: AspireExtendedDebugConfiguration = {
+    //         type: 'aspire',
+    //         name: `Aspire: ${getRelativePathToWorkspace(projectFile ?? workingDirectory)}`,
+    //         request: 'launch',
+    //         program: projectFile ?? workingDirectory,
+    //         noDebug: !debug,
+    //     };
+    //
+    //     const workspaceFolder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(workingDirectory));
+    //     const didDebugStart = await vscode.debug.startDebugging(workspaceFolder, debugConfiguration);
+    //     if (!didDebugStart) {
+    //         throw new Error(failedToStartDebugSession);
+    //     }
+    // }
   }
 
   [JsonRpcMethod("stopDebugging")]
