@@ -12,7 +12,7 @@ using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Controllers.Initialize;
 
-public class InitializeController(IClientService clientService, IVisualStudioLocator locator, IMsBuildService msBuildService) : BaseController
+public class InitializeController(IClientService clientService, IVisualStudioLocator locator, IMsBuildService msBuildService, JsonRpc rpc) : BaseController
 {
   [JsonRpcMethod("initialize")]
   public async Task<InitializeResponse> Initialize(InitializeRequest request)
@@ -40,6 +40,13 @@ public class InitializeController(IClientService clientService, IVisualStudioLoc
     clientService.IsInitialized = true;
     clientService.ProjectInfo = request.ProjectInfo;
     clientService.ClientInfo = request.ClientInfo;
+
+    // var res = await rpc.InvokeWithParameterObjectAsync<bool>("openBuffer", new { path = "C:/Users/gustav.eikaas/repo/fusion-data-gateway/src/CCApplications.Applications/Common/Api/Behaviors/LoggingBehavior.cs" });
+    var res1 = await rpc.InvokeWithParameterObjectAsync<bool>("setBreakpoint", new
+    {
+      path = "C:/Users/gustav.eikaas/repo/fusion-data-gateway/src/CCApplications.Applications/Common/Api/Behaviors/LoggingBehavior.cs",
+      lineNumber = 2,
+    });
 
     if (request.Options is not null)
     {
