@@ -6,6 +6,7 @@ namespace EasyDotnet.Infrastructure.Services;
 
 public sealed record SetBreakpointRequest(string Path, int LineNumber);
 public sealed record OpenBufferRequest(string Path);
+public sealed record PromptConfirmRequest(string Prompt, bool DefaultValue);
 
 public class ClientService(JsonRpc rpc) : IClientService
 {
@@ -25,4 +26,5 @@ public class ClientService(JsonRpc rpc) : IClientService
 
   public async Task<bool> RequestOpenBuffer(string path) => await rpc.InvokeWithParameterObjectAsync<bool>("openBuffer", new OpenBufferRequest(path));
   public async Task<bool> RequestSetBreakpoint(string path, int lineNumber) => await rpc.InvokeWithParameterObjectAsync<bool>("setBreakpoint", new SetBreakpointRequest(path, lineNumber));
+  public async Task<bool> RequestConfirmation(string prompt, bool defaultValue) => await rpc.InvokeWithParameterObjectAsync<bool>("promptConfirm", new PromptConfirmRequest(prompt, defaultValue));
 }
