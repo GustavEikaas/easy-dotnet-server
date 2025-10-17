@@ -15,6 +15,7 @@
     <PackageReference Include="Microsoft.Build.Locator" Version="1.9.1" />
     <PackageReference Include="NJsonSchema" Version="11.3.2" />
     <PackageReference Include="NJsonSchema.CodeGeneration.CSharp" Version="11.3.2" />
+    <PackageReference Include="StreamJsonRpc" Version="2.21.69" />
   </ItemGroup>
 
   <ItemGroup>
