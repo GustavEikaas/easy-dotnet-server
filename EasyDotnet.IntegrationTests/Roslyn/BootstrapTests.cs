@@ -9,6 +9,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
+using StreamJsonRpc;
 
 namespace EasyDotnet.IntegrationTests.Roslyn;
 
@@ -129,7 +130,7 @@ public class BootstrapTests
 
     var mockLogService = NullLogger<RoslynService>.Instance;
     var memoryCache = new MemoryCache(new MemoryCacheOptions());
-    var roslynService = new RoslynService(new MsBuildService(new VisualStudioLocator(memoryCache, new ClientService(), new ProcessQueue()), new ClientService(), new ProcessQueue(35, NullLogger<ProcessQueue>.Instance), memoryCache, new TestNotificationService(), new SolutionService()), mockLogService);
+    var roslynService = new RoslynService(new MsBuildService(new VisualStudioLocator(memoryCache, new ClientService(new JsonRpc(Stream.Null)), new ProcessQueue()), new ClientService(new JsonRpc(Stream.Null)), new ProcessQueue(35, NullLogger<ProcessQueue>.Instance), memoryCache, new TestNotificationService(), new SolutionService()), mockLogService);
     await roslynService.BootstrapFile(
         controllerFilePath,
         kind,
