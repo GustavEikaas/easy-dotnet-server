@@ -6,7 +6,6 @@ using System.Reflection;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
-using EasyDotnet.Domain.Models.Client;
 using EasyDotnet.IDE.Utils;
 using EasyDotnet.Notifications;
 using StreamJsonRpc;
@@ -37,7 +36,6 @@ public class InitializeController(IClientService clientService, IVisualStudioLoc
         throw new Exception($"Server is outdated. Please update the server. `dotnet tool install -g EasyDotnet` Server Version: {serverVersion}, Client Version: {clientVersion}");
       }
     }
-
     Directory.SetCurrentDirectory(request.ProjectInfo.RootDir);
     clientService.IsInitialized = true;
     clientService.ProjectInfo = request.ProjectInfo;
