@@ -6,13 +6,13 @@ namespace EasyDotnet.Infrastructure.Services;
 
 public sealed record SetBreakpointRequest(string Path, int LineNumber);
 public sealed record OpenBufferRequest(string Path);
-public sealed record PromptString(string Prompt);
+public sealed record PromptString(string Prompt, string? DefaultValue);
 public sealed record PromptConfirmRequest(string Prompt, bool DefaultValue);
 
 public class ClientService(JsonRpc rpc) : IClientService
 {
   public bool IsInitialized { get; set; }
-  public bool UseVisualStudio { get; set; } = false;
+  public bool UseVisualStudio { get; set; }
   public ProjectInfo? ProjectInfo { get; set; }
   public ClientInfo? ClientInfo { get; set; }
   public ClientOptions? ClientOptions { get; set; }
@@ -28,5 +28,5 @@ public class ClientService(JsonRpc rpc) : IClientService
   public async Task<bool> RequestOpenBuffer(string path) => await rpc.InvokeWithParameterObjectAsync<bool>("openBuffer", new OpenBufferRequest(path));
   public async Task<bool> RequestSetBreakpoint(string path, int lineNumber) => await rpc.InvokeWithParameterObjectAsync<bool>("setBreakpoint", new SetBreakpointRequest(path, lineNumber));
   public async Task<bool> RequestConfirmation(string prompt, bool defaultValue) => await rpc.InvokeWithParameterObjectAsync<bool>("promptConfirm", new PromptConfirmRequest(prompt, defaultValue));
-  public async Task<string?> RequestString(string prompt) => await rpc.InvokeWithParameterObjectAsync<string?>("promptString", new PromptString(prompt));
+  public async Task<string?> RequestString(string prompt, string? defaultValue) => await rpc.InvokeWithParameterObjectAsync<string?>("promptString", new PromptString(prompt, defaultValue));
 }
