@@ -14,5 +14,5 @@ public interface IClientService
   Task<bool> RequestConfirmation(string prompt, bool defaultValue);
   Task<bool> RequestOpenBuffer(string path);
   Task<bool> RequestSetBreakpoint(string path, int lineNumber);
-  Task<string> RequestString(string prompt);
+  Task<string?> RequestString(string prompt);
 }

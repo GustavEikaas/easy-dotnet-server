@@ -28,5 +28,5 @@ public class ClientService(JsonRpc rpc) : IClientService
   public async Task<bool> RequestOpenBuffer(string path) => await rpc.InvokeWithParameterObjectAsync<bool>("openBuffer", new OpenBufferRequest(path));
   public async Task<bool> RequestSetBreakpoint(string path, int lineNumber) => await rpc.InvokeWithParameterObjectAsync<bool>("setBreakpoint", new SetBreakpointRequest(path, lineNumber));
   public async Task<bool> RequestConfirmation(string prompt, bool defaultValue) => await rpc.InvokeWithParameterObjectAsync<bool>("promptConfirm", new PromptConfirmRequest(prompt, defaultValue));
-  public async Task<string> RequestString(string prompt) => await rpc.InvokeWithParameterObjectAsync<string>("promptString", new PromptString(prompt));
+  public async Task<string?> RequestString(string prompt) => await rpc.InvokeWithParameterObjectAsync<string?>("promptString", new PromptString(prompt));
 }
