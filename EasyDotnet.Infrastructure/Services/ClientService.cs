@@ -8,6 +8,7 @@ public sealed record SetBreakpointRequest(string Path, int LineNumber);
 public sealed record OpenBufferRequest(string Path);
 public sealed record PromptString(string Prompt, string? DefaultValue);
 public sealed record PromptConfirmRequest(string Prompt, bool DefaultValue);
+public sealed record PromptSelectionRequest(string Prompt, SelectionOption[] Choices, string? DefaultSelectionId);
 
 public class ClientService(JsonRpc rpc) : IClientService
 {
@@ -29,4 +30,10 @@ public class ClientService(JsonRpc rpc) : IClientService
   public async Task<bool> RequestSetBreakpoint(string path, int lineNumber) => await rpc.InvokeWithParameterObjectAsync<bool>("setBreakpoint", new SetBreakpointRequest(path, lineNumber));
   public async Task<bool> RequestConfirmation(string prompt, bool defaultValue) => await rpc.InvokeWithParameterObjectAsync<bool>("promptConfirm", new PromptConfirmRequest(prompt, defaultValue));
   public async Task<string?> RequestString(string prompt, string? defaultValue) => await rpc.InvokeWithParameterObjectAsync<string?>("promptString", new PromptString(prompt, defaultValue));
+  public async Task<SelectionOption?> RequestSelection(string prompt, SelectionOption[] choices, string? defaultSelectionId = null)
+  {
+    var request = new PromptSelectionRequest(prompt, choices, defaultSelectionId);
+    var selectedId = await rpc.InvokeWithParameterObjectAsync<string?>("promptSelection", request);
+    return selectedId == null ? null : choices.FirstOrDefault(option => option.Id == selectedId);
+  }
 }
