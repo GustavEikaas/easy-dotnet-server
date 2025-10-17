@@ -11,4 +11,7 @@ public interface IClientService
   ClientOptions? ClientOptions { get; set; }
 
   void ThrowIfNotInitialized();
+  Task<bool> RequestConfirmation(string prompt, bool defaultValue);
+  Task<bool> RequestOpenBuffer(string path);
+  Task<bool> RequestSetBreakpoint(string path, int lineNumber);
 }
