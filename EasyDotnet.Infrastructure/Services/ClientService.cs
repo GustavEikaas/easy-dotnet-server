@@ -4,6 +4,9 @@ using StreamJsonRpc;
 
 namespace EasyDotnet.Infrastructure.Services;
 
+public sealed record SetBreakpointRequest(string Path, int LineNumber);
+public sealed record OpenBufferRequest(string Path);
+
 public class ClientService(JsonRpc rpc) : IClientService
 {
   public bool IsInitialized { get; set; }
@@ -20,6 +23,6 @@ public class ClientService(JsonRpc rpc) : IClientService
     }
   }
 
-  public async Task<bool> RequestOpenBuffer(string path) => await rpc.InvokeWithParameterObjectAsync<bool>("openBuffer", new { path });
-  public async Task<bool> RequestSetBreakpoint(string path, int lineNumber) => await rpc.InvokeWithParameterObjectAsync<bool>("setBreakpoint", new { path, lineNumber, });
+  public async Task<bool> RequestOpenBuffer(string path) => await rpc.InvokeWithParameterObjectAsync<bool>("openBuffer", new OpenBufferRequest(path));
+  public async Task<bool> RequestSetBreakpoint(string path, int lineNumber) => await rpc.InvokeWithParameterObjectAsync<bool>("setBreakpoint", new SetBreakpointRequest(path, lineNumber));
 }
