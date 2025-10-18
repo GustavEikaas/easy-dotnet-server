@@ -257,7 +257,7 @@ public class DcpServer : IAsyncDisposable
         var psi = new System.Diagnostics.ProcessStartInfo
         {
           FileName = "dotnet",
-          Arguments = $"run --project \"{projectConfig.ProjectPath}\" --no-build",
+          Arguments = $"run --project \"{projectConfig.ProjectPath}\" --no-launch-profile",
           UseShellExecute = false,
           RedirectStandardOutput = true,
           RedirectStandardError = true,
@@ -268,21 +268,29 @@ public class DcpServer : IAsyncDisposable
         if (payload.Env != null)
         {
           _logger.LogInformation("Applying {Count} environment variables", payload.Env.Length);
+
+          var aspnetcoreUrls = payload.Env.FirstOrDefault(e => e.Name == "ASPNETCORE_URLS");
+          if (aspnetcoreUrls != null)
+          {
+            _logger.LogCritical("!!! ASPNETCORE_URLS = {Value} !!!", aspnetcoreUrls.Value);
+          }
+          else
+          {
+            _logger.LogWarning("!!! ASPNETCORE_URLS not found in env vars !!!");
+          }
+
+          // Log ALL env vars that contain URL or PORT
+          foreach (var envVar in payload.Env.Where(e =>
+              e.Name.Contains("URL", StringComparison.OrdinalIgnoreCase) ||
+              e.Name.Contains("PORT", StringComparison.OrdinalIgnoreCase)))
+          {
+            _logger.LogInformation("  {Name} = {Value}", envVar.Name, envVar.Value);
+          }
+
           foreach (var envVar in payload.Env)
           {
             psi.Environment[envVar.Name] = envVar.Value;
-
-            // Log important ones for debugging
-            if (envVar.Name.Contains("PORT") || envVar.Name.Contains("URL") ||
-                envVar.Name.StartsWith("ASPNETCORE_") || envVar.Name.StartsWith("DOTNET_"))
-            {
-              _logger.LogDebug("  {Name}={Value}", envVar.Name, envVar.Value);
-            }
           }
-        }
-        else
-        {
-          _logger.LogWarning("No environment variables provided in payload!");
         }
 
 

@@ -4,6 +4,7 @@ using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Text.Json;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Infrastructure.Aspire.Server.Controllers;
 using Microsoft.Extensions.Logging;
@@ -73,7 +74,7 @@ public static class AspireServer
     Console.WriteLine($"DCP server listening on port {dcpServer.Port}");
 
     // 4. Start Aspire CLI process
-    var aspireProcess = StartAspireCliProcess(projectPath, rpcEndpoint, token, cert);
+    var aspireProcess = StartAspireCliProcess(projectPath, rpcEndpoint, token, cert, dcpServer);
 
     // 5. Accept RPC connection from Aspire CLI
     Console.WriteLine("Waiting for Aspire CLI to connect to RPC server...");
@@ -109,7 +110,7 @@ public static class AspireServer
     string projectPath,
     string rpcEndpoint,
     string token,
-    X509Certificate2 certificate)
+    X509Certificate2 certificate, DcpServer dcpServer)
   {
     var psi = new ProcessStartInfo
     {
@@ -126,6 +127,18 @@ public static class AspireServer
     psi.Environment["ASPIRE_EXTENSION_TOKEN"] = token;
     psi.Environment["ASPIRE_EXTENSION_CERT"] = Convert.ToBase64String(certificate.Export(X509ContentType.Cert));
     psi.Environment["ASPIRE_EXTENSION_PROMPT_ENABLED"] = "true";
+
+    psi.Environment["DEBUG_SESSION_PORT"] = $"localhost:{dcpServer.Port}";
+    psi.Environment["DEBUG_SESSION_TOKEN"] = dcpServer.Token;
+    psi.Environment["DEBUG_SESSION_CERTIFICATE"] = dcpServer.CertificateBase64;
+
+    var runSessionInfo = new
+    {
+      supported_launch_configurations = new[] { "project" }
+    };
+    psi.Environment["DEBUG_SESSION_INFO"] = JsonSerializer.Serialize(runSessionInfo);
+
+    Console.WriteLine($"Starting Aspire CLI with DCP server at localhost:{dcpServer.Port}");
 
     var cliProcess = System.Diagnostics.Process.Start(psi) ?? throw new Exception("Failed to start Aspire CLI");
 

@@ -14,10 +14,9 @@ public class DebuggingController(
   private System.Diagnostics.Process? _appHostProcess;
 
   [JsonRpcMethod("startDebugSession")]
-  public async Task StartDebugSession(string token, string workingDirectory,
-                                    string? projectFile, bool debug)
+  public async Task StartDebugSession(string token, string workingDirectory, string? projectFile, bool debug)
   {
-    logger.LogInformation($"[{token}] StartDebugSession for {projectFile ?? workingDirectory}");
+    logger.LogInformation("[{Token}] StartDebugSession: {ProjectFile}, debug={Debug}", token, projectFile, debug);
 
     if (string.IsNullOrEmpty(projectFile))
     {
@@ -25,96 +24,70 @@ public class DebuggingController(
       return;
     }
 
-    // This should ONLY be called for child services, not the AppHost
-    // The AppHost is started via launchAppHost
+    // Check if this is the AppHost
+    var project = await msBuildService.GetOrSetProjectPropertiesAsync(
+      projectFile, null, "Debug", CancellationToken.None);
 
-    var sessionId = projectFile;
-    var tcs = new TaskCompletionSource<bool>();
-    _debugSessions[sessionId] = tcs;
-
-    try
+    if (project.IsAspireHost)
     {
-      var project = await msBuildService.GetOrSetProjectPropertiesAsync(
-        projectFile, null, "Debug", CancellationToken.None);
+      // This is the AppHost - start it with the DCP server configured
+      logger.LogInformation("Starting AppHost: {ProjectFile}", projectFile);
 
-      if (!debug)
+      var psi = new System.Diagnostics.ProcessStartInfo
       {
-        var psi = new System.Diagnostics.ProcessStartInfo
-        {
-          FileName = "dotnet",
-          Arguments = $"run --project \"{projectFile}\" --no-build",
-          UseShellExecute = false,
-          RedirectStandardOutput = true,
-          RedirectStandardError = true,
-          WorkingDirectory = Path.GetDirectoryName(projectFile)!
-        };
-        // DEBUG_SESSION_RUN_MODE
-        psi.Environment["DEBUG_SESSION_PORT"] = $"localhost:{dcpServer.Port}";
-        psi.Environment["DEBUG_SESSION_TOKEN"] = dcpServer.Token;
-        psi.Environment["DEBUG_SESSION_CERTIFICATE"] = dcpServer.CertificateBase64;
+        FileName = "dotnet",
+        Arguments = $"run --project \"{projectFile}\" --no-build",
+        UseShellExecute = false,
+        RedirectStandardOutput = true,
+        RedirectStandardError = true,
+        WorkingDirectory = workingDirectory
+      };
 
-        var runSessionInfo = new
-        {
-          supported_launch_configurations = new[] { "project" }
-        };
+      // CRITICAL: Set DCP server info so the AppHost uses IDE execution mode
+      psi.Environment["DEBUG_SESSION_PORT"] = $"localhost:{dcpServer.Port}";
+      psi.Environment["DEBUG_SESSION_TOKEN"] = dcpServer.Token;
+      psi.Environment["DEBUG_SESSION_CERTIFICATE"] = dcpServer.CertificateBase64;
 
-        // env.ASPIRE_EXTENSION_DEBUG_SESSION_ID = debugSessionId;
-        // env.DCP_INSTANCE_ID_PREFIX = debugSessionId + '-';
-        // env.DEBUG_SESSION_RUN_MODE = noDebug === false ? "Debug" : "NoDebug";
-        // env.ASPIRE_EXTENSION_DEBUG_RUN_MODE = noDebug === false ? "Debug" : "NoDebug";
-        // env.DEBUG_SESSION_INFO = JSON.stringify(getRunSessionInfo());
-        // env.ASPIRE_EXTENSION_CAPABILITIES = getSupportedCapabilities().join(',');
-        psi.Environment["DEBUG_SESSION_INFO"] = JsonSerializer.Serialize(runSessionInfo);
-        psi.Environment["DEBUG_SESSION_RUN_MODE"] = "Debug";
+      var runSessionInfo = new
+      {
+        supported_launch_configurations = new[] { "project" }
+      };
+      psi.Environment["DEBUG_SESSION_INFO"] = JsonSerializer.Serialize(runSessionInfo);
 
-        _appHostProcess = System.Diagnostics.Process.Start(psi);
-        if (_appHostProcess == null)
-        {
-          throw new Exception("Failed to start AppHost");
-        }
+      logger.LogInformation("Starting AppHost with DEBUG_SESSION_PORT=localhost:{Port}", dcpServer.Port);
 
-        _appHostProcess.OutputDataReceived += (_, e) =>
-        {
-          if (!string.IsNullOrEmpty(e.Data))
-            Console.WriteLine($"[AppHost] {e.Data}");
-        };
-
-        _appHostProcess.ErrorDataReceived += (_, e) =>
-        {
-          if (!string.IsNullOrEmpty(e.Data))
-            Console.Error.WriteLine($"[AppHost] {e.Data}");
-        };
-
-        _appHostProcess.BeginOutputReadLine();
-        _appHostProcess.BeginErrorReadLine();
-
-        Console.WriteLine($"AppHost started with PID {_appHostProcess.Id}");
-        logger.LogInformation("Debug=false, starting without debugger");
-        var x = new TaskCompletionSource<object>();
-        await x.Task;
+      _appHostProcess = System.Diagnostics.Process.Start(psi);
+      if (_appHostProcess == null)
+      {
+        throw new Exception("Failed to start AppHost");
       }
 
-      var binaryPath = "netcoredbg"; // TODO: get from config
-      logger.LogInformation($"Starting debugger for {projectFile}");
+      _appHostProcess.OutputDataReceived += (_, e) =>
+      {
+        if (!string.IsNullOrEmpty(e.Data))
+          logger.LogInformation("[AppHost] {Output}", e.Data);
+      };
 
-      var port = await netcoreDbgService.Start(
-        binaryPath, project, projectFile, null, null);
+      _appHostProcess.ErrorDataReceived += (_, e) =>
+      {
+        if (!string.IsNullOrEmpty(e.Data))
+          logger.LogError("[AppHost] {Error}", e.Data);
+      };
 
-      logger.LogInformation($"Debugger started on port {port} for {projectFile}");
+      _appHostProcess.BeginOutputReadLine();
+      _appHostProcess.BeginErrorReadLine();
 
-      // Wait until this service's debugging completes
-      await tcs.Task;
+      logger.LogInformation("AppHost started with PID {Pid}", _appHostProcess.Id);
 
-      logger.LogInformation($"Debug session completed for {projectFile}");
+      // Wait for the AppHost to exit
+      await _appHostProcess.WaitForExitAsync();
+      logger.LogInformation("AppHost exited with code {ExitCode}", _appHostProcess.ExitCode);
     }
-    catch (Exception ex)
+    else
     {
-      logger.LogError(ex, $"Failed to start debug session for {projectFile}");
-      throw;
-    }
-    finally
-    {
-      _debugSessions.Remove(sessionId);
+      // This is a child service - this should NOT be called because DCP should use the HTTP server
+      logger.LogWarning("StartDebugSession called for non-AppHost project: {ProjectFile}", projectFile);
+      logger.LogWarning("This suggests DCP is not using the IDE execution endpoint properly");
     }
   }
 
