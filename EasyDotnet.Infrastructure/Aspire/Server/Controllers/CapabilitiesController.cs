@@ -16,6 +16,6 @@ public class CapabilitiesController
   {
     Console.WriteLine($"[{token}] HasCapability called for: {capability}");
     // Return true/false based on supported capabilities
-    return capability == "baseline.v1";
+    return true;
   }
 }

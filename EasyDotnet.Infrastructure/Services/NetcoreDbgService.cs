@@ -93,25 +93,25 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
                     attachReq.Seq,
                     vsTestAttach?.Item2
                 );
-                logger.LogInformation("[TCP] Intercepted attach request: {modified}", JsonSerializer.Serialize(modified, LoggingSerializerOptions));
+                // logger.LogInformation("[TCP] Intercepted attach request: {modified}", JsonSerializer.Serialize(modified, LoggingSerializerOptions));
                 return JsonSerializer.Serialize(modified, SerializerOptions);
 
               case SetBreakpointsRequest setBpReq:
                 if (OperatingSystem.IsWindows())
                 {
-                  logger.LogInformation("[TCP] Intercepted set breakpoints request: Normalizing path separators");
+                  // logger.LogInformation("[TCP] Intercepted set breakpoints request: Normalizing path separators");
                   setBpReq.Arguments.Source.Path =
                       setBpReq.Arguments.Source.Path.Replace('/', '\\');
                 }
 
-                logger.LogInformation(
-                    "[TCP] setBreakpoints request: {message}",
-                    JsonSerializer.Serialize(setBpReq, LoggingSerializerOptions));
+                // logger.LogInformation(
+                    // "[TCP] setBreakpoints request: {message}",
+                    // JsonSerializer.Serialize(setBpReq, LoggingSerializerOptions));
 
                 return JsonSerializer.Serialize(setBpReq, SerializerOptions);
 
               case Request req:
-                logger.LogInformation("[TCP] request: {message}", JsonSerializer.Serialize(req, LoggingSerializerOptions));
+                // logger.LogInformation("[TCP] request: {message}", JsonSerializer.Serialize(req, LoggingSerializerOptions));
                 Console.WriteLine($"Request command: {req.Command}");
                 return JsonSerializer.Serialize(req, SerializerOptions);
 
@@ -126,20 +126,29 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
           }
         });
 
+        var psi = new ProcessStartInfo
+        {
+          FileName = binaryPath,
+          Arguments = "--interpreter=vscode",
+          RedirectStandardInput = true,
+          RedirectStandardOutput = true,
+          RedirectStandardError = true,
+          UseShellExecute = false,
+          CreateNoWindow = true
+        };
+
+        psi.Environment["ASPNETCORE_URLS"] = "https://localhost:18888";
+        psi.Environment["ASPIRE_DASHBOARD_OTLP_ENDPOINT_URL"] = "https://localhost:4317";
+        psi.Environment["ASPIRE_DASHBOARD_OTLP_HTTP_ENDPOINT_URL"] = "https://localhost:4318";
+        psi.Environment["ASPIRE_RESOURCE_SERVICE_ENDPOINT_URL"] = "https://localhost:4319";
+
         _process = new System.Diagnostics.Process
         {
-          StartInfo = new ProcessStartInfo
-          {
-            FileName = binaryPath,
-            Arguments = "--interpreter=vscode",
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-          },
+          StartInfo = psi,
           EnableRaisingEvents = true,
         };
+
+
 
         _process.Exited += (sender, args) =>
         {
@@ -153,17 +162,12 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
         {
           try
           {
-            switch (msg)
+            return msg switch
             {
-              case Response res:
-                logger.LogInformation("[DBG] response: {message}", JsonSerializer.Serialize(res, LoggingSerializerOptions));
-                return JsonSerializer.Serialize(res, SerializerOptions);
-              case Event e:
-                logger.LogInformation("[DBG] event: {message}", JsonSerializer.Serialize(e, LoggingSerializerOptions));
-                return JsonSerializer.Serialize(e, SerializerOptions);
-              default:
-                throw new Exception($"Unsupported DAP message from debugger: {msg}");
-            }
+              Response res => JsonSerializer.Serialize(res, SerializerOptions),// logger.LogInformation("[DBG] response: {message}", JsonSerializer.Serialize(res, LoggingSerializerOptions));
+              Event e => JsonSerializer.Serialize(e, SerializerOptions),// logger.LogInformation("[DBG] event: {message}", JsonSerializer.Serialize(e, LoggingSerializerOptions));
+              _ => throw new Exception($"Unsupported DAP message from debugger: {msg}"),
+            };
           }
           catch (Exception e)
           {
