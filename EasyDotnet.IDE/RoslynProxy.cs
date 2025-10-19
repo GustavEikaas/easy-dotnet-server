@@ -94,7 +94,7 @@ public sealed class RoslynProxy(string clientPipeName, ILogger logger) : IAsyncD
   }
 
 
-  private static ProcessStartInfo GetRoslynProcessStartInfo(string roslynLogDir, RoslynProxyOptions options)
+  private ProcessStartInfo GetRoslynProcessStartInfo(string roslynLogDir, RoslynProxyOptions options)
   {
 #if DEBUG
     var psi = new ProcessStartInfo(
@@ -136,6 +136,7 @@ public sealed class RoslynProxy(string clientPipeName, ILogger logger) : IAsyncD
 
     foreach (var dll in GetAnalyzers(options))
     {
+        logger.LogInformation("[Roslyn]: Adding extension {ext}", dll);
         psi.ArgumentList.Add("--extension");
         psi.ArgumentList.Add(dll);
     }
