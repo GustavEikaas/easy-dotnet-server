@@ -59,8 +59,8 @@ runs:
           "https://pkgs.dev.azure.com/azure-public/vside/_apis/packaging/feeds/msft_consumption/nuget/packages/${RAZOR_PACKAGE_ID}/versions/${RAZOR_PACKAGE_VERSION}/content?api-version=6.0-preview.1"
 
         unzip -o artifacts/razor/razor.nupkg -d artifacts/razor/extracted
-        cp -r artifacts/roslyn/extracted/content/LanguageServer/neutral/* "$OUTPUT_PATH/LanguageServer/"
-        cp artifacts/roslyn/extracted/content/Targets/Microsoft.NET.Sdk.Razor.DesignTime.targets "$OUTPUT_PATH/LanguageServer/"
+        cp -r artifacts/razor/extracted/content/LanguageServer/neutral/* "$OUTPUT_PATH/LanguageServer/Razor/"
+        cp artifacts/razor/extracted/content/Targets/Microsoft.NET.Sdk.Razor.DesignTime.targets "$OUTPUT_PATH/LanguageServer/Razor/"
 
         mkdir -p artifacts/roslynator
         curl -L -o artifacts/roslynator/roslynator.nupkg \
