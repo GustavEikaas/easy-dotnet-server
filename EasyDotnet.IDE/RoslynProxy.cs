@@ -152,7 +152,7 @@ public sealed class RoslynProxy(string clientPipeName, ILogger logger) : IAsyncD
 
     var additionalAnalyzers = options.AnalyzerAssemblies ?? [];
 
-    return roslynatorAnalyzers.Concat(additionalAnalyzers);
+    return roslynatorAnalyzers.Concat(additionalAnalyzers).Concat([RoslynLocator.GetRazorExtensionDllPath()]);
   }
 
   private async Task PumpAsync(Stream input, Stream output, CancellationToken token, string pumpName)

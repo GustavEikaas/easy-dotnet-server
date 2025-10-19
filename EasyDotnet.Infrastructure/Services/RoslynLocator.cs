@@ -32,6 +32,20 @@ public static class RoslynLocator
 
     return razorDll;
   }
+
+  public static string GetRazorExtensionDllPath()
+  {
+    var roslynDir = GetRoslynBaseDir();
+    var razorExtensionDll = Path.Combine(roslynDir, "LanguageServer", "Razor", "Extension", "Microsoft.VisualStudioCode.RazorExtension.dll");
+
+    if (!File.Exists(razorExtensionDll))
+    {
+      throw new FileNotFoundException("Razor extension DLL not found", razorExtensionDll);
+    }
+
+    return razorExtensionDll;
+  }
+
   public static string GetRazorTargetsPath()
   {
     var roslynDir = GetRoslynBaseDir();
