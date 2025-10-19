@@ -41,6 +41,8 @@ runs:
         ROSLYN_PACKAGE_VERSION="${{ inputs.roslynPackageVersion }}"
         RAZOR_PACKAGE_ID="rzls.neutral"
         RAZOR_PACKAGE_VERSION="10.0.0-preview.25512.6"
+        RAZOR_EXTENSION_PACKAGE_ID="Microsoft.VisualStudioCode.RazorExtension"
+        RAZOR_EXTENSION_PACKAGE_VERSION="10.0.0-preview.25512.6"
         ROSLYNATOR_VERSION=4.14.0
         OUTPUT_PATH="${{ inputs.roslynOutputPath }}/Roslyn"
         
@@ -63,6 +65,14 @@ runs:
         mkdir -p "$OUTPUT_PATH/LanguageServer/Razor"
         cp -r artifacts/razor/extracted/content/LanguageServer/neutral/* "$OUTPUT_PATH/LanguageServer/Razor/"
         cp artifacts/razor/extracted/content/Targets/Microsoft.NET.Sdk.Razor.DesignTime.targets "$OUTPUT_PATH/LanguageServer/Razor/"
+
+        curl -L -o artifacts/razor/razorExtension.nupkg \
+          "https://pkgs.dev.azure.com/azure-public/vside/_apis/packaging/feeds/msft_consumption/nuget/packages/${RAZOR_EXTENSION_PACKAGE_ID}/versions/${RAZOR_EXTENSION_PACKAGE_VERSION}/content?api-version=6.0-preview.1"
+
+        unzip -o artifacts/razor/razorExtension.nupkg -d artifacts/razor/razorExtension
+
+        mkdir -p "$OUTPUT_PATH/LanguageServer/Razor/Extension"
+        cp -r artifacts/razor/razorExtension/content/* "$OUTPUT_PATH/LanguageServer/Razor/Extension"
 
         mkdir -p artifacts/roslynator
         curl -L -o artifacts/roslynator/roslynator.nupkg \
