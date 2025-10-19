@@ -115,6 +115,8 @@ public sealed class RoslynProxy(string clientPipeName, ILogger logger) : IAsyncD
     return psi;
 #else
     var roslynDllPath = RoslynLocator.GetRoslynDllPath();
+    var razorDllPath = RoslynLocator.GetRazorDllPath();
+    var razorTargetsPath = RoslynLocator.GetRazorTargetsPath();
     var psi = new ProcessStartInfo("dotnet")
     {
         RedirectStandardInput = true,
@@ -128,6 +130,8 @@ public sealed class RoslynProxy(string clientPipeName, ILogger logger) : IAsyncD
     psi.ArgumentList.Add("--stdio");
     psi.ArgumentList.Add("--logLevel=Information");
     psi.ArgumentList.Add("--extensionLogDirectory");
+    psi.ArgumentList.Add($"--razorSourceGenerator={razorDllPath}");
+    psi.ArgumentList.Add($"--razorDesignTimePath={razorTargetsPath}");
     psi.ArgumentList.Add(roslynLogDir);
 
     foreach (var dll in GetAnalyzers(options))
