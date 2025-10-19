@@ -37,7 +37,6 @@ runs:
     - name: Download and Extract Roslyn DLLs
       shell: bash
       run: |
-
         ROSLYN_PACKAGE_ID="${{ inputs.roslynPackageId }}"
         ROSLYN_PACKAGE_VERSION="${{ inputs.roslynPackageVersion }}"
         RAZOR_PACKAGE_ID="rzls.neutral"
@@ -47,55 +46,37 @@ runs:
         ROSLYNATOR_VERSION=4.14.0
         OUTPUT_PATH="${{ inputs.roslynOutputPath }}/Roslyn"
         
-        download_and_extract () {
-          local pkg_id=$1
-          local pkg_ver=$2
-          local feed_url=$3
-          local dest=$4
+        mkdir -p "$OUTPUT_PATH/LanguageServer"
+        mkdir -p "$OUTPUT_PATH/Analyzers"
 
-          mkdir -p "artifacts/$pkg_id"
-          local pkg_path="artifacts/$pkg_id/package.nupkg"
-          curl -sSL -o "$pkg_path" "$feed_url"
-          unzip -qo "$pkg_path" -d "$dest"
-        }
+        mkdir -p artifacts/roslyn
+        curl -L -o artifacts/roslyn/roslyn.nupkg \
+          "https://pkgs.dev.azure.com/azure-public/vside/_apis/packaging/feeds/vs-impl/nuget/packages/${ROSLYN_PACKAGE_ID}/versions/${ROSLYN_PACKAGE_VERSION}/content?api-version=6.0-preview.1"
 
-        mkdir -p "$OUTPUT/LanguageServer/Razor/Extension" "$OUTPUT/Analyzers"
+        unzip -o artifacts/roslyn/roslyn.nupkg -d artifacts/roslyn/extracted
+        cp -r artifacts/roslyn/extracted/content/LanguageServer/neutral/* "$OUTPUT_PATH/LanguageServer/"
 
-        # -------------------------
-        # Download + copy Roslyn
-        # -------------------------
-        download_and_extract \
-          "$ROSLYN_ID" "$ROSLYN_VER" \
-          "https://pkgs.dev.azure.com/azure-public/vside/_apis/packaging/feeds/vs-impl/nuget/packages/${ROSLYN_ID}/versions/${ROSLYN_VER}/content?api-version=6.0-preview.1" \
-          "artifacts/roslyn/extracted"
+        mkdir -p artifacts/razor
+        curl -L -o artifacts/razor/razor.nupkg \
+          "https://pkgs.dev.azure.com/azure-public/vside/_apis/packaging/feeds/msft_consumption/nuget/packages/${RAZOR_PACKAGE_ID}/versions/${RAZOR_PACKAGE_VERSION}/content?api-version=6.0-preview.1"
 
-        cp -r artifacts/roslyn/extracted/content/LanguageServer/neutral/* "$OUTPUT/LanguageServer/"
+        unzip -o artifacts/razor/razor.nupkg -d artifacts/razor/extracted
 
-        # -------------------------
-        # Razor LSP + Razor Extension
-        # -------------------------
-        download_and_extract \
-          "$RAZOR_ID" "$RAZOR_VER" \
-          "https://pkgs.dev.azure.com/azure-public/vside/_apis/packaging/feeds/msft_consumption/nuget/packages/${RAZOR_ID}/versions/${RAZOR_VER}/content?api-version=6.0-preview.1" \
-          "artifacts/razor/extracted"
+        mkdir -p "$OUTPUT_PATH/LanguageServer/Razor"
+        cp -r artifacts/razor/extracted/content/LanguageServer/neutral/* "$OUTPUT_PATH/LanguageServer/Razor/"
+        cp artifacts/razor/extracted/content/Targets/Microsoft.NET.Sdk.Razor.DesignTime.targets "$OUTPUT_PATH/LanguageServer/Razor/"
 
-        cp -r artifacts/razor/extracted/content/LanguageServer/neutral/* "$OUTPUT/LanguageServer/Razor/"
-        cp artifacts/razor/extracted/content/Targets/Microsoft.NET.Sdk.Razor.DesignTime.targets "$OUTPUT/LanguageServer/Razor/"
+        curl -L -o artifacts/razor/razorExtension.nupkg \
+          "https://pkgs.dev.azure.com/azure-public/vside/_apis/packaging/feeds/msft_consumption/nuget/packages/${RAZOR_EXTENSION_PACKAGE_ID}/versions/${RAZOR_EXTENSION_PACKAGE_VERSION}/content?api-version=6.0-preview.1"
 
-        download_and_extract \
-          "$RAZOR_EXT_ID" "$RAZOR_EXT_VER" \
-          "https://pkgs.dev.azure.com/azure-public/vside/_apis/packaging/feeds/msft_consumption/nuget/packages/${RAZOR_EXT_ID}/versions/${RAZOR_EXT_VER}/content?api-version=6.0-preview.1" \
-          "artifacts/razor/razorExtension"
+        unzip -o artifacts/razor/razorExtension.nupkg -d artifacts/razor/razorExtension
 
-        cp -r artifacts/razor/razorExtension/content/* "$OUTPUT/LanguageServer/Razor/Extension/"
+        mkdir -p "$OUTPUT_PATH/LanguageServer/Razor/Extension"
+        cp -r artifacts/razor/razorExtension/content/* "$OUTPUT_PATH/LanguageServer/Razor/Extension"
 
-        # -------------------------
-        # Roslynator analyzers
-        # -------------------------
-        download_and_extract \
-          "Roslynator.Analyzers" "$ROSLYNATOR_VER" \
-          "https://www.nuget.org/api/v2/package/Roslynator.Analyzers/${ROSLYNATOR_VER}" \
-          "artifacts/roslynator/extracted"
+        mkdir -p artifacts/roslynator
+        curl -L -o artifacts/roslynator/roslynator.nupkg \
+          "https://www.nuget.org/api/v2/package/Roslynator.Analyzers/${ROSLYNATOR_VERSION}"
 
-        cp artifacts/roslynator/extracted/analyzers/dotnet/roslyn4.7/cs/*.dll "$OUTPUT/Analyzers/"
-
+        unzip -o artifacts/roslynator/roslynator.nupkg -d artifacts/roslynator/extracted
+        cp artifacts/roslynator/extracted/analyzers/dotnet/roslyn4.7/cs/*.dll "$OUTPUT_PATH/Analyzers/"
