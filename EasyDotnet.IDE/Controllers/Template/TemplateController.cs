@@ -15,7 +15,7 @@ public class TemplateController(TemplateEngineService templateEngineService) : B
     await templateEngineService.EnsureInstalled();
     var templates = await templateEngineService.GetTemplatesAsync();
 
-    return templates.Where(x => x.GetLanguage() != "VB").Select(x => new DotnetNewTemplateResponse(string.IsNullOrWhiteSpace(x.GetLanguage()) ? x.Name : $"{x.Name} ({x.GetLanguage()})", x.Name, x.Identity, x.GetTemplateType())).AsAsyncEnumerable();
+    return templates.Where(x => x.GetLanguage() != "VB").Select(x => new DotnetNewTemplateResponse(string.IsNullOrWhiteSpace(x.GetLanguage()) ? x.Name : $"{x.Name} ({x.GetLanguage()})", x.Name, x.Identity, x.GetTemplateType())).AsAsyncEnumerable().WithJsonRpcSettings(new() { MinBatchSize = 5 });
   }
 
   [JsonRpcMethod("template/parameters")]
@@ -33,7 +33,7 @@ public class TemplateController(TemplateEngineService templateEngineService) : B
             x.Description,
             x.Precedence.IsRequired,
             x.Choices?.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.DisplayName ?? kvp.Value.Description ?? "")))
-      .AsAsyncEnumerable();
+      .AsAsyncEnumerable().WithJsonRpcSettings(new() { MinBatchSize = 5 });
   }
 
   [JsonRpcMethod("template/instantiate")]

@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
+using Microsoft.Extensions.Logging;
 using Microsoft.TemplateEngine.Abstractions;
 using Microsoft.TemplateEngine.Abstractions.Installer;
 using Microsoft.TemplateEngine.Edge.Settings;
@@ -15,7 +15,7 @@ using Microsoft.TemplateEngine.Utils;
 
 namespace EasyDotnet.IDE.Services;
 
-public class TemplateEngineService(IMsBuildService msBuildService)
+public class TemplateEngineService(IMsBuildService msBuildService, ILogger<TemplateEngineService> logger)
 {
   private readonly Microsoft.TemplateEngine.Edge.DefaultTemplateEngineHost _host = new(
         hostIdentifier: "easy-dotnet",
@@ -116,10 +116,10 @@ public class TemplateEngineService(IMsBuildService msBuildService)
   {
     using var bootstrapper = new Bootstrapper(
         _host,
-        loadDefaultComponents: true,
-        virtualizeConfiguration: false);
-    var x = await bootstrapper.GetTemplatesAsync(CancellationToken.None);
-    return x;
+        virtualizeConfiguration: false,
+        loadDefaultComponents: true);
+
+    return await bootstrapper.GetTemplatesAsync(CancellationToken.None);
   }
 
   public async Task InstantiateTemplateAsync(string identity, string name, string outputPath, IReadOnlyDictionary<string, string?>? parameters)
@@ -130,12 +130,17 @@ public class TemplateEngineService(IMsBuildService msBuildService)
 
     using var bootstrapper = new Bootstrapper(
         _host,
-        loadDefaultComponents: true,
-        virtualizeConfiguration: false);
+        virtualizeConfiguration: false,
+        loadDefaultComponents: true);
 
     var updatedParams = OverwriteTargetFrameworkIfSet(parameters);
 
-    await bootstrapper.CreateAsync(template, name, outputPath, updatedParams);
+    var result = await bootstrapper.CreateAsync(template, name, outputPath, updatedParams);
+    if (result.Status != Microsoft.TemplateEngine.Edge.Template.CreationResultStatus.Success)
+    {
+      throw new Exception($"Failed to instantiate template, STATUS:{result.Status}, err:{result.ErrorMessage ?? ""}");
+    }
+    logger.LogInformation("CREATED: {list}", string.Join(",", (result.CreationResult?.PrimaryOutputs ?? []).Select(x => x.Path)) ?? "");
   }
 
   public static IReadOnlyDictionary<string, string?> OverwriteTargetFrameworkIfSet(IReadOnlyDictionary<string, string?>? parameters)
