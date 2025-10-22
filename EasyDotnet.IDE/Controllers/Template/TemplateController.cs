@@ -48,7 +48,6 @@ public class TemplateController(TemplateEngineService templateEngineService, ICl
   }
   private async Task OpenEntryPointIfApplicable(string outputPath)
   {
-
     var programFile = Directory
         .EnumerateFiles(outputPath, "Program.cs", SearchOption.TopDirectoryOnly)
         .FirstOrDefault();

@@ -137,12 +137,7 @@ public class TemplateEngineService(IMsBuildService msBuildService, ILogger<Templ
     var updatedParams = OverwriteTargetFrameworkIfSet(parameters);
 
     var result = await bootstrapper.CreateAsync(template, name, outputPath, updatedParams);
-    if (result.Status != CreationResultStatus.Success)
-    {
-      throw new Exception($"Failed to instantiate template, STATUS:{result.Status}, err:{result.ErrorMessage ?? ""}");
-    }
-    logger.LogInformation("CREATED: {list}", string.Join(",", (result.CreationResult?.PrimaryOutputs ?? []).Select(x => x.Path)) ?? "");
-    return result;
+    return result.Status == CreationResultStatus.Success ? result : throw new Exception($"Failed to instantiate template, STATUS:{result.Status}, err:{result.ErrorMessage ?? ""}");
   }
 
   public static IReadOnlyDictionary<string, string?> OverwriteTargetFrameworkIfSet(IReadOnlyDictionary<string, string?>? parameters)
