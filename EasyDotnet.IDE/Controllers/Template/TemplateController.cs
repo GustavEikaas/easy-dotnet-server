@@ -46,6 +46,7 @@ public class TemplateController(TemplateEngineService templateEngineService, ICl
 
     await OpenEntryPointIfApplicable(outputPath);
   }
+
   private async Task OpenEntryPointIfApplicable(string outputPath)
   {
     var programFile = Directory
