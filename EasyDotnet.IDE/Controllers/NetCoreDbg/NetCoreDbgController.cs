@@ -1,11 +1,15 @@
 using System;
 using System.Diagnostics;
+using System.Net.Security;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
 using EasyDotnet.Domain.Models.MsBuild.Project;
+using EasyDotnet.Infrastructure.Aspire.Server;
+using EasyDotnet.Infrastructure.Aspire.Server.Controllers;
 using EasyDotnet.Infrastructure.Dap;
+using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Controllers.NetCoreDbg;
@@ -19,12 +23,14 @@ public sealed record DebuggerStartRequest(
 
 public sealed record DebuggerStartResponse(bool Success, int Port);
 
-public class NetCoreDbgController(IMsBuildService msBuildService, ILaunchProfileService launchProfileService, INetcoreDbgService netcoreDbgService, IClientService clientService) : BaseController
+public class NetCoreDbgController(IMsBuildService msBuildService, ILaunchProfileService launchProfileService, INetcoreDbgService netcoreDbgService, IClientService clientService, ILogger<NetCoreDbgController> logger, ILogger<DcpServer> logger1, ILogger<DebuggingController> logger2) : BaseController
 {
   [JsonRpcMethod("debugger/start")]
   public async Task<DebuggerStartResponse> StartDebugger(DebuggerStartRequest request, CancellationToken cancellationToken)
   {
+
     var project = await msBuildService.GetOrSetProjectPropertiesAsync(request.TargetPath, request.TargetFramework, request.Configuration ?? "Debug", cancellationToken);
+
     var launchProfile = !string.IsNullOrEmpty(request.LaunchProfileName)
         ? (launchProfileService.GetLaunchProfiles(request.TargetPath)
            is { } profiles && profiles.TryGetValue(request.LaunchProfileName, out var profile)
