@@ -1,13 +1,15 @@
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using EasyDotnet.Application.Interfaces;
 using EasyDotnet.IDE.Services;
 using Microsoft.TemplateEngine.Utils;
 using StreamJsonRpc;
 
 namespace EasyDotnet.Controllers.Template;
 
-public class TemplateController(TemplateEngineService templateEngineService) : BaseController
+public class TemplateController(TemplateEngineService templateEngineService, IClientService clientService) : BaseController
 {
   [JsonRpcMethod("template/list")]
   public async Task<IAsyncEnumerable<DotnetNewTemplateResponse>> GetTemplates()
@@ -15,7 +17,7 @@ public class TemplateController(TemplateEngineService templateEngineService) : B
     await templateEngineService.EnsureInstalled();
     var templates = await templateEngineService.GetTemplatesAsync();
 
-    return templates.Where(x => x.GetLanguage() != "VB").Select(x => new DotnetNewTemplateResponse(string.IsNullOrWhiteSpace(x.GetLanguage()) ? x.Name : $"{x.Name} ({x.GetLanguage()})", x.Name, x.Identity, x.GetTemplateType())).AsAsyncEnumerable();
+    return templates.Where(x => x.GetLanguage() != "VB").Select(x => new DotnetNewTemplateResponse(string.IsNullOrWhiteSpace(x.GetLanguage()) ? x.Name : $"{x.Name} ({x.GetLanguage()})", x.Name, x.Identity, x.GetTemplateType())).AsAsyncEnumerable().WithJsonRpcSettings(new() { MinBatchSize = 5 });
   }
 
   [JsonRpcMethod("template/parameters")]
@@ -33,7 +35,7 @@ public class TemplateController(TemplateEngineService templateEngineService) : B
             x.Description,
             x.Precedence.IsRequired,
             x.Choices?.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.DisplayName ?? kvp.Value.Description ?? "")))
-      .AsAsyncEnumerable();
+      .AsAsyncEnumerable().WithJsonRpcSettings(new() { MinBatchSize = 5 });
   }
 
   [JsonRpcMethod("template/instantiate")]
@@ -41,5 +43,19 @@ public class TemplateController(TemplateEngineService templateEngineService) : B
   {
     await templateEngineService.EnsureInstalled();
     await templateEngineService.InstantiateTemplateAsync(identity, name, outputPath, parameters);
+
+    await OpenEntryPointIfApplicable(outputPath);
+  }
+
+  private async Task OpenEntryPointIfApplicable(string outputPath)
+  {
+    var programFile = Directory
+        .EnumerateFiles(outputPath, "Program.cs", SearchOption.TopDirectoryOnly)
+        .FirstOrDefault();
+
+    if (programFile != null)
+    {
+      await clientService.RequestOpenBuffer(Path.GetFullPath(programFile));
+    }
   }
 }
