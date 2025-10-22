@@ -31,45 +31,23 @@ public class NetCoreDbgController(IMsBuildService msBuildService, ILaunchProfile
 
     var project = await msBuildService.GetOrSetProjectPropertiesAsync(request.TargetPath, request.TargetFramework, request.Configuration ?? "Debug", cancellationToken);
 
-    if (project.IsAspireHost)
+    var launchProfile = !string.IsNullOrEmpty(request.LaunchProfileName)
+        ? (launchProfileService.GetLaunchProfiles(request.TargetPath)
+           is { } profiles && profiles.TryGetValue(request.LaunchProfileName, out var profile)
+              ? profile
+              : null)
+        : null;
+
+    var binaryPath = clientService.ClientOptions?.DebuggerOptions?.BinaryPath;
+    if (string.IsNullOrEmpty(binaryPath))
     {
-      logger.LogInformation($"Starting Aspire AppHost {request.TargetPath}");
-
-      // Create the complete Aspire server infrastructure
-      var aspireContext = await AspireServer.CreateAndStartAsync(
-        request.TargetPath,
-        netcoreDbgService,
-        msBuildService,
-        logger1,
-        logger2,
-        cancellationToken
-      );
-
-      logger.LogInformation("Aspire server infrastructure started successfully");
-
-      // Return -1 since we're not directly debugging the AppHost
-      return new DebuggerStartResponse(true, -1);
+      throw new Exception("Failed to start debugger, no binary path provided");
     }
-    else
-    {
-      var launchProfile = !string.IsNullOrEmpty(request.LaunchProfileName)
-          ? (launchProfileService.GetLaunchProfiles(request.TargetPath)
-             is { } profiles && profiles.TryGetValue(request.LaunchProfileName, out var profile)
-                ? profile
-                : null)
-          : null;
 
-      var binaryPath = clientService.ClientOptions?.DebuggerOptions?.BinaryPath;
-      if (string.IsNullOrEmpty(binaryPath))
-      {
-        throw new Exception("Failed to start debugger, no binary path provided");
-      }
+    var res = StartVsTestIfApplicable(project, request.TargetPath);
 
-      var res = StartVsTestIfApplicable(project, request.TargetPath);
-
-      var port = await netcoreDbgService.Start(binaryPath, project, request.TargetPath, launchProfile, res);
-      return new DebuggerStartResponse(true, port);
-    }
+    var port = await netcoreDbgService.Start(binaryPath, project, request.TargetPath, launchProfile, res);
+    return new DebuggerStartResponse(true, port);
   }
 
   private static (Process, int)? StartVsTestIfApplicable(DotnetProject project, string projectPath) => project.IsTestProject && !project.TestingPlatformDotnetTestSupport ? VsTestHelper.StartTestProcess(projectPath) : null;

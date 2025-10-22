@@ -57,6 +57,7 @@ public static class AspireServer
   public static async Task<AspireServerContext> CreateAndStartAsync(
       string projectPath,
       INetcoreDbgService netcoreDbgService,
+      IClientService clientService,
       IMsBuildService msBuildService,
       ILogger<DcpServer> dcpLogger,
       ILogger<DebuggingController> logger2,
@@ -70,7 +71,7 @@ public static class AspireServer
     var (listener, rpcEndpoint) = CreateListener();
 
     // 3. Start DCP HTTP server
-    var dcpServer = await DcpServer.CreateAsync(dcpLogger, netcoreDbgService, msBuildService, cancellationToken);
+    var dcpServer = await DcpServer.CreateAsync(dcpLogger, netcoreDbgService, msBuildService, clientService, cancellationToken);
     Console.WriteLine($"DCP server listening on port {dcpServer.Port}");
 
     // 4. Start Aspire CLI process
@@ -92,7 +93,7 @@ public static class AspireServer
     Console.WriteLine("SSL authentication completed with Aspire CLI");
 
     // 7. Create RPC server
-    var rpcServer = CreateAspireServer(ssl, dcpServer, netcoreDbgService, msBuildService, logger2);
+    var rpcServer = CreateAspireServer(ssl, dcpServer, clientService, netcoreDbgService, msBuildService, logger2);
     rpcServer.StartListening();
     Console.WriteLine("RPC server listening");
 
@@ -161,7 +162,7 @@ public static class AspireServer
   }
 
 
-  public static JsonRpc CreateAspireServer(SslStream stream, DcpServer server, INetcoreDbgService netcoreDbgService, IMsBuildService msBuildService, ILogger<DebuggingController> logger)
+  public static JsonRpc CreateAspireServer(SslStream stream, DcpServer server, IClientService clientService, INetcoreDbgService netcoreDbgService, IMsBuildService msBuildService, ILogger<DebuggingController> logger)
   {
     var rpc = new JsonRpc(new HeaderDelimitedMessageHandler(stream, stream));
     rpc.TraceSource.Switch.Level = SourceLevels.All;
@@ -169,7 +170,7 @@ public static class AspireServer
 
     rpc.AddLocalRpcTarget(new AppHostController(server));
     rpc.AddLocalRpcTarget(new CapabilitiesController());
-    rpc.AddLocalRpcTarget(new DebuggingController(netcoreDbgService, msBuildService, logger, server));
+    rpc.AddLocalRpcTarget(new DebuggingController(netcoreDbgService, clientService, msBuildService, logger, server));
     rpc.AddLocalRpcTarget(new DisplayController());
     rpc.AddLocalRpcTarget(new EditorController());
     rpc.AddLocalRpcTarget(new LoggingController());

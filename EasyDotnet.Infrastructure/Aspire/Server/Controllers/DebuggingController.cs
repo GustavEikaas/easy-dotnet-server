@@ -7,6 +7,7 @@ namespace EasyDotnet.Infrastructure.Aspire.Server.Controllers;
 
 public class DebuggingController(
   INetcoreDbgService netcoreDbgService,
+  IClientService clientService,
   IMsBuildService msBuildService,
   ILogger<DebuggingController> logger, DcpServer dcpServer)
 {

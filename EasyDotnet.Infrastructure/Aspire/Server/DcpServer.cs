@@ -12,16 +12,17 @@ using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Infrastructure.Aspire.Server;
 
-public class DcpServer : IAsyncDisposable
+public sealed class DcpServer : IAsyncDisposable
 {
   private readonly ILogger<DcpServer> _logger;
   private readonly INetcoreDbgService _netcoreDbgService;
+  private readonly IClientService _clientService;
   private readonly IMsBuildService _msBuildService;
   private readonly X509Certificate2 _certificate;
   private readonly HttpListener _listener;
-  private readonly Dictionary<string, RunSession> _runSessions = new();
-  private readonly Dictionary<string, WebSocket> _webSocketsByDcpId = new();
-  private readonly Dictionary<string, Queue<object>> _pendingNotificationsByDcpId = new();
+  private readonly Dictionary<string, RunSession> _runSessions = [];
+  private readonly Dictionary<string, WebSocket> _webSocketsByDcpId = [];
+  private readonly Dictionary<string, Queue<object>> _pendingNotificationsByDcpId = [];
   private readonly CancellationTokenSource _cts = new();
   private Task? _listenerTask;
 
@@ -32,6 +33,7 @@ public class DcpServer : IAsyncDisposable
   private DcpServer(
       ILogger<DcpServer> logger,
       INetcoreDbgService netcoreDbgService,
+      IClientService clientService,
       IMsBuildService msBuildService,
       string token,
       X509Certificate2 certificate,
@@ -41,6 +43,7 @@ public class DcpServer : IAsyncDisposable
     _logger = logger;
     _netcoreDbgService = netcoreDbgService;
     _msBuildService = msBuildService;
+    _clientService = clientService;
     Token = token;
     _certificate = certificate;
     CertificateBase64 = Convert.ToBase64String(certificate.Export(X509ContentType.Cert));
@@ -52,6 +55,7 @@ public class DcpServer : IAsyncDisposable
       ILogger<DcpServer> logger,
       INetcoreDbgService netcoreDbgService,
       IMsBuildService msBuildService,
+      IClientService clientService,
       CancellationToken cancellationToken = default)
   {
     var token = Guid.NewGuid().ToString("N");
@@ -67,7 +71,7 @@ public class DcpServer : IAsyncDisposable
 
     listener.Start();
 
-    var server = new DcpServer(logger, netcoreDbgService, msBuildService, token, certificate, listener, port);
+    var server = new DcpServer(logger, netcoreDbgService, clientService, msBuildService, token, certificate, listener, port);
     server.StartListening();
 
     logger.LogInformation("DCP server listening on port {Port}", port);
@@ -234,7 +238,8 @@ public class DcpServer : IAsyncDisposable
       var project = await _msBuildService.GetOrSetProjectPropertiesAsync(
           projectConfig.ProjectPath, null, "Debug", CancellationToken.None);
 
-      var debug = projectConfig.Mode != "NoDebug"; // Default is "Debug"
+      //TODO: revert
+      var debug = true; // projectConfig.Mode != "NoDebug"; // Default is "Debug"
 
       int? debuggerPort = null;
       System.Diagnostics.Process? serviceProcess = null;
@@ -243,11 +248,13 @@ public class DcpServer : IAsyncDisposable
       {
         // Start with debugger attached
         var binaryPath = "netcoredbg"; // TODO: get from config
-        debuggerPort = await _netcoreDbgService.Start(
+        var port = await _netcoreDbgService.Start(
             binaryPath, project, projectConfig.ProjectPath, null, null);
+        debuggerPort = port;
 
-        _logger.LogInformation("Started debugger on port {Port} for {ProjectPath}",
-            debuggerPort, projectConfig.ProjectPath);
+        _logger.LogInformation("Started debugger on port {Port} for {ProjectPath}", debuggerPort, projectConfig.ProjectPath);
+        // await _clientService.RequestSetBreakpoint("C:/Users/Gustav/repo/aspire/aspire.ApiService/Program.cs", 1);
+        await _clientService.RequestStartDebugSession("127.0.0.1", port);
       }
       else
       {
