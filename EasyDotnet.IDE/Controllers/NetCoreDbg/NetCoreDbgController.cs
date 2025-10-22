@@ -41,7 +41,6 @@ public class NetCoreDbgController(IMsBuildService msBuildService, ILaunchProfile
     var res = StartVsTestIfApplicable(project, request.TargetPath);
 
     var port = await netcoreDbgService.Start(binaryPath, project, request.TargetPath, launchProfile, res);
-    await clientService.RequestStartDebugSession("127.0.0.1", port);
     return new DebuggerStartResponse(true, port);
   }
 
