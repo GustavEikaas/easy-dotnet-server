@@ -18,6 +18,8 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
     return [.. instances.Select(x => new SdkInstallation(x.Name, $"net{x.Version.Major}.0", x.Version, x.MSBuildPath, x.VisualStudioRootPath))];
   }
 
+  public bool HasMinimumSdk(Version version) => QuerySdkInstallations().Any(x => x.Version >= version);
+
   public string GetDotnetSdkBasePath() => Path.GetDirectoryName(Path.GetDirectoryName(QuerySdkInstallations().First().MSBuildPath))!;
 
   public async Task<BuildResult> RequestBuildAsync(

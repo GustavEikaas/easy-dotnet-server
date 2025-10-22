@@ -70,7 +70,6 @@ public class NetCoreDbgController(IMsBuildService msBuildService, ILaunchProfile
       var port = await netcoreDbgService.Start(binaryPath, project, request.TargetPath, launchProfile, res);
       return new DebuggerStartResponse(true, port);
     }
-
   }
 
   private static (Process, int)? StartVsTestIfApplicable(DotnetProject project, string projectPath) => project.IsTestProject && !project.TestingPlatformDotnetTestSupport ? VsTestHelper.StartTestProcess(projectPath) : null;
