@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.TemplateEngine.Abstractions;
 using Microsoft.TemplateEngine.Abstractions.Installer;
 using Microsoft.TemplateEngine.Edge.Settings;
+using Microsoft.TemplateEngine.Edge.Template;
 using Microsoft.TemplateEngine.IDE;
 using Microsoft.TemplateEngine.Utils;
 
@@ -122,7 +123,7 @@ public class TemplateEngineService(IMsBuildService msBuildService, ILogger<Templ
     return await bootstrapper.GetTemplatesAsync(CancellationToken.None);
   }
 
-  public async Task InstantiateTemplateAsync(string identity, string name, string outputPath, IReadOnlyDictionary<string, string?>? parameters)
+  public async Task<ITemplateCreationResult> InstantiateTemplateAsync(string identity, string name, string outputPath, IReadOnlyDictionary<string, string?>? parameters)
   {
     var templates = await GetTemplatesAsync();
 
@@ -136,11 +137,12 @@ public class TemplateEngineService(IMsBuildService msBuildService, ILogger<Templ
     var updatedParams = OverwriteTargetFrameworkIfSet(parameters);
 
     var result = await bootstrapper.CreateAsync(template, name, outputPath, updatedParams);
-    if (result.Status != Microsoft.TemplateEngine.Edge.Template.CreationResultStatus.Success)
+    if (result.Status != CreationResultStatus.Success)
     {
       throw new Exception($"Failed to instantiate template, STATUS:{result.Status}, err:{result.ErrorMessage ?? ""}");
     }
     logger.LogInformation("CREATED: {list}", string.Join(",", (result.CreationResult?.PrimaryOutputs ?? []).Select(x => x.Path)) ?? "");
+    return result;
   }
 
   public static IReadOnlyDictionary<string, string?> OverwriteTargetFrameworkIfSet(IReadOnlyDictionary<string, string?>? parameters)

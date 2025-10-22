@@ -1,13 +1,15 @@
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using EasyDotnet.Application.Interfaces;
 using EasyDotnet.IDE.Services;
 using Microsoft.TemplateEngine.Utils;
 using StreamJsonRpc;
 
 namespace EasyDotnet.Controllers.Template;
 
-public class TemplateController(TemplateEngineService templateEngineService) : BaseController
+public class TemplateController(TemplateEngineService templateEngineService, IClientService clientService) : BaseController
 {
   [JsonRpcMethod("template/list")]
   public async Task<IAsyncEnumerable<DotnetNewTemplateResponse>> GetTemplates()
@@ -41,5 +43,19 @@ public class TemplateController(TemplateEngineService templateEngineService) : B
   {
     await templateEngineService.EnsureInstalled();
     await templateEngineService.InstantiateTemplateAsync(identity, name, outputPath, parameters);
+
+    await OpenEntryPointIfApplicable(outputPath);
+  }
+  private async Task OpenEntryPointIfApplicable(string outputPath)
+  {
+
+    var programFile = Directory
+        .EnumerateFiles(outputPath, "Program.cs", SearchOption.TopDirectoryOnly)
+        .FirstOrDefault();
+
+    if (programFile != null)
+    {
+      await clientService.RequestOpenBuffer(Path.GetFullPath(programFile));
+    }
   }
 }
