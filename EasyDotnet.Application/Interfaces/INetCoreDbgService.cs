@@ -9,5 +9,5 @@ public interface INetcoreDbgService
   Task Completion { get; }
 
   ValueTask DisposeAsync();
-  Task<int> Start(string binaryPath, DotnetProject project, string projectPath, LaunchProfile? launchProfile, (Process, int)? vsTestAttach);
+  Task<int> Start(string binaryPath, DotnetProject project, string projectPath, LaunchProfile? launchProfile, (Process, int)? vsTestAttach, IDictionary<string, string>? envVars);
 }

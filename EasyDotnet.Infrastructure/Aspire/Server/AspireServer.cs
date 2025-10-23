@@ -116,7 +116,7 @@ public static class AspireServer
     var psi = new ProcessStartInfo
     {
       FileName = "aspire",
-      Arguments = $"run --project \"{projectPath}\"",
+      Arguments = "run --start-debug-session",
       UseShellExecute = false,
       RedirectStandardOutput = true,
       RedirectStandardError = true,
@@ -133,9 +133,16 @@ public static class AspireServer
     psi.Environment["DEBUG_SESSION_TOKEN"] = dcpServer.Token;
     psi.Environment["DEBUG_SESSION_CERTIFICATE"] = dcpServer.CertificateBase64;
 
+    // env.DCP_INSTANCE_ID_PREFIX = debugSessionId + '-';
+    psi.Environment["DEBUG_SESSION_RUN_MODE"] = "Debug";
+    psi.Environment["ASPIRE_EXTENSION_DEBUG_RUN_MODE"] = "Debug";
+    var cap = new[] { "project", "prompting", "baseline.v1", "secret-prompts.v1", "ms-dotnettools.csharp", "devkit", "ms-dotnettools.csdevkit" };
+    psi.Environment["ASPIRE_EXTENSION_CAPABILITIES"] = string.Join(", ", cap);
+
     var runSessionInfo = new
     {
-      supported_launch_configurations = new[] { "project" }
+      ProtocolsSupported = new[] { "2024-03-03", "2024-04-23", "2025-10-01" },
+      SupportedLaunchConfigurations = cap,
     };
     psi.Environment["DEBUG_SESSION_INFO"] = JsonSerializer.Serialize(runSessionInfo);
 
@@ -144,16 +151,16 @@ public static class AspireServer
     var cliProcess = System.Diagnostics.Process.Start(psi) ?? throw new Exception("Failed to start Aspire CLI");
 
     cliProcess.OutputDataReceived += (_, e) =>
-    {
-      if (!string.IsNullOrEmpty(e.Data))
-        Console.WriteLine("[Aspire CLI] " + e.Data);
-    };
+      {
+        if (!string.IsNullOrEmpty(e.Data))
+          Console.WriteLine("[Aspire CLI] " + e.Data);
+      };
 
     cliProcess.ErrorDataReceived += (_, e) =>
-    {
-      if (!string.IsNullOrEmpty(e.Data))
-        Console.Error.WriteLine("[Aspire CLI] " + e.Data);
-    };
+        {
+          if (!string.IsNullOrEmpty(e.Data))
+            Console.Error.WriteLine("[Aspire CLI] " + e.Data);
+        };
 
     cliProcess.BeginOutputReadLine();
     cliProcess.BeginErrorReadLine();

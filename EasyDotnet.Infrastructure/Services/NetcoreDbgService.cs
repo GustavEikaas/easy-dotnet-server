@@ -38,7 +38,7 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
 
   public Task Completion => _completionSource.Task;
 
-  public async Task<int> Start(string binaryPath, DotnetProject project, string projectPath, LaunchProfile? launchProfile, (System.Diagnostics.Process, int)? vsTestAttach)
+  public async Task<int> Start(string binaryPath, DotnetProject project, string projectPath, LaunchProfile? launchProfile, (System.Diagnostics.Process, int)? vsTestAttach, IDictionary<string, string>? envVars)
   {
     if (_disposeTask != null)
     {
@@ -137,18 +137,25 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
           CreateNoWindow = true
         };
 
-        psi.Environment["ASPNETCORE_URLS"] = "https://localhost:18888";
-        psi.Environment["ASPIRE_DASHBOARD_OTLP_ENDPOINT_URL"] = "https://localhost:4317";
-        psi.Environment["ASPIRE_DASHBOARD_OTLP_HTTP_ENDPOINT_URL"] = "https://localhost:4318";
-        psi.Environment["ASPIRE_RESOURCE_SERVICE_ENDPOINT_URL"] = "https://localhost:4319";
+
+        if (envVars is not null)
+        {
+          foreach (var (name, value) in envVars)
+          {
+            psi.Environment[name] = value;
+          }
+        }
+
+        // psi.Environment["ASPNETCORE_URLS"] = "https://localhost:18888";
+        // psi.Environment["ASPIRE_DASHBOARD_OTLP_ENDPOINT_URL"] = "https://localhost:4317";
+        // psi.Environment["ASPIRE_DASHBOARD_OTLP_HTTP_ENDPOINT_URL"] = "https://localhost:4318";
+        // psi.Environment["ASPIRE_RESOURCE_SERVICE_ENDPOINT_URL"] = "https://localhost:4319";
 
         _process = new System.Diagnostics.Process
         {
           StartInfo = psi,
           EnableRaisingEvents = true,
         };
-
-
 
         _process.Exited += (sender, args) =>
         {
@@ -169,9 +176,9 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
               _ => throw new Exception($"Unsupported DAP message from debugger: {msg}"),
             };
           }
-          catch (Exception e)
+          catch (Exception)
           {
-            logger.LogError("Exception {e}", e);
+            // logger.LogError("Exception {e}", e);
             throw;
           }
         });
@@ -186,12 +193,12 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
       }
       catch (OperationCanceledException)
       {
-        logger.LogInformation("Operation was canceled.");
+        // logger.LogInformation("Operation was canceled.");
         _completionSource.SetCanceled();
       }
       catch (Exception ex)
       {
-        logger.LogError(ex, "An unhandled exception occurred in the debugging session.");
+        // logger.LogError(ex, "An unhandled exception occurred in the debugging session.");
         _completionSource.SetException(ex);
         throw;
       }

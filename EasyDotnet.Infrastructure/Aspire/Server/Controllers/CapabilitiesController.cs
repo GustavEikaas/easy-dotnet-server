@@ -8,7 +8,8 @@ public class CapabilitiesController
   public string[] GetCapabilities(string token)
   {
     Console.WriteLine($"[{token}] GetCapabilities called");
-    return ["baseline.v1"];
+
+    return ["baseline.v1", "project", "ms-dotnettools.csharp", "devkit", "ms-dotnettools.csdevkit"];
   }
 
   [JsonRpcMethod("hasCapability")]

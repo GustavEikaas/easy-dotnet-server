@@ -32,6 +32,7 @@ public class AppHostController(DcpServer dcpServer)
     psi.Environment["DEBUG_SESSION_PORT"] = $"localhost:{dcpServer.Port}";
     psi.Environment["DEBUG_SESSION_TOKEN"] = dcpServer.Token;
     psi.Environment["DEBUG_SESSION_CERTIFICATE"] = dcpServer.CertificateBase64;
+    psi.Environment["DEBUG_SESSION_RUN_MODE"] = "Debug";
 
     // Add run session info
     var runSessionInfo = new

@@ -179,12 +179,12 @@ public sealed class DcpServer : IAsyncDisposable
 
   private async Task HandleInfoAsync(HttpListenerResponse response)
   {
-    var info = new
+    var runSessionInfo = new
     {
-      protocols_supported = new[] { "2024-03-03", "2024-04-23" },
-      supported_launch_configurations = new[] { "project" }
+      ProtocolsSupported = new[] { "2024-03-03", "2024-04-23", "2025-10-01" },
+      SupportedLaunchConfigurations = new[] { "project", "prompting", "baseline.v1", "secret-prompts.v1", "ms-dotnettools.csharp", "devkit", "ms-dotnettools.csdevkit" }
     };
-    await SendJsonResponseAsync(response, 200, info);
+    await SendJsonResponseAsync(response, 200, runSessionInfo);
   }
 
   private async Task HandleCreateRunSessionAsync(HttpListenerRequest request, HttpListenerResponse response)
@@ -238,18 +238,18 @@ public sealed class DcpServer : IAsyncDisposable
       var project = await _msBuildService.GetOrSetProjectPropertiesAsync(
           projectConfig.ProjectPath, null, "Debug", CancellationToken.None);
 
-      //TODO: revert
-      var debug = true; // projectConfig.Mode != "NoDebug"; // Default is "Debug"
+      var debug = projectConfig.Mode != "NoDebug"; // Default is "Debug"
 
       int? debuggerPort = null;
       System.Diagnostics.Process? serviceProcess = null;
 
       if (debug)
       {
-        // Start with debugger attached
-        var binaryPath = "netcoredbg"; // TODO: get from config
+        var envVars = BuildEnvironmentVariables(payload);
+
+        var binaryPath = "netcoredbg";
         var port = await _netcoreDbgService.Start(
-            binaryPath, project, projectConfig.ProjectPath, null, null);
+            binaryPath, project, projectConfig.ProjectPath, null, null, envVars);
         debuggerPort = port;
 
         _logger.LogInformation("Started debugger on port {Port} for {ProjectPath}", debuggerPort, projectConfig.ProjectPath);
@@ -272,34 +272,11 @@ public sealed class DcpServer : IAsyncDisposable
           CreateNoWindow = true
         };
 
-        if (payload.Env != null)
+        var envVars = BuildEnvironmentVariables(payload);
+        foreach (var (name, value) in envVars)
         {
-          _logger.LogInformation("Applying {Count} environment variables", payload.Env.Length);
-
-          var aspnetcoreUrls = payload.Env.FirstOrDefault(e => e.Name == "ASPNETCORE_URLS");
-          if (aspnetcoreUrls != null)
-          {
-            _logger.LogCritical("!!! ASPNETCORE_URLS = {Value} !!!", aspnetcoreUrls.Value);
-          }
-          else
-          {
-            _logger.LogWarning("!!! ASPNETCORE_URLS not found in env vars !!!");
-          }
-
-          // Log ALL env vars that contain URL or PORT
-          foreach (var envVar in payload.Env.Where(e =>
-              e.Name.Contains("URL", StringComparison.OrdinalIgnoreCase) ||
-              e.Name.Contains("PORT", StringComparison.OrdinalIgnoreCase)))
-          {
-            _logger.LogInformation("  {Name} = {Value}", envVar.Name, envVar.Value);
-          }
-
-          foreach (var envVar in payload.Env)
-          {
-            psi.Environment[envVar.Name] = envVar.Value;
-          }
+          psi.Environment[name] = value;
         }
-
 
         // Apply arguments from the payload
         if (payload.Args != null && payload.Args.Length > 0)
@@ -589,6 +566,50 @@ public sealed class DcpServer : IAsyncDisposable
     var port = ((IPEndPoint)listener.LocalEndpoint).Port;
     listener.Stop();
     return port;
+  }
+
+
+  private IDictionary<string, string> BuildEnvironmentVariables(RunSessionPayload payload)
+  {
+    var envVars = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+    if (payload.Env == null || payload.Env.Length == 0)
+    {
+      _logger.LogWarning("No environment variables found in payload");
+      return envVars;
+    }
+
+    _logger.LogInformation("Applying {Count} environment variables from payload", payload.Env.Length);
+
+    // Check for ASPNETCORE_URLS specifically
+    var aspnetcoreUrls = payload.Env.FirstOrDefault(e => e.Name.Equals("ASPNETCORE_URLS", StringComparison.OrdinalIgnoreCase));
+    if (aspnetcoreUrls != null)
+    {
+      _logger.LogCritical("!!! ASPNETCORE_URLS = {Value} !!!", aspnetcoreUrls.Value);
+    }
+    else
+    {
+      _logger.LogWarning("!!! ASPNETCORE_URLS not found in env vars !!!");
+    }
+
+    // Log all URL- or PORT-related env vars
+    foreach (var envVar in payload.Env.Where(e =>
+        e.Name.Contains("URL", StringComparison.OrdinalIgnoreCase) ||
+        e.Name.Contains("PORT", StringComparison.OrdinalIgnoreCase)))
+    {
+      _logger.LogInformation("  {Name} = {Value}", envVar.Name, envVar.Value);
+    }
+
+    // Populate dictionary
+    foreach (var envVar in payload.Env)
+    {
+      if (string.IsNullOrWhiteSpace(envVar.Name))
+        continue;
+
+      envVars[envVar.Name] = envVar.Value ?? string.Empty;
+    }
+
+    return envVars;
   }
 
   private static string GenerateRunId() => $"run-{Guid.NewGuid():N}";

@@ -1,9 +1,20 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using EasyDotnet.Application.Interfaces;
 using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
 
 namespace EasyDotnet.Infrastructure.Aspire.Server.Controllers;
+
+
+public class RunSessionInfo
+{
+  [JsonPropertyName("protocols_supported")]
+  public string[] ProtocolsSupported { get; set; } = [];
+
+  [JsonPropertyName("supported_launch_configurations")]
+  public string[] SupportedLaunchConfigurations { get; set; } = [];
+}
 
 public class DebuggingController(
   INetcoreDbgService netcoreDbgService,
@@ -17,12 +28,22 @@ public class DebuggingController(
   [JsonRpcMethod("startDebugSession")]
   public async Task StartDebugSession(string token, string workingDirectory, string? projectFile, bool debug)
   {
+
     logger.LogInformation("[{Token}] StartDebugSession: {ProjectFile}, debug={Debug}", token, projectFile, debug);
 
     if (string.IsNullOrEmpty(projectFile))
     {
-      logger.LogWarning("No project file specified");
-      return;
+      projectFile = Directory
+                  .EnumerateFiles(workingDirectory, "*.csproj", SearchOption.TopDirectoryOnly)
+                  .FirstOrDefault();
+
+      if (string.IsNullOrEmpty(projectFile))
+      {
+        logger.LogError("[{Token}] No .csproj file found in directory: {WorkingDirectory}", token, workingDirectory);
+        throw new FileNotFoundException("No project file found in working directory.", workingDirectory);
+      }
+
+      logger.LogInformation("[{Token}] Falling back to discovered project file: {ProjectFile}", token, projectFile);
     }
 
     // Check if this is the AppHost
@@ -49,10 +70,17 @@ public class DebuggingController(
       psi.Environment["DEBUG_SESSION_TOKEN"] = dcpServer.Token;
       psi.Environment["DEBUG_SESSION_CERTIFICATE"] = dcpServer.CertificateBase64;
 
+      psi.Environment["DEBUG_SESSION_RUN_MODE"] = "Debug";
+      psi.Environment["ASPIRE_EXTENSION_DEBUG_RUN_MODE"] = "Debug";
+      var cap = new[] { "project", "prompting", "baseline.v1", "secret-prompts.v1", "ms-dotnettools.csharp", "devkit", "ms-dotnettools.csdevkit" };
+      psi.Environment["ASPIRE_EXTENSION_CAPABILITIES"] = string.Join(", ", cap);
+
       var runSessionInfo = new
       {
-        supported_launch_configurations = new[] { "project" }
-      };
+        ProtocolsSupported = new[] { "2024-03-03", "2024-04-23", "2025-10-01" },
+        SupportedLaunchConfigurations = cap,
+      }
+    ;
       psi.Environment["DEBUG_SESSION_INFO"] = JsonSerializer.Serialize(runSessionInfo);
 
       logger.LogInformation("Starting AppHost with DEBUG_SESSION_PORT=localhost:{Port}", dcpServer.Port);
