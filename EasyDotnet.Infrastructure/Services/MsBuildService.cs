@@ -221,7 +221,7 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
         "TestingPlatformDotnetTestSupport", "TargetPath", "GeneratePackageOnBuild",
         "IsPackable", "PackageId", "Version", "PackageOutputPath", "TargetFrameworkVersion",
         "UsingMicrosoftNETSdkWorker", "UsingMicrosoftNETSdkWeb",  "UseIISExpress", "LangVersion",
-        "RootNamespace", "IsAspireHost", "AspireHostingSDKVersion"
+        "RootNamespace", "IsAspireHost", "AspireHostingSDKVersion", "EnableDefaultCompileItems"
     };
 
     var (command, args) = await GetCommandAndArguments(
@@ -294,6 +294,7 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
         PackageOutputPath: TryGet("PackageOutputPath"),
         IsMultiTarget: (TryGet("TargetFrameworks")?.Split(';', StringSplitOptions.RemoveEmptyEntries).Length ?? 0) > 1,
         IsNetFramework: isNetFramework,
+        EnableDefaultCompileItems: TryGetBool("EnableDefaultCompileItems"),
         UseIISExpress: useIISExpress,
         RunCommand: await BuildRunCommand(!isNetFramework, useIISExpress, targetPath, projectPath, projectName),
         BuildCommand: await BuildBuildCommand(!isNetFramework, projectPath),
