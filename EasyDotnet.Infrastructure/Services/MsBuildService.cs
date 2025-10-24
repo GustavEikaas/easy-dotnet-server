@@ -1,8 +1,5 @@
-using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using System.Xml;
-using System.Xml.Linq;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Domain.Models.MsBuild.Build;
 using EasyDotnet.Domain.Models.MsBuild.Project;
@@ -10,7 +7,6 @@ using EasyDotnet.Domain.Models.MsBuild.SDK;
 using Microsoft.Build.Locator;
 using Microsoft.Build.Construction;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Logging;
 using Microsoft.Build.Evaluation;
 
 namespace EasyDotnet.Services;
@@ -47,7 +43,7 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
       return;
     }
     var project = await GetOrSetProjectPropertiesAsync(projectFile);
-    if (!project.IsNetFramework)
+    if (project.EnableDefaultCompileItems)
     {
       return;
     }
