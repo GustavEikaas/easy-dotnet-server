@@ -2,13 +2,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using EasyDotnet.Application.Interfaces;
 using EasyDotnet.IDE.Controllers.Roslyn;
 using EasyDotnet.Services;
 using StreamJsonRpc;
 
 namespace EasyDotnet.Controllers.Roslyn;
 
-public class RoslynController(RoslynService roslynService) : BaseController
+public class RoslynController(RoslynService roslynService, IMsBuildService msBuildService) : BaseController
 {
 
   [JsonRpcMethod("roslyn/bootstrap-file")]

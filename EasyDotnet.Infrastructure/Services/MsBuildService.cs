@@ -1,11 +1,17 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Xml;
+using System.Xml.Linq;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Domain.Models.MsBuild.Build;
 using EasyDotnet.Domain.Models.MsBuild.Project;
 using EasyDotnet.Domain.Models.MsBuild.SDK;
 using Microsoft.Build.Locator;
+using Microsoft.Build.Construction;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
+using Microsoft.Build.Evaluation;
 
 namespace EasyDotnet.Services;
 
@@ -17,6 +23,43 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
     var instances = MSBuildLocator.QueryVisualStudioInstances().Where(x => x.DiscoveryType == DiscoveryType.DotNetSdk).ToList();
     return [.. instances.Select(x => new SdkInstallation(x.Name, $"net{x.Version.Major}.0", x.Version, x.MSBuildPath, x.VisualStudioRootPath))];
   }
+
+  /// <summary>
+  /// Ensures that the specified source file is included in the compilation of its containing project.
+  /// </summary>
+  /// <param name="filePath">The full path to the source file to include in the project.</param>
+  /// <remarks>
+  /// This method performs the following steps:
+  /// <list type="bullet">
+  /// <item>Finds the corresponding .csproj file containing <paramref name="filePath"/> using <see cref="FindCsprojFromFile"/>.</item>
+  /// <item>Checks if the project is a .NET Framework project. If not, the method returns without making changes.</item>
+  /// <item>Retrieves the list of existing <c>Compile</c> items in the project via <see cref="GetCompileItemsAsync"/>.</item>
+  /// <item>If the file is already included (path comparison is case-insensitive and normalized), no changes are made.</item>
+  /// <item>Otherwise, calls <see cref="AddCompileItem"/> to add the file to the project, preserving project formatting and relative paths.</item>
+  /// </list>
+  /// </remarks>
+  /// <returns>A <see cref="Task"/> that represents the asynchronous operation.</returns>
+  public async Task EnsureFileInCompilation(string filePath)
+  {
+    var projectFile = FindCsprojFromFile(filePath);
+    if (projectFile is null)
+    {
+      return;
+    }
+    var project = await GetOrSetProjectPropertiesAsync(projectFile);
+    if (!project.IsNetFramework)
+    {
+      return;
+    }
+
+    var compileItems = await GetCompileItemsAsync(projectFile);
+    if (compileItems.Any(p => string.Equals(NormalizePath(p), NormalizePath(filePath), StringComparison.OrdinalIgnoreCase)))
+    {
+      return;
+    }
+    AddCompileItem(projectFile, filePath);
+  }
+
 
   public bool HasMinimumSdk(Version version) => QuerySdkInstallations().Any(x => x.Version >= version);
 
@@ -102,7 +145,9 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
     var ext = Path.GetExtension(targetPath);
 
     if (ext.Equals(".csproj", StringComparison.OrdinalIgnoreCase))
+    {
       return Path.GetFileNameWithoutExtension(targetPath);
+    }
 
     if (ext.Equals(".sln", StringComparison.OrdinalIgnoreCase))
     {
@@ -189,7 +234,9 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
 
     var (success, stdout, stderr) = await processQueue.RunProcessAsync(command, args, new ProcessOptions(KillOnTimeout: true), cancellationToken);
     if (!success)
+    {
       throw new InvalidOperationException($"Failed to get project properties: {stderr}");
+    }
 
     var lines = stdout.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
     var jsonStartIndex = Array.FindIndex(lines, line => line.Trim() == "{");
@@ -394,6 +441,100 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
         .ToList();
 
     return (errors, warnings);
+  }
+
+  private static string FindCsprojFromFile(string filePath)
+  {
+    var dir = Path.GetDirectoryName(filePath)
+        ?? throw new ArgumentException("Invalid file path", nameof(filePath));
+
+    return FindCsprojInDirectoryOrParents(dir)
+        ?? throw new FileNotFoundException($"Failed to resolve csproj for file: {filePath}");
+  }
+
+  private static string? FindCsprojInDirectoryOrParents(string directory)
+  {
+    var csproj = Directory.GetFiles(directory, "*.csproj", SearchOption.TopDirectoryOnly).FirstOrDefault();
+    if (csproj != null)
+    {
+      return csproj;
+    }
+
+    var parent = Directory.GetParent(directory);
+    return parent != null
+        ? FindCsprojInDirectoryOrParents(parent.FullName)
+        : null;
+  }
+
+  private async Task<List<string>> GetCompileItemsAsync(string projectPath)
+  {
+    var (command, args) = await GetCommandAndArguments(
+        MSBuildProjectType.VisualStudio, projectPath, null, "Debug", "");
+
+    args += " -nologo -v:quiet -getItem:Compile";
+
+    var (success, stdout, stderr) = await processQueue.RunProcessAsync(command, args, new ProcessOptions(true));
+    if (!success)
+    {
+      throw new InvalidOperationException($"Failed to get Compile items: {stderr}");
+    }
+
+    using var doc = JsonDocument.Parse(stdout);
+    var items = new List<string>();
+
+    if (doc.RootElement.TryGetProperty("Items", out var itemsProp) &&
+        itemsProp.TryGetProperty("Compile", out var compileArray))
+    {
+      foreach (var item in compileArray.EnumerateArray())
+      {
+        if (item.TryGetProperty("FullPath", out var fullPath))
+        {
+          items.Add(fullPath.GetString()!);
+        }
+        else if (item.TryGetProperty("Identity", out var id))
+        {
+          items.Add(id.GetString()!);
+        }
+      }
+    }
+
+    return items;
+  }
+
+  private static void AddCompileItem(string projectFile, string filePath)
+  {
+    using var collection = new ProjectCollection();
+    var projectRoot = ProjectRootElement.Open(projectFile, collection, preserveFormatting: true);
+
+    var projectDir = Path.GetDirectoryName(projectFile)!;
+    var relativePath = Path.GetRelativePath(projectDir, filePath)
+        .Replace(Path.AltDirectorySeparatorChar, '\\');
+
+    var targetGroup = projectRoot.ItemGroups.FirstOrDefault(ig =>
+        ig.Items.Any(i => i.ItemType == "Compile"));
+    targetGroup ??= projectRoot.AddItemGroup();
+
+    if (targetGroup.Items.Any(i => string.Equals(i.Include, relativePath, StringComparison.OrdinalIgnoreCase)))
+    {
+      return;
+    }
+
+    var insertBefore = targetGroup.Items
+        .Where(i => i.ItemType == "Compile")
+        .FirstOrDefault(i => string.Compare(i.Include, relativePath, StringComparison.OrdinalIgnoreCase) > 0);
+
+    var newItem = projectRoot.CreateItemElement("Compile", relativePath);
+
+    if (insertBefore != null)
+    {
+      targetGroup.InsertBeforeChild(newItem, insertBefore);
+    }
+    else
+    {
+      targetGroup.AppendChild(newItem);
+    }
+
+    projectRoot.Save();
   }
 
   [GeneratedRegex(@"^(?<file>.*)\((?<line>\d+),(?<col>\d+)\): (?<type>error|warning) (?<code>\S+): (?<msg>.*)$", RegexOptions.IgnoreCase | RegexOptions.Compiled, "en-US")]
