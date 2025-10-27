@@ -4,6 +4,7 @@ using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Domain.Models.MsBuild.Build;
 using EasyDotnet.Domain.Models.MsBuild.Project;
 using EasyDotnet.Domain.Models.MsBuild.SDK;
+using EasyDotnet.Infrastructure.MsBuild;
 using Microsoft.Build.Locator;
 using Microsoft.Extensions.Caching.Memory;
 
@@ -101,10 +102,11 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
     var normalizedFilePath = NormalizePath(filePath);
     var ext = Path.GetExtension(targetPath);
 
-    if (ext.Equals(".csproj", StringComparison.OrdinalIgnoreCase))
+
+    if (FileTypes.IsCsProjectFile(targetPath))
       return Path.GetFileNameWithoutExtension(targetPath);
 
-    if (ext.Equals(".sln", StringComparison.OrdinalIgnoreCase) || ext.Equals(".slnx", StringComparison.OrdinalIgnoreCase))
+    if (FileTypes.IsSolutionFile(targetPath))
     {
       return projectMap
         .Where(kvp => normalizedFilePath.StartsWith(kvp.Value, StringComparison.OrdinalIgnoreCase))
@@ -116,34 +118,36 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
     return null;
   }
 
-  private Dictionary<string, string> GetProjectMap(string targetPath) =>
-    Path.GetExtension(targetPath).ToLowerInvariant() switch
+
+  private Dictionary<string, string> GetProjectMap(string targetPath)
+  {
+    if (FileTypes.IsAnyProjectFile(targetPath))
     {
-      ".csproj" => new Dictionary<string, string>
+      return new Dictionary<string, string>
       {
-        [Path.GetFileNameWithoutExtension(targetPath)] = NormalizePath(Path.GetDirectoryName(targetPath) ?? "")
-      },
-      ".sln" => solutionService.GetProjectsFromSolutionFile(targetPath)
-               .ToDictionary(
-                   p => Path.GetFileNameWithoutExtension(p.AbsolutePath),
-                   p => NormalizePath(Path.GetDirectoryName(p.AbsolutePath) ?? "")
-               ),
-      ".slnx" => solutionService.GetProjectsFromSolutionFile(targetPath)
-               .ToDictionary(
-                   p => Path.GetFileNameWithoutExtension(p.AbsolutePath),
-                   p => NormalizePath(Path.GetDirectoryName(p.AbsolutePath) ?? "")
-               ),
-      _ => throw new InvalidOperationException("Target must be a .csproj or (.sln, .slnx) file")
-    };
+        [Path.GetFileNameWithoutExtension(targetPath)] =
+              NormalizePath(Path.GetDirectoryName(targetPath) ?? string.Empty)
+      };
+    }
+
+    if (FileTypes.IsAnySolutionFile(targetPath))
+    {
+      return solutionService.GetProjectsFromSolutionFile(targetPath)
+          .ToDictionary(
+              p => Path.GetFileNameWithoutExtension(p.AbsolutePath),
+              p => NormalizePath(Path.GetDirectoryName(p.AbsolutePath) ?? string.Empty)
+          );
+    }
+
+    throw new InvalidOperationException("Target must be a .csproj or (.sln, .slnx) file");
+  }
 
   private class MsBuildPropertiesResponse
   {
     public Dictionary<string, string?> Properties { get; set; } = new(StringComparer.OrdinalIgnoreCase);
   }
 
-  private static string GetLanguage(string path) => path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) ? "csharp" :
-    path.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase) ? "fsharp" :
-    "unknown";
+  private static string GetLanguage(string path) => FileTypes.IsCsProjectFile(path) ? "csharp" : FileTypes.IsFsProjectFile(path) ? "fsharp" : "unknown";
 
 
   public async Task InvalidateProjectProperties(string projectPath, string? targetFrameworkMoniker = null, string configuration = "Debug")
@@ -285,7 +289,7 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
     return [.. stdOut
         .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
         .Select(line => line.Trim())
-        .Where(line => line.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) || line.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase))
+        .Where(line => line.EndsWith(FileTypes.CsProjectExtension, StringComparison.OrdinalIgnoreCase) || line.EndsWith(FileTypes.FsProjectExtension, StringComparison.OrdinalIgnoreCase))
         .Select(relativePath => Path.GetFullPath(Path.Combine(projectDir, relativePath)))];
   }
 

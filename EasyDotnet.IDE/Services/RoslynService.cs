@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers.Roslyn;
 using EasyDotnet.Extensions;
+using EasyDotnet.Infrastructure.MsBuild;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -237,12 +238,11 @@ public class RoslynService(IMsBuildService service, ILogger<RoslynService> logSe
 
     try
     {
-      if (targetPath.EndsWith(".sln", StringComparison.OrdinalIgnoreCase))
+      if (FileTypes.IsAnySolutionFile(targetPath))
       {
         solution = await workspace.OpenSolutionAsync(targetPath).ConfigureAwait(false);
       }
-      else if (targetPath.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) ||
-               targetPath.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase))
+      else if (FileTypes.IsAnyProjectFile(targetPath))
       {
         var project = await workspace.OpenProjectAsync(targetPath).ConfigureAwait(false);
         solution = project.Solution;
@@ -254,7 +254,7 @@ public class RoslynService(IMsBuildService service, ILogger<RoslynService> logSe
     }
     catch (InvalidOperationException ex)
     {
-      throw new InvalidOperationException($"Failed to open {(targetPath.EndsWith(".sln") ? "solution" : "project")}: {ex.Message}", ex);
+      throw new InvalidOperationException($"Failed to open {(FileTypes.IsAnySolutionFile(targetPath) ? "solution" : "project")}: {ex.Message}", ex);
     }
     catch (FileNotFoundException ex)
     {
@@ -262,11 +262,11 @@ public class RoslynService(IMsBuildService service, ILogger<RoslynService> logSe
     }
     catch (IOException ex)
     {
-      throw new IOException($"IO error while opening {(targetPath.EndsWith(".sln") ? "solution" : "project")}: {ex.Message}", ex);
+      throw new IOException($"IO error while opening {(FileTypes.IsAnySolutionFile(targetPath) ? "solution" : "project")}: {ex.Message}", ex);
     }
     catch (UnauthorizedAccessException ex)
     {
-      throw new UnauthorizedAccessException($"Access denied to {(targetPath.EndsWith(".sln") ? "solution" : "project")}: {ex.Message}", ex);
+      throw new UnauthorizedAccessException($"Access denied to {(FileTypes.IsAnySolutionFile(targetPath) ? "solution" : "project")}: {ex.Message}", ex);
     }
 
     var allDocuments = solution.Projects.SelectMany(project => project.Documents);
