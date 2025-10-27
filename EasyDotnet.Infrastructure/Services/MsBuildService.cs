@@ -104,7 +104,7 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
     if (ext.Equals(".csproj", StringComparison.OrdinalIgnoreCase))
       return Path.GetFileNameWithoutExtension(targetPath);
 
-    if (ext.Equals(".sln", StringComparison.OrdinalIgnoreCase))
+    if (ext.Equals(".sln", StringComparison.OrdinalIgnoreCase) || ext.Equals(".slnx", StringComparison.OrdinalIgnoreCase))
     {
       return projectMap
         .Where(kvp => normalizedFilePath.StartsWith(kvp.Value, StringComparison.OrdinalIgnoreCase))
@@ -128,7 +128,12 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
                    p => Path.GetFileNameWithoutExtension(p.AbsolutePath),
                    p => NormalizePath(Path.GetDirectoryName(p.AbsolutePath) ?? "")
                ),
-      _ => throw new InvalidOperationException("Target must be a .csproj or .sln file")
+      ".slnx" => solutionService.GetProjectsFromSolutionFile(targetPath)
+               .ToDictionary(
+                   p => Path.GetFileNameWithoutExtension(p.AbsolutePath),
+                   p => NormalizePath(Path.GetDirectoryName(p.AbsolutePath) ?? "")
+               ),
+      _ => throw new InvalidOperationException("Target must be a .csproj or (.sln, .slnx) file")
     };
 
   private class MsBuildPropertiesResponse
