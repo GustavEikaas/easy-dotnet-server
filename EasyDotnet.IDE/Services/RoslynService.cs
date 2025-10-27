@@ -254,7 +254,7 @@ public class RoslynService(IMsBuildService service, ILogger<RoslynService> logSe
     }
     catch (InvalidOperationException ex)
     {
-      throw new InvalidOperationException($"Failed to open {(FileTypes.IsSolutionFile(targetPath) ? "solution" : "project")}: {ex.Message}", ex);
+      throw new InvalidOperationException($"Failed to open {(FileTypes.IsAnySolutionFile(targetPath) ? "solution" : "project")}: {ex.Message}", ex);
     }
     catch (FileNotFoundException ex)
     {
@@ -262,11 +262,11 @@ public class RoslynService(IMsBuildService service, ILogger<RoslynService> logSe
     }
     catch (IOException ex)
     {
-      throw new IOException($"IO error while opening {(FileTypes.IsSolutionFile(targetPath) ? "solution" : "project")}: {ex.Message}", ex);
+      throw new IOException($"IO error while opening {(FileTypes.IsAnySolutionFile(targetPath) ? "solution" : "project")}: {ex.Message}", ex);
     }
     catch (UnauthorizedAccessException ex)
     {
-      throw new UnauthorizedAccessException($"Access denied to {(FileTypes.IsSolutionFile(targetPath) ? "solution" : "project")}: {ex.Message}", ex);
+      throw new UnauthorizedAccessException($"Access denied to {(FileTypes.IsAnySolutionFile(targetPath) ? "solution" : "project")}: {ex.Message}", ex);
     }
 
     var allDocuments = solution.Projects.SelectMany(project => project.Documents);
