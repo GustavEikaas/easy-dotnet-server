@@ -25,6 +25,7 @@ public sealed record DotnetProject(
     string? PackageOutputPath,
     bool IsMultiTarget,
     bool IsNetFramework,
+    bool EnableDefaultCompileItems,
     bool UseIISExpress,
     string RunCommand,
     string BuildCommand,

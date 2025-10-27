@@ -12,6 +12,13 @@ namespace EasyDotnet.IDE.Controllers.MsBuild;
 
 public class MsBuildController(IClientService clientService, IMsBuildService msBuild) : BaseController
 {
+  [JsonRpcMethod("msbuild/file-created")]
+  public async Task<bool> FileCreated(string filePath)
+  {
+    await msBuild.EnsureFileInCompilation(filePath);
+    return true;
+  }
+
   [JsonRpcMethod("msbuild/build")]
   public async Task<BuildResultResponse> Build(BuildRequest request)
   {
