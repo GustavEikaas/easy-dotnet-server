@@ -94,7 +94,7 @@ public sealed class RoslynProxy(string clientPipeName, ILogger logger) : IAsyncD
   }
 
 
-  private static ProcessStartInfo GetRoslynProcessStartInfo(string roslynLogDir, RoslynProxyOptions options)
+  private ProcessStartInfo GetRoslynProcessStartInfo(string roslynLogDir, RoslynProxyOptions options)
   {
 #if DEBUG
     var psi = new ProcessStartInfo(
@@ -115,6 +115,8 @@ public sealed class RoslynProxy(string clientPipeName, ILogger logger) : IAsyncD
     return psi;
 #else
     var roslynDllPath = RoslynLocator.GetRoslynDllPath();
+    var razorDllPath = RoslynLocator.GetRazorDllPath();
+    var razorTargetsPath = RoslynLocator.GetRazorTargetsPath();
     var psi = new ProcessStartInfo("dotnet")
     {
         RedirectStandardInput = true,
@@ -129,9 +131,14 @@ public sealed class RoslynProxy(string clientPipeName, ILogger logger) : IAsyncD
     psi.ArgumentList.Add("--logLevel=Information");
     psi.ArgumentList.Add("--extensionLogDirectory");
     psi.ArgumentList.Add(roslynLogDir);
+    psi.ArgumentList.Add($"--razorSourceGenerator");
+    psi.ArgumentList.Add(razorDllPath);
+    psi.ArgumentList.Add($"--razorDesignTimePath");
+    psi.ArgumentList.Add(razorTargetsPath);
 
     foreach (var dll in GetAnalyzers(options))
     {
+        logger.LogInformation("[Roslyn]: Adding extension {ext}", dll);
         psi.ArgumentList.Add("--extension");
         psi.ArgumentList.Add(dll);
     }
@@ -148,7 +155,7 @@ public sealed class RoslynProxy(string clientPipeName, ILogger logger) : IAsyncD
 
     var additionalAnalyzers = options.AnalyzerAssemblies ?? [];
 
-    return roslynatorAnalyzers.Concat(additionalAnalyzers);
+    return roslynatorAnalyzers.Concat(additionalAnalyzers).Concat([RoslynLocator.GetRazorExtensionDllPath()]);
   }
 
   private async Task PumpAsync(Stream input, Stream output, CancellationToken token, string pumpName)
