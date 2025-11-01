@@ -131,8 +131,10 @@ public sealed class RoslynProxy(string clientPipeName, ILogger logger) : IAsyncD
     psi.ArgumentList.Add("--logLevel=Information");
     psi.ArgumentList.Add("--extensionLogDirectory");
     psi.ArgumentList.Add(roslynLogDir);
-    psi.ArgumentList.Add($"--razorSourceGenerator={razorDllPath}");
-    psi.ArgumentList.Add($"--razorDesignTimePath={razorTargetsPath}");
+    psi.ArgumentList.Add($"--razorSourceGenerator");
+    psi.ArgumentList.Add(razorDllPath);
+    psi.ArgumentList.Add($"--razorDesignTimePath");
+    psi.ArgumentList.Add(razorTargetsPath);
 
     foreach (var dll in GetAnalyzers(options))
     {
