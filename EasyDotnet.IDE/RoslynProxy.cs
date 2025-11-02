@@ -96,37 +96,37 @@ public sealed class RoslynProxy(string clientPipeName, ILogger logger) : IAsyncD
 
   private ProcessStartInfo GetRoslynProcessStartInfo(string roslynLogDir, RoslynProxyOptions options)
   {
-#if DEBUG
-    var psi = new ProcessStartInfo(
-        @"C:\Users\gustav.eikaas\AppData\Local\nvim-data\mason\bin\roslyn.cmd")
+    // #if DEBUG
+    //     var psi = new ProcessStartInfo(
+    //         @"C:\Users\gustav.eikaas\AppData\Local\nvim-data\mason\bin\roslyn.cmd")
+    //     {
+    //       RedirectStandardInput = true,
+    //       RedirectStandardOutput = true,
+    //       RedirectStandardError = true,
+    //       UseShellExecute = false,
+    //       CreateNoWindow = true
+    //     };
+    //
+    //     psi.ArgumentList.Add("--stdio");
+    //     psi.ArgumentList.Add("--logLevel=Information");
+    //     psi.ArgumentList.Add("--extensionLogDirectory");
+    //     psi.ArgumentList.Add(roslynLogDir);
+    //
+    //     return psi;
+    // #else
+    var roslynDllPath = RoslynLocator.GetRoslynDllPath();
+    var razorDllPath = RoslynLocator.GetRazorDllPath();
+    var razorTargetsPath = RoslynLocator.GetRazorTargetsPath();
+    var psi = new ProcessStartInfo(roslynDllPath)
     {
       RedirectStandardInput = true,
       RedirectStandardOutput = true,
       RedirectStandardError = true,
       UseShellExecute = false,
-      CreateNoWindow = true
+      CreateNoWindow = true,
+      WorkingDirectory = "C:/Users/Gustav/repo/aspire/aspire.Web"
+
     };
-
-    psi.ArgumentList.Add("--stdio");
-    psi.ArgumentList.Add("--logLevel=Information");
-    psi.ArgumentList.Add("--extensionLogDirectory");
-    psi.ArgumentList.Add(roslynLogDir);
-
-    return psi;
-#else
-    var roslynDllPath = RoslynLocator.GetRoslynDllPath();
-    var razorDllPath = RoslynLocator.GetRazorDllPath();
-    var razorTargetsPath = RoslynLocator.GetRazorTargetsPath();
-    var psi = new ProcessStartInfo("dotnet")
-    {
-        RedirectStandardInput = true,
-        RedirectStandardOutput = true,
-        RedirectStandardError = true,
-        UseShellExecute = false,
-        CreateNoWindow = true
-    };
-
-    psi.ArgumentList.Add(roslynDllPath);
     psi.ArgumentList.Add("--stdio");
     psi.ArgumentList.Add("--logLevel=Information");
     psi.ArgumentList.Add("--extensionLogDirectory");
@@ -138,13 +138,16 @@ public sealed class RoslynProxy(string clientPipeName, ILogger logger) : IAsyncD
 
     foreach (var dll in GetAnalyzers(options))
     {
-        logger.LogInformation("[Roslyn]: Adding extension {ext}", dll);
-        psi.ArgumentList.Add("--extension");
-        psi.ArgumentList.Add(dll);
+      logger.LogInformation("[Roslyn]: Adding extension {ext}", dll);
+      psi.ArgumentList.Add("--extension");
+      psi.ArgumentList.Add(dll);
     }
 
+    var commandString = $"{psi.FileName} {string.Join(' ', psi.ArgumentList.Select(arg => $"\"{arg}\""))}";
+    logger.LogInformation("[Roslyn] Executing command: {command}", commandString);
+
     return psi;
-#endif
+    // #endif
   }
 
   private static IEnumerable<string> GetAnalyzers(RoslynProxyOptions options)

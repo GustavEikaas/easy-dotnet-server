@@ -4,13 +4,30 @@ namespace EasyDotnet.Infrastructure.Services;
 
 public static class RoslynLocator
 {
+  private static readonly string RzlsPath = Path.Combine(
+          Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+          "nvim-data",
+          "mason",
+          "packages",
+          "rzls",
+          "libexec");
+
+  private static readonly string RoslynPath = Path.Combine(
+          Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+          "nvim-data",
+          "mason",
+          "packages",
+          "roslyn"
+ );
+
+
   /// <summary>
   /// Returns the full path to the Roslyn LSP DLL inside the .NET tool installation folder.
   /// </summary>
   public static string GetRoslynDllPath()
   {
     var roslynDir = GetRoslynBaseDir();
-    var roslynDll = Path.Combine(roslynDir, "LanguageServer", "Microsoft.CodeAnalysis.LanguageServer.dll");
+    var roslynDll = Path.Combine(RoslynPath, "roslyn.cmd");
 
     if (!File.Exists(roslynDll))
     {
@@ -23,7 +40,8 @@ public static class RoslynLocator
   public static string GetRazorDllPath()
   {
     var roslynDir = GetRoslynBaseDir();
-    var razorDll = Path.Combine(roslynDir, "LanguageServer", "Razor", "LanguageServer", "neutral", "Microsoft.CodeAnalysis.Razor.Compiler.dll");
+    // C:\Users\Gustav\AppData\Local\nvim-data\mason\packages\rzls\libexec
+    var razorDll = Path.Combine(RzlsPath, "Microsoft.CodeAnalysis.Razor.Compiler.dll");
 
     if (!File.Exists(razorDll))
     {
@@ -36,7 +54,9 @@ public static class RoslynLocator
   public static string GetRazorExtensionDllPath()
   {
     var roslynDir = GetRoslynBaseDir();
-    var razorExtensionDll = Path.Combine(roslynDir, "LanguageServer", "RazorExtension", "Microsoft.VisualStudioCode.RazorExtension.dll");
+
+    // C:\Users\Gustav\AppData\Local\nvim-data\mason\packages\rzls\libexec\RazorExtension
+    var razorExtensionDll = Path.Combine(RzlsPath, "RazorExtension", "Microsoft.VisualStudioCode.RazorExtension.dll");
 
     if (!File.Exists(razorExtensionDll))
     {
@@ -48,8 +68,9 @@ public static class RoslynLocator
 
   public static string GetRazorTargetsPath()
   {
+    // C:\Users\Gustav\AppData\Local\nvim-data\mason\packages\rzls\libexec\Targets
     var roslynDir = GetRoslynBaseDir();
-    var razorTargets = Path.Combine(roslynDir, "LanguageServer", "Razor", "Targets", "Microsoft.NET.Sdk.Razor.DesignTime.targets");
+    var razorTargets = Path.Combine(RzlsPath, "Targets", "Microsoft.NET.Sdk.Razor.DesignTime.targets");
 
     if (!File.Exists(razorTargets))
     {
