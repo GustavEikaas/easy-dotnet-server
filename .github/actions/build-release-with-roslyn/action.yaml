@@ -63,16 +63,15 @@ runs:
         unzip -o artifacts/razor/razor.nupkg -d artifacts/razor/extracted
 
         mkdir -p "$OUTPUT_PATH/LanguageServer/Razor"
-        cp -r artifacts/razor/extracted/content/LanguageServer/neutral/* "$OUTPUT_PATH/LanguageServer/Razor/"
-        cp artifacts/razor/extracted/content/Targets/Microsoft.NET.Sdk.Razor.DesignTime.targets "$OUTPUT_PATH/LanguageServer/Razor/"
+        cp -r artifacts/razor/extracted/content/* "$OUTPUT_PATH/LanguageServer/Razor/"
 
         curl -L -o artifacts/razor/razorExtension.nupkg \
           "https://pkgs.dev.azure.com/azure-public/vside/_apis/packaging/feeds/msft_consumption/nuget/packages/${RAZOR_EXTENSION_PACKAGE_ID}/versions/${RAZOR_EXTENSION_PACKAGE_VERSION}/content?api-version=6.0-preview.1"
 
         unzip -o artifacts/razor/razorExtension.nupkg -d artifacts/razor/razorExtension
 
-        mkdir -p "$OUTPUT_PATH/LanguageServer/Razor/Extension"
-        cp -r artifacts/razor/razorExtension/content/* "$OUTPUT_PATH/LanguageServer/Razor/Extension"
+        mkdir -p "$OUTPUT_PATH/LanguageServer/RazorExtension"
+        cp -r artifacts/razor/razorExtension/content/* "$OUTPUT_PATH/LanguageServer/RazorExtension/"
 
         mkdir -p artifacts/roslynator
         curl -L -o artifacts/roslynator/roslynator.nupkg \

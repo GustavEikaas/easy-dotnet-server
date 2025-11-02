@@ -23,7 +23,7 @@ public static class RoslynLocator
   public static string GetRazorDllPath()
   {
     var roslynDir = GetRoslynBaseDir();
-    var razorDll = Path.Combine(roslynDir, "LanguageServer", "Razor", "Microsoft.CodeAnalysis.Razor.Compiler.dll");
+    var razorDll = Path.Combine(roslynDir, "LanguageServer", "Razor", "LanguageServer", "neutral", "Microsoft.CodeAnalysis.Razor.Compiler.dll");
 
     if (!File.Exists(razorDll))
     {
@@ -36,7 +36,7 @@ public static class RoslynLocator
   public static string GetRazorExtensionDllPath()
   {
     var roslynDir = GetRoslynBaseDir();
-    var razorExtensionDll = Path.Combine(roslynDir, "LanguageServer", "Razor", "Extension", "Microsoft.VisualStudioCode.RazorExtension.dll");
+    var razorExtensionDll = Path.Combine(roslynDir, "LanguageServer", "RazorExtension", "Microsoft.VisualStudioCode.RazorExtension.dll");
 
     if (!File.Exists(razorExtensionDll))
     {
@@ -49,7 +49,7 @@ public static class RoslynLocator
   public static string GetRazorTargetsPath()
   {
     var roslynDir = GetRoslynBaseDir();
-    var razorTargets = Path.Combine(roslynDir, "LanguageServer", "Razor", "Microsoft.NET.Sdk.Razor.DesignTime.targets");
+    var razorTargets = Path.Combine(roslynDir, "LanguageServer", "Razor", "Targets", "Microsoft.NET.Sdk.Razor.DesignTime.targets");
 
     if (!File.Exists(razorTargets))
     {
