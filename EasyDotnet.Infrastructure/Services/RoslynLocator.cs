@@ -49,7 +49,7 @@ public static class RoslynLocator
   public static string GetRazorTargetsPath()
   {
     var roslynDir = GetRoslynBaseDir();
-    var razorTargets = Path.Combine(roslynDir, "LanguageServer", "Razor", "Targets", "Microsoft.NET.Sdk.Razor.DesignTime.targets");
+    var razorTargets = Path.Combine(roslynDir, "LanguageServer", "Razor", "Microsoft.NET.Sdk.Razor.DesignTime.targets");
 
     if (!File.Exists(razorTargets))
     {
