@@ -185,8 +185,103 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
         "TestingPlatformDotnetTestSupport", "TargetPath", "GeneratePackageOnBuild",
         "IsPackable", "PackageId", "Version", "PackageOutputPath", "TargetFrameworkVersion",
         "UsingMicrosoftNETSdkWorker", "UsingMicrosoftNETSdkWeb",  "UseIISExpress", "LangVersion",
-        "RootNamespace", "IsAspireHost", "AspireHostingSDKVersion"
+        "RootNamespace",
+
+    // Starting with Aspire 9.0.0, Aspire moved from a workload-based distribution model to NuGet packages
+    // with the Aspire.AppHost.Sdk. Projects using the old workload-based approach need to be upgraded.
+    //
+    // Detection logic:
+    // - IsAspireHost='true' indicates this is an Aspire host project
+    // - AspireHostingSDKVersion is set by Aspire.AppHost.Sdk in new projects (9.0.0+)
+    // - If AspireHostingSDKVersion is missing or < 9.0.0, this is likely an old workload-based project
+"IsAspireHost",
+"AspireHostingSDKVersion",
+        "EnableDefaultCompileItems",
+        "EnableDefaultItems",
+        "EnableDefaultEmbeddedResourceItems",
+        "EnableDefaultNoneItems",
+        "_IsNETCoreOrNETStandard",
+        "PublishDir",
+        "PublishDirName",
+        "AppDesignerFolder", // Properties
+"ImportDirectoryBuildProps",
+"RestoreTool",
+"RestoreSuccess",
+"ProjectAssetsFile",
+"NuGetPackageRoot",
+"NuGetPackageFolders",
+"NuGetProjectStyle",
+"NuGetToolVersion",
+"IsTestingPlatformApplication",
+"ImportDirectoryPackagesProps",
+"Configurations", // Debug;Release
+"Configuration", // Debug
+"Platforms", // AnyCPU
+"Platform", // AnyCPU
+"DebugSymbols",
+"Optimize",
+"DebugType", // Portable
+"RestoreProjectStyle", // PackageReference
+"TreatWarningsAsErrors",
+"DebugSymbols",
+"MSBuildToolsPath", //C:\Program Files\dotnet\sdk\10.0.100-preview.7.25380.108
+"NetCoreTargetingPackRoot", //C:\Program Files\dotnet\packs
+"NetCoreRoot", // C:\Program Files\dotnet\
+"DOTNET_HOST_PATH", // C:\Program Files\dotnet\dotnet.exe
+"NETCoreAppMaximumVersion", // 10.0
+"BundledNETCoreAppTargetFrameworkVersion", // 10.0
+"BundledNETCoreAppPackageVersion", // 10.0.0-preview.7.25380.108
+"MinimumMSBuildVersion",
+"BundledMSBuildVersion",
+"DefaultLanguageSourceExtension", // .cs
+"NoWarn", //1701;1702
+"VisualStudioVersion", // 18.0
+"MaxSupportedLangVersion", //13.0
+"TargetFrameworkIdentifier", // .NETCoreApp
+"MSBuildBinPath",
+"TargetsNet9",
+"TargetsNet8",
+"TargetsNet7",
+"TargetsNet6",
+"TargetsCurrent",
+"IsNetCoreAppTargetingLatestTFM",
+"DefaultAppHostRuntimeIdentifier",
+
+// <BundledNETStandardTargetFrameworkVersion>2.1</BundledNETStandardTargetFrameworkVersion>
+// <BundledNETStandardPackageVersion>2.1.0</BundledNETStandardPackageVersion>
+// <BundledNETCorePlatformsPackageVersion>10.0.0-preview.7.25380.108</BundledNETCorePlatformsPackageVersion>
+// <BundledRuntimeIdentifierGraphFile>$(MSBuildThisFileDirectory)RuntimeIdentifierGraph.json</BundledRuntimeIdentifierGraphFile>
+// <NETCoreSdkVersion>10.0.100-preview.7.25380.108</NETCoreSdkVersion>
+// <SdkAnalysisLevel>10.0.100</SdkAnalysisLevel>
+// <NETCoreSdkRuntimeIdentifier>win-x64</NETCoreSdkRuntimeIdentifier>
+// <NETCoreSdkPortableRuntimeIdentifier>win-x64</NETCoreSdkPortableRuntimeIdentifier>
+// <_NETCoreSdkIsPreview>true</_NETCoreSdkIsPreview>
+"ProjectDir", // C:\Users\Gustav\repo\easy-dotnet-server\EasyDotnet.IDE\
+"Language", // C# \ VB \ F#
+"RunCommand",
+"RunArguments",
+"ProjectDepsFileName", // nuget cache EasyDotnet.IDE.deps.json,
+"ProjectDepsFilePath",// C:\Users\Gustav\repo\easy-dotnet-server\EasyDotnet.IDE\bin\Debug\net8.0\EasyDotnet.IDE.deps.json
+"ProjectRuntimeConfigFileName",
+"ProjectRuntimeConfigFilePath",
+"ProjectRuntimeConfigDevFilePath",
+"IncludeMainProjectInDepsFile",
+"TrimDepsJsonLibrariesWithoutAssets",
+"GeneratedAssemblyInfoFile",
+"GenerateAssemblyInfo",
+"MSBuildProjectName",
+"TargetFileName",
+"IntermediateOutputPath",
+"BaseIntermediateOutputPath",
+"MSBuildProjectExtensionsPath",
+"SelfContained",
+"UserProfileRuntimeStorePath",
+"MSBuildProjectFullPath" // C:\Users\Gustav\repo\easy-dotnet-server\EasyDotnet.IDE\EasyDotnet.IDE.csproj
+
+
     };
+
+    var knownTargets = new List<string>() { "_CheckForBuildWithNoBuild" };
 
     var (command, args) = await GetCommandAndArguments(
         clientService.UseVisualStudio ? MSBuildProjectType.VisualStudio : MSBuildProjectType.SDK,
