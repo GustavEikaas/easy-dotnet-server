@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Domain.Models.MsBuild.Build;
 using EasyDotnet.Domain.Models.MsBuild.Project;
@@ -9,7 +8,7 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace EasyDotnet.Services;
 
-public partial class MsBuildService(IVisualStudioLocator locator, IClientService clientService, IProcessQueue processQueue, IMemoryCache memoryCache, INotificationService notificationService, ISolutionService solutionService) : IMsBuildService
+public class MsBuildService(IVisualStudioLocator locator, IClientService clientService, IProcessQueue processQueue, IMemoryCache memoryCache, INotificationService notificationService, ISolutionService solutionService) : IMsBuildService
 {
   public SdkInstallation[] QuerySdkInstallations()
   {
@@ -38,7 +37,7 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
 
     var (success, stdout, stderr) = await processQueue.RunProcessAsync(command, args, new ProcessOptions(true), cancellationToken);
 
-    var (errors, warnings) = ParseBuildOutput(stdout, stderr);
+    var (errors, warnings) = MsBuildBuildStdoutParser.ParseBuildOutput(stdout, stderr);
     var (errorsWithProject, warningsWithProject) = AddProjectToBuildMessages(targetPath, errors, warnings);
 
     var orderedErrors = errorsWithProject
@@ -70,8 +69,8 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
 
   private (List<BuildMessageWithProject>, List<BuildMessageWithProject>) AddProjectToBuildMessages(
     string targetPath,
-    IEnumerable<BuildMessage> errors,
-    IEnumerable<BuildMessage> warnings)
+    IEnumerable<MsBuildStdoutMessage> errors,
+    IEnumerable<MsBuildStdoutMessage> warnings)
   {
     if (!errors.Any() && !warnings.Any())
     {
@@ -80,7 +79,7 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
 
     var projectMap = GetProjectMap(targetPath);
 
-    var map = new Func<IEnumerable<BuildMessage>, List<BuildMessageWithProject>>(messages =>
+    var map = new Func<IEnumerable<MsBuildStdoutMessage>, List<BuildMessageWithProject>>(messages =>
         messages.Select(m => new BuildMessageWithProject(
             m.Type,
             m.FilePath,
@@ -289,46 +288,4 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
     };
   }
 
-  private static (List<BuildMessage> Errors, List<BuildMessage> Warnings) ParseBuildOutput(string stdout, string stderr)
-  {
-    var regex = MsBuildLoggingLine();
-
-    var messages =
-        stdout
-            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
-            .Select(line => regex.Match(line))
-            .Where(match => match.Success)
-            .Select(match => new BuildMessage(
-                Type: match.Groups["type"].Value,
-                FilePath: match.Groups["file"].Value.Trim(), // strip leading spaces
-                LineNumber: int.Parse(match.Groups["line"].Value),
-                ColumnNumber: int.Parse(match.Groups["col"].Value),
-                Code: match.Groups["code"].Value,
-                Message: match.Groups["msg"].Value
-            ));
-
-    var stderrMessages =
-        stderr
-            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
-            .Select(line => new BuildMessage("error", "", 0, 0, "", line));
-
-    var allMessages = messages.Concat(stderrMessages);
-
-    var errors = allMessages
-        .Where(m => m.Type.Equals("error", StringComparison.OrdinalIgnoreCase))
-        .GroupBy(m => (m.Type, m.Code, m.LineNumber, m.ColumnNumber))
-        .Select(g => g.First())
-        .ToList();
-
-    var warnings = allMessages
-        .Where(m => m.Type.Equals("warning", StringComparison.OrdinalIgnoreCase))
-        .GroupBy(m => (m.Type, m.Code, m.LineNumber, m.ColumnNumber))
-        .Select(g => g.First())
-        .ToList();
-
-    return (errors, warnings);
-  }
-
-  [GeneratedRegex(@"^(?<file>.*)\((?<line>\d+),(?<col>\d+)\): (?<type>error|warning) (?<code>\S+): (?<msg>.*)$", RegexOptions.IgnoreCase | RegexOptions.Compiled, "en-US")]
-  private static partial Regex MsBuildLoggingLine();
 }
