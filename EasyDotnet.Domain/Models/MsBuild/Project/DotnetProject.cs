@@ -1,6 +1,6 @@
 namespace EasyDotnet.Domain.Models.MsBuild.Project;
 
-public sealed record DotnetProject(
+public sealed record DotnetProjectV1(
     string ProjectName,
     string Language,
     string? OutputPath,

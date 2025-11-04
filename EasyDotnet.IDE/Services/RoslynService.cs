@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers.Roslyn;
 using EasyDotnet.Extensions;
-using EasyDotnet.Infrastructure.MsBuild;
+using EasyDotnet.MsBuild;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;

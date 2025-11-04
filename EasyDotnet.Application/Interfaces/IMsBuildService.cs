@@ -16,8 +16,8 @@ public interface IMsBuildService
   SdkInstallation[] QuerySdkInstallations();
   bool HasMinimumSdk(Version version);
   Task<bool> AddProjectReferenceAsync(string projectPath, string targetPath, CancellationToken cancellationToken = default);
-  Task<DotnetProject> GetOrSetProjectPropertiesAsync(string projectPath, string? targetFrameworkMoniker = null, string configuration = "Debug", CancellationToken cancellationToken = default);
-  Task<DotnetProject> GetProjectPropertiesAsync(string projectPath, string? targetFrameworkMoniker = null, string configuration = "Debug", CancellationToken cancellationToken = default);
+  Task<DotnetProjectV1> GetOrSetProjectPropertiesAsync(string projectPath, string? targetFrameworkMoniker = null, string configuration = "Debug", CancellationToken cancellationToken = default);
+  Task<DotnetProjectV1> GetProjectPropertiesAsync(string projectPath, string? targetFrameworkMoniker = null, string configuration = "Debug", CancellationToken cancellationToken = default);
   Task<List<string>> GetProjectReferencesAsync(string projectPath, CancellationToken cancellationToken = default);
   Task InvalidateProjectProperties(string projectPath, string? targetFrameworkMoniker = null, string configuration = "Debug");
   Task<bool> RemoveProjectReferenceAsync(string projectPath, string targetPath, CancellationToken cancellationToken = default);

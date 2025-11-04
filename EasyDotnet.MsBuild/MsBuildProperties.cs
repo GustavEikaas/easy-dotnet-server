@@ -5,6 +5,31 @@ namespace EasyDotnet.MsBuild;
 /// </summary>
 public static class MsBuildProperties
 {
+  /// <summary>
+  /// Get all known MSBuild property definitions from a static class.
+  /// </summary>
+  public static IEnumerable<MsBuildProperty<object?>> GetAllProperties()
+  {
+    var fields = typeof(MsBuildProperties)
+        .GetFields(System.Reflection.BindingFlags.Public |
+                   System.Reflection.BindingFlags.Static)
+        .Where(f => f.FieldType.IsGenericType &&
+                    f.FieldType.GetGenericTypeDefinition() == typeof(MsBuildProperty<>));
+
+    foreach (var field in fields)
+    {
+      var value = field.GetValue(null);
+      if (value is not null)
+      {
+        yield return (MsBuildProperty<object?>)Convert.ChangeType(value, typeof(MsBuildProperty<object?>));
+      }
+    }
+  }
+
+  /// <summary>
+  /// Get names of all known MSBuild properties.
+  /// </summary>
+  public static string[] GetAllPropertyNames() => [.. GetAllProperties().Where(x => x.IsComputed == false).Select(p => p.Name)];
 
   public static readonly MsBuildProperty<string?> OutputPath =
       new(

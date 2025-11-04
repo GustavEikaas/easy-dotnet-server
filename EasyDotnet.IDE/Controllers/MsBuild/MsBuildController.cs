@@ -22,7 +22,7 @@ public class MsBuildController(IClientService clientService, IMsBuildService msB
   }
 
   [JsonRpcMethod("msbuild/project-properties")]
-  public async Task<DotnetProject> QueryProjectProperties(ProjectPropertiesRequest request)
+  public async Task<DotnetProjectV1> QueryProjectProperties(ProjectPropertiesRequest request)
   {
     clientService.ThrowIfNotInitialized();
     var result = await msBuild.GetOrSetProjectPropertiesAsync(request.TargetPath, request.TargetFramework, request.ConfigurationOrDefault);

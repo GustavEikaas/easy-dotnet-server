@@ -38,7 +38,7 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
 
   public Task Completion => _completionSource.Task;
 
-  public async Task<int> Start(string binaryPath, DotnetProject project, string projectPath, LaunchProfile? launchProfile, (System.Diagnostics.Process, int)? vsTestAttach)
+  public async Task<int> Start(string binaryPath, DotnetProjectV1 project, string projectPath, LaunchProfile? launchProfile, (System.Diagnostics.Process, int)? vsTestAttach)
   {
     if (_disposeTask != null)
     {

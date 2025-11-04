@@ -6,9 +6,9 @@ namespace EasyDotnet.MsBuild;
 public record MsBuildProperty<T>(
     string Name,
     string Description,
-    Func<IReadOnlyDictionary<string, string>, string, T> Deserialize,
+    Func<IReadOnlyDictionary<string, string?>, string, T> Deserialize,
     bool IsComputed = false
 )
 {
-  public T GetValue(IReadOnlyDictionary<string, string> values) => Deserialize(values, Name);
+  public T GetValue(IReadOnlyDictionary<string, string?> values) => Deserialize(values, Name);
 }

@@ -142,10 +142,6 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
     throw new InvalidOperationException("Target must be a .csproj or (.sln, .slnx) file");
   }
 
-  private class MsBuildPropertiesResponse
-  {
-    public Dictionary<string, string?> Properties { get; set; } = new(StringComparer.OrdinalIgnoreCase);
-  }
 
   private static string GetLanguage(string path) => FileTypes.IsCsProjectFile(path) ? "csharp" : FileTypes.IsFsProjectFile(path) ? "fsharp" : "unknown";
 
@@ -156,7 +152,7 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
     await notificationService.NotifyProjectChanged(projectPath, targetFrameworkMoniker, configuration);
   }
 
-  public async Task<DotnetProject> GetOrSetProjectPropertiesAsync(
+  public async Task<DotnetProjectV1> GetOrSetProjectPropertiesAsync(
       string projectPath,
       string? targetFrameworkMoniker = null,
       string configuration = "Debug",
@@ -167,7 +163,7 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
 
   private static string GetCacheKeyProperties(string projectPath, string? targetFrameworkMoniker, string configuration) => $"{projectPath}-{targetFrameworkMoniker ?? ""}-{configuration ?? ""}";
 
-  public async Task<DotnetProject> GetProjectPropertiesAsync(
+  public async Task<DotnetProjectV1> GetProjectPropertiesAsync(
       string projectPath,
       string? targetFrameworkMoniker = null,
       string configuration = "Debug",
@@ -178,32 +174,7 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
       throw new ArgumentException("Project path must be provided", nameof(projectPath));
     }
 
-    var propsToQuery = new[]
-    {
-        MsBuildProperties.OutputPath.Name,
-        MsBuildProperties.OutputType.Name,
-        MsBuildProperties.TargetExt.Name,
-        MsBuildProperties.AssemblyName.Name,
-        MsBuildProperties.TargetFramework.Name,
-        MsBuildProperties.TargetFrameworks.Name,
-        MsBuildProperties.IsTestProject.Name,
-        MsBuildProperties.UserSecretsId.Name,
-        MsBuildProperties.TestingPlatformDotnetTestSupport.Name,
-        MsBuildProperties.TargetPath.Name,
-        MsBuildProperties.GeneratePackageOnBuild.Name,
-        MsBuildProperties.IsPackable.Name,
-        MsBuildProperties.PackageId.Name,
-        MsBuildProperties.Version.Name,
-        MsBuildProperties.PackageOutputPath.Name,
-        MsBuildProperties.TargetFrameworkVersion.Name,
-        MsBuildProperties.UsingMicrosoftNETSdkWorker.Name,
-        MsBuildProperties.UsingMicrosoftNETSdkWeb.Name,
-        MsBuildProperties.UseIISExpress.Name,
-        MsBuildProperties.LangVersion.Name,
-        MsBuildProperties.RootNamespace.Name,
-        MsBuildProperties.IsAspireHost.Name,
-        MsBuildProperties.AspireHostingSDKVersion.Name,
-    };
+    var props = MsBuildPropertyQueryBuilder.BuildQueryString();
 
     var (command, args) = await GetCommandAndArguments(
         clientService.UseVisualStudio ? MSBuildProjectType.VisualStudio : MSBuildProjectType.SDK,
@@ -211,71 +182,56 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
         targetFrameworkMoniker,
         configuration, "");
 
-    args += " -nologo -v:quiet " + string.Join(" ", propsToQuery.Select(p => $"-getProperty:{p}"));
+    args += " -nologo -v:quiet " + props;
 
     var (success, stdout, stderr) = await processQueue.RunProcessAsync(command, args, new ProcessOptions(KillOnTimeout: true), cancellationToken);
     if (!success)
       throw new InvalidOperationException($"Failed to get project properties: {stderr}");
+    var project = MsBuildPropertiesStdoutParser.ParseMsBuildOutputToProject(stdout);
 
-    var lines = stdout.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
-    var jsonStartIndex = Array.FindIndex(lines, line => line.Trim() == "{");
-
-    if (jsonStartIndex == -1)
-    {
-      throw new InvalidOperationException("Did not find JSON payload in MSBuild output.");
-    }
-
-    var jsonPayload = string.Join("\n", lines.Skip(jsonStartIndex));
-
-    var msbuildOutput = JsonSerializer.Deserialize<MsBuildPropertiesResponse>(jsonPayload);
-    var values = msbuildOutput?.Properties ?? new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-
-    var bag = new MsBuildPropertyBag(values);
-
-
-    var tfm = bag.Get(MsBuildProperties.TargetFramework);
+    var tfm = project.TargetFramework;
     var versionMoniker = tfm is { } s && s.StartsWith("net", StringComparison.OrdinalIgnoreCase)
         ? s[3..]
         : tfm;
 
-    var nugetVersion = bag.Get(MsBuildProperties.Version)?.ToString();
-    var targetFrameworkVersion = bag.Get(MsBuildProperties.TargetFrameworkVersion);
+    var nugetVersion = project.Version?.ToString();
+    var targetFrameworkVersion = project.TargetFrameworkVersion;
     var isNetFramework = targetFrameworkVersion?.StartsWith("v4") == true;
-    var useIISExpress = bag.Get(MsBuildProperties.UseIISExpress);
-    var targetPath = bag.Get(MsBuildProperties.TargetPath);
+    var useIISExpress = project.UseIISExpress;
+    var targetPath = project.TargetPath;
     var projectName = Path.GetFileNameWithoutExtension(projectPath);
-    var aspireSdkVersion = bag.Get(MsBuildProperties.AspireHostingSDKVersion);
+    var aspireSdkVersion = project.AspireHostingSDKVersion;
 
-    return new DotnetProject(
+    return new DotnetProjectV1(
         ProjectName: projectName,
         Language: GetLanguage(projectPath),
-        OutputPath: bag.Get(MsBuildProperties.OutputPath),
-        OutputType: bag.Get(MsBuildProperties.OutputType),
-        TargetExt: bag.Get(MsBuildProperties.TargetExt),
-        AssemblyName: bag.Get(MsBuildProperties.AssemblyName),
+        OutputPath: project.OutputPath,
+        OutputType: project.OutputType,
+        TargetExt: project.TargetExt,
+        AssemblyName: project.AssemblyName,
         TargetFramework: tfm,
-        TargetFrameworks: bag.Get(MsBuildProperties.TargetFrameworks),
-        IsTestProject: bag.Get(MsBuildProperties.IsTestProject),
-        IsWebProject: bag.Get(MsBuildProperties.UsingMicrosoftNETSdkWeb),
-        IsWorkerProject: bag.Get(MsBuildProperties.UsingMicrosoftNETSdkWorker),
-        UserSecretsId: bag.Get(MsBuildProperties.UserSecretsId),
-        TestingPlatformDotnetTestSupport: bag.Get(MsBuildProperties.TestingPlatformDotnetTestSupport),
+        TargetFrameworks: project.TargetFrameworks,
+        IsTestProject: project.IsTestProject,
+        IsWebProject: project.UsingMicrosoftNETSdkWeb,
+        IsWorkerProject: project.UsingMicrosoftNETSdkWorker,
+        UserSecretsId: project.UserSecretsId,
+        TestingPlatformDotnetTestSupport: project.TestingPlatformDotnetTestSupport,
         TargetPath: targetPath,
-        GeneratePackageOnBuild: bag.Get(MsBuildProperties.GeneratePackageOnBuild),
-        IsPackable: bag.Get(MsBuildProperties.IsPackable),
-        LangVersion: bag.Get(MsBuildProperties.LangVersion),
-        RootNamespace: bag.Get(MsBuildProperties.RootNamespace),
-        PackageId: bag.Get(MsBuildProperties.PackageId),
+        GeneratePackageOnBuild: project.GeneratePackageOnBuild,
+        IsPackable: project.IsPackable,
+        LangVersion: project.LangVersion,
+        RootNamespace: project.RootNamespace,
+        PackageId: project.PackageId,
         NugetVersion: string.IsNullOrWhiteSpace(nugetVersion) ? null : nugetVersion,
         Version: targetFrameworkVersion,
-        PackageOutputPath: bag.Get(MsBuildProperties.PackageOutputPath),
-        IsMultiTarget: bag.Get(MsBuildProperties.TargetFrameworks)?.Length > 1,
+        PackageOutputPath: project.PackageOutputPath,
+        IsMultiTarget: project.TargetFrameworks?.Length > 1,
         IsNetFramework: isNetFramework,
         UseIISExpress: useIISExpress,
         RunCommand: await BuildRunCommand(!isNetFramework, useIISExpress, targetPath, projectPath, projectName),
         BuildCommand: await BuildBuildCommand(!isNetFramework, projectPath),
         TestCommand: BuildTestCommand(!isNetFramework, targetPath, projectPath),
-        IsAspireHost: bag.Get(MsBuildProperties.IsAspireHost),
+        IsAspireHost: project.IsAspireHost,
         AspireHostingSdkVersion: aspireSdkVersion);
   }
 
