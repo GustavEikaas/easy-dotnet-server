@@ -5,6 +5,7 @@ using EasyDotnet.Domain.Models.MsBuild.Build;
 using EasyDotnet.Domain.Models.MsBuild.Project;
 using EasyDotnet.Domain.Models.MsBuild.SDK;
 using EasyDotnet.Infrastructure.MsBuild;
+using EasyDotnet.MsBuild;
 using Microsoft.Build.Locator;
 using Microsoft.Extensions.Caching.Memory;
 
@@ -180,108 +181,30 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
 
     var propsToQuery = new[]
     {
-        "OutputPath", "OutputType", "TargetExt", "AssemblyName",
-        "TargetFramework", "TargetFrameworks", "IsTestProject", "UserSecretsId",
-        "TestingPlatformDotnetTestSupport", "TargetPath", "GeneratePackageOnBuild",
-        "IsPackable", "PackageId", "Version", "PackageOutputPath", "TargetFrameworkVersion",
-        "UsingMicrosoftNETSdkWorker", "UsingMicrosoftNETSdkWeb",  "UseIISExpress", "LangVersion",
-        "RootNamespace",
-
-    // Starting with Aspire 9.0.0, Aspire moved from a workload-based distribution model to NuGet packages
-    // with the Aspire.AppHost.Sdk. Projects using the old workload-based approach need to be upgraded.
-    //
-    // Detection logic:
-    // - IsAspireHost='true' indicates this is an Aspire host project
-    // - AspireHostingSDKVersion is set by Aspire.AppHost.Sdk in new projects (9.0.0+)
-    // - If AspireHostingSDKVersion is missing or < 9.0.0, this is likely an old workload-based project
-"IsAspireHost",
-"AspireHostingSDKVersion",
-        "EnableDefaultCompileItems",
-        "EnableDefaultItems",
-        "EnableDefaultEmbeddedResourceItems",
-        "EnableDefaultNoneItems",
-        "_IsNETCoreOrNETStandard",
-        "PublishDir",
-        "PublishDirName",
-        "AppDesignerFolder", // Properties
-"ImportDirectoryBuildProps",
-"RestoreTool",
-"RestoreSuccess",
-"ProjectAssetsFile",
-"NuGetPackageRoot",
-"NuGetPackageFolders",
-"NuGetProjectStyle",
-"NuGetToolVersion",
-"IsTestingPlatformApplication",
-"ImportDirectoryPackagesProps",
-"Configurations", // Debug;Release
-"Configuration", // Debug
-"Platforms", // AnyCPU
-"Platform", // AnyCPU
-"DebugSymbols",
-"Optimize",
-"DebugType", // Portable
-"RestoreProjectStyle", // PackageReference
-"TreatWarningsAsErrors",
-"DebugSymbols",
-"MSBuildToolsPath", //C:\Program Files\dotnet\sdk\10.0.100-preview.7.25380.108
-"NetCoreTargetingPackRoot", //C:\Program Files\dotnet\packs
-"NetCoreRoot", // C:\Program Files\dotnet\
-"DOTNET_HOST_PATH", // C:\Program Files\dotnet\dotnet.exe
-"NETCoreAppMaximumVersion", // 10.0
-"BundledNETCoreAppTargetFrameworkVersion", // 10.0
-"BundledNETCoreAppPackageVersion", // 10.0.0-preview.7.25380.108
-"MinimumMSBuildVersion",
-"BundledMSBuildVersion",
-"DefaultLanguageSourceExtension", // .cs
-"NoWarn", //1701;1702
-"VisualStudioVersion", // 18.0
-"MaxSupportedLangVersion", //13.0
-"TargetFrameworkIdentifier", // .NETCoreApp
-"MSBuildBinPath",
-"TargetsNet9",
-"TargetsNet8",
-"TargetsNet7",
-"TargetsNet6",
-"TargetsCurrent",
-"IsNetCoreAppTargetingLatestTFM",
-"DefaultAppHostRuntimeIdentifier",
-
-// <BundledNETStandardTargetFrameworkVersion>2.1</BundledNETStandardTargetFrameworkVersion>
-// <BundledNETStandardPackageVersion>2.1.0</BundledNETStandardPackageVersion>
-// <BundledNETCorePlatformsPackageVersion>10.0.0-preview.7.25380.108</BundledNETCorePlatformsPackageVersion>
-// <BundledRuntimeIdentifierGraphFile>$(MSBuildThisFileDirectory)RuntimeIdentifierGraph.json</BundledRuntimeIdentifierGraphFile>
-// <NETCoreSdkVersion>10.0.100-preview.7.25380.108</NETCoreSdkVersion>
-// <SdkAnalysisLevel>10.0.100</SdkAnalysisLevel>
-// <NETCoreSdkRuntimeIdentifier>win-x64</NETCoreSdkRuntimeIdentifier>
-// <NETCoreSdkPortableRuntimeIdentifier>win-x64</NETCoreSdkPortableRuntimeIdentifier>
-// <_NETCoreSdkIsPreview>true</_NETCoreSdkIsPreview>
-"ProjectDir", // C:\Users\Gustav\repo\easy-dotnet-server\EasyDotnet.IDE\
-"Language", // C# \ VB \ F#
-"RunCommand",
-"RunArguments",
-"ProjectDepsFileName", // nuget cache EasyDotnet.IDE.deps.json,
-"ProjectDepsFilePath",// C:\Users\Gustav\repo\easy-dotnet-server\EasyDotnet.IDE\bin\Debug\net8.0\EasyDotnet.IDE.deps.json
-"ProjectRuntimeConfigFileName",
-"ProjectRuntimeConfigFilePath",
-"ProjectRuntimeConfigDevFilePath",
-"IncludeMainProjectInDepsFile",
-"TrimDepsJsonLibrariesWithoutAssets",
-"GeneratedAssemblyInfoFile",
-"GenerateAssemblyInfo",
-"MSBuildProjectName",
-"TargetFileName",
-"IntermediateOutputPath",
-"BaseIntermediateOutputPath",
-"MSBuildProjectExtensionsPath",
-"SelfContained",
-"UserProfileRuntimeStorePath",
-"MSBuildProjectFullPath" // C:\Users\Gustav\repo\easy-dotnet-server\EasyDotnet.IDE\EasyDotnet.IDE.csproj
-
-
+        MsBuildProperties.OutputPath.Name,
+        MsBuildProperties.OutputType.Name,
+        MsBuildProperties.TargetExt.Name,
+        MsBuildProperties.AssemblyName.Name,
+        MsBuildProperties.TargetFramework.Name,
+        MsBuildProperties.TargetFrameworks.Name,
+        MsBuildProperties.IsTestProject.Name,
+        MsBuildProperties.UserSecretsId.Name,
+        MsBuildProperties.TestingPlatformDotnetTestSupport.Name,
+        MsBuildProperties.TargetPath.Name,
+        MsBuildProperties.GeneratePackageOnBuild.Name,
+        MsBuildProperties.IsPackable.Name,
+        MsBuildProperties.PackageId.Name,
+        MsBuildProperties.Version.Name,
+        MsBuildProperties.PackageOutputPath.Name,
+        MsBuildProperties.TargetFrameworkVersion.Name,
+        MsBuildProperties.UsingMicrosoftNETSdkWorker.Name,
+        MsBuildProperties.UsingMicrosoftNETSdkWeb.Name,
+        MsBuildProperties.UseIISExpress.Name,
+        MsBuildProperties.LangVersion.Name,
+        MsBuildProperties.RootNamespace.Name,
+        MsBuildProperties.IsAspireHost.Name,
+        MsBuildProperties.AspireHostingSDKVersion.Name,
     };
-
-    var knownTargets = new List<string>() { "_CheckForBuildWithNoBuild" };
 
     var (command, args) = await GetCommandAndArguments(
         clientService.UseVisualStudio ? MSBuildProjectType.VisualStudio : MSBuildProjectType.SDK,
@@ -308,58 +231,54 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
     var msbuildOutput = JsonSerializer.Deserialize<MsBuildPropertiesResponse>(jsonPayload);
     var values = msbuildOutput?.Properties ?? new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
 
-    string? TryGet(string name)
-        => values.TryGetValue(name, out var v) && !string.IsNullOrEmpty(v) ? v : null;
-    bool TryGetBool(string name) => values.TryGetValue(name, out var v) && bool.TryParse(v, out var b) && b;
+    var bag = new MsBuildPropertyBag(values);
 
-    var tfm = TryGet("TargetFramework");
+
+    var tfm = bag.Get(MsBuildProperties.TargetFramework);
     var versionMoniker = tfm is { } s && s.StartsWith("net", StringComparison.OrdinalIgnoreCase)
         ? s[3..]
         : tfm;
 
-    var nugetVersion = TryGet("Version");
-    var targetFrameworkVersion = TryGet("TargetFrameworkVersion");
+    var nugetVersion = bag.Get(MsBuildProperties.Version)?.ToString();
+    var targetFrameworkVersion = bag.Get(MsBuildProperties.TargetFrameworkVersion);
     var isNetFramework = targetFrameworkVersion?.StartsWith("v4") == true;
-    var useIISExpress = TryGetBool("UseIISExpress");
-    var targetPath = TryGet("TargetPath");
+    var useIISExpress = bag.Get(MsBuildProperties.UseIISExpress);
+    var targetPath = bag.Get(MsBuildProperties.TargetPath);
     var projectName = Path.GetFileNameWithoutExtension(projectPath);
-    var aspireSdkVersionString = TryGet("AspireHostingSDKVersion");
-    var aspireSdkVersion = TryParseVersion(aspireSdkVersionString);
+    var aspireSdkVersion = bag.Get(MsBuildProperties.AspireHostingSDKVersion);
 
     return new DotnetProject(
         ProjectName: projectName,
         Language: GetLanguage(projectPath),
-        OutputPath: TryGet("OutputPath"),
-        OutputType: TryGet("OutputType"),
-        TargetExt: TryGet("TargetExt"),
-        AssemblyName: TryGet("AssemblyName"),
+        OutputPath: bag.Get(MsBuildProperties.OutputPath),
+        OutputType: bag.Get(MsBuildProperties.OutputType),
+        TargetExt: bag.Get(MsBuildProperties.TargetExt),
+        AssemblyName: bag.Get(MsBuildProperties.AssemblyName),
         TargetFramework: tfm,
-        TargetFrameworks: TryGet("TargetFrameworks")?.Split(';', StringSplitOptions.RemoveEmptyEntries),
-        IsTestProject: TryGetBool("IsTestProject"),
-        IsWebProject: TryGetBool("UsingMicrosoftNETSdkWeb"),
-        IsWorkerProject: TryGetBool("UsingMicrosoftNETSdkWorker"),
-        UserSecretsId: TryGet("UserSecretsId"),
-        TestingPlatformDotnetTestSupport: TryGetBool("TestingPlatformDotnetTestSupport"),
-        TargetPath: TryGet("TargetPath"),
-        GeneratePackageOnBuild: TryGetBool("GeneratePackageOnBuild"),
-        IsPackable: TryGetBool("IsPackable"),
-        LangVersion: TryGet("LangVersion"),
-        RootNamespace: TryGet("RootNamespace"),
-        PackageId: TryGet("PackageId"),
+        TargetFrameworks: bag.Get(MsBuildProperties.TargetFrameworks),
+        IsTestProject: bag.Get(MsBuildProperties.IsTestProject),
+        IsWebProject: bag.Get(MsBuildProperties.UsingMicrosoftNETSdkWeb),
+        IsWorkerProject: bag.Get(MsBuildProperties.UsingMicrosoftNETSdkWorker),
+        UserSecretsId: bag.Get(MsBuildProperties.UserSecretsId),
+        TestingPlatformDotnetTestSupport: bag.Get(MsBuildProperties.TestingPlatformDotnetTestSupport),
+        TargetPath: targetPath,
+        GeneratePackageOnBuild: bag.Get(MsBuildProperties.GeneratePackageOnBuild),
+        IsPackable: bag.Get(MsBuildProperties.IsPackable),
+        LangVersion: bag.Get(MsBuildProperties.LangVersion),
+        RootNamespace: bag.Get(MsBuildProperties.RootNamespace),
+        PackageId: bag.Get(MsBuildProperties.PackageId),
         NugetVersion: string.IsNullOrWhiteSpace(nugetVersion) ? null : nugetVersion,
         Version: targetFrameworkVersion,
-        PackageOutputPath: TryGet("PackageOutputPath"),
-        IsMultiTarget: (TryGet("TargetFrameworks")?.Split(';', StringSplitOptions.RemoveEmptyEntries).Length ?? 0) > 1,
+        PackageOutputPath: bag.Get(MsBuildProperties.PackageOutputPath),
+        IsMultiTarget: bag.Get(MsBuildProperties.TargetFrameworks)?.Length > 1,
         IsNetFramework: isNetFramework,
         UseIISExpress: useIISExpress,
         RunCommand: await BuildRunCommand(!isNetFramework, useIISExpress, targetPath, projectPath, projectName),
         BuildCommand: await BuildBuildCommand(!isNetFramework, projectPath),
         TestCommand: BuildTestCommand(!isNetFramework, targetPath, projectPath),
-        IsAspireHost: TryGetBool("IsAspireHost"),
+        IsAspireHost: bag.Get(MsBuildProperties.IsAspireHost),
         AspireHostingSdkVersion: aspireSdkVersion);
   }
-  private static Version? TryParseVersion(string? versionString) =>
-    string.IsNullOrWhiteSpace(versionString) ? null : Version.TryParse(versionString, out var version) ? version : null;
 
   public async Task<List<string>> GetProjectReferencesAsync(string projectPath, CancellationToken cancellationToken = default)
   {
