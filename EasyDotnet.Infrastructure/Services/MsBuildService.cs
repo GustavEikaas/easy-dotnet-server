@@ -181,10 +181,14 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
         configuration, "");
 
     args += " -nologo -v:quiet " + props;
+    Console.WriteLine(command);
+    Console.WriteLine(args);
 
     var (success, stdout, stderr) = await processQueue.RunProcessAsync(command, args, new ProcessOptions(KillOnTimeout: true), cancellationToken);
     if (!success)
+    {
       throw new InvalidOperationException($"Failed to get project properties: {stderr}");
+    }
     var project = MsBuildPropertiesStdoutParser.ParseMsBuildOutputToProject(stdout);
     return project;
   }

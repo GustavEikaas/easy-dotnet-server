@@ -5,10 +5,7 @@ namespace EasyDotnet.MsBuild;
 /// </summary>
 public static class MsBuildProperties
 {
-  /// <summary>
-  /// Get all known MSBuild property definitions from a static class.
-  /// </summary>
-  public static IEnumerable<MsBuildProperty<object?>> GetAllProperties()
+  public static IEnumerable<string> GetAllPropertyNames()
   {
     var fields = typeof(MsBuildProperties)
         .GetFields(System.Reflection.BindingFlags.Public |
@@ -18,18 +15,18 @@ public static class MsBuildProperties
 
     foreach (var field in fields)
     {
-      var value = field.GetValue(null);
-      if (value is not null)
+      if (field.GetValue(null) is not null)
       {
-        yield return (MsBuildProperty<object?>)Convert.ChangeType(value, typeof(MsBuildProperty<object?>));
+        var prop = field.GetValue(null);
+        var isComputed = (bool)prop?.GetType().GetProperty("IsComputed")!.GetValue(prop)!;
+        if (!isComputed)
+        {
+          var name = (string)prop.GetType().GetProperty("Name")!.GetValue(prop)!;
+          yield return name;
+        }
       }
     }
   }
-
-  /// <summary>
-  /// Get names of all known MSBuild properties.
-  /// </summary>
-  public static string[] GetAllPropertyNames() => [.. GetAllProperties().Where(x => x.IsComputed == false).Select(p => p.Name)];
 
   public static readonly MsBuildProperty<string?> OutputPath =
       new(
