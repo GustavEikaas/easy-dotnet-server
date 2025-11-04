@@ -23,6 +23,20 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
 
   public string GetDotnetSdkBasePath() => Path.GetDirectoryName(Path.GetDirectoryName(QuerySdkInstallations().First().MSBuildPath))!;
 
+  public string GetNewestMsBuildBin()
+  {
+    var highest = QuerySdkInstallations()
+        .OrderByDescending(x => x.Version)
+        .FirstOrDefault();
+
+    if (highest == null)
+    {
+      throw new InvalidOperationException("No .NET SDKs found.");
+    }
+
+    return Path.Join(highest.MSBuildPath, "MSBuild.dll");
+  }
+
   public async Task<BuildResult> RequestBuildAsync(
          string targetPath,
          string? targetFrameworkMoniker,
@@ -35,7 +49,7 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
       throw new ArgumentException("Target path must be provided", nameof(targetPath));
     }
 
-    var (command, args) = await GetCommandAndArguments(clientService.UseVisualStudio ? MSBuildProjectType.VisualStudio : MSBuildProjectType.SDK, targetPath, targetFrameworkMoniker, configuration, buildArgs);
+    var (command, args) = await GetCommandAndArguments(clientService.UseVisualStudio ? MSBuildProjectType.VisualStudio : MSBuildProjectType.SDK, GetNewestMsBuildBin(), targetPath, targetFrameworkMoniker, configuration, buildArgs);
 
     var (success, stdout, stderr) = await processQueue.RunProcessAsync(command, args, new ProcessOptions(true), cancellationToken);
 
@@ -190,6 +204,7 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
 
     var (command, args) = await GetCommandAndArguments(
         clientService.UseVisualStudio ? MSBuildProjectType.VisualStudio : MSBuildProjectType.SDK,
+        GetNewestMsBuildBin(),
         projectPath,
         targetFrameworkMoniker,
         configuration, "");
@@ -349,6 +364,7 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
 
   private async Task<(string Command, string Arguments)> GetCommandAndArguments(
       MSBuildProjectType type,
+      string? newestMsBuildBin,
       string targetPath,
       string? targetFrameworkMoniker,
       string configuration, string? args)
@@ -359,7 +375,7 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
 
     return type switch
     {
-      MSBuildProjectType.SDK => ("dotnet", $"msbuild \"{targetPath}\" /p:Configuration={configuration} {tfmArg} {args ?? ""}"),
+      MSBuildProjectType.SDK => ("dotnet", $"\"{newestMsBuildBin}\" \"{targetPath}\" /p:Configuration={configuration} {tfmArg} {args ?? ""}"),
       MSBuildProjectType.VisualStudio => (await locator.GetVisualStudioMSBuildPath(), $"\"{targetPath}\" /p:Configuration={configuration} {tfmArg} {args ?? ""}"),
       _ => throw new InvalidOperationException("Unknown MSBuild type")
     };
