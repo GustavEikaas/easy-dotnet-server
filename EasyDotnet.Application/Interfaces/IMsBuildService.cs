@@ -1,6 +1,6 @@
 using EasyDotnet.Domain.Models.MsBuild.Build;
-using EasyDotnet.MsBuild;
 using EasyDotnet.Domain.Models.MsBuild.SDK;
+using EasyDotnet.MsBuild;
 
 namespace EasyDotnet.Application.Interfaces;
 
@@ -8,7 +8,7 @@ public interface IMsBuildService
 {
   /// <summary>
   /// Retrieves the base installation path for the .NET runtime (dotnet root).
-  /// This path is typically two directory levels above the MSBuild path, such as 
+  /// This path is typically two directory levels above the MSBuild path, such as
   /// "C:\Program Files\dotnet" on Windows or "/usr/share/dotnet" on Unix systems.
   /// </summary>
   /// <returns>The root path of the dotnet installation.</returns>
