@@ -49,7 +49,7 @@
 |-----------|------|----------|
 | request | ProjectPropertiesRequest |   |
 
-**Returns:** `Task<DotnetProject>`
+**Returns:** `Task<DotnetProjectV1>`
 
 ### `msbuild/remove-project-reference`
 | Parameter | Type | Optional |
