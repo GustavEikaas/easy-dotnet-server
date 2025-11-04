@@ -7,6 +7,7 @@ using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Domain.Models.LaunchProfile;
 using EasyDotnet.Domain.Models.MsBuild.Project;
 using EasyDotnet.Infrastructure.Dap;
+using EasyDotnet.MsBuild;
 using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Infrastructure.Services;
@@ -38,7 +39,7 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
 
   public Task Completion => _completionSource.Task;
 
-  public async Task<int> Start(string binaryPath, DotnetProjectV1 project, string projectPath, LaunchProfile? launchProfile, (System.Diagnostics.Process, int)? vsTestAttach)
+  public async Task<int> Start(string binaryPath, DotnetProject project, string projectPath, LaunchProfile? launchProfile, (System.Diagnostics.Process, int)? vsTestAttach)
   {
     if (_disposeTask != null)
     {

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Domain.Models.MsBuild.Build;
@@ -143,7 +142,6 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
   }
 
 
-  private static string GetLanguage(string path) => FileTypes.IsCsProjectFile(path) ? "csharp" : FileTypes.IsFsProjectFile(path) ? "fsharp" : "unknown";
 
 
   public async Task InvalidateProjectProperties(string projectPath, string? targetFrameworkMoniker = null, string configuration = "Debug")
@@ -152,7 +150,7 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
     await notificationService.NotifyProjectChanged(projectPath, targetFrameworkMoniker, configuration);
   }
 
-  public async Task<DotnetProjectV1> GetOrSetProjectPropertiesAsync(
+  public async Task<DotnetProject> GetOrSetProjectPropertiesAsync(
       string projectPath,
       string? targetFrameworkMoniker = null,
       string configuration = "Debug",
@@ -163,7 +161,7 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
 
   private static string GetCacheKeyProperties(string projectPath, string? targetFrameworkMoniker, string configuration) => $"{projectPath}-{targetFrameworkMoniker ?? ""}-{configuration ?? ""}";
 
-  public async Task<DotnetProjectV1> GetProjectPropertiesAsync(
+  public async Task<DotnetProject> GetProjectPropertiesAsync(
       string projectPath,
       string? targetFrameworkMoniker = null,
       string configuration = "Debug",
@@ -188,51 +186,7 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
     if (!success)
       throw new InvalidOperationException($"Failed to get project properties: {stderr}");
     var project = MsBuildPropertiesStdoutParser.ParseMsBuildOutputToProject(stdout);
-
-    var tfm = project.TargetFramework;
-    var versionMoniker = tfm is { } s && s.StartsWith("net", StringComparison.OrdinalIgnoreCase)
-        ? s[3..]
-        : tfm;
-
-    var nugetVersion = project.Version?.ToString();
-    var targetFrameworkVersion = project.TargetFrameworkVersion;
-    var isNetFramework = targetFrameworkVersion?.StartsWith("v4") == true;
-    var useIISExpress = project.UseIISExpress;
-    var targetPath = project.TargetPath;
-    var projectName = Path.GetFileNameWithoutExtension(projectPath);
-    var aspireSdkVersion = project.AspireHostingSDKVersion;
-
-    return new DotnetProjectV1(
-        ProjectName: projectName,
-        Language: GetLanguage(projectPath),
-        OutputPath: project.OutputPath,
-        OutputType: project.OutputType,
-        TargetExt: project.TargetExt,
-        AssemblyName: project.AssemblyName,
-        TargetFramework: tfm,
-        TargetFrameworks: project.TargetFrameworks,
-        IsTestProject: project.IsTestProject,
-        IsWebProject: project.UsingMicrosoftNETSdkWeb,
-        IsWorkerProject: project.UsingMicrosoftNETSdkWorker,
-        UserSecretsId: project.UserSecretsId,
-        TestingPlatformDotnetTestSupport: project.TestingPlatformDotnetTestSupport,
-        TargetPath: targetPath,
-        GeneratePackageOnBuild: project.GeneratePackageOnBuild,
-        IsPackable: project.IsPackable,
-        LangVersion: project.LangVersion,
-        RootNamespace: project.RootNamespace,
-        PackageId: project.PackageId,
-        NugetVersion: string.IsNullOrWhiteSpace(nugetVersion) ? null : nugetVersion,
-        Version: targetFrameworkVersion,
-        PackageOutputPath: project.PackageOutputPath,
-        IsMultiTarget: project.TargetFrameworks?.Length > 1,
-        IsNetFramework: isNetFramework,
-        UseIISExpress: useIISExpress,
-        RunCommand: await BuildRunCommand(!isNetFramework, useIISExpress, targetPath, projectPath, projectName),
-        BuildCommand: await BuildBuildCommand(!isNetFramework, projectPath),
-        TestCommand: BuildTestCommand(!isNetFramework, targetPath, projectPath),
-        IsAspireHost: project.IsAspireHost,
-        AspireHostingSdkVersion: aspireSdkVersion);
+    return project;
   }
 
   public async Task<List<string>> GetProjectReferencesAsync(string projectPath, CancellationToken cancellationToken = default)
@@ -285,31 +239,31 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
     return success;
   }
 
-  private async Task<string> BuildRunCommand(bool isSdk, bool useIISExpress, string? targetPath, string projectPath, string projectName)
+  public async Task<string> BuildRunCommand(bool isSdk, DotnetProject project)
   {
-    var buildCmd = await BuildBuildCommand(isSdk, projectPath);
+    var buildCmd = await BuildBuildCommand(isSdk, project);
 
+    var useIISExpress = project.UseIISExpress;
     return (isSdk, useIISExpress) switch
     {
-      (true, _) => $"dotnet run --project \"{projectPath}\"",
+      (true, _) => $"dotnet run --project \"{project.MSBuildProjectFullPath}\"",
 
       (false, true) =>
-          $"{buildCmd}; & \"{locator.GetIisExpressExe()}\" /config:\"{locator.GetApplicationHostConfig()}\" /site:\"{projectName}\"",
+          $"{buildCmd}; & \"{locator.GetIisExpressExe()}\" /config:\"{locator.GetApplicationHostConfig()}\" /site:\"{project.MSBuildProjectName}\"",
 
-      (false, false) => $"\"{targetPath}\""
+      (false, false) => $"\"{project.TargetPath}\""
     };
   }
 
-  private static string BuildTestCommand(bool isSdk, string? targetPath, string projectPath) => isSdk switch
+  public string BuildTestCommand(bool isSdk, DotnetProject project) => isSdk switch
   {
-    true => $"dotnet test \"{projectPath}\"",
-    false => $"dotnet vstest \"{targetPath}\""
+    true => $"dotnet test \"{project.MSBuildProjectFullPath}\"",
+    false => $"dotnet vstest \"{project.TargetPath}\""
   };
 
-  private async Task<string> BuildBuildCommand(bool isSdk, string projectPath)
+  public async Task<string> BuildBuildCommand(bool isSdk, DotnetProject project)
   {
-    var normalizedPath = Path.GetFullPath(projectPath)
-        .Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+    var normalizedPath = project.MSBuildProjectFullPath;
 
     return isSdk
         ? $"dotnet build \"{normalizedPath}\""

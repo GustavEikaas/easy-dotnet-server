@@ -129,7 +129,7 @@ public class RoslynService(IMsBuildService service, ILogger<RoslynService> logSe
 
     var project = await service.GetOrSetProjectPropertiesAsync(projectPath, null, "Debug", cancellationToken);
 
-    var rootNamespace = project.RootNamespace ?? project.ProjectName;
+    var rootNamespace = project.RootNamespace ?? project.MSBuildProjectName ?? Path.GetFileNameWithoutExtension(projectPath);
 
     var supportsFileScopedNamespace =
         string.IsNullOrEmpty(project.LangVersion) ||

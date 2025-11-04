@@ -4,8 +4,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
-using EasyDotnet.Domain.Models.MsBuild.Project;
 using EasyDotnet.Infrastructure.Dap;
+using EasyDotnet.MsBuild;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Controllers.NetCoreDbg;
@@ -44,5 +44,5 @@ public class NetCoreDbgController(IMsBuildService msBuildService, ILaunchProfile
     return new DebuggerStartResponse(true, port);
   }
 
-  private static (Process, int)? StartVsTestIfApplicable(DotnetProjectV1 project, string projectPath) => project.IsTestProject && !project.TestingPlatformDotnetTestSupport ? VsTestHelper.StartTestProcess(projectPath) : null;
+  private static (Process, int)? StartVsTestIfApplicable(DotnetProject project, string projectPath) => project.IsTestProject && !project.TestingPlatformDotnetTestSupport ? VsTestHelper.StartTestProcess(projectPath) : null;
 }

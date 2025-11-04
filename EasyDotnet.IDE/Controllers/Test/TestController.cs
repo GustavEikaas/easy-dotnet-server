@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Domain.Models.MsBuild.Project;
+using EasyDotnet.MsBuild;
 using EasyDotnet.MTP;
 using EasyDotnet.Services;
 using EasyDotnet.Types;
@@ -72,9 +73,9 @@ public class TestController(IClientService clientService, MtpService mtpService,
     }
   }
 
-  private static string GetExecutablePath(DotnetProjectV1 project) => OperatingSystem.IsWindows() ? Path.ChangeExtension(project.TargetPath!, ".exe") : project.TargetPath![..^4];
+  private static string GetExecutablePath(DotnetProject project) => OperatingSystem.IsWindows() ? Path.ChangeExtension(project.TargetPath!, ".exe") : project.TargetPath![..^4];
 
-  private async Task<DotnetProjectV1> GetProject(string projectPath, string? targetFrameworkMoniker, string? configuration, CancellationToken cancellationToken)
+  private async Task<DotnetProject> GetProject(string projectPath, string? targetFrameworkMoniker, string? configuration, CancellationToken cancellationToken)
   {
     var project = await msBuildService.GetProjectPropertiesAsync(projectPath, targetFrameworkMoniker, configuration ?? "Debug", cancellationToken);
     return string.IsNullOrEmpty(project.TargetPath) ? throw new Exception("TargetPath is null or empty") : project;

@@ -1,11 +1,11 @@
 using EasyDotnet.Domain.Models.LaunchProfile;
-using EasyDotnet.Domain.Models.MsBuild.Project;
+using EasyDotnet.MsBuild;
 
 namespace EasyDotnet.Infrastructure.Dap;
 
 public static class InitializeRequestRewriter
 {
-  public static Task<InterceptableAttachRequest> CreateInitRequestBasedOnProjectType(DotnetProjectV1 project, LaunchProfile? launchProfile, InterceptableAttachRequest request, string cwd, int seq, int? processId)
+  public static Task<InterceptableAttachRequest> CreateInitRequestBasedOnProjectType(DotnetProject project, LaunchProfile? launchProfile, InterceptableAttachRequest request, string cwd, int seq, int? processId)
   {
     if (project.IsTestProject && project.TestingPlatformDotnetTestSupport != true && processId is not null)
     {
@@ -27,7 +27,7 @@ public static class InitializeRequestRewriter
             )
             .ToDictionary(kv => kv.Key, kv => kv.Value);
 
-  private static async Task<InterceptableAttachRequest> CreateLaunchRequestAsync(InterceptableAttachRequest request, DotnetProjectV1 project, LaunchProfile? launchProfile, string cwd)
+  private static async Task<InterceptableAttachRequest> CreateLaunchRequestAsync(InterceptableAttachRequest request, DotnetProject project, LaunchProfile? launchProfile, string cwd)
   {
     var env = BuildEnvironmentVariables(launchProfile);
     request.Type = "request";
