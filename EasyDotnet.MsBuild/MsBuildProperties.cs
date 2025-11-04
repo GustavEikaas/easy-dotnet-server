@@ -5,28 +5,14 @@ namespace EasyDotnet.MsBuild;
 /// </summary>
 public static class MsBuildProperties
 {
-  public static IEnumerable<string> GetAllPropertyNames()
-  {
-    var fields = typeof(MsBuildProperties)
+  public static IEnumerable<string> GetAllPropertyNames() => typeof(MsBuildProperties)
         .GetFields(System.Reflection.BindingFlags.Public |
                    System.Reflection.BindingFlags.Static)
         .Where(f => f.FieldType.IsGenericType &&
-                    f.FieldType.GetGenericTypeDefinition() == typeof(MsBuildProperty<>));
-
-    foreach (var field in fields)
-    {
-      if (field.GetValue(null) is not null)
-      {
-        var prop = field.GetValue(null);
-        var isComputed = (bool)prop?.GetType().GetProperty("IsComputed")!.GetValue(prop)!;
-        if (!isComputed)
-        {
-          var name = (string)prop.GetType().GetProperty("Name")!.GetValue(prop)!;
-          yield return name;
-        }
-      }
-    }
-  }
+                    f.FieldType.GetGenericTypeDefinition() == typeof(MsBuildProperty<>))
+        .Select(f => f.GetValue(null))
+        .Where(prop => prop is not null && !(bool)prop.GetType().GetProperty("IsComputed")!.GetValue(prop)!)
+        .Select(prop => (string)prop?.GetType().GetProperty("Name")!.GetValue(prop)!);
 
   public static readonly MsBuildProperty<string?> OutputPath =
       new(
