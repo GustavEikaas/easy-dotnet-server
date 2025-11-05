@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -54,7 +55,7 @@ public static class CompatCommandHandler
     Console.WriteLine($"[compat] MSBuild: {msbuildPath}");
     Console.WriteLine($"[compat] Target: {targetPath}");
 
-    var buildExit = await RunProcessAsync(msbuildPath, $"\"{projectPath}\" /nologo /m /verbosity:minimal");
+    var buildExit = await RunProcessWithSpinnerAsync(msbuildPath, $"\"{projectPath}\" /nologo /m /verbosity:minimal", "[compat] Building...");
     if (buildExit != 0)
     {
       Console.Error.WriteLine($"[compat] Build failed (exit code {buildExit}). Aborting run.");
@@ -118,6 +119,53 @@ public static class CompatCommandHandler
     process.BeginOutputReadLine();
     process.BeginErrorReadLine();
     await process.WaitForExitAsync();
+
+    return process.ExitCode;
+  }
+
+  private static async Task<int> RunProcessWithSpinnerAsync(string fileName, string arguments, string statusMessage)
+  {
+    var spinnerFrames = new[] { "🛠️ ", "🔨", "⏳" };
+    var spinnerIndex = 0;
+
+    using var process = new Process
+    {
+      StartInfo = new ProcessStartInfo
+      {
+        FileName = fileName,
+        Arguments = arguments,
+        RedirectStandardOutput = true,
+        RedirectStandardError = true,
+        UseShellExecute = false,
+        CreateNoWindow = true
+      }
+    };
+
+    var outputLines = new List<string>();
+    var errorLines = new List<string>();
+
+    process.OutputDataReceived += (_, e) => { if (e.Data != null) outputLines.Add(e.Data); };
+    process.ErrorDataReceived += (_, e) => { if (e.Data != null) errorLines.Add(e.Data); };
+
+    process.Start();
+    process.BeginOutputReadLine();
+    process.BeginErrorReadLine();
+
+    while (!process.HasExited)
+    {
+      Console.Write($"\r{statusMessage} {spinnerFrames[spinnerIndex % spinnerFrames.Length]}");
+      spinnerIndex++;
+      await Task.Delay(100);
+    }
+
+    await process.WaitForExitAsync();
+    Console.Write("\r" + new string(' ', Console.WindowWidth) + "\r"); // clear spinner line
+
+    if (process.ExitCode != 0)
+    {
+      foreach (var line in outputLines) Console.WriteLine(line);
+      foreach (var line in errorLines) Console.Error.WriteLine(line);
+    }
 
     return process.ExitCode;
   }
