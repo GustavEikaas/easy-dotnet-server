@@ -1,4 +1,4 @@
-namespace EasyDotnet.Infrastructure.MsBuild;
+namespace EasyDotnet.MsBuild;
 
 public static class FileTypes
 {
@@ -9,7 +9,7 @@ public static class FileTypes
   public const string CsFileExtension = ".cs";
 
   public const string FsProjectExtension = ".fsproj";
-  public const string FsFileExtension = ".cs";
+  public const string FsFileExtension = ".fs";
 
   /// <summary>
   /// Checks whether the given path points to a Visual Studio solution sln file

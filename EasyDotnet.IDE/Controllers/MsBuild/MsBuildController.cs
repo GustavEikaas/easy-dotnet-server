@@ -5,7 +5,6 @@ using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
 using EasyDotnet.Controllers.MsBuild;
-using EasyDotnet.Domain.Models.MsBuild.Project;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Controllers.MsBuild;
@@ -22,11 +21,13 @@ public class MsBuildController(IClientService clientService, IMsBuildService msB
   }
 
   [JsonRpcMethod("msbuild/project-properties")]
-  public async Task<DotnetProject> QueryProjectProperties(ProjectPropertiesRequest request)
+  public async Task<DotnetProjectV1> QueryProjectProperties(ProjectPropertiesRequest request)
   {
     clientService.ThrowIfNotInitialized();
-    var result = await msBuild.GetOrSetProjectPropertiesAsync(request.TargetPath, request.TargetFramework, request.ConfigurationOrDefault);
-    return result;
+    var project = await msBuild.GetOrSetProjectPropertiesAsync(request.TargetPath, request.TargetFramework, request.ConfigurationOrDefault);
+    var isSdk = !clientService.UseVisualStudio;
+
+    return project.ToResponse(await msBuild.BuildRunCommand(isSdk, project), await msBuild.BuildBuildCommand(isSdk, project), msBuild.BuildTestCommand(isSdk, project));
   }
 
   [JsonRpcMethod("msbuild/list-project-reference")]

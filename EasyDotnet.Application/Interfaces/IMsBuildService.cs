@@ -1,6 +1,6 @@
 using EasyDotnet.Domain.Models.MsBuild.Build;
-using EasyDotnet.Domain.Models.MsBuild.Project;
 using EasyDotnet.Domain.Models.MsBuild.SDK;
+using EasyDotnet.MsBuild;
 
 namespace EasyDotnet.Application.Interfaces;
 
@@ -8,7 +8,7 @@ public interface IMsBuildService
 {
   /// <summary>
   /// Retrieves the base installation path for the .NET runtime (dotnet root).
-  /// This path is typically two directory levels above the MSBuild path, such as 
+  /// This path is typically two directory levels above the MSBuild path, such as
   /// "C:\Program Files\dotnet" on Windows or "/usr/share/dotnet" on Unix systems.
   /// </summary>
   /// <returns>The root path of the dotnet installation.</returns>
@@ -22,4 +22,8 @@ public interface IMsBuildService
   Task InvalidateProjectProperties(string projectPath, string? targetFrameworkMoniker = null, string configuration = "Debug");
   Task<bool> RemoveProjectReferenceAsync(string projectPath, string targetPath, CancellationToken cancellationToken = default);
   Task<BuildResult> RequestBuildAsync(string targetPath, string? targetFrameworkMoniker, string? buildArgs, string configuration = "Debug", CancellationToken cancellationToken = default);
+
+  string BuildTestCommand(bool isSdk, DotnetProject project);
+  Task<string> BuildBuildCommand(bool isSdk, DotnetProject project);
+  Task<string> BuildRunCommand(bool isSdk, DotnetProject project);
 }

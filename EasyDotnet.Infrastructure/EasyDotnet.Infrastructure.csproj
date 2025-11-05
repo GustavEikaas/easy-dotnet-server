@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\EasyDotnet.Domain\EasyDotnet.Domain.csproj" />
     <ProjectReference Include="..\EasyDotnet.Application\EasyDotnet.Application.csproj" />
+    <ProjectReference Include="..\EasyDotnet.MsBuild\EasyDotnet.MsBuild.csproj" />
   </ItemGroup>
 
 </Project>

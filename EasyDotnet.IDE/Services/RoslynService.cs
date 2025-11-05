@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers.Roslyn;
 using EasyDotnet.Extensions;
-using EasyDotnet.Infrastructure.MsBuild;
+using EasyDotnet.MsBuild;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -129,7 +129,7 @@ public class RoslynService(IMsBuildService service, ILogger<RoslynService> logSe
 
     var project = await service.GetOrSetProjectPropertiesAsync(projectPath, null, "Debug", cancellationToken);
 
-    var rootNamespace = project.RootNamespace ?? project.ProjectName;
+    var rootNamespace = project.RootNamespace ?? project.MSBuildProjectName ?? Path.GetFileNameWithoutExtension(projectPath);
 
     var supportsFileScopedNamespace =
         string.IsNullOrEmpty(project.LangVersion) ||

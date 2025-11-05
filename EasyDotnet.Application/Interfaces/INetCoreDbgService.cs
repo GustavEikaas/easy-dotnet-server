@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using EasyDotnet.Domain.Models.LaunchProfile;
-using EasyDotnet.Domain.Models.MsBuild.Project;
+using EasyDotnet.MsBuild;
 
 namespace EasyDotnet.Application.Interfaces;
 
