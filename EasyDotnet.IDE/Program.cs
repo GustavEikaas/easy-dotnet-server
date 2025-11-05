@@ -16,7 +16,8 @@ class Program
 {
   public static async Task<int> Main(string[] args)
   {
-    if (CompatCommandHandler.IsCompatRunCommand(args)){
+    if (CompatCommandHandler.IsCompatRunCommand(args))
+    {
       return await CompatCommandHandler.HandleAsync(args);
     }
 

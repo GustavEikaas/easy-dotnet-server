@@ -239,11 +239,11 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
     return success;
   }
 
-  public async Task<string> BuildRunCommand(bool isSdk, DotnetProject project)
+  public async Task<string> BuildRunCommand(DotnetProject project)
   {
     var projectPath = project.MSBuildProjectFullPath;
 
-    if (isSdk)
+    if (project.IsNETCoreOrNETStandard)
     {
       return $"dotnet run --project \"{projectPath}\"";
     }
@@ -286,7 +286,7 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
   {
     var normalizedPath = project.MSBuildProjectFullPath;
 
-    return isSdk
+    return project.IsNETCoreOrNETStandard
         ? $"dotnet build \"{normalizedPath}\""
         : $"& \"{await locator.GetVisualStudioMSBuildPath()}\" \"{normalizedPath}\"";
   }

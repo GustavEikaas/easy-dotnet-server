@@ -25,5 +25,5 @@ public interface IMsBuildService
 
   string BuildTestCommand(bool isSdk, DotnetProject project);
   Task<string> BuildBuildCommand(bool isSdk, DotnetProject project);
-  Task<string> BuildRunCommand(bool isSdk, DotnetProject project);
+  Task<string> BuildRunCommand(DotnetProject project);
 }
