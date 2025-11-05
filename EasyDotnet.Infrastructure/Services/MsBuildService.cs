@@ -258,7 +258,7 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
       var iisExe = locator.GetIisExpressExe();
       var configPath = locator.GetApplicationHostConfig();
 
-      return "easy-dotnet compat run " +
+      return "dotnet easydotnet compat run " +
              $"\"{projectPath}\" " +
              $"--msbuild \"{msbuildPath}\" " +
              $"--target \"{targetPath}\" " +
@@ -269,7 +269,7 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
     }
     else
     {
-      return "easy-dotnet compat run " +
+      return "dotnet easydotnet compat run " +
              $"\"{projectPath}\" " +
              $"--msbuild \"{msbuildPath}\" " +
              $"--target \"{targetPath}\"";

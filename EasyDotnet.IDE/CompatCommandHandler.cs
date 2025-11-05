@@ -16,7 +16,7 @@ public static class CompatCommandHandler
   public static async Task<int> HandleAsync(string[] args)
   {
     // Example usage:
-    // easy-dotnet compat run <project.csproj>
+    // dontet easydotnet compat run <project.csproj>
     //   --msbuild "C:\Path\To\MSBuild.exe"
     //   --target "C:\Path\To\App.exe"
     //   [--with-iis]
@@ -27,7 +27,7 @@ public static class CompatCommandHandler
     var projectPath = args.Skip(2).FirstOrDefault(a => !a.StartsWith("--"));
     if (string.IsNullOrEmpty(projectPath))
     {
-      Console.Error.WriteLine("Usage: easy-dotnet compat run <project.csproj> --msbuild <path> --target <path> [--with-iis] [--iis-exe <path>] [--config <path>] [--site <name>]");
+      Console.Error.WriteLine("Usage: dotnet easydotnet compat run <project.csproj> --msbuild <path> --target <path> [--with-iis] [--iis-exe <path>] [--config <path>] [--site <name>]");
       return 1;
     }
 
@@ -54,7 +54,7 @@ public static class CompatCommandHandler
     Console.WriteLine($"[compat] MSBuild: {msbuildPath}");
     Console.WriteLine($"[compat] Target: {targetPath}");
 
-    var buildExit = await RunProcessAsync(msbuildPath, $"\"{projectPath}\" /restore /t:Build /nologo");
+    var buildExit = await RunProcessAsync(msbuildPath, $"\"{projectPath}\" /nologo /m /verbosity:minimal");
     if (buildExit != 0)
     {
       Console.Error.WriteLine($"[compat] Build failed (exit code {buildExit}). Aborting run.");
