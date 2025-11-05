@@ -16,6 +16,10 @@ class Program
 {
   public static async Task<int> Main(string[] args)
   {
+    if (CompatCommandHandler.IsCompatRunCommand(args)){
+      return await CompatCommandHandler.HandleAsync(args);
+    }
+
     if (args.Contains("-v"))
     {
       var assembly = Assembly.GetExecutingAssembly();

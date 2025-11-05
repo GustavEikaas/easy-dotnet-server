@@ -241,18 +241,39 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
 
   public async Task<string> BuildRunCommand(bool isSdk, DotnetProject project)
   {
-    var buildCmd = await BuildBuildCommand(isSdk, project);
+    var projectPath = project.MSBuildProjectFullPath;
 
-    var useIISExpress = project.UseIISExpress;
-    return (isSdk, useIISExpress) switch
+    if (isSdk)
     {
-      (true, _) => $"dotnet run --project \"{project.MSBuildProjectFullPath}\"",
+      return $"dotnet run --project \"{projectPath}\"";
+    }
 
-      (false, true) =>
-          $"{buildCmd}; & \"{locator.GetIisExpressExe()}\" /config:\"{locator.GetApplicationHostConfig()}\" /site:\"{project.MSBuildProjectName}\"",
+    var targetPath = project.TargetPath;
 
-      (false, false) => $"\"{project.TargetPath}\""
-    };
+    var msbuildPath = await locator.GetVisualStudioMSBuildPath();
+
+    if (project.UseIISExpress)
+    {
+      var siteName = project.MSBuildProjectName;
+      var iisExe = locator.GetIisExpressExe();
+      var configPath = locator.GetApplicationHostConfig();
+
+      return "easy-dotnet compat run " +
+             $"\"{projectPath}\" " +
+             $"--msbuild \"{msbuildPath}\" " +
+             $"--target \"{targetPath}\" " +
+             "--with-iis " +
+             $"--iis-exe \"{iisExe}\" " +
+             $"--config \"{configPath}\" " +
+             $"--site \"{siteName}\"";
+    }
+    else
+    {
+      return "easy-dotnet compat run " +
+             $"\"{projectPath}\" " +
+             $"--msbuild \"{msbuildPath}\" " +
+             $"--target \"{targetPath}\"";
+    }
   }
 
   public string BuildTestCommand(bool isSdk, DotnetProject project) => isSdk switch
