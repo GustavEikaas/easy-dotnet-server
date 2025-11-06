@@ -1,30 +1,49 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
 
-namespace EasyDotnet.IDE;
+namespace EasyDotnet.Infrastructure.Framework;
 
 public static class CompatCommandHandler
 {
-  public static bool IsCompatRunCommand(string[] args) =>
-      args.Length >= 2 &&
-      args[0].Equals("compat", StringComparison.OrdinalIgnoreCase) &&
-      args[1].Equals("run", StringComparison.OrdinalIgnoreCase);
+  public static bool IsCompatCommand(string[] args) =>
+        args.Length >= 2 &&
+        args[0].Equals("compat", StringComparison.OrdinalIgnoreCase);
+  private const string Shim = "dotnet easydotnet compat";
+
+  public static string GetBuildCommand(string projectPath, string msbuildPath) => $"{Shim} build \"{projectPath}\" --msbuild \"{msbuildPath}\"";
+  public static string GetTestCommand(string targetPath, string vstestPath) => $"{Shim} test \"{targetPath}\" --vstest \"{vstestPath}\"";
+  public static string GetIisCommand(
+        string projectPath,
+        string msbuildPath,
+        string targetPath,
+        string iisExe,
+        string configPath,
+        string siteName) =>
+$"{Shim} run \"{projectPath}\" --msbuild \"{msbuildPath}\" --target \"{targetPath}\" --with-iis --iis-exe \"{iisExe}\" --config \"{configPath}\" --site \"{siteName}\"";
+
+  public static string GetRunCommand(
+        string projectPath,
+        string msbuildPath,
+        string targetPath) => $"{Shim} run \"{projectPath}\" --msbuild \"{msbuildPath}\" --target \"{targetPath}\"";
 
   public static async Task<int> HandleAsync(string[] args)
   {
-    // Example usage:
-    // dontet easydotnet compat run <project.csproj>
-    //   --msbuild "C:\Path\To\MSBuild.exe"
-    //   --target "C:\Path\To\App.exe"
-    //   [--with-iis]
-    //   [--iis-exe "C:\Path\To\IISExpress.exe"]
-    //   [--config "C:\Path\To\applicationhost.config"]
-    //   [--site "MyApp"]
+    if (args.Length < 2)
+    {
+      Console.Error.WriteLine("Usage: dotnet easydotnet compat <run|build|test> ...");
+      return 1;
+    }
+    var subCommand = args[1].ToLowerInvariant();
 
+    return subCommand switch
+    {
+      "run" => await HandleRunAsync(args),
+      "build" => await HandleBuildAsync(args),
+      "test" => await HandleTestAsync(args),
+      _ => UnknownSubcommand(subCommand)
+    };
+  }
+  private static async Task<int> HandleRunAsync(string[] args)
+  {
     var projectPath = args.Skip(2).FirstOrDefault(a => !a.StartsWith("--"));
     if (string.IsNullOrEmpty(projectPath))
     {
@@ -91,6 +110,71 @@ public static class CompatCommandHandler
     }
   }
 
+  private static async Task<int> HandleTestAsync(string[] args)
+  {
+    // Example:
+    // dotnet easydotnet compat test <target.dll> [--vstest "C:\Path\To\vstest.console.exe"]
+
+    var targetPath = args.Skip(2).FirstOrDefault(a => !a.StartsWith("--"));
+    var vstestPath = GetArgValue(args, "--vstest");
+
+    if (string.IsNullOrEmpty(targetPath))
+    {
+      Console.Error.WriteLine("Usage: dotnet easydotnet compat test <target.dll> [--vstest <path>]");
+      return 1;
+    }
+
+    if (!File.Exists(targetPath))
+    {
+      Console.Error.WriteLine($"[compat] Target not found: {targetPath}");
+      return 1;
+    }
+
+    if (string.IsNullOrEmpty(vstestPath))
+    {
+      // Default to system vstest if available
+      vstestPath = "vstest.console.exe";
+    }
+
+    Console.WriteLine($"[compat] Running tests with: {vstestPath}");
+    Console.WriteLine($"[compat] Target: {targetPath}");
+
+    return await RunProcessAsync(vstestPath, $"\"{targetPath}\"");
+  }
+
+  private static async Task<int> HandleBuildAsync(string[] args)
+  {
+    // Example:
+    // dotnet easydotnet compat build <project.csproj> --msbuild "C:\Path\To\MSBuild.exe"
+
+    var projectPath = args.Skip(2).FirstOrDefault(a => !a.StartsWith("--"));
+    var msbuildPath = GetArgValue(args, "--msbuild");
+
+    if (string.IsNullOrEmpty(projectPath))
+    {
+      Console.Error.WriteLine("Usage: dotnet easydotnet compat build <project.csproj> --msbuild <path>");
+      return 1;
+    }
+
+    if (string.IsNullOrEmpty(msbuildPath) || !File.Exists(msbuildPath))
+    {
+      Console.Error.WriteLine("[compat] Missing or invalid --msbuild path.");
+      return 1;
+    }
+
+    Console.WriteLine($"[compat] Building project: {projectPath}");
+    Console.WriteLine($"[compat] Using MSBuild: {msbuildPath}");
+
+    return await RunProcessWithSpinnerAsync(msbuildPath, $"\"{projectPath}\" /nologo /m /verbosity:minimal", "[compat] Building...");
+  }
+
+  private static int UnknownSubcommand(string cmd)
+  {
+    Console.Error.WriteLine($"Unknown compat command: {cmd}");
+    Console.Error.WriteLine("Supported commands: run, build, test");
+    return 1;
+  }
+
   private static string? GetArgValue(string[] args, string name)
   {
     var i = Array.FindIndex(args, a => a.Equals(name, StringComparison.OrdinalIgnoreCase));
@@ -99,7 +183,7 @@ public static class CompatCommandHandler
 
   private static async Task<int> RunProcessAsync(string fileName, string arguments)
   {
-    using var process = new Process
+    using var process = new System.Diagnostics.Process
     {
       StartInfo = new ProcessStartInfo
       {
@@ -128,7 +212,7 @@ public static class CompatCommandHandler
     var spinnerFrames = new[] { "🛠️ ", "🔨", "⏳" };
     var spinnerIndex = 0;
 
-    using var process = new Process
+    using var process = new System.Diagnostics.Process
     {
       StartInfo = new ProcessStartInfo
       {
@@ -159,7 +243,7 @@ public static class CompatCommandHandler
     }
 
     await process.WaitForExitAsync();
-    Console.Write("\r" + new string(' ', Console.WindowWidth) + "\r"); // clear spinner line
+    Console.Write("\r" + new string(' ', Console.WindowWidth) + "\r");
 
     if (process.ExitCode != 0)
     {

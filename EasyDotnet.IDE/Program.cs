@@ -11,12 +11,13 @@ using EasyDotnet.IDE.Utils;
 
 using EasyDotnet;
 using EasyDotnet.IDE;
+using EasyDotnet.Infrastructure.Framework;
 
 class Program
 {
   public static async Task<int> Main(string[] args)
   {
-    if (CompatCommandHandler.IsCompatRunCommand(args))
+    if (CompatCommandHandler.IsCompatCommand(args))
     {
       return await CompatCommandHandler.HandleAsync(args);
     }

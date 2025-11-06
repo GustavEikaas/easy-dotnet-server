@@ -5,8 +5,9 @@ using EasyDotnet.Domain.Models.MsBuild.SDK;
 using EasyDotnet.MsBuild;
 using Microsoft.Build.Locator;
 using Microsoft.Extensions.Caching.Memory;
+using EasyDotnet.Infrastructure.Framework;
 
-namespace EasyDotnet.Services;
+namespace EasyDotnet.Infrastructure.Services;
 
 public class MsBuildService(IVisualStudioLocator locator, IClientService clientService, IProcessQueue processQueue, IMemoryCache memoryCache, INotificationService notificationService, ISolutionService solutionService) : IMsBuildService
 {
@@ -15,6 +16,12 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
     MSBuildLocator.AllowQueryAllRuntimeVersions = true;
     var instances = MSBuildLocator.QueryVisualStudioInstances().Where(x => x.DiscoveryType == DiscoveryType.DotNetSdk).ToList();
     return [.. instances.Select(x => new SdkInstallation(x.Name, $"net{x.Version.Major}.0", x.Version, x.MSBuildPath, x.VisualStudioRootPath))];
+  }
+
+  public string GetVsTestPath()
+  {
+    var sdk = QuerySdkInstallations();
+    return Path.Join(sdk.ToList()[0].MSBuildPath, "vstest.console.dll");
   }
 
   public bool HasMinimumSdk(Version version) => QuerySdkInstallations().Any(x => x.Version >= version);
@@ -241,54 +248,71 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
 
   public async Task<string> BuildRunCommand(DotnetProject project)
   {
-    var projectPath = project.MSBuildProjectFullPath;
-
     if (project.IsNETCoreOrNETStandard)
     {
-      return $"dotnet run --project \"{projectPath}\"";
+      return string.IsNullOrWhiteSpace(project.MSBuildProjectFullPath)
+        ? throw new InvalidOperationException("[compat] Missing project path")
+        : $"dotnet run --project \"{project.MSBuildProjectFullPath}\"";
     }
-
-    var targetPath = project.TargetPath;
 
     var msbuildPath = await locator.GetVisualStudioMSBuildPath();
+    var projectPath = project.MSBuildProjectFullPath ?? throw new InvalidOperationException("[compat] Project path is missing or invalid.");
+    var targetPath = project.TargetPath ?? throw new InvalidOperationException("[compat] Target path is missing or invalid.");
 
-    if (project.UseIISExpress)
+    if (!project.UseIISExpress)
     {
-      var siteName = project.MSBuildProjectName;
-      var iisExe = locator.GetIisExpressExe();
-      var configPath = locator.GetApplicationHostConfig();
+      return CompatCommandHandler.GetRunCommand(projectPath, msbuildPath, targetPath);
+    }
 
-      return "dotnet easydotnet compat run " +
-             $"\"{projectPath}\" " +
-             $"--msbuild \"{msbuildPath}\" " +
-             $"--target \"{targetPath}\" " +
-             "--with-iis " +
-             $"--iis-exe \"{iisExe}\" " +
-             $"--config \"{configPath}\" " +
-             $"--site \"{siteName}\"";
-    }
-    else
-    {
-      return "dotnet easydotnet compat run " +
-             $"\"{projectPath}\" " +
-             $"--msbuild \"{msbuildPath}\" " +
-             $"--target \"{targetPath}\"";
-    }
+    var siteName = project.MSBuildProjectName ?? Path.GetFileNameWithoutExtension(projectPath);
+    var iisExe = locator.GetIisExpressExe();
+    if (string.IsNullOrWhiteSpace(iisExe) || !File.Exists(iisExe))
+      throw new FileNotFoundException("[compat] IIS Express executable not found.", iisExe);
+
+    var configPath = locator.GetApplicationHostConfig();
+    return string.IsNullOrWhiteSpace(configPath) || !File.Exists(configPath)
+      ? throw new FileNotFoundException("[compat] IIS Express applicationhost.config not found.", configPath)
+      : CompatCommandHandler.GetIisCommand(
+        projectPath,
+        msbuildPath,
+        targetPath,
+        iisExe,
+        configPath,
+        siteName);
   }
 
-  public string BuildTestCommand(bool isSdk, DotnetProject project) => isSdk switch
+  public string BuildTestCommand(DotnetProject project)
   {
-    true => $"dotnet test \"{project.MSBuildProjectFullPath}\"",
-    false => $"dotnet vstest \"{project.TargetPath}\""
-  };
+    if (project.IsNETCoreOrNETStandard)
+    {
+      return string.IsNullOrWhiteSpace(project.MSBuildProjectFullPath)
+        ? throw new InvalidOperationException("[compat] Missing project path for test command.")
+        : $"dotnet test \"{project.MSBuildProjectFullPath}\"";
+    }
 
-  public async Task<string> BuildBuildCommand(bool isSdk, DotnetProject project)
+    var targetPath = project.TargetPath ?? throw new InvalidOperationException("[compat] Missing target path");
+    var vstestPath = GetVsTestPath();
+    if (string.IsNullOrWhiteSpace(vstestPath) || !File.Exists(vstestPath))
+    {
+      throw new FileNotFoundException("[compat] Could not locate vstest.console.exe.", vstestPath);
+    }
+
+    return CompatCommandHandler.GetTestCommand(targetPath, vstestPath);
+  }
+
+  public async Task<string> BuildBuildCommand(DotnetProject project)
   {
-    var normalizedPath = project.MSBuildProjectFullPath;
+    if (project.IsNETCoreOrNETStandard)
+    {
+      return string.IsNullOrWhiteSpace(project.MSBuildProjectFullPath)
+        ? throw new InvalidOperationException("[compat] Missing project path for build command.")
+        : $"dotnet build \"{project.MSBuildProjectFullPath}\"";
+    }
 
-    return project.IsNETCoreOrNETStandard
-        ? $"dotnet build \"{normalizedPath}\""
-        : $"& \"{await locator.GetVisualStudioMSBuildPath()}\" \"{normalizedPath}\"";
+    var projectPath = project.MSBuildProjectFullPath ?? throw new InvalidOperationException("[compat] Missing or invalid project path for compat build.");
+    var msbuildPath = await locator.GetVisualStudioMSBuildPath();
+
+    return CompatCommandHandler.GetBuildCommand(projectPath, msbuildPath);
   }
 
   private async Task<(string Command, string Arguments)> GetCommandAndArguments(
