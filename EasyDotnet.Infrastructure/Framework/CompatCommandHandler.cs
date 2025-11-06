@@ -195,11 +195,10 @@ $"{Shim} run \"{projectPath}\" --msbuild \"{msbuildPath}\" --target \"{targetPat
     return 1;
   }
 
-  private static string? GetArgValue(string[] args, string name)
-  {
-    var i = Array.FindIndex(args, a => a.Equals(name, StringComparison.OrdinalIgnoreCase));
-    return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
-  }
+  private static string? GetArgValue(string[] args, string name) =>
+      args.SkipWhile(a => !a.Equals(name, StringComparison.OrdinalIgnoreCase))
+          .Skip(1)
+          .FirstOrDefault();
 
   private static async Task<int> RunProcessAsync(string fileName, string arguments)
   {
