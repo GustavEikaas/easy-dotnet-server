@@ -114,32 +114,52 @@ $"{Shim} run \"{projectPath}\" --msbuild \"{msbuildPath}\" --target \"{targetPat
   {
     // Example:
     // dotnet easydotnet compat test <target.dll> [--vstest "C:\Path\To\vstest.console.exe"]
-    var targetPath = args.Skip(2).FirstOrDefault(a => !a.StartsWith("--"));
+    var projectPath = args.Skip(2).FirstOrDefault(a => !a.StartsWith("--"));
+    var targetPath = GetArgValue(args, "--target");
     var vstestPath = GetArgValue(args, "--vstest");
+    var msbuildPath = GetArgValue(args, "--msbuild");
+
+    if (string.IsNullOrEmpty(projectPath))
+    {
+      Console.Error.WriteLine("Usage: dotnet easydotnet compat test <project.csproj> --msbuild <path> --target <path> --vstest <path>");
+      return 1;
+    }
+
+    if (string.IsNullOrEmpty(msbuildPath) || !File.Exists(msbuildPath))
+    {
+      Console.Error.WriteLine("[compat] Missing or invalid --msbuild path.");
+      return 1;
+    }
+
+    if (string.IsNullOrEmpty(vstestPath) || !File.Exists(vstestPath))
+    {
+      Console.Error.WriteLine("[compat] Missing or invalid --vstest path.");
+      return 1;
+    }
 
     if (string.IsNullOrEmpty(targetPath))
     {
-      Console.Error.WriteLine("Usage: dotnet easydotnet compat test <target.dll> [--vstest <path>]");
+      Console.Error.WriteLine("[compat] Missing required --target argument (expected test assembly path).");
       return 1;
     }
 
-    if (!File.Exists(targetPath))
+    Console.WriteLine("[compat] Building project before test...");
+    var buildExit = await RunProcessWithSpinnerAsync(msbuildPath, $"\"{projectPath}\" /nologo /m /verbosity:minimal", "[compat] Building...");
+    if (buildExit != 0)
     {
-      //dll not found
-      Console.Error.WriteLine($"[compat] Target not found: {targetPath}");
-      return 1;
+      Console.Error.WriteLine($"[compat] Build failed (exit code {buildExit}). Aborting test run.");
+      return buildExit;
     }
 
-    if (string.IsNullOrEmpty(vstestPath))
-    {
-      Console.Error.WriteLine($"[compat] vstest not found: {vstestPath}");
-      return 1;
-    }
+    Console.WriteLine($"[compat] Running tests from {targetPath}...");
+    var testExit = await RunProcessAsync(vstestPath, $"\"{targetPath}\"");
 
-    Console.WriteLine($"[compat] Running tests with: {vstestPath}");
-    Console.WriteLine($"[compat] Target: {targetPath}");
+    if (testExit == 0)
+      Console.WriteLine("[compat] Tests completed successfully.");
+    else
+      Console.Error.WriteLine($"[compat] Tests failed (exit code {testExit}).");
 
-    return await RunProcessAsync("dotnet", $"\"{vstestPath}\" \"{targetPath}\"");
+    return testExit;
   }
 
   private static async Task<int> HandleBuildAsync(string[] args)
