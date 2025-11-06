@@ -281,7 +281,7 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
         siteName);
   }
 
-  public string BuildTestCommand(DotnetProject project)
+  public async Task<string> BuildTestCommand(DotnetProject project)
   {
     if (project.IsNETCoreOrNETStandard)
     {
@@ -290,14 +290,14 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
         : $"dotnet test \"{project.MSBuildProjectFullPath}\"";
     }
 
+    var projectPath = project.MSBuildProjectFullPath ?? throw new InvalidOperationException("[compat] Missing project path");
     var targetPath = project.TargetPath ?? throw new InvalidOperationException("[compat] Missing target path");
-    var vstestPath = GetVsTestPath();
-    if (string.IsNullOrWhiteSpace(vstestPath) || !File.Exists(vstestPath))
-    {
-      throw new FileNotFoundException("[compat] Could not locate vstest.console.exe.", vstestPath);
-    }
+    var msbuildPath = await locator.GetVisualStudioMSBuildPath();
 
-    return CompatCommandHandler.GetTestCommand(targetPath, vstestPath);
+    var vstestPath = GetVsTestPath();
+    return string.IsNullOrWhiteSpace(vstestPath) || !File.Exists(vstestPath)
+      ? throw new FileNotFoundException("[compat] Could not locate vstest", vstestPath)
+      : CompatCommandHandler.GetTestCommand(projectPath, targetPath, msbuildPath, vstestPath);
   }
 
   public async Task<string> BuildBuildCommand(DotnetProject project)

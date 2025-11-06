@@ -24,7 +24,7 @@ public interface IMsBuildService
   Task<bool> RemoveProjectReferenceAsync(string projectPath, string targetPath, CancellationToken cancellationToken = default);
   Task<BuildResult> RequestBuildAsync(string targetPath, string? targetFrameworkMoniker, string? buildArgs, string configuration = "Debug", CancellationToken cancellationToken = default);
 
-  string BuildTestCommand(DotnetProject project);
+  Task<string> BuildTestCommand(DotnetProject project);
   Task<string> BuildBuildCommand(DotnetProject project);
   Task<string> BuildRunCommand(DotnetProject project);
 }
