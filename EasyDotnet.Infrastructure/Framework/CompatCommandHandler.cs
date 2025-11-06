@@ -114,7 +114,6 @@ $"{Shim} run \"{projectPath}\" --msbuild \"{msbuildPath}\" --target \"{targetPat
   {
     // Example:
     // dotnet easydotnet compat test <target.dll> [--vstest "C:\Path\To\vstest.console.exe"]
-
     var targetPath = args.Skip(2).FirstOrDefault(a => !a.StartsWith("--"));
     var vstestPath = GetArgValue(args, "--vstest");
 
@@ -126,20 +125,21 @@ $"{Shim} run \"{projectPath}\" --msbuild \"{msbuildPath}\" --target \"{targetPat
 
     if (!File.Exists(targetPath))
     {
+      //dll not found
       Console.Error.WriteLine($"[compat] Target not found: {targetPath}");
       return 1;
     }
 
     if (string.IsNullOrEmpty(vstestPath))
     {
-      // Default to system vstest if available
-      vstestPath = "vstest.console.exe";
+      Console.Error.WriteLine($"[compat] vstest not found: {vstestPath}");
+      return 1;
     }
 
     Console.WriteLine($"[compat] Running tests with: {vstestPath}");
     Console.WriteLine($"[compat] Target: {targetPath}");
 
-    return await RunProcessAsync(vstestPath, $"\"{targetPath}\"");
+    return await RunProcessAsync("dotnet", $"\"{vstestPath}\" \"{targetPath}\"");
   }
 
   private static async Task<int> HandleBuildAsync(string[] args)
