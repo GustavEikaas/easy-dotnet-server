@@ -247,9 +247,22 @@ $"{Shim} run \"{projectPath}\" --msbuild \"{msbuildPath}\" --target \"{targetPat
 
     var outputLines = new List<string>();
     var errorLines = new List<string>();
+    var recentOutput = new Queue<string>();
 
-    process.OutputDataReceived += (_, e) => { if (e.Data != null) outputLines.Add(e.Data); };
-    process.ErrorDataReceived += (_, e) => { if (e.Data != null) errorLines.Add(e.Data); };
+    process.OutputDataReceived += (_, e) =>
+    {
+      if (e.Data != null)
+      {
+        outputLines.Add(e.Data);
+        recentOutput.Enqueue(e.Data);
+        if (recentOutput.Count > 3) recentOutput.Dequeue();
+      }
+    };
+
+    process.ErrorDataReceived += (_, e) =>
+    {
+      if (e.Data != null) errorLines.Add(e.Data);
+    };
 
     process.Start();
     process.BeginOutputReadLine();
@@ -257,9 +270,23 @@ $"{Shim} run \"{projectPath}\" --msbuild \"{msbuildPath}\" --target \"{targetPat
 
     while (!process.HasExited)
     {
-      Console.Write($"\r{statusMessage} {spinnerFrames[spinnerIndex % spinnerFrames.Length]}");
+      Console.Write("\r" + new string(' ', Console.WindowWidth) + "\r");
+      Console.Write($"{statusMessage} {spinnerFrames[spinnerIndex % spinnerFrames.Length]}");
+
+      if (recentOutput.Count > 0)
+      {
+        Console.WriteLine();
+        foreach (var line in recentOutput)
+        {
+          Console.WriteLine("  " + line);
+        }
+      }
+
       spinnerIndex++;
       await Task.Delay(100);
+
+      if (recentOutput.Count > 0)
+        Console.CursorTop -= recentOutput.Count;
     }
 
     await process.WaitForExitAsync();
