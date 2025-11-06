@@ -10,7 +10,7 @@ public static class CompatCommandHandler
   private const string Shim = "dotnet easydotnet compat";
 
   public static string GetBuildCommand(string projectPath, string msbuildPath) => $"{Shim} build \"{projectPath}\" --msbuild \"{msbuildPath}\"";
-  public static string GetTestCommand(string targetPath, string vstestPath) => $"{Shim} test \"{targetPath}\" --vstest \"{vstestPath}\"";
+  public static string GetTestCommand(string projectPath, string targetPath, string msbuildPath, string vstestPath) => $"{Shim} test \"{projectPath}\" --target \"{targetPath}\" --msbuild \"{msbuildPath}\" --vstest \"{vstestPath}\"";
   public static string GetIisCommand(
         string projectPath,
         string msbuildPath,
