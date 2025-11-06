@@ -2,10 +2,10 @@ using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Domain.Models.MsBuild.Build;
 using EasyDotnet.Domain.Models.MsBuild.Project;
 using EasyDotnet.Domain.Models.MsBuild.SDK;
+using EasyDotnet.Infrastructure.Framework;
 using EasyDotnet.MsBuild;
 using Microsoft.Build.Locator;
 using Microsoft.Extensions.Caching.Memory;
-using EasyDotnet.Infrastructure.Framework;
 
 namespace EasyDotnet.Infrastructure.Services;
 
