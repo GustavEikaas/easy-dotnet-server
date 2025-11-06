@@ -153,7 +153,7 @@ $"{Shim} run \"{projectPath}\" --msbuild \"{msbuildPath}\" --target \"{targetPat
     }
 
     Console.WriteLine($"[compat] Running tests from {targetPath}...");
-    var testExit = await RunProcessAsync(vstestPath, $"\"{targetPath}\"");
+    var testExit = await RunProcessAsync("dotnet", $"\"{vstestPath}\" \"{targetPath}\"");
 
     if (testExit == 0)
       Console.WriteLine("[compat] Tests completed successfully.");
