@@ -6,19 +6,29 @@ public static partial class MsBuildBuildStdoutParser
 {
   [GeneratedRegex(@"^(?<file>.*)\((?<line>\d+),(?<col>\d+)\): (?<type>error|warning) (?<code>\S+): (?<msg>.*)$", RegexOptions.IgnoreCase | RegexOptions.Compiled, "en-US")]
   private static partial Regex MsBuildLoggingLine();
+  [GeneratedRegex(@"^(?<file>.*) : (?<type>error|warning) (?<code>\S+): (?<msg>.*)$", RegexOptions.IgnoreCase | RegexOptions.Compiled, "en-US")]
+  private static partial Regex MsBuildLoggingLineNoPosition();
 
   public static IEnumerable<MsBuildStdoutMessage> ParseMsBuildLines(string output)
   {
-    var regex = MsBuildLoggingLine();
+    var regex1 = MsBuildLoggingLine(); // with line/col
+    var regex2 = MsBuildLoggingLineNoPosition(); // without line/col
+
     return output
         .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
-        .Select(line => regex.Match(line))
-        .Where(match => match.Success)
+        .Select(line =>
+        {
+          var match = regex1.Match(line);
+          if (match.Success) return match;
+          match = regex2.Match(line);
+          return match.Success ? match : null;
+        })
+        .Where(match => match != null)
         .Select(match => new MsBuildStdoutMessage(
-            Type: match.Groups["type"].Value,
+            Type: match!.Groups["type"].Value,
             FilePath: match.Groups["file"].Value.Trim(),
-            LineNumber: int.Parse(match.Groups["line"].Value),
-            ColumnNumber: int.Parse(match.Groups["col"].Value),
+            LineNumber: match.Groups["line"].Success ? int.Parse(match.Groups["line"].Value) : 0,
+            ColumnNumber: match.Groups["col"].Success ? int.Parse(match.Groups["col"].Value) : 0,
             Code: match.Groups["code"].Value,
             Message: match.Groups["msg"].Value
         ));

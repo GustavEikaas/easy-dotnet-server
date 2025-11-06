@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using EasyDotnet.MsBuild;
+using Spectre.Console;
 
 namespace EasyDotnet.Infrastructure.Framework;
 
@@ -73,8 +75,7 @@ $"{Shim} run \"{projectPath}\" --msbuild \"{msbuildPath}\" --target \"{targetPat
     Console.WriteLine($"[compat] Project: {projectPath}");
     Console.WriteLine($"[compat] MSBuild: {msbuildPath}");
     Console.WriteLine($"[compat] Target: {targetPath}");
-
-    var buildExit = await RunProcessWithSpinnerAsync(msbuildPath, $"\"{projectPath}\" /nologo /m /verbosity:minimal", "[compat] Building...");
+    var buildExit = await RunBuildWithSpectreAsync(msbuildPath, projectPath);
     if (buildExit != 0)
     {
       Console.Error.WriteLine($"[compat] Build failed (exit code {buildExit}). Aborting run.");
@@ -144,7 +145,7 @@ $"{Shim} run \"{projectPath}\" --msbuild \"{msbuildPath}\" --target \"{targetPat
     }
 
     Console.WriteLine("[compat] Building project before test...");
-    var buildExit = await RunProcessWithSpinnerAsync(msbuildPath, $"\"{projectPath}\" /nologo /m /verbosity:minimal", "[compat] Building...");
+    var buildExit = await RunBuildWithSpectreAsync(msbuildPath, projectPath);
     if (buildExit != 0)
     {
       Console.Error.WriteLine($"[compat] Build failed (exit code {buildExit}). Aborting test run.");
@@ -184,8 +185,7 @@ $"{Shim} run \"{projectPath}\" --msbuild \"{msbuildPath}\" --target \"{targetPat
 
     Console.WriteLine($"[compat] Building project: {projectPath}");
     Console.WriteLine($"[compat] Using MSBuild: {msbuildPath}");
-
-    return await RunProcessWithSpinnerAsync(msbuildPath, $"\"{projectPath}\" /nologo /m /verbosity:minimal", "[compat] Building...");
+    return await RunBuildWithSpectreAsync(msbuildPath, projectPath);
   }
 
   private static int UnknownSubcommand(string cmd)
@@ -227,77 +227,72 @@ $"{Shim} run \"{projectPath}\" --msbuild \"{msbuildPath}\" --target \"{targetPat
     return process.ExitCode;
   }
 
-  private static async Task<int> RunProcessWithSpinnerAsync(string fileName, string arguments, string statusMessage)
+  public static async Task<int> RunBuildWithSpectreAsync(string msbuildPath, string projectPath)
   {
-    var spinnerFrames = new[] { "🛠️ ", "🔨", "⏳" };
-    var spinnerIndex = 0;
+    if (!File.Exists(msbuildPath))
+      throw new FileNotFoundException("MSBuild not found.", msbuildPath);
 
-    using var process = new System.Diagnostics.Process
-    {
-      StartInfo = new ProcessStartInfo
-      {
-        FileName = fileName,
-        Arguments = arguments,
-        RedirectStandardOutput = true,
-        RedirectStandardError = true,
-        UseShellExecute = false,
-        CreateNoWindow = true
-      }
-    };
+    if (!File.Exists(projectPath))
+      throw new FileNotFoundException("Project file not found.", projectPath);
 
-    var outputLines = new List<string>();
-    var errorLines = new List<string>();
-    var recentOutput = new Queue<string>();
+    var exitCode = 0;
 
-    process.OutputDataReceived += (_, e) =>
-    {
-      if (e.Data != null)
-      {
-        outputLines.Add(e.Data);
-        recentOutput.Enqueue(e.Data);
-        if (recentOutput.Count > 3) recentOutput.Dequeue();
-      }
-    };
-
-    process.ErrorDataReceived += (_, e) =>
-    {
-      if (e.Data != null) errorLines.Add(e.Data);
-    };
-
-    process.Start();
-    process.BeginOutputReadLine();
-    process.BeginErrorReadLine();
-
-    while (!process.HasExited)
-    {
-      Console.Write("\r" + new string(' ', Console.WindowWidth) + "\r");
-      Console.Write($"{statusMessage} {spinnerFrames[spinnerIndex % spinnerFrames.Length]}");
-
-      if (recentOutput.Count > 0)
-      {
-        Console.WriteLine();
-        foreach (var line in recentOutput)
+    // Status spinner while building
+    await AnsiConsole.Status()
+        .Spinner(Spinner.Known.Dots)
+        .StartAsync("[yellow]Building project...[/]", async ctx =>
         {
-          Console.WriteLine("  " + line);
-        }
-      }
+          var process = new System.Diagnostics.Process
+          {
+            StartInfo = new System.Diagnostics.ProcessStartInfo
+            {
+              FileName = msbuildPath,
+              Arguments = $"\"{projectPath}\" /nologo /m /verbosity:minimal",
+              RedirectStandardOutput = true,
+              RedirectStandardError = true,
+              UseShellExecute = false,
+              CreateNoWindow = true
+            }
+          };
 
-      spinnerIndex++;
-      await Task.Delay(100);
+          process.OutputDataReceived += (_, e) =>
+          {
+            if (string.IsNullOrEmpty(e.Data))
+              return;
 
-      if (recentOutput.Count > 0)
-        Console.CursorTop -= recentOutput.Count;
-    }
+            var msg = MsBuildBuildStdoutParser.ParseMsBuildLines(e.Data).FirstOrDefault();
 
-    await process.WaitForExitAsync();
-    Console.Write("\r" + new string(' ', Console.WindowWidth) + "\r");
+            if (msg != null)
+            {
+              if (msg.Type.Equals("error", StringComparison.OrdinalIgnoreCase))
+                AnsiConsole.MarkupLine($"[red]{msg.Message.EscapeMarkup()}[/]");
+              else if (msg.Type.Equals("warning", StringComparison.OrdinalIgnoreCase))
+                AnsiConsole.MarkupLine($"[yellow]{msg.Message.EscapeMarkup()}[/]");
+              else
+                AnsiConsole.MarkupLine($"[grey]{e.Data.EscapeMarkup()}[/]");
+            }
+            else
+            {
+              AnsiConsole.MarkupLine($"[grey]{e.Data.EscapeMarkup()}[/]");
+            }
+          };
 
-    if (process.ExitCode != 0)
-    {
-      foreach (var line in outputLines) Console.WriteLine(line);
-      foreach (var line in errorLines) Console.Error.WriteLine(line);
-    }
+          process.ErrorDataReceived += (_, e) => { if (e.Data != null) AnsiConsole.MarkupLine($"[red]{e.Data.EscapeMarkup()}[/]"); };
 
-    return process.ExitCode;
+          process.Start();
+          process.BeginOutputReadLine();
+          process.BeginErrorReadLine();
+          await process.WaitForExitAsync();
+
+          exitCode = process.ExitCode;
+        });
+
+    // Success / Failure message
+    if (exitCode == 0)
+      AnsiConsole.MarkupLine("[bold green]✔ Build succeeded![/]");
+    else
+      AnsiConsole.MarkupLine("[bold red]✖ Build failed![/]");
+
+    return exitCode;
   }
 }
