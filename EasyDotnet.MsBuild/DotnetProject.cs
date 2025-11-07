@@ -19,6 +19,7 @@ public record DotnetProject
     Version? Version,
     string? PackageOutputPath,
     string? TargetFrameworkVersion,
+    bool UsingMicrosoftNETSdk,
     bool UsingMicrosoftNETSdkWorker,
     bool UsingMicrosoftNETSdkWeb,
     bool UseIISExpress,
