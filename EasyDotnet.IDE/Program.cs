@@ -14,9 +14,11 @@ static class Program
     app.Configure(config =>
     {
       config.SetApplicationName("easydotnet");
+      config.SetApplicationVersion(Assembly.GetExecutingAssembly().GetName().Version!.ToString());
+
       config.AddCommand<GenerateRpcDocsCommand>("generate-rpc-docs")
               .WithDescription("Generate RPC documentation in JSON or Markdown format.");
-      config.SetApplicationVersion(Assembly.GetExecutingAssembly().GetName().Version!.ToString());
+
       config.AddBranch("compat", compat =>
         {
           compat.SetDescription("Run compatibility commands (run, build, test).");
@@ -37,5 +39,4 @@ static class Program
 
     return await app.RunAsync(args);
   }
-
 }
