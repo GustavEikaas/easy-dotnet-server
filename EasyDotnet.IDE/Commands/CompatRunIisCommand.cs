@@ -71,7 +71,6 @@ public sealed class CompatRunIisCommand : AsyncCommand<CompatRunIisCommand.Setti
     var buildExit = await CompatCommandHandler.RunBuildWithSpectreAsync(settings.MsBuildPath, settings.ProjectPath);
     if (buildExit != 0)
     {
-      Console.Error.WriteLine($"[compat] Build failed (exit code {buildExit}). Aborting run.");
       return buildExit;
     }
 

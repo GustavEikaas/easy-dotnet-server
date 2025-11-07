@@ -71,7 +71,6 @@ public sealed class CompatTestCommand : AsyncCommand<CompatTestCommand.Settings>
 
     if (buildExit != 0)
     {
-      AnsiConsole.MarkupLine($"[red]✖ Build failed (exit code {buildExit}). Aborting test run.[/]");
       return buildExit;
     }
 
