@@ -273,12 +273,11 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
     return string.IsNullOrWhiteSpace(configPath) || !File.Exists(configPath)
       ? throw new FileNotFoundException("[compat] IIS Express applicationhost.config not found.", configPath)
       : CompatCommandHandler.GetIisCommand(
-        projectPath,
-        msbuildPath,
-        targetPath,
-        iisExe,
-        configPath,
-        siteName);
+        projectPath: projectPath,
+        msbuildPath: msbuildPath,
+        iisExe: iisExe,
+        configPath: configPath,
+        siteName: siteName);
   }
 
   public async Task<string> BuildTestCommand(DotnetProject project)
