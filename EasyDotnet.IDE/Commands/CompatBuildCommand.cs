@@ -43,16 +43,9 @@ public sealed class CompatBuildCommand : AsyncCommand<CompatBuildCommand.Setting
     AnsiConsole.MarkupLine($"[yellow][[compat]][/] Building project: [cyan]{settings.ProjectPath}[/]");
     AnsiConsole.MarkupLine($"[yellow][[compat]][/] Using MSBuild: [grey]{settings.MsBuildPath}[/]");
 
-    var exitCode = await CompatCommandHandler.RunBuildWithSpectreAsync(
+    return await CompatCommandHandler.RunBuildWithSpectreAsync(
         settings.MsBuildPath,
         settings.ProjectPath
     );
-
-    if (exitCode == 0)
-      AnsiConsole.MarkupLine("[green]✔ Build succeeded![/]");
-    else
-      AnsiConsole.MarkupLine($"[red]✖ Build failed with exit code {exitCode}![/]");
-
-    return exitCode;
   }
 }
