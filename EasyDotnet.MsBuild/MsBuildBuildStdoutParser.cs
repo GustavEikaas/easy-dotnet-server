@@ -11,8 +11,8 @@ public static partial class MsBuildBuildStdoutParser
 
   public static IEnumerable<MsBuildStdoutMessage> ParseMsBuildLines(string output)
   {
-    var regex1 = MsBuildLoggingLine(); // with line/col
-    var regex2 = MsBuildLoggingLineNoPosition(); // without line/col
+    var regex1 = MsBuildLoggingLine();
+    var regex2 = MsBuildLoggingLineNoPosition();
 
     return output
         .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
