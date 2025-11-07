@@ -11,18 +11,24 @@ public static class CompatCommandHandler
   public static string GetBuildCommand(string projectPath, string msbuildPath) => $"{Shim} build \"{projectPath}\" --msbuild \"{msbuildPath}\"";
   public static string GetTestCommand(string projectPath, string targetPath, string msbuildPath, string vstestPath) => $"{Shim} test \"{projectPath}\" --target \"{targetPath}\" --msbuild \"{msbuildPath}\" --vstest \"{vstestPath}\"";
   public static string GetIisCommand(
-        string projectPath,
-        string msbuildPath,
-        string targetPath,
-        string iisExe,
-        string configPath,
-        string siteName) =>
-$"{Shim} run \"{projectPath}\" --msbuild \"{msbuildPath}\" --target \"{targetPath}\" --with-iis --iis-exe \"{iisExe}\" --config \"{configPath}\" --site \"{siteName}\"";
+          string projectPath,
+          string msbuildPath,
+          string iisExe,
+          string configPath,
+          string siteName)
+          => $"{Shim} run-iis \"{projectPath}\" " +
+             $"--msbuild \"{msbuildPath}\" " +
+             $"--iis-exe \"{iisExe}\" " +
+             $"--config \"{configPath}\" " +
+             $"--site \"{siteName}\"";
 
   public static string GetRunCommand(
-        string projectPath,
-        string msbuildPath,
-        string targetPath) => $"{Shim} run \"{projectPath}\" --msbuild \"{msbuildPath}\" --target \"{targetPath}\"";
+      string projectPath,
+      string msbuildPath,
+      string targetPath)
+      => $"{Shim} run \"{projectPath}\" " +
+         $"--msbuild \"{msbuildPath}\" " +
+         $"--target \"{targetPath}\"";
 
 
   public static async Task<int> RunProcessAsync(string fileName, string arguments)

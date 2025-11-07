@@ -25,7 +25,10 @@ static class Program
                    compat.SetDescription("Run compatibility commands (run, build, test).");
 
                    compat.AddCommand<CompatRunCommand>("run")
-                    .WithDescription("Build and run a project, optionally under IIS Express.");
+                    .WithDescription("Build and run a .NET project.");
+
+                   compat.AddCommand<CompatRunIisCommand>("run-iis")
+                    .WithDescription("Build and run a .NET project using IIS Express.");
 
                    compat.AddCommand<CompatBuildCommand>("build")
                     .WithDescription("Build a project using MSBuild.");
