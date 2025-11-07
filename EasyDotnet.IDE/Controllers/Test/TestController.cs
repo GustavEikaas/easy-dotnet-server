@@ -5,7 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
-using EasyDotnet.Domain.Models.MsBuild.Project;
+using EasyDotnet.IDE;
 using EasyDotnet.MsBuild;
 using EasyDotnet.MTP;
 using EasyDotnet.Services;
@@ -38,7 +38,7 @@ public class TestController(IClientService clientService, MtpService mtpService,
     }
     else
     {
-      return vsTestService.RunDiscover(project.TargetPath!).AsAsyncEnumerable().WithJsonRpcSettings(new JsonRpcEnumerableSettings() { MinBatchSize = 30 });
+      return vsTestService.RunDiscover(project.TargetPath!).ToBatchedAsyncEnumerable(30);
     }
   }
 
@@ -69,7 +69,7 @@ public class TestController(IClientService clientService, MtpService mtpService,
     }
     else
     {
-      return vsTestService.RunTests(project.TargetPath!, [.. filter.Select(x => Guid.Parse(x.Uid))]).AsAsyncEnumerable().WithJsonRpcSettings(new JsonRpcEnumerableSettings() { MinBatchSize = 30 });
+      return vsTestService.RunTests(project.TargetPath!, [.. filter.Select(x => Guid.Parse(x.Uid))]).ToBatchedAsyncEnumerable(30);
     }
   }
 

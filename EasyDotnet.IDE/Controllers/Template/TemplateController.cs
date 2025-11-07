@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
+using EasyDotnet.IDE;
 using EasyDotnet.IDE.Services;
 using Microsoft.TemplateEngine.Utils;
 using StreamJsonRpc;
@@ -17,7 +18,7 @@ public class TemplateController(TemplateEngineService templateEngineService, ICl
     await templateEngineService.EnsureInstalled();
     var templates = await templateEngineService.GetTemplatesAsync();
 
-    return templates.Where(x => x.GetLanguage() != "VB").Select(x => new DotnetNewTemplateResponse(string.IsNullOrWhiteSpace(x.GetLanguage()) ? x.Name : $"{x.Name} ({x.GetLanguage()})", x.Name, x.Identity, x.GetTemplateType())).AsAsyncEnumerable().WithJsonRpcSettings(new() { MinBatchSize = 5 });
+    return templates.Where(x => x.GetLanguage() != "VB").Select(x => new DotnetNewTemplateResponse(string.IsNullOrWhiteSpace(x.GetLanguage()) ? x.Name : $"{x.Name} ({x.GetLanguage()})", x.Name, x.Identity, x.GetTemplateType())).ToBatchedAsyncEnumerable(5);
   }
 
   [JsonRpcMethod("template/parameters")]
@@ -35,7 +36,7 @@ public class TemplateController(TemplateEngineService templateEngineService, ICl
             x.Description,
             x.Precedence.IsRequired,
             x.Choices?.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.DisplayName ?? kvp.Value.Description ?? "")))
-      .AsAsyncEnumerable().WithJsonRpcSettings(new() { MinBatchSize = 5 });
+      .ToBatchedAsyncEnumerable(5);
   }
 
   [JsonRpcMethod("template/instantiate")]
