@@ -1,90 +1,27 @@
-﻿using System;
-using System.Diagnostics;
-using System.IO;
-using System.IO.Pipes;
-using System.Linq;
-using System.Reflection;
+﻿using System.Reflection;
 using System.Threading.Tasks;
-#if RELEASE
-using EasyDotnet.IDE.Utils;
-#endif
 
-using EasyDotnet;
-using EasyDotnet.IDE;
+using EasyDotnet.IDE.Commands;
+using Spectre.Console.Cli;
 
 class Program
 {
   public static async Task<int> Main(string[] args)
   {
-    if (args.Contains("-v"))
+    var app = new CommandApp<RunCommand>();
+
+    app.Configure(config =>
     {
-      var assembly = Assembly.GetExecutingAssembly();
-      var version = assembly.GetName().Version;
-      Console.WriteLine($"Assembly Version: {version}");
-      return 0;
-    }
+      config.SetApplicationName("easydotnet");
 
-    if (args.Contains("--generate-rpc-docs"))
-    {
-      var doc = RpcDocGenerator.GenerateJsonDoc();
-      File.WriteAllText("./rpcDoc.json", doc);
-      return 0;
-    }
+      config.AddCommand<GenerateRpcDocsCommand>("generate-rpc-docs")
+              .WithDescription("Generate RPC documentation in JSON or Markdown format.");
 
-    if (args.Contains("--generate-rpc-docs-md"))
-    {
-      var md = RpcDocGenerator.GenerateMarkdownDoc().Replace("\r\n", "\n").Replace("\r", "\n");
-      File.WriteAllText("./rpcDoc.md", md);
-      return 0;
-    }
+      config.SetApplicationVersion(Assembly.GetExecutingAssembly().GetName().Version!.ToString());
 
-    var logLevel = SourceLevels.Off;
+    });
 
-    var logArg = args
-        .SkipWhile(a => !a.Equals("--logLevel", StringComparison.OrdinalIgnoreCase))
-        .Skip(1)
-        .LastOrDefault();
-
-    if (logArg != null && Enum.TryParse<SourceLevels>(logArg, true, out var parsedLevel))
-    {
-      logLevel = parsedLevel;
-    }
-
-    await StartServerAsync(logLevel);
-
-    return 0;
+    return await app.RunAsync(args);
   }
 
-  private static async Task StartServerAsync(SourceLevels logLevel)
-  {
-    var pipeName = GeneratePipeName();
-
-    var clientId = 0;
-    while (true)
-    {
-      var stream = new NamedPipeServerStream(pipeName, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
-      Console.WriteLine($"Named pipe server started: {pipeName}");
-      await stream.WaitForConnectionAsync();
-      _ = RespondToRpcRequestsAsync(stream, ++clientId, logLevel);
-    }
-  }
-
-  private static string GeneratePipeName()
-  {
-#if DEBUG 
-    var pipe = "EasyDotnet_ROcrjwn9kiox3tKvRWcQg";
-    return pipe;
-#else
-    var pipe = PipeUtils.GeneratePipeName();
-    return pipe;
-#endif
-  }
-
-  private static async Task RespondToRpcRequestsAsync(Stream stream, int clientId, SourceLevels logLevel)
-  {
-    var rpc = JsonRpcServerBuilder.Build(stream, stream, null, logLevel);
-    rpc.StartListening();
-    await rpc.Completion;
-    await Console.Error.WriteLineAsync($"Connection #{clientId} terminated.");
-  }
 }
