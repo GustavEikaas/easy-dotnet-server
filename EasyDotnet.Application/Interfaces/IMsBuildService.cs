@@ -13,6 +13,7 @@ public interface IMsBuildService
   /// </summary>
   /// <returns>The root path of the dotnet installation.</returns>
   string GetDotnetSdkBasePath();
+  string GetVsTestPath();
   SdkInstallation[] QuerySdkInstallations();
   bool HasMinimumSdk(Version version);
   Task<bool> AddProjectReferenceAsync(string projectPath, string targetPath, CancellationToken cancellationToken = default);
@@ -23,7 +24,7 @@ public interface IMsBuildService
   Task<bool> RemoveProjectReferenceAsync(string projectPath, string targetPath, CancellationToken cancellationToken = default);
   Task<BuildResult> RequestBuildAsync(string targetPath, string? targetFrameworkMoniker, string? buildArgs, string configuration = "Debug", CancellationToken cancellationToken = default);
 
-  string BuildTestCommand(bool isSdk, DotnetProject project);
-  Task<string> BuildBuildCommand(bool isSdk, DotnetProject project);
-  Task<string> BuildRunCommand(bool isSdk, DotnetProject project);
+  Task<string> BuildTestCommand(DotnetProject project);
+  Task<string> BuildBuildCommand(DotnetProject project);
+  Task<string> BuildRunCommand(DotnetProject project);
 }

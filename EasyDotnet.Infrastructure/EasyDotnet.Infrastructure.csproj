@@ -16,6 +16,7 @@
     <PackageReference Include="NJsonSchema" Version="11.3.2" />
     <PackageReference Include="NJsonSchema.CodeGeneration.CSharp" Version="11.3.2" />
     <PackageReference Include="StreamJsonRpc" Version="2.21.69" />
+    <PackageReference Include="Spectre.Console" Version="0.53.1-preview.0.2" />
   </ItemGroup>
 
   <ItemGroup>
