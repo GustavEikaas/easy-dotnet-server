@@ -133,6 +133,13 @@ public static class MsBuildProperties
           Deserialize: MsBuildValueParsers.AsString
       );
 
+  public static readonly MsBuildProperty<bool> UsingMicrosoftNETSdk =
+      new(
+          Name: "UsingMicrosoftNETSdk",
+          Description: "Indicates whether the project is using the SDK style csproj",
+          Deserialize: MsBuildValueParsers.AsBool
+      );
+
   public static readonly MsBuildProperty<bool> UsingMicrosoftNETSdkWorker =
       new(
           Name: "UsingMicrosoftNETSdkWorker",
