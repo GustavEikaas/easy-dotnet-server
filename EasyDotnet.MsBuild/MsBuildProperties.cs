@@ -140,6 +140,20 @@ public static class MsBuildProperties
           Deserialize: MsBuildValueParsers.AsBool
       );
 
+  public static readonly MsBuildProperty<bool> UsingMicrosoftNETSdkRazor =
+      new(
+          Name: "UsingMicrosoftNETSdkRazor",
+          Description: "Indicates whether the project is using the razor SDK",
+          Deserialize: MsBuildValueParsers.AsBool
+      );
+
+  public static readonly MsBuildProperty<bool> UsingMicrosoftNETSdkStaticWebAssets =
+      new(
+          Name: "UsingMicrosoftNETSdkStaticWebAssets",
+          Description: "",
+          Deserialize: MsBuildValueParsers.AsBool
+      );
+
   public static readonly MsBuildProperty<bool> UsingMicrosoftNETSdkWorker =
       new(
           Name: "UsingMicrosoftNETSdkWorker",
@@ -178,8 +192,92 @@ public static class MsBuildProperties
   public static readonly MsBuildProperty<bool> IsAspireHost =
       new(
           Name: "IsAspireHost",
-          Description: "Indicates whether the project is an Aspire host project.",
+          Description: "Indicates whether the project is an Aspire host project (i.e., the primary orchestrator entry point).",
           Deserialize: MsBuildValueParsers.AsBool
+      );
+
+  public static readonly MsBuildProperty<string?> AspireRidToolExecutable =
+      new(
+          Name: "AspireRidToolExecutable",
+          Description: "Path to the Aspire RID tool runtime executable (DLL or EXE) used for runtime identification and packaging.",
+          Deserialize: MsBuildValueParsers.AsString
+      );
+
+  public static readonly MsBuildProperty<string?> AspireRidToolRoot =
+      new(
+          Name: "AspireRidToolRoot",
+          Description: "Root directory for the Aspire RID tool installation.",
+          Deserialize: MsBuildValueParsers.AsString
+      );
+
+  public static readonly MsBuildProperty<string?> AspireRidToolDirectory =
+      new(
+          Name: "AspireRidToolDirectory",
+          Description: "Directory containing the Aspire RID tool binaries.",
+          Deserialize: MsBuildValueParsers.AsString
+      );
+
+  public static readonly MsBuildProperty<string?> DcpDir =
+      new(
+          Name: "DcpDir",
+          Description: "Specifies the base directory for the Aspire orchestrator (DCP).",
+          Deserialize: MsBuildValueParsers.AsString
+      );
+
+  public static readonly MsBuildProperty<string?> DcpExtensionsDir =
+      new(
+          Name: "DcpExtensionsDir",
+          Description: "Specifies the directory containing Aspire orchestrator (DCP) extensions.",
+          Deserialize: MsBuildValueParsers.AsString
+      );
+
+  public static readonly MsBuildProperty<string?> DcpBinDir =
+      new(
+          Name: "DcpBinDir",
+          Description: "Specifies the directory containing compiled Aspire orchestrator (DCP) binaries.",
+          Deserialize: MsBuildValueParsers.AsString
+      );
+
+  public static readonly MsBuildProperty<string?> AspireManifestPublishOutputPath =
+      new(
+          Name: "AspireManifestPublishOutputPath",
+          Description: "Specifies the directory where Aspire manifest files are published (e.g., 'obj\\Debug\\net9.0\\Aspire\\').",
+          Deserialize: MsBuildValueParsers.AsString
+      );
+
+  public static readonly MsBuildProperty<string?> AspireDashboardPath =
+      new(
+          Name: "AspireDashboardPath",
+          Description: "Specifies the full path to the Aspire Dashboard executable (e.g., '.nuget/packages/aspire.dashboard.sdk.win-x64/9.5.1/tools/Aspire.Dashboard.exe').",
+          Deserialize: MsBuildValueParsers.AsString
+      );
+
+  public static readonly MsBuildProperty<string?> AspireDashboardDir =
+      new(
+          Name: "AspireDashboardDir",
+          Description: "Specifies the directory containing the Aspire Dashboard executable.",
+          Deserialize: MsBuildValueParsers.AsString
+      );
+
+  public static readonly MsBuildProperty<string?> AspirePublisher =
+      new(
+          Name: "AspirePublisher",
+          Description: "Specifies the publisher type used for Aspire manifests (e.g., 'manifest').",
+          Deserialize: MsBuildValueParsers.AsString
+      );
+
+  public static readonly MsBuildProperty<bool> SkipAspireWorkloadManifest =
+      new(
+          Name: "SkipAspireWorkloadManifest",
+          Description: "Determines whether the Aspire workload manifest should be skipped during build. Defaults to false.",
+          Deserialize: MsBuildValueParsers.AsBool
+      );
+
+  public static readonly MsBuildProperty<string?> AspireGeneratedClassesVisibility =
+      new(
+          Name: "AspireGeneratedClassesVisibility",
+          Description: "Specifies the access modifier for generated Aspire classes (e.g., 'public', 'internal').",
+          Deserialize: MsBuildValueParsers.AsString
       );
 
   public static readonly MsBuildProperty<Version?> AspireHostingSDKVersion =
@@ -202,7 +300,89 @@ public static class MsBuildProperties
           IsComputed: true
       );
 
-  // ## FUTURE
+  public static readonly MsBuildProperty<bool> EnableDefaultContentItems =
+      new(
+          Name: "EnableDefaultContentItems",
+          Description: "Determines whether default content items (e.g., 'wwwroot', static files) are automatically included in the project. Defaults to true.",
+          Deserialize: MsBuildValueParsers.AsBool
+      );
+
+  public static readonly MsBuildProperty<bool> EnableDefaultRazorGenerateItems =
+      new(
+          Name: "EnableDefaultRazorGenerateItems",
+          Description: "Determines whether default Razor generation items are included in the project build.",
+          Deserialize: MsBuildValueParsers.AsBool
+      );
+
+  public static readonly MsBuildProperty<bool> EnableDefaultRazorComponentItems =
+      new(
+          Name: "EnableDefaultRazorComponentItems",
+          Description: "Determines whether default Razor component items are included in the project build.",
+          Deserialize: MsBuildValueParsers.AsBool
+      );
+
+  public static readonly MsBuildProperty<bool> CopyRazorGenerateFilesToPublishDirectory =
+      new(
+          Name: "CopyRazorGenerateFilesToPublishDirectory",
+          Description: "Specifies whether Razor-generated files are copied to the publish directory during build or publish.",
+          Deserialize: MsBuildValueParsers.AsBool
+      );
+
+  public static readonly MsBuildProperty<string?> RazorCompileToolset =
+      new(
+          Name: "RazorCompileToolset",
+          Description: "Specifies the Razor compile toolset to use (e.g., 'Implicit').",
+          Deserialize: MsBuildValueParsers.AsString
+      );
+
+  public static readonly MsBuildProperty<bool> IncludeRazorContentInPack =
+      new(
+          Name: "IncludeRazorContentInPack",
+          Description: "Indicates whether Razor content files are included when the project is packed into a NuGet package.",
+          Deserialize: MsBuildValueParsers.AsBool
+      );
+
+  public static readonly MsBuildProperty<string?> RazorGenerateOutputFileExtension =
+      new(
+          Name: "RazorGenerateOutputFileExtension",
+          Description: "Specifies the file extension for generated Razor source files (e.g., '.g.cs').",
+          Deserialize: MsBuildValueParsers.AsString
+      );
+
+  public static readonly MsBuildProperty<string[]?> RazorUpToDateReloadFileTypes =
+      new(
+          Name: "RazorUpToDateReloadFileTypes",
+          Description: "List of file extensions that trigger Razor design-time recompilation or reload (e.g., '.cs;.razor;.resx;.cshtml').",
+          Deserialize: MsBuildValueParsers.AsStringList
+      );
+
+  public static readonly MsBuildProperty<Version?> RazorLangVersion =
+      new(
+          Name: "RazorLangVersion",
+          Description: "Specifies the Razor language version used for code generation (e.g., '9.0').",
+          Deserialize: MsBuildValueParsers.AsVersion
+      );
+
+  public static readonly MsBuildProperty<bool> UsingMicrosoftNETSdkBlazorWebAssembly =
+      new(
+          Name: "UsingMicrosoftNETSdkBlazorWebAssembly",
+          Description: "Indicates whether the project uses the Microsoft.NET.Sdk.BlazorWebAssembly SDK.",
+          Deserialize: MsBuildValueParsers.AsBool
+      );
+
+  public static readonly MsBuildProperty<bool> AddRazorSupportForMvc =
+      new(
+          Name: "AddRazorSupportForMvc",
+          Description: "Indicates whether Razor support for MVC is enabled in the project.",
+          Deserialize: MsBuildValueParsers.AsBool
+      );
+
+  public static readonly MsBuildProperty<string?> RazorDefaultConfiguration =
+      new(
+          Name: "RazorDefaultConfiguration",
+          Description: "Specifies the default Razor configuration to use (e.g., 'MVC-3.0').",
+          Deserialize: MsBuildValueParsers.AsString
+      );
 
   public static readonly MsBuildProperty<bool> EnableDefaultCompileItems =
       new(
@@ -394,10 +574,80 @@ public static class MsBuildProperties
           Deserialize: MsBuildValueParsers.AsPath
       );
 
+  public static readonly MsBuildProperty<string?> MicrosoftNETBuildTasksDirectoryRoot =
+      new(
+          Name: "MicrosoftNETBuildTasksDirectoryRoot",
+          Description: "Specifies the root directory that contains the Microsoft .NET SDK build tasks and related resources. Typically points to the SDK's base tasks folder.",
+          Deserialize: MsBuildValueParsers.AsPath
+      );
+
+  public static readonly MsBuildProperty<string?> MicrosoftNETBuildTasksDirectory =
+      new(
+          Name: "MicrosoftNETBuildTasksDirectory",
+          Description: "Specifies the directory containing the Microsoft .NET SDK build task assemblies (e.g., 'Microsoft.NET.Build.Tasks.dll'). Usually a subdirectory of the SDK path.",
+          Deserialize: MsBuildValueParsers.AsPath
+      );
+
+  public static readonly MsBuildProperty<string?> MicrosoftNETBuildTasksAssembly =
+      new(
+          Name: "MicrosoftNETBuildTasksAssembly",
+          Description: "Specifies the full path to the Microsoft .NET SDK build tasks assembly (e.g., '.../Sdks/Microsoft.NET.Sdk/targets/Microsoft.NET.Build.Tasks.dll').",
+          Deserialize: MsBuildValueParsers.AsPath
+      );
+
+  public static readonly MsBuildProperty<string?> MicrosoftNETBuildTasksTFM =
+      new(
+          Name: "MicrosoftNETBuildTasksTFM",
+          Description: "Specifies the Target Framework Moniker (TFM) used by the Microsoft .NET SDK build tasks assembly (e.g., 'net472' or 'net8.0'). Determines the framework the SDK’s build logic runs on.",
+          Deserialize: MsBuildValueParsers.AsString
+      );
+
+  public static readonly MsBuildProperty<bool> HasRuntimeOutput =
+      new(
+          Name: "HasRuntimeOutput",
+          Description: "Indicates whether the project produces a runtime-executable output (e.g., 'Exe' or 'WinExe') instead of a library assembly. Used by MSBuild to control publish, run, and deployment behavior.",
+          Deserialize: MsBuildValueParsers.AsBool
+      );
+
+  public static readonly MsBuildProperty<string?> RoslynTargetsPath =
+      new(
+          Name: "RoslynTargetsPath",
+          Description: "Specifies the full path to the Roslyn .targets file used by MSBuild to integrate the C# and VB.NET compilers into the build process.",
+          Deserialize: MsBuildValueParsers.AsPath
+      );
+
+  public static readonly MsBuildProperty<string?> RoslynTasksAssembly =
+      new(
+          Name: "RoslynTasksAssembly",
+          Description: "Specifies the full path to the Roslyn build tasks assembly (e.g., 'Microsoft.Build.Tasks.CodeAnalysis.dll') that provides compiler task implementations for MSBuild.",
+          Deserialize: MsBuildValueParsers.AsPath
+      );
+
+  public static readonly MsBuildProperty<string[]?> DefaultImplicitPackages =
+      new(
+          Name: "DefaultImplicitPackages",
+          Description: "Specifies a semicolon-delimited list of package references that are implicitly included by the SDK (e.g., 'Microsoft.NETCore.App;Microsoft.AspNetCore.App'). Used by the .NET SDK to automatically include framework and runtime packages.",
+          Deserialize: MsBuildValueParsers.AsStringList
+      );
+
+  public static readonly MsBuildProperty<string?> MSBuildProjectFile =
+      new(
+          Name: "MSBuildProjectFile",
+          Description: "Specifies the file name of the current project file, including extension but without the full directory path (e.g., 'MyApp.csproj').",
+          Deserialize: MsBuildValueParsers.AsPath
+      );
+
+  public static readonly MsBuildProperty<string?> ProjectPath =
+      new(
+          Name: "ProjectPath",
+          Description: "Specifies the full path to the project file, equivalent to 'MSBuildProjectFullPath'. Some SDK logic and tasks use this alias for compatibility.",
+          Deserialize: MsBuildValueParsers.AsPath
+      );
+
   public static readonly MsBuildProperty<string?> MSBuildProjectFullPath =
       new(
           Name: "MSBuildProjectFullPath",
-          Description: "Specifies the full path including file name of the project file.",
+          Description: "Specifies the absolute path to the project file, including its file name and extension (e.g., 'C:\\src\\MyApp\\MyApp.csproj').",
           Deserialize: MsBuildValueParsers.AsPath
       );
 
