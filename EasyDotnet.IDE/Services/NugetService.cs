@@ -6,9 +6,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Domain.Models.MsBuild.Project;
+using EasyDotnet.MsBuild;
 using Microsoft.Extensions.Logging;
 using NuGet.Common;
 using NuGet.Configuration;
+using NuGet.ProjectModel;
 using NuGet.Protocol;
 using NuGet.Protocol.Core.Types;
 using NuGet.Versioning;
@@ -29,6 +31,60 @@ public class NugetService(IClientService clientService, ILogger<NugetService> lo
         MSBuildProjectType.VisualStudio => ("nuget", $"restore \"{targetPath}\""),
         _ => throw new InvalidOperationException("Unknown MSBuild type")
       };
+
+  public Dictionary<string, TfmReferences> GetDotnetProjectReferences(DotnetProject project)
+  {
+    if (!project.IsNETCoreOrNETStandard)
+    {
+      throw new NotImplementedException("GetDotnetProjectReferences is not supported for .NET framework yet");
+    }
+
+    var assetsPath = project.ProjectAssetsFile ?? throw new InvalidOperationException("Project does not have an project.assets.json path");
+    if (!File.Exists(assetsPath))
+    {
+      throw new FileNotFoundException("project.assets.json not found. Run 'dotnet restore' first.", assetsPath);
+    }
+
+    var lockFile = LockFileUtilities.GetLockFile(assetsPath, NullLogger.Instance);
+
+    var libraryLookup = lockFile.Libraries
+        .Where(l => !string.IsNullOrEmpty(l.Name) && l.Version is not null)
+        .ToDictionary(l => (l.Name!, l.Version!));
+
+    return lockFile.Targets
+            .ToDictionary(
+                target => target.TargetFramework.GetShortFolderName(),
+                target => new TfmReferences(
+                    Packages: target.Libraries
+                        .Where(l => l.Type == "package" && !string.IsNullOrEmpty(l.Name) && l.Version != null)
+                        .Select(l =>
+                        {
+                          libraryLookup.TryGetValue((l.Name!, l.Version!), out var meta);
+                          return new PackageReferenceInfo(
+                          Name: l.Name!,
+                          Version: l.Version?.ToNormalizedString()
+                      );
+                        })
+                        .ToList()
+                        .AsReadOnly(),
+
+                    Projects: target.Libraries
+                        .Where(l => l.Type == "project" && !string.IsNullOrEmpty(l.Name) && l.Version != null)
+                        .Select(l =>
+                        {
+                          libraryLookup.TryGetValue((l.Name!, l.Version!), out var meta);
+                          return new ProjectReferenceInfo(
+                          Name: l.Name!,
+                          Path: (project?.ProjectDir != null && meta?.MSBuildProject != null)
+                                 ? Path.GetFullPath(Path.Combine(project.ProjectDir, meta.MSBuildProject))
+                                 : null
+                      );
+                        })
+                        .ToList()
+                        .AsReadOnly()
+                )
+            );
+  }
 
   public async Task<RestoreResult> RestorePackagesAsync(string targetPath, CancellationToken cancellationToken)
   {
@@ -176,4 +232,13 @@ public class NugetService(IClientService clientService, ILogger<NugetService> lo
     var sourceRepository = Repository.Factory.GetCoreV3(packageSource);
     return await sourceRepository.GetResourceAsync<PackageUpdateResource>();
   }
+
+  public sealed record TfmReferences(
+          IReadOnlyList<PackageReferenceInfo> Packages,
+          IReadOnlyList<ProjectReferenceInfo> Projects
+      );
+
+  public sealed record PackageReferenceInfo(string Name, string? Version);
+
+  public sealed record ProjectReferenceInfo(string Name, string? Path);
 }

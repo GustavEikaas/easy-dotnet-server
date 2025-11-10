@@ -1,15 +1,18 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
 using EasyDotnet.Controllers.MsBuild;
+using EasyDotnet.Services;
 using StreamJsonRpc;
+using static EasyDotnet.Services.NugetService;
 
 namespace EasyDotnet.IDE.Controllers.MsBuild;
 
-public class MsBuildController(IClientService clientService, IMsBuildService msBuild) : BaseController
+public class MsBuildController(IClientService clientService, IMsBuildService msBuild, NugetService nugetService) : BaseController
 {
   [JsonRpcMethod("msbuild/build")]
   public async Task<BuildResultResponse> Build(BuildRequest request)
@@ -27,6 +30,26 @@ public class MsBuildController(IClientService clientService, IMsBuildService msB
     var project = await msBuild.GetOrSetProjectPropertiesAsync(request.TargetPath, request.TargetFramework, request.ConfigurationOrDefault);
 
     return project.ToResponse(await msBuild.BuildRunCommand(project), await msBuild.BuildBuildCommand(project), await msBuild.BuildTestCommand(project));
+  }
+
+  [JsonRpcMethod("msbuild/references")]
+  public async Task<Dictionary<string, TfmReferencesApiModel>> GetDotnetProjectReferences(string projectPath)
+  {
+    clientService.ThrowIfNotInitialized();
+    var project = await msBuild.GetOrSetProjectPropertiesAsync(projectPath);
+    var references = nugetService.GetDotnetProjectReferences(project);
+
+    return references.ToDictionary(
+            kvp => kvp.Key,
+            kvp => new TfmReferencesApiModel(
+                Packages: kvp.Value.Packages
+                            .Select(p => new PackageReferenceInfoApiModel(p.Name, p.Version))
+                            .ToBatchedAsyncEnumerable(50),
+                Projects: kvp.Value.Projects
+                            .Select(p => new ProjectReferenceInfoApiModel(p.Name, p.Path))
+                            .ToBatchedAsyncEnumerable(50)
+            )
+        );
   }
 
   [JsonRpcMethod("msbuild/list-project-reference")]
@@ -49,4 +72,13 @@ public class MsBuildController(IClientService clientService, IMsBuildService msB
     clientService.ThrowIfNotInitialized();
     return await msBuild.RemoveProjectReferenceAsync(Path.GetFullPath(projectPath), targetPath, cancellationToken);
   }
+
+  public sealed record PackageReferenceInfoApiModel(string Name, string? Version);
+
+  public sealed record ProjectReferenceInfoApiModel(string Name, string? Path);
+
+  public sealed record TfmReferencesApiModel(
+      IAsyncEnumerable<PackageReferenceInfoApiModel> Packages,
+      IAsyncEnumerable<ProjectReferenceInfoApiModel> Projects
+  );
 }
