@@ -10,8 +10,15 @@ public class NugetTests
   [Fact]
   public async Task ListSources()
   {
-    var res = await RpcTestServerInstantiator.InitializedOneShotRequest<List<TestNugetSourceResponse>>("nuget/list-sources", null);
-    Assert.NotNull(res);
-    Assert.True(res.Count > 0);
+    var enumerable = RpcTestServerInstantiator.InitializedOneShotStreamRequest<TestNugetSourceResponse>("nuget/list-sources", null);
+
+    var list = new List<TestNugetSourceResponse>();
+
+    await foreach (var item in enumerable)
+    {
+      list.Add(item);
+    }
+
+    Assert.NotEmpty(list);
   }
 }
