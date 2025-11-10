@@ -113,7 +113,7 @@ _No parameters_
 ### `nuget/list-sources`
 _No parameters_
 
-**Returns:** `List<NugetSourceResponse>`
+**Returns:** `IAsyncEnumerable<NugetSourceResponse>`
 
 ### `nuget/push`
 | Parameter | Type | Optional |
