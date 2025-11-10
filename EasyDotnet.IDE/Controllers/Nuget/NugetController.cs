@@ -22,12 +22,12 @@ public class NugetController(IClientService clientService, NugetService nugetSer
   }
 
   [JsonRpcMethod("nuget/list-sources")]
-  public List<NugetSourceResponse> GetSources()
+  public IAsyncEnumerable<NugetSourceResponse> GetSources()
   {
     clientService.ThrowIfNotInitialized();
 
     var sources = nugetService.GetSources();
-    return [.. sources.Select(x => x.ToResponse())];
+    return sources.Select(x => x.ToResponse()).ToBatchedAsyncEnumerable(50);
   }
 
   [JsonRpcMethod("nuget/push")]
