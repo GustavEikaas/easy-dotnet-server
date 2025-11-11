@@ -1,3 +1,4 @@
+using System.Text;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Domain.Models.MsBuild.Build;
 using EasyDotnet.Domain.Models.MsBuild.Project;
@@ -42,7 +43,7 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
 
     var (command, args) = await GetCommandAndArguments(clientService.UseVisualStudio ? MSBuildProjectType.VisualStudio : MSBuildProjectType.SDK, targetPath, targetFrameworkMoniker, configuration, buildArgs);
 
-    var (success, stdout, stderr) = await processQueue.RunProcessAsync(command, args, new ProcessOptions(true), cancellationToken);
+    var (success, stdout, stderr) = await processQueue.RunProcessAsync(command, args, new ProcessOptions(KillOnTimeout: true), cancellationToken);
 
     var (errors, warnings) = MsBuildBuildStdoutParser.ParseBuildOutput(stdout, stderr);
     var (errorsWithProject, warningsWithProject) = AddProjectToBuildMessages(targetPath, errors, warnings);
@@ -314,6 +315,118 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
     return CompatCommandHandler.GetBuildCommand(projectPath, msbuildPath);
   }
 
+  public async Task<BuildResult> RequestCleanAsync(
+      string targetPath,
+      string? targetFrameworkMoniker,
+      string configuration = "Debug",
+      CancellationToken cancellationToken = default)
+  {
+    async Task<BuildResult> CleanWithMsBuildAsync()
+    {
+      var msbuildPath = await locator.GetVisualStudioMSBuildPath();
+      return await CleanFrameworkResource(msbuildPath, targetPath, configuration, cancellationToken);
+    }
+
+    async Task<BuildResult> CleanWithDotnetAsync()
+        => await CleanSdkResource(targetPath, targetFrameworkMoniker, configuration, cancellationToken);
+
+    if (FileTypes.IsAnySolutionFile(targetPath))
+    {
+      return clientService.UseVisualStudio
+          ? await CleanWithMsBuildAsync()
+          : await CleanWithDotnetAsync();
+    }
+
+    if (FileTypes.IsAnyProjectFile(targetPath))
+    {
+      var project = await GetOrSetProjectPropertiesAsync(targetPath, cancellationToken: cancellationToken);
+      return project.IsNETCoreOrNETStandard
+          ? await CleanWithDotnetAsync()
+          : await CleanWithMsBuildAsync();
+    }
+
+    throw new InvalidOperationException(
+        $"The specified target path '{targetPath}' is not a supported MSBuild entity (.sln, .slnx, .csproj, .fsproj).");
+  }
+
+  private async Task<BuildResult> CleanFrameworkResource(
+      string msbuildPath,
+      string targetPath,
+      string configuration,
+      CancellationToken cancellationToken)
+  {
+    var argsBuilder = new StringBuilder()
+        .Append($"\"{targetPath}\" ")
+        .Append("/t:Clean ")
+        .Append($"/p:Configuration={configuration} ")
+        .Append("/nologo /m /verbosity:minimal");
+
+    var (success, stdout, stderr) = await processQueue.RunProcessAsync(
+        msbuildPath,
+        argsBuilder.ToString(),
+        new ProcessOptions(KillOnTimeout: true),
+        cancellationToken: cancellationToken);
+
+    var (errors, warnings) = MsBuildBuildStdoutParser.ParseBuildOutput(stdout, stderr);
+    var (errorsWithProject, warningsWithProject) = AddProjectToBuildMessages(targetPath, errors, warnings);
+
+    var orderedErrors = errorsWithProject
+        .OrderBy(e => e.Project)
+        .ThenBy(e => e.FilePath)
+        .ThenBy(e => e.LineNumber)
+        .ThenBy(e => e.ColumnNumber)
+        .ToList();
+
+    var orderedWarnings = warningsWithProject
+        .OrderBy(w => w.Project)
+        .ThenBy(w => w.FilePath)
+        .ThenBy(w => w.LineNumber)
+        .ThenBy(w => w.ColumnNumber)
+        .ToList();
+
+    return new BuildResult(success, orderedErrors, orderedWarnings);
+  }
+
+  private async Task<BuildResult> CleanSdkResource(string targetPath, string? targetFrameworkMoniker, string configuration, CancellationToken cancellationToken)
+  {
+    var argsBuilder = new StringBuilder()
+            .Append("clean ")
+            .Append($"\"{targetPath}\" ")
+            .Append($"--configuration \"{configuration}\" ");
+
+    if (!string.IsNullOrWhiteSpace(targetFrameworkMoniker))
+      argsBuilder.Append($"--framework \"{targetFrameworkMoniker}\" ");
+
+    var (success, stdout, stderr) = await processQueue.RunProcessAsync(
+        "dotnet",
+        argsBuilder.ToString().TrimEnd(),
+        new ProcessOptions(KillOnTimeout: true),
+        cancellationToken: cancellationToken);
+
+    var (errors, warnings) = MsBuildBuildStdoutParser.ParseBuildOutput(stdout, stderr);
+    var (errorsWithProject, warningsWithProject) = AddProjectToBuildMessages(targetPath, errors, warnings);
+
+    var orderedErrors = errorsWithProject
+        .OrderBy(e => e.Project)
+        .ThenBy(e => e.FilePath)
+        .ThenBy(e => e.LineNumber)
+        .ThenBy(e => e.ColumnNumber)
+        .ToList();
+
+    var orderedWarnings = warningsWithProject
+        .OrderBy(w => w.Project)
+        .ThenBy(w => w.FilePath)
+        .ThenBy(w => w.LineNumber)
+        .ThenBy(w => w.ColumnNumber)
+        .ToList();
+
+    return new BuildResult(
+            success,
+            orderedErrors,
+            orderedWarnings
+        );
+  }
+
   private async Task<(string Command, string Arguments)> GetCommandAndArguments(
       MSBuildProjectType type,
       string targetPath,
@@ -331,5 +444,4 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
       _ => throw new InvalidOperationException("Unknown MSBuild type")
     };
   }
-
 }
