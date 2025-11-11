@@ -1,11 +1,11 @@
-using EasyDotnet.Infrastructure.Services;
-using Spectre.Console.Cli;
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using EasyDotnet.Infrastructure.Services;
+using Spectre.Console.Cli;
 
 namespace EasyDotnet.IDE.Commands;
 
