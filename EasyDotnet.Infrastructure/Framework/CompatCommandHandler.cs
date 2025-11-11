@@ -66,7 +66,7 @@ public static class CompatCommandHandler
       throw new FileNotFoundException("Project file not found.", projectPath);
 
     var exitCode = 0;
-
+    var messages = new List<MsBuildStdoutMessage>();
     await AnsiConsole.Status()
         .Spinner(Spinner.Known.Dots)
         .StartAsync("[yellow]Building project...[/]", async ctx =>
@@ -85,28 +85,25 @@ public static class CompatCommandHandler
           };
 
           process.OutputDataReceived += (_, e) =>
+                      {
+                        if (!string.IsNullOrEmpty(e.Data))
+                        {
+                          var parsed = MsBuildBuildStdoutParser.ParseMsBuildLines(e.Data);
+                          messages.AddRange(parsed);
+                        }
+                      };
+
+          process.ErrorDataReceived += (_, e) =>
           {
-            if (string.IsNullOrEmpty(e.Data))
-              return;
-
-            var msg = MsBuildBuildStdoutParser.ParseMsBuildLines(e.Data).FirstOrDefault();
-
-            if (msg != null)
+            if (!string.IsNullOrEmpty(e.Data))
             {
-              if (msg.Type.Equals("error", StringComparison.OrdinalIgnoreCase))
-                AnsiConsole.MarkupLine($"[red]{msg.Message.EscapeMarkup()}[/]");
-              else if (msg.Type.Equals("warning", StringComparison.OrdinalIgnoreCase))
-                AnsiConsole.MarkupLine($"[yellow]{msg.Message.EscapeMarkup()}[/]");
+              var parsed = MsBuildBuildStdoutParser.ParseMsBuildLines(e.Data);
+              if (!parsed.Any())
+                messages.Add(new MsBuildStdoutMessage("error", "", 0, 0, "", e.Data));
               else
-                AnsiConsole.MarkupLine($"[grey]{e.Data.EscapeMarkup()}[/]");
-            }
-            else
-            {
-              AnsiConsole.MarkupLine($"[grey]{e.Data.EscapeMarkup()}[/]");
+                messages.AddRange(parsed);
             }
           };
-
-          process.ErrorDataReceived += (_, e) => { if (e.Data != null) AnsiConsole.MarkupLine($"[red]{e.Data.EscapeMarkup()}[/]"); };
 
           process.Start();
           process.BeginOutputReadLine();
@@ -116,11 +113,49 @@ public static class CompatCommandHandler
           exitCode = process.ExitCode;
         });
 
+
+    var errorCount = messages.Count(m => m.Type.Equals("error", StringComparison.OrdinalIgnoreCase));
+    var warningCount = messages.Count(m => m.Type.Equals("warning", StringComparison.OrdinalIgnoreCase));
+
+    if (errorCount > 0 || warningCount > 0)
+    {
+      var table = MsBuildMessageTableBuilder(messages);
+      AnsiConsole.Write(table);
+    }
+
     if (exitCode == 0)
-      AnsiConsole.MarkupLine("[bold green]✔ Build succeeded![/]");
+      AnsiConsole.MarkupLine($"\n[bold green]✔ Build succeeded![/] [yellow]Warnings: {warningCount}[/]");
     else
-      AnsiConsole.MarkupLine("[bold red]✖ Build failed![/]");
+      AnsiConsole.MarkupLine($"\n[bold red]✖ Build failed![/] [yellow]Warnings: {warningCount}[/], [red]Errors: {errorCount}[/]");
 
     return exitCode;
+  }
+
+  public static Table MsBuildMessageTableBuilder(IEnumerable<MsBuildStdoutMessage> messages)
+  {
+    var table = new Table().Border(TableBorder.Rounded).Expand();
+    table.AddColumn("Type");
+    table.AddColumn("File");
+    table.AddColumn("Line");
+    table.AddColumn("Col");
+    table.AddColumn("Code");
+    table.AddColumn("Message");
+
+    foreach (var msg in messages)
+    {
+      var color = msg.Type.Equals("error", StringComparison.OrdinalIgnoreCase) ? "red" :
+                  msg.Type.Equals("warning", StringComparison.OrdinalIgnoreCase) ? "yellow" : "grey";
+
+      table.AddRow(
+          $"[{color}]{msg.Type}[/]",
+          $"[{color}]{msg.FilePath}[/]",
+          $"[{color}]{msg.LineNumber}[/]",
+          $"[{color}]{msg.ColumnNumber}[/]",
+          $"[{color}]{msg.Code}[/]",
+          $"[{color}]{msg.Message?.EscapeMarkup()}[/]"
+      );
+    }
+
+    return table;
   }
 }
