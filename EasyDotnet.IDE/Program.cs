@@ -35,6 +35,13 @@ static class Program
           compat.AddCommand<CompatTestCommand>("test")
            .WithDescription("Build and run tests using VSTest.");
         });
+
+      config.AddBranch("roslyn", roslyn =>
+          {
+            roslyn.SetDescription("Roslyn language server commands.");
+            roslyn.AddCommand<RoslynStartCommand>("start")
+            .WithDescription("Start the Roslyn Language Server over stdio.");
+          });
     });
 
     return await app.RunAsync(args);
