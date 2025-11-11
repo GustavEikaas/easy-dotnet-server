@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
 using EasyDotnet.Controllers.MsBuild;
+using EasyDotnet.Domain.Models.MsBuild.Build;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Controllers.MsBuild;
@@ -48,5 +49,12 @@ public class MsBuildController(IClientService clientService, IMsBuildService msB
   {
     clientService.ThrowIfNotInitialized();
     return await msBuild.RemoveProjectReferenceAsync(Path.GetFullPath(projectPath), targetPath, cancellationToken);
+  }
+
+  [JsonRpcMethod("msbuild/clean")]
+  public async Task<BuildResult> CleanTarget(CleanRequest request, CancellationToken cancellationToken)
+  {
+    clientService.ThrowIfNotInitialized();
+    return await msBuild.RequestCleanAsync(request.TargetPath, request.TargetFramework, request.ConfigurationOrDefault, cancellationToken);
   }
 }
