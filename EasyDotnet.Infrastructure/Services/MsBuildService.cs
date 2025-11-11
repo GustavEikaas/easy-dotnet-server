@@ -444,18 +444,4 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
       _ => throw new InvalidOperationException("Unknown MSBuild type")
     };
   }
-
-  private static async Task<T> MsBuildEntityBranchAsync<T>(
-      string path,
-      params (Func<string, bool> Predicate, Func<string, Task<T>> Handler)[] branches)
-  {
-    foreach (var (predicate, handler) in branches)
-    {
-      if (predicate(path))
-        return await handler(path).ConfigureAwait(false);
-    }
-
-    throw new InvalidOperationException($"No matching branch for path: {path}");
-  }
-
 }
