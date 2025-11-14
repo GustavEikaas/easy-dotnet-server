@@ -30,7 +30,7 @@ public class TestController(IClientService clientService, MtpService mtpService,
       throw new Exception("Client has not initialized yet");
     }
     var project = await GetProject(projectPath, targetFrameworkMoniker, configuration, token);
-    if (project.TestingPlatformDotnetTestSupport)
+    if (project.IsTestingPlatformApplication)
     {
       var path = GetExecutablePath(project);
       var res = await mtpService.RunDiscoverAsync(path, token);
@@ -56,7 +56,7 @@ public class TestController(IClientService clientService, MtpService mtpService,
       throw new Exception("Client has not initialized yet");
     }
     var project = await GetProject(projectPath, targetFrameworkMoniker, configuration, token);
-    if (project.TestingPlatformDotnetTestSupport)
+    if (project.IsTestingPlatformApplication)
     {
       var path = GetExecutablePath(project);
 
