@@ -288,10 +288,12 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
   public async Task<string> BuildTestCommand(DotnetProject project)
   {
 
+    //Automatically makes IsNETCoreOrNETStandard false
     if (project.TargetFrameworks?.Length > 0)
     {
       return "";
     }
+
     if (project.IsNETCoreOrNETStandard)
     {
       return string.IsNullOrWhiteSpace(project.MSBuildProjectFullPath)
