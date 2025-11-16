@@ -248,6 +248,11 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
 
   public async Task<string> BuildRunCommand(DotnetProject project)
   {
+    if (project.TargetFrameworks?.Length > 0)
+    {
+      return "";
+    }
+
     if (project.IsNETCoreOrNETStandard)
     {
       return string.IsNullOrWhiteSpace(project.MSBuildProjectFullPath)
@@ -282,6 +287,11 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
 
   public async Task<string> BuildTestCommand(DotnetProject project)
   {
+
+    if (project.TargetFrameworks?.Length > 0)
+    {
+      return "";
+    }
     if (project.IsNETCoreOrNETStandard)
     {
       return string.IsNullOrWhiteSpace(project.MSBuildProjectFullPath)
@@ -301,6 +311,10 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
 
   public async Task<string> BuildBuildCommand(DotnetProject project)
   {
+    if (project.TargetFrameworks?.Length > 0)
+    {
+      return "";
+    }
     if (project.IsNETCoreOrNETStandard)
     {
       return string.IsNullOrWhiteSpace(project.MSBuildProjectFullPath)
