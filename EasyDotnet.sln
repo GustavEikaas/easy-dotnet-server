@@ -17,6 +17,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EasyDotnet.Application", "E
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EasyDotnet.MsBuild", "EasyDotnet.MsBuild\EasyDotnet.MsBuild.csproj", "{950FB188-68CF-411A-917B-C60B91AE894A}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EasyDotnet.MsBuild.Tests", "EasyDotnet.MsBuild.Tests\EasyDotnet.MsBuild.Tests.csproj", "{0306958F-7A66-4A85-ABF3-B531A4307D46}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -111,6 +113,18 @@ Global
 		{950FB188-68CF-411A-917B-C60B91AE894A}.Release|x64.Build.0 = Release|Any CPU
 		{950FB188-68CF-411A-917B-C60B91AE894A}.Release|x86.ActiveCfg = Release|Any CPU
 		{950FB188-68CF-411A-917B-C60B91AE894A}.Release|x86.Build.0 = Release|Any CPU
+		{0306958F-7A66-4A85-ABF3-B531A4307D46}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0306958F-7A66-4A85-ABF3-B531A4307D46}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0306958F-7A66-4A85-ABF3-B531A4307D46}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{0306958F-7A66-4A85-ABF3-B531A4307D46}.Debug|x64.Build.0 = Debug|Any CPU
+		{0306958F-7A66-4A85-ABF3-B531A4307D46}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{0306958F-7A66-4A85-ABF3-B531A4307D46}.Debug|x86.Build.0 = Debug|Any CPU
+		{0306958F-7A66-4A85-ABF3-B531A4307D46}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0306958F-7A66-4A85-ABF3-B531A4307D46}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0306958F-7A66-4A85-ABF3-B531A4307D46}.Release|x64.ActiveCfg = Release|Any CPU
+		{0306958F-7A66-4A85-ABF3-B531A4307D46}.Release|x64.Build.0 = Release|Any CPU
+		{0306958F-7A66-4A85-ABF3-B531A4307D46}.Release|x86.ActiveCfg = Release|Any CPU
+		{0306958F-7A66-4A85-ABF3-B531A4307D46}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

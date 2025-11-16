@@ -5,7 +5,6 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Domain.Models.LaunchProfile;
-using EasyDotnet.Domain.Models.MsBuild.Project;
 using EasyDotnet.Infrastructure.Dap;
 using EasyDotnet.MsBuild;
 using Microsoft.Extensions.Logging;
@@ -150,7 +149,7 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
 
         _process.Start();
 
-        var debuggerDap = new Dap.Debugger(_process.StandardInput.BaseStream, _process.StandardOutput.BaseStream, async (msg) =>
+        var debuggerDap = new Dap.Debugger(_process.StandardInput.BaseStream, _process.StandardOutput.BaseStream, (msg) =>
         {
           try
           {
@@ -158,10 +157,10 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
             {
               case Response res:
                 logger.LogInformation("[DBG] response: {message}", JsonSerializer.Serialize(res, LoggingSerializerOptions));
-                return JsonSerializer.Serialize(res, SerializerOptions);
+                return Task.FromResult(JsonSerializer.Serialize(res, SerializerOptions));
               case Event e:
                 logger.LogInformation("[DBG] event: {message}", JsonSerializer.Serialize(e, LoggingSerializerOptions));
-                return JsonSerializer.Serialize(e, SerializerOptions);
+                return Task.FromResult(JsonSerializer.Serialize(e, SerializerOptions));
               default:
                 throw new Exception($"Unsupported DAP message from debugger: {msg}");
             }
