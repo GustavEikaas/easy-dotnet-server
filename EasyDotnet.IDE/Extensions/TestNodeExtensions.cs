@@ -10,7 +10,7 @@ public static class TestNodeExtensions
   public static DiscoveredTest ToDiscoveredTest(this TestNodeUpdate test)
   {
     //TODO: I need to document this somewhere
-    var name = string.IsNullOrEmpty(test.Node.TestNamespace) ? $"root.{test.Node.DisplayName}" : $"{test.Node.TestNamespace}.{test.Node.DisplayName}";
+    var name = string.IsNullOrEmpty(test.Node.TestNamespace) ? $"{test.Node.TestType}.{test.Node.DisplayName}" : $"{test.Node.TestNamespace}.{test.Node.DisplayName}";
     return new()
     {
       Id = test.Node.Uid,
