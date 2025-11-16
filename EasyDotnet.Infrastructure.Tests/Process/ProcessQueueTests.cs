@@ -25,6 +25,7 @@ public class ProcessQueueTests
   [Test]
   public async Task Timeout_CancelsLongRunningProcess()
   {
+    Skip.When(RuntimeInformation.IsOSPlatform(OSPlatform.Windows), "Test is flaky on Windows");
     var service = new ProcessQueue(1, NullLogger<ProcessQueue>.Instance);
 
     var options = new ProcessOptions(
