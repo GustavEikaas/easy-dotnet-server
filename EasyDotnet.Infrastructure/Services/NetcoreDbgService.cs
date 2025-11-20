@@ -11,7 +11,7 @@ using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Infrastructure.Services;
 
-public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<DebuggerProxy> debuggerProxyLogger) : INetcoreDbgService
+public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<DebuggerProxy> debuggerProxyLogger, INotificationService notificationService) : INetcoreDbgService
 {
   private static readonly JsonSerializerOptions SerializerOptions = new()
   {
@@ -147,7 +147,14 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
           TriggerCleanup();
         };
 
-        _process.Start();
+        try
+        {
+          _process.Start();
+        }
+        catch (Exception e)
+        {
+          await notificationService.DisplayError($"Debugger failed to start: {e.Message}");
+        }
 
         var debuggerDap = new Dap.Debugger(_process.StandardInput.BaseStream, _process.StandardOutput.BaseStream, (msg) =>
         {
