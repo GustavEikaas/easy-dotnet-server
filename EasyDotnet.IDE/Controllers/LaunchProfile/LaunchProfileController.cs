@@ -13,6 +13,6 @@ public class LaunchProfileController(ILaunchProfileService launchProfileService)
   {
     var profiles = launchProfileService.GetLaunchProfiles(targetPath);
 
-    return (profiles?.Select(x => new LaunchProfileResponse(x.Key, x.Value)) ?? []).AsAsyncEnumerable();
+    return (profiles?.Select(x => new LaunchProfileResponse(x.Key, x.Value)) ?? []).OrderBy(x => x.Name).ToBatchedAsyncEnumerable(15);
   }
 }
