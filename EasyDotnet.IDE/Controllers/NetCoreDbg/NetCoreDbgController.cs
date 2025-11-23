@@ -44,5 +44,5 @@ public class NetCoreDbgController(IMsBuildService msBuildService, ILaunchProfile
     return new DebuggerStartResponse(true, port);
   }
 
-  private static (Process, int)? StartVsTestIfApplicable(DotnetProject project, string projectPath) => project.IsTestProject && !project.IsTestingPlatformApplication ? VsTestHelper.StartTestProcess(projectPath) : null;
+  private static (Process, int)? StartVsTestIfApplicable(DotnetProject project, string projectPath) => project.IsTestProject && !project.TestingPlatformDotnetTestSupport ? VsTestHelper.StartTestProcess(projectPath) : null;
 }
