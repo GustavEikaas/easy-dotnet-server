@@ -1,15 +1,11 @@
 using System;
 using System.Diagnostics;
-using System.Net.Security;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
 using EasyDotnet.Domain.Models.MsBuild.Project;
-using EasyDotnet.Infrastructure.Aspire.Server;
-using EasyDotnet.Infrastructure.Aspire.Server.Controllers;
 using EasyDotnet.Infrastructure.Dap;
-using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Controllers.NetCoreDbg;
@@ -23,7 +19,7 @@ public sealed record DebuggerStartRequest(
 
 public sealed record DebuggerStartResponse(bool Success, int Port);
 
-public class NetCoreDbgController(IMsBuildService msBuildService, ILaunchProfileService launchProfileService, INetcoreDbgService netcoreDbgService, IClientService clientService, ILogger<NetCoreDbgController> logger, ILogger<DcpServer> logger1, ILogger<DebuggingController> logger2) : BaseController
+public class NetCoreDbgController(IMsBuildService msBuildService, ILaunchProfileService launchProfileService, INetcoreDbgService netcoreDbgService, IClientService clientService) : BaseController
 {
   [JsonRpcMethod("debugger/start")]
   public async Task<DebuggerStartResponse> StartDebugger(DebuggerStartRequest request, CancellationToken cancellationToken)

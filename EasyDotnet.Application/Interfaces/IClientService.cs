@@ -17,4 +17,5 @@ public interface IClientService
   Task<string?> RequestString(string prompt, string? defaultValue);
   Task<SelectionOption?> RequestSelection(string prompt, SelectionOption[] choices, string? defaultSelectionId = null);
   Task<int> RequestStartDebugSession(string host, int port);
+  Task<bool> RequestTerminateDebugSession(int sessionId);
 }

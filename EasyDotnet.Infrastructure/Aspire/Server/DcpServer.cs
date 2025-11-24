@@ -1,54 +1,56 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
-using System.Security.Cryptography;
-using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using EasyDotnet.Application.Interfaces;
-using EasyDotnet.Infrastructure.Aspire.Server.Controllers;
+using EasyDotnet.Infrastructure.Dap;
+using EasyDotnet.Infrastructure.Services;
 using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Infrastructure.Aspire.Server;
 
+public record EnvVar(string Name, string Value);
+
 public sealed class DcpServer : IAsyncDisposable
 {
-  private readonly ILogger<DcpServer> _logger;
   private readonly INetcoreDbgService _netcoreDbgService;
+  private readonly ILogger<NetcoreDbgService> _logger;
+  private readonly ILogger<DebuggerProxy> _debuggerProxyLogger;
   private readonly IClientService _clientService;
   private readonly IMsBuildService _msBuildService;
-  private readonly X509Certificate2 _certificate;
   private readonly HttpListener _listener;
   private readonly Dictionary<string, RunSession> _runSessions = [];
   private readonly Dictionary<string, WebSocket> _webSocketsByDcpId = [];
   private readonly Dictionary<string, Queue<object>> _pendingNotificationsByDcpId = [];
   private readonly CancellationTokenSource _cts = new();
+  private readonly Dictionary<string, int> _debuggerSessionMap = [];
+  //Store a dictionary of runId -> debuggerSessionId
   private Task? _listenerTask;
 
   public int Port { get; }
   public string Token { get; }
-  public string CertificateBase64 { get; }
 
   private DcpServer(
-      ILogger<DcpServer> logger,
       INetcoreDbgService netcoreDbgService,
       IClientService clientService,
       IMsBuildService msBuildService,
       string token,
-      X509Certificate2 certificate,
       HttpListener listener,
-      int port)
+      int port,
+      ILogger<DebuggerProxy> debuggerProxyLogger,
+      ILogger<NetcoreDbgService> logger
+)
   {
-    _logger = logger;
     _netcoreDbgService = netcoreDbgService;
     _msBuildService = msBuildService;
     _clientService = clientService;
     Token = token;
-    _certificate = certificate;
-    CertificateBase64 = Convert.ToBase64String(certificate.Export(X509ContentType.Cert));
     _listener = listener;
     Port = port;
+    _debuggerProxyLogger = debuggerProxyLogger;
+    _logger = logger;
   }
 
   public static async Task<DcpServer> CreateAsync(
@@ -56,22 +58,20 @@ public sealed class DcpServer : IAsyncDisposable
       INetcoreDbgService netcoreDbgService,
       IMsBuildService msBuildService,
       IClientService clientService,
+      ILogger<DebuggerProxy> debuggerProxyLogger,
+      ILogger<NetcoreDbgService> logger2,
       CancellationToken cancellationToken = default)
   {
     var token = Guid.NewGuid().ToString("N");
-    var certificate = GenerateSelfSignedCertificate();
 
-    // Find a free port
     var port = GetFreePort();
 
     var listener = new HttpListener();
-    // Note: For production, you'd need to bind the certificate using netsh
-    // For now, we'll use HTTP (the spec says HTTPS is "strongly recommended" but optional)
     listener.Prefixes.Add($"http://localhost:{port}/");
 
     listener.Start();
 
-    var server = new DcpServer(logger, netcoreDbgService, clientService, msBuildService, token, certificate, listener, port);
+    var server = new DcpServer(netcoreDbgService, clientService, msBuildService, token, listener, port, debuggerProxyLogger, logger2);
     server.StartListening();
 
     logger.LogInformation("DCP server listening on port {Port}", port);
@@ -194,7 +194,6 @@ public sealed class DcpServer : IAsyncDisposable
     using var reader = new StreamReader(request.InputStream);
     var json = await reader.ReadToEndAsync();
 
-    _logger.LogInformation("Received run session request: {Json}", json);
 
     var options = new JsonSerializerOptions
     {
@@ -204,6 +203,8 @@ public sealed class DcpServer : IAsyncDisposable
     };
 
     var payload = JsonSerializer.Deserialize<RunSessionPayload>(json, options);
+
+    _logger.LogInformation("Received run session request: {Json}", JsonSerializer.Serialize(payload!.LaunchConfigurations, new JsonSerializerOptions() { WriteIndented = true }));
 
     if (payload == null || payload.LaunchConfigurations.Length == 0)
     {
@@ -243,122 +244,44 @@ public sealed class DcpServer : IAsyncDisposable
       int? debuggerPort = null;
       System.Diagnostics.Process? serviceProcess = null;
 
-      if (debug)
+      if (!debug)
       {
-        var envVars = BuildEnvironmentVariables(payload);
-
-        var binaryPath = "netcoredbg";
-        var port = await _netcoreDbgService.Start(
-            binaryPath, project, projectConfig.ProjectPath, null, null, envVars);
-        debuggerPort = port;
-
-        _logger.LogInformation("Started debugger on port {Port} for {ProjectPath}", debuggerPort, projectConfig.ProjectPath);
-        // await _clientService.RequestSetBreakpoint("C:/Users/Gustav/repo/aspire/aspire.ApiService/Program.cs", 1);
-        await _clientService.RequestStartDebugSession("127.0.0.1", port);
+        throw new InvalidOperationException("DCP does not support non-debugging");
       }
-      else
+
+      var x = new NetcoreDbgService(_logger, _debuggerProxyLogger);
+      var envVars = BuildEnvironmentVariables(payload);
+
+      var binaryPath = _clientService.ClientOptions!.DebuggerOptions!.BinaryPath!;
+
+      var port = await x.Start(
+          binaryPath, project, projectConfig.ProjectPath, null, null, envVars);
+      debuggerPort = port;
+
+      _logger.LogInformation("Started debugger on port {Port} for {ProjectPath}", debuggerPort, projectConfig.ProjectPath);
+
+      if (Path.GetFileName(projectConfig.ProjectPath) == "aspire.ApiService")
       {
-        // Start without debugger - just run the project directly
-        _logger.LogInformation("Starting project without debugger: {ProjectPath}", projectConfig.ProjectPath);
-
-        var psi = new System.Diagnostics.ProcessStartInfo
-        {
-          FileName = "dotnet",
-          Arguments = $"run --project \"{projectConfig.ProjectPath}\" --no-launch-profile",
-          UseShellExecute = false,
-          RedirectStandardOutput = true,
-          RedirectStandardError = true,
-          WorkingDirectory = Path.GetDirectoryName(projectConfig.ProjectPath)!,
-          CreateNoWindow = true
-        };
-
-        var envVars = BuildEnvironmentVariables(payload);
-        foreach (var (name, value) in envVars)
-        {
-          psi.Environment[name] = value;
-        }
-
-        // Apply arguments from the payload
-        if (payload.Args != null && payload.Args.Length > 0)
-        {
-          psi.Arguments += " -- " + string.Join(" ", payload.Args);
-        }
-
-        serviceProcess = System.Diagnostics.Process.Start(psi);
-        if (serviceProcess == null)
-        {
-          throw new Exception("Failed to start service process");
-        }
-
-        _logger.LogInformation("Started service process with PID {Pid}", serviceProcess.Id);
-
-        // Monitor output
-        serviceProcess.OutputDataReceived += (_, e) =>
-        {
-          if (!string.IsNullOrEmpty(e.Data))
-          {
-            _logger.LogInformation("[{ProjectName}] {Output}",
-                Path.GetFileNameWithoutExtension(projectConfig.ProjectPath), e.Data);
-
-            // Send service logs notification
-            _ = SendNotificationToDcpAsync(dcpId, new
-            {
-              notification_type = "serviceLogs",
-              session_id = runId,
-              is_std_err = false,
-              log_message = e.Data
-            });
-          }
-        };
-
-        serviceProcess.ErrorDataReceived += (_, e) =>
-        {
-          if (!string.IsNullOrEmpty(e.Data))
-          {
-            _logger.LogError("[{ProjectName}] {Error}",
-                Path.GetFileNameWithoutExtension(projectConfig.ProjectPath), e.Data);
-
-            // Send service logs notification
-            _ = SendNotificationToDcpAsync(dcpId, new
-            {
-              notification_type = "serviceLogs",
-              session_id = runId,
-              is_std_err = true,
-              log_message = e.Data
-            });
-          }
-        };
-
-        serviceProcess.BeginOutputReadLine();
-        serviceProcess.BeginErrorReadLine();
-
-        // Monitor process exit
-        serviceProcess.EnableRaisingEvents = true;
-        serviceProcess.Exited += async (_, _) =>
-        {
-          _logger.LogInformation("Service process {Pid} exited with code {ExitCode}",
-              serviceProcess.Id, serviceProcess.ExitCode);
-
-          // Send session terminated notification
-          await SendNotificationToDcpAsync(dcpId, new
-          {
-            notification_type = "sessionTerminated",
-            session_id = runId,
-            exit_code = serviceProcess.ExitCode
-          });
-        };
+        await _clientService.RequestSetBreakpoint("C:/Users/Gustav/repo/aspire/aspire.ApiService/Program.cs", 1);
       }
+
+      if (Path.GetFileName(projectConfig.ProjectPath) == "aspire.Web")
+      {
+        await _clientService.RequestSetBreakpoint("C:/Users/Gustav/repo/aspire/aspire.Web/Program.cs", 1);
+      }
+      var id = await _clientService.RequestStartDebugSession("127.0.0.1", port);
+      _debuggerSessionMap.Add(runId, id);
 
       // Send process restarted notification
-      var pid = debug ? (int?)null : serviceProcess?.Id;
+      var pid = debug ? null : serviceProcess?.Id;
       await SendNotificationToDcpAsync(dcpId, new
       {
         notification_type = "processRestarted",
         session_id = runId,
-        pid = pid
+        pid
       });
 
-      var session = new RunSession
+      _runSessions[runId] = new RunSession
       {
         RunId = runId,
         DcpId = dcpId,
@@ -368,14 +291,12 @@ public sealed class DcpServer : IAsyncDisposable
         ServiceProcess = serviceProcess
       };
 
-      _runSessions[runId] = session;
-
       response.StatusCode = 201;
       response.Headers.Add("Location", $"http://localhost:{Port}/run_session/{runId}");
       response.Close();
 
-      _logger.LogInformation("Run session {RunId} created successfully for project {ProjectPath}",
-          runId, projectConfig.ProjectPath);
+      _logger.LogInformation("Run session {RunId} created successfully for project {ProjectPath}", runId, projectConfig.ProjectPath);
+      _logger.LogInformation("Run session http://localhost:{Port}/run_session/{runId}", port, runId);
     }
     catch (Exception ex)
     {
@@ -385,23 +306,21 @@ public sealed class DcpServer : IAsyncDisposable
     }
   }
 
-  private Task HandleDeleteRunSessionAsync(string runId, HttpListenerResponse response)
+  private async Task HandleDeleteRunSessionAsync(string runId, HttpListenerResponse response)
   {
     _logger.LogInformation("Deleting run session {RunId}", runId);
 
+
     if (_runSessions.TryGetValue(runId, out var session))
     {
-      // Stop the service process if running
-      if (session.ServiceProcess != null && !session.ServiceProcess.HasExited)
+      var success = _debuggerSessionMap.TryGetValue(runId, out var sessionId);
+      if (success)
       {
-        _logger.LogInformation("Killing service process {Pid}", session.ServiceProcess.Id);
-        session.ServiceProcess.Kill();
+        await _clientService.RequestTerminateDebugSession(sessionId);
       }
-
       _runSessions.Remove(runId);
 
-      // Send session terminated notification
-      _ = SendNotificationToDcpAsync(session.DcpId, new
+      await SendNotificationToDcpAsync(session.DcpId, new
       {
         notification_type = "sessionTerminated",
         session_id = runId,
@@ -412,11 +331,10 @@ public sealed class DcpServer : IAsyncDisposable
     }
     else
     {
-      response.StatusCode = 204;
+      response.StatusCode = 404;
     }
 
     response.Close();
-    return Task.CompletedTask;
   }
   private async Task HandleWebSocketAsync(HttpListenerContext context)
   {
@@ -537,28 +455,6 @@ public sealed class DcpServer : IAsyncDisposable
     }
   }
 
-  private static X509Certificate2 GenerateSelfSignedCertificate()
-  {
-    using var rsa = RSA.Create(2048);
-    var request = new CertificateRequest("CN=localhost", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
-
-    request.CertificateExtensions.Add(
-        new X509BasicConstraintsExtension(false, false, 0, false));
-
-    request.CertificateExtensions.Add(
-        new X509KeyUsageExtension(
-            X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment, false));
-
-    // CRITICAL: Must include SubjectAlternativeName per spec
-    var sanBuilder = new SubjectAlternativeNameBuilder();
-    sanBuilder.AddDnsName("localhost");
-    sanBuilder.AddIpAddress(IPAddress.Loopback);
-    request.CertificateExtensions.Add(sanBuilder.Build());
-
-    var cert = request.CreateSelfSigned(DateTimeOffset.Now.AddDays(-1), DateTimeOffset.Now.AddYears(1));
-    return new X509Certificate2(cert.Export(X509ContentType.Pfx));
-  }
-
   private static int GetFreePort()
   {
     using var listener = new TcpListener(IPAddress.Loopback, 0);
@@ -635,7 +531,6 @@ public sealed class DcpServer : IAsyncDisposable
     }
 
     _listener?.Stop();
-    _certificate?.Dispose();
 
     if (_listenerTask != null)
     {

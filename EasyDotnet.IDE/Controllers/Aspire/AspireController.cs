@@ -4,13 +4,21 @@ using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
 using EasyDotnet.Infrastructure.Aspire.Server;
-using EasyDotnet.Infrastructure.Aspire.Server.Controllers;
+using EasyDotnet.Infrastructure.Dap;
+using EasyDotnet.Infrastructure.Services;
 using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Controllers.Aspire;
 
-public class AspireController(IMsBuildService msBuildService, INetcoreDbgService netcoreDbgService, IClientService clientService, ILogger<AspireController> logger, ILogger<DcpServer> dcpLogger, ILogger<DebuggingController> logger2) : BaseController
+public class AspireController(
+  IMsBuildService msBuildService,
+  INetcoreDbgService netcoreDbgService,
+  IClientService clientService,
+  ILogger<AspireController> logger,
+  ILogger<DcpServer> dcpLogger,
+  ILogger<DebuggerProxy> debuggerProxyLogger,
+  ILogger<NetcoreDbgService> logger2) : BaseController
 {
   [JsonRpcMethod("aspire/startDebugSession")]
   public async Task StartDebugger(string projectPath, CancellationToken cancellationToken)
@@ -25,15 +33,16 @@ public class AspireController(IMsBuildService msBuildService, INetcoreDbgService
 
     logger.LogInformation("Starting Aspire AppHost {projectPath}", projectPath);
 
-    var aspireContext = await AspireServer.CreateAndStartAsync(
-      projectPath,
-      netcoreDbgService,
-      clientService,
-      msBuildService,
-      dcpLogger,
-      logger2,
-      cancellationToken
-    );
+    await AspireServer.CreateAndStartAsync(
+     projectPath,
+     netcoreDbgService,
+     clientService,
+     msBuildService,
+     dcpLogger,
+     debuggerProxyLogger,
+     logger2,
+     cancellationToken
+   );
 
     logger.LogInformation("Aspire server infrastructure started successfully");
   }

@@ -10,6 +10,7 @@ public sealed record PromptString(string Prompt, string? DefaultValue);
 public sealed record PromptConfirmRequest(string Prompt, bool DefaultValue);
 public sealed record PromptSelectionRequest(string Prompt, SelectionOption[] Choices, string? DefaultSelectionId);
 public sealed record StartDebugSessionRequest(string Host, int Port);
+public sealed record TerminateDebugSessionRequest(int SessionId);
 
 public class ClientService(JsonRpc rpc) : IClientService
 {
@@ -37,9 +38,16 @@ public class ClientService(JsonRpc rpc) : IClientService
     var selectedId = await rpc.InvokeWithParameterObjectAsync<string?>("promptSelection", request);
     return selectedId == null ? null : choices.FirstOrDefault(option => option.Id == selectedId);
   }
+
   public async Task<int> RequestStartDebugSession(string host, int port)
   {
     var request = new StartDebugSessionRequest(host, port);
     return await rpc.InvokeWithParameterObjectAsync<int>("startDebugSession", request);
+  }
+
+  public async Task<bool> RequestTerminateDebugSession(int sessionId)
+  {
+    var request = new TerminateDebugSessionRequest(sessionId);
+    return await rpc.InvokeWithParameterObjectAsync<bool>("terminateDebugSession", request);
   }
 }
