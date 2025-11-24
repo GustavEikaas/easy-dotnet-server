@@ -33,6 +33,7 @@ public class ClientService(JsonRpc rpc) : IClientService
   public async Task<bool> RequestSetBreakpoint(string path, int lineNumber) => await rpc.InvokeWithParameterObjectAsync<bool>("setBreakpoint", new SetBreakpointRequest(path, lineNumber));
   public async Task<bool> RequestConfirmation(string prompt, bool defaultValue) => await rpc.InvokeWithParameterObjectAsync<bool>("promptConfirm", new PromptConfirmRequest(prompt, defaultValue));
   public async Task<string?> RequestString(string prompt, string? defaultValue) => await rpc.InvokeWithParameterObjectAsync<string?>("promptString", new PromptString(prompt, defaultValue));
+
   public async Task<SelectionOption?> RequestSelection(string prompt, SelectionOption[] choices, string? defaultSelectionId = null)
   {
     var request = new PromptSelectionRequest(prompt, choices, defaultSelectionId);
@@ -46,6 +47,7 @@ public class ClientService(JsonRpc rpc) : IClientService
     var selectedIds = await rpc.InvokeWithParameterObjectAsync<string[]?>("promptMultiSelection", request);
     return selectedIds == null ? null : [.. choices.Where(option => selectedIds.Contains(option.Id))];
   }
+
   public async Task<int> RequestStartDebugSession(string host, int port)
   {
     var request = new StartDebugSessionRequest(host, port);
