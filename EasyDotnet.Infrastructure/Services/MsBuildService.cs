@@ -1,21 +1,27 @@
-using System.Text.Json;
-using System.Text.RegularExpressions;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Domain.Models.MsBuild.Build;
 using EasyDotnet.Domain.Models.MsBuild.Project;
 using EasyDotnet.Domain.Models.MsBuild.SDK;
+using EasyDotnet.Infrastructure.Framework;
+using EasyDotnet.MsBuild;
 using Microsoft.Build.Locator;
 using Microsoft.Extensions.Caching.Memory;
 
-namespace EasyDotnet.Services;
+namespace EasyDotnet.Infrastructure.Services;
 
-public partial class MsBuildService(IVisualStudioLocator locator, IClientService clientService, IProcessQueue processQueue, IMemoryCache memoryCache, INotificationService notificationService, ISolutionService solutionService) : IMsBuildService
+public class MsBuildService(IVisualStudioLocator locator, IClientService clientService, IProcessQueue processQueue, IMemoryCache memoryCache, INotificationService notificationService, ISolutionService solutionService) : IMsBuildService
 {
   public SdkInstallation[] QuerySdkInstallations()
   {
     MSBuildLocator.AllowQueryAllRuntimeVersions = true;
     var instances = MSBuildLocator.QueryVisualStudioInstances().Where(x => x.DiscoveryType == DiscoveryType.DotNetSdk).ToList();
     return [.. instances.Select(x => new SdkInstallation(x.Name, $"net{x.Version.Major}.0", x.Version, x.MSBuildPath, x.VisualStudioRootPath))];
+  }
+
+  public string GetVsTestPath()
+  {
+    var sdk = QuerySdkInstallations();
+    return Path.Join(sdk.ToList()[0].MSBuildPath, "vstest.console.dll");
   }
 
   public bool HasMinimumSdk(Version version) => QuerySdkInstallations().Any(x => x.Version >= version);
@@ -38,7 +44,7 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
 
     var (success, stdout, stderr) = await processQueue.RunProcessAsync(command, args, new ProcessOptions(true), cancellationToken);
 
-    var (errors, warnings) = ParseBuildOutput(stdout, stderr);
+    var (errors, warnings) = MsBuildBuildStdoutParser.ParseBuildOutput(stdout, stderr);
     var (errorsWithProject, warningsWithProject) = AddProjectToBuildMessages(targetPath, errors, warnings);
 
     var orderedErrors = errorsWithProject
@@ -70,8 +76,8 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
 
   private (List<BuildMessageWithProject>, List<BuildMessageWithProject>) AddProjectToBuildMessages(
     string targetPath,
-    IEnumerable<BuildMessage> errors,
-    IEnumerable<BuildMessage> warnings)
+    IEnumerable<MsBuildStdoutMessage> errors,
+    IEnumerable<MsBuildStdoutMessage> warnings)
   {
     if (!errors.Any() && !warnings.Any())
     {
@@ -80,7 +86,7 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
 
     var projectMap = GetProjectMap(targetPath);
 
-    var map = new Func<IEnumerable<BuildMessage>, List<BuildMessageWithProject>>(messages =>
+    var map = new Func<IEnumerable<MsBuildStdoutMessage>, List<BuildMessageWithProject>>(messages =>
         messages.Select(m => new BuildMessageWithProject(
             m.Type,
             m.FilePath,
@@ -101,10 +107,11 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
     var normalizedFilePath = NormalizePath(filePath);
     var ext = Path.GetExtension(targetPath);
 
-    if (ext.Equals(".csproj", StringComparison.OrdinalIgnoreCase))
+
+    if (FileTypes.IsCsProjectFile(targetPath))
       return Path.GetFileNameWithoutExtension(targetPath);
 
-    if (ext.Equals(".sln", StringComparison.OrdinalIgnoreCase))
+    if (FileTypes.IsSolutionFile(targetPath))
     {
       return projectMap
         .Where(kvp => normalizedFilePath.StartsWith(kvp.Value, StringComparison.OrdinalIgnoreCase))
@@ -116,29 +123,31 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
     return null;
   }
 
-  private Dictionary<string, string> GetProjectMap(string targetPath) =>
-    Path.GetExtension(targetPath).ToLowerInvariant() switch
-    {
-      ".csproj" => new Dictionary<string, string>
-      {
-        [Path.GetFileNameWithoutExtension(targetPath)] = NormalizePath(Path.GetDirectoryName(targetPath) ?? "")
-      },
-      ".sln" => solutionService.GetProjectsFromSolutionFile(targetPath)
-               .ToDictionary(
-                   p => Path.GetFileNameWithoutExtension(p.AbsolutePath),
-                   p => NormalizePath(Path.GetDirectoryName(p.AbsolutePath) ?? "")
-               ),
-      _ => throw new InvalidOperationException("Target must be a .csproj or .sln file")
-    };
 
-  private class MsBuildPropertiesResponse
+  private Dictionary<string, string> GetProjectMap(string targetPath)
   {
-    public Dictionary<string, string?> Properties { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    if (FileTypes.IsAnyProjectFile(targetPath))
+    {
+      return new Dictionary<string, string>
+      {
+        [Path.GetFileNameWithoutExtension(targetPath)] =
+              NormalizePath(Path.GetDirectoryName(targetPath) ?? string.Empty)
+      };
+    }
+
+    if (FileTypes.IsAnySolutionFile(targetPath))
+    {
+      return solutionService.GetProjectsFromSolutionFile(targetPath)
+          .ToDictionary(
+              p => Path.GetFileNameWithoutExtension(p.AbsolutePath),
+              p => NormalizePath(Path.GetDirectoryName(p.AbsolutePath) ?? string.Empty)
+          );
+    }
+
+    throw new InvalidOperationException("Target must be a .csproj or (.sln, .slnx) file");
   }
 
-  private static string GetLanguage(string path) => path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) ? "csharp" :
-    path.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase) ? "fsharp" :
-    "unknown";
+
 
 
   public async Task InvalidateProjectProperties(string projectPath, string? targetFrameworkMoniker = null, string configuration = "Debug")
@@ -169,15 +178,7 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
       throw new ArgumentException("Project path must be provided", nameof(projectPath));
     }
 
-    var propsToQuery = new[]
-    {
-        "OutputPath", "OutputType", "TargetExt", "AssemblyName",
-        "TargetFramework", "TargetFrameworks", "IsTestProject", "UserSecretsId",
-        "TestingPlatformDotnetTestSupport", "TargetPath", "GeneratePackageOnBuild",
-        "IsPackable", "PackageId", "Version", "PackageOutputPath", "TargetFrameworkVersion",
-        "UsingMicrosoftNETSdkWorker", "UsingMicrosoftNETSdkWeb",  "UseIISExpress", "LangVersion",
-        "RootNamespace", "IsAspireHost", "AspireHostingSDKVersion"
-    };
+    var props = MsBuildPropertyQueryBuilder.BuildQueryString();
 
     var (command, args) = await GetCommandAndArguments(
         clientService.UseVisualStudio ? MSBuildProjectType.VisualStudio : MSBuildProjectType.SDK,
@@ -185,77 +186,15 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
         targetFrameworkMoniker,
         configuration, "");
 
-    args += " -nologo -v:quiet " + string.Join(" ", propsToQuery.Select(p => $"-getProperty:{p}"));
+    args += " -nologo -v:quiet " + props;
 
     var (success, stdout, stderr) = await processQueue.RunProcessAsync(command, args, new ProcessOptions(KillOnTimeout: true), cancellationToken);
     if (!success)
-      throw new InvalidOperationException($"Failed to get project properties: {stderr}");
-
-    var lines = stdout.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
-    var jsonStartIndex = Array.FindIndex(lines, line => line.Trim() == "{");
-
-    if (jsonStartIndex == -1)
     {
-      throw new InvalidOperationException("Did not find JSON payload in MSBuild output.");
+      throw new InvalidOperationException($"Failed to get project properties: {stderr}");
     }
-
-    var jsonPayload = string.Join("\n", lines.Skip(jsonStartIndex));
-
-    var msbuildOutput = JsonSerializer.Deserialize<MsBuildPropertiesResponse>(jsonPayload);
-    var values = msbuildOutput?.Properties ?? new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-
-    string? TryGet(string name)
-        => values.TryGetValue(name, out var v) && !string.IsNullOrEmpty(v) ? v : null;
-    bool TryGetBool(string name) => values.TryGetValue(name, out var v) && bool.TryParse(v, out var b) && b;
-
-    var tfm = TryGet("TargetFramework");
-    var versionMoniker = tfm is { } s && s.StartsWith("net", StringComparison.OrdinalIgnoreCase)
-        ? s[3..]
-        : tfm;
-
-    var nugetVersion = TryGet("Version");
-    var targetFrameworkVersion = TryGet("TargetFrameworkVersion");
-    var isNetFramework = targetFrameworkVersion?.StartsWith("v4") == true;
-    var useIISExpress = TryGetBool("UseIISExpress");
-    var targetPath = TryGet("TargetPath");
-    var projectName = Path.GetFileNameWithoutExtension(projectPath);
-    var aspireSdkVersionString = TryGet("AspireHostingSDKVersion");
-    var aspireSdkVersion = TryParseVersion(aspireSdkVersionString);
-
-    return new DotnetProject(
-        ProjectName: projectName,
-        Language: GetLanguage(projectPath),
-        OutputPath: TryGet("OutputPath"),
-        OutputType: TryGet("OutputType"),
-        TargetExt: TryGet("TargetExt"),
-        AssemblyName: TryGet("AssemblyName"),
-        TargetFramework: tfm,
-        TargetFrameworks: TryGet("TargetFrameworks")?.Split(';', StringSplitOptions.RemoveEmptyEntries),
-        IsTestProject: TryGetBool("IsTestProject"),
-        IsWebProject: TryGetBool("UsingMicrosoftNETSdkWeb"),
-        IsWorkerProject: TryGetBool("UsingMicrosoftNETSdkWorker"),
-        UserSecretsId: TryGet("UserSecretsId"),
-        TestingPlatformDotnetTestSupport: TryGetBool("TestingPlatformDotnetTestSupport"),
-        TargetPath: TryGet("TargetPath"),
-        GeneratePackageOnBuild: TryGetBool("GeneratePackageOnBuild"),
-        IsPackable: TryGetBool("IsPackable"),
-        LangVersion: TryGet("LangVersion"),
-        RootNamespace: TryGet("RootNamespace"),
-        PackageId: TryGet("PackageId"),
-        NugetVersion: string.IsNullOrWhiteSpace(nugetVersion) ? null : nugetVersion,
-        Version: targetFrameworkVersion,
-        PackageOutputPath: TryGet("PackageOutputPath"),
-        IsMultiTarget: (TryGet("TargetFrameworks")?.Split(';', StringSplitOptions.RemoveEmptyEntries).Length ?? 0) > 1,
-        IsNetFramework: isNetFramework,
-        UseIISExpress: useIISExpress,
-        RunCommand: await BuildRunCommand(!isNetFramework, useIISExpress, targetPath, projectPath, projectName),
-        BuildCommand: await BuildBuildCommand(!isNetFramework, projectPath),
-        TestCommand: BuildTestCommand(!isNetFramework, targetPath, projectPath),
-        IsAspireHost: TryGetBool("IsAspireHost"),
-        AspireHostingSdkVersion: aspireSdkVersion);
+    return MsBuildPropertiesStdoutParser.ParseMsBuildOutputToProject(stdout);
   }
-  private static Version? TryParseVersion(string? versionString) =>
-    string.IsNullOrWhiteSpace(versionString) ? null : Version.TryParse(versionString, out var version) ? version : null;
 
   public async Task<List<string>> GetProjectReferencesAsync(string projectPath, CancellationToken cancellationToken = default)
   {
@@ -280,7 +219,7 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
     return [.. stdOut
         .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
         .Select(line => line.Trim())
-        .Where(line => line.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) || line.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase))
+        .Where(line => line.EndsWith(FileTypes.CsProjectExtension, StringComparison.OrdinalIgnoreCase) || line.EndsWith(FileTypes.FsProjectExtension, StringComparison.OrdinalIgnoreCase))
         .Select(relativePath => Path.GetFullPath(Path.Combine(projectDir, relativePath)))];
   }
 
@@ -307,35 +246,88 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
     return success;
   }
 
-  private async Task<string> BuildRunCommand(bool isSdk, bool useIISExpress, string? targetPath, string projectPath, string projectName)
+  public async Task<string> BuildRunCommand(DotnetProject project)
   {
-    var buildCmd = await BuildBuildCommand(isSdk, projectPath);
-
-    return (isSdk, useIISExpress) switch
+    if (project.TargetFrameworks?.Length > 0)
     {
-      (true, _) => $"dotnet run --project \"{projectPath}\"",
+      return "";
+    }
 
-      (false, true) =>
-          $"{buildCmd}; & \"{locator.GetIisExpressExe()}\" /config:\"{locator.GetApplicationHostConfig()}\" /site:\"{projectName}\"",
+    if (project.IsNETCoreOrNETStandard)
+    {
+      return string.IsNullOrWhiteSpace(project.MSBuildProjectFullPath)
+        ? throw new InvalidOperationException("[compat] Missing project path")
+        : $"dotnet run --project \"{project.MSBuildProjectFullPath}\"";
+    }
 
-      (false, false) => $"\"{targetPath}\""
-    };
+    var msbuildPath = await locator.GetVisualStudioMSBuildPath();
+    var projectPath = project.MSBuildProjectFullPath ?? throw new InvalidOperationException("[compat] Project path is missing or invalid.");
+    var targetPath = project.TargetPath ?? throw new InvalidOperationException("[compat] Target path is missing or invalid.");
+
+    if (!project.UseIISExpress)
+    {
+      return CompatCommandHandler.GetRunCommand(projectPath, msbuildPath, targetPath);
+    }
+
+    var siteName = project.MSBuildProjectName ?? Path.GetFileNameWithoutExtension(projectPath);
+    var iisExe = locator.GetIisExpressExe();
+    if (string.IsNullOrWhiteSpace(iisExe) || !File.Exists(iisExe))
+      throw new FileNotFoundException("[compat] IIS Express executable not found.", iisExe);
+
+    var configPath = locator.GetApplicationHostConfig();
+    return string.IsNullOrWhiteSpace(configPath) || !File.Exists(configPath)
+      ? throw new FileNotFoundException("[compat] IIS Express applicationhost.config not found.", configPath)
+      : CompatCommandHandler.GetIisCommand(
+        projectPath: projectPath,
+        msbuildPath: msbuildPath,
+        iisExe: iisExe,
+        configPath: configPath,
+        siteName: siteName);
   }
 
-  private static string BuildTestCommand(bool isSdk, string? targetPath, string projectPath) => isSdk switch
+  public async Task<string> BuildTestCommand(DotnetProject project)
   {
-    true => $"dotnet test \"{projectPath}\"",
-    false => $"dotnet vstest \"{targetPath}\""
-  };
 
-  private async Task<string> BuildBuildCommand(bool isSdk, string projectPath)
+    //Automatically makes IsNETCoreOrNETStandard false
+    if (project.TargetFrameworks?.Length > 0)
+    {
+      return "";
+    }
+
+    if (project.IsNETCoreOrNETStandard)
+    {
+      return string.IsNullOrWhiteSpace(project.MSBuildProjectFullPath)
+        ? throw new InvalidOperationException("[compat] Missing project path for test command.")
+        : $"dotnet test \"{project.MSBuildProjectFullPath}\"";
+    }
+
+    var projectPath = project.MSBuildProjectFullPath ?? throw new InvalidOperationException("[compat] Missing project path");
+    var targetPath = project.TargetPath ?? throw new InvalidOperationException("[compat] Missing target path");
+    var msbuildPath = await locator.GetVisualStudioMSBuildPath();
+
+    var vstestPath = GetVsTestPath();
+    return string.IsNullOrWhiteSpace(vstestPath) || !File.Exists(vstestPath)
+      ? throw new FileNotFoundException("[compat] Could not locate vstest", vstestPath)
+      : CompatCommandHandler.GetTestCommand(projectPath, targetPath, msbuildPath, vstestPath);
+  }
+
+  public async Task<string> BuildBuildCommand(DotnetProject project)
   {
-    var normalizedPath = Path.GetFullPath(projectPath)
-        .Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+    if (project.TargetFrameworks?.Length > 0)
+    {
+      return "";
+    }
+    if (project.IsNETCoreOrNETStandard)
+    {
+      return string.IsNullOrWhiteSpace(project.MSBuildProjectFullPath)
+        ? throw new InvalidOperationException("[compat] Missing project path for build command.")
+        : $"dotnet build \"{project.MSBuildProjectFullPath}\"";
+    }
 
-    return isSdk
-        ? $"dotnet build \"{normalizedPath}\""
-        : $"& \"{await locator.GetVisualStudioMSBuildPath()}\" \"{normalizedPath}\"";
+    var projectPath = project.MSBuildProjectFullPath ?? throw new InvalidOperationException("[compat] Missing or invalid project path for compat build.");
+    var msbuildPath = await locator.GetVisualStudioMSBuildPath();
+
+    return CompatCommandHandler.GetBuildCommand(projectPath, msbuildPath);
   }
 
   private async Task<(string Command, string Arguments)> GetCommandAndArguments(
@@ -356,46 +348,4 @@ public partial class MsBuildService(IVisualStudioLocator locator, IClientService
     };
   }
 
-  private static (List<BuildMessage> Errors, List<BuildMessage> Warnings) ParseBuildOutput(string stdout, string stderr)
-  {
-    var regex = MsBuildLoggingLine();
-
-    var messages =
-        stdout
-            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
-            .Select(line => regex.Match(line))
-            .Where(match => match.Success)
-            .Select(match => new BuildMessage(
-                Type: match.Groups["type"].Value,
-                FilePath: match.Groups["file"].Value.Trim(), // strip leading spaces
-                LineNumber: int.Parse(match.Groups["line"].Value),
-                ColumnNumber: int.Parse(match.Groups["col"].Value),
-                Code: match.Groups["code"].Value,
-                Message: match.Groups["msg"].Value
-            ));
-
-    var stderrMessages =
-        stderr
-            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
-            .Select(line => new BuildMessage("error", "", 0, 0, "", line));
-
-    var allMessages = messages.Concat(stderrMessages);
-
-    var errors = allMessages
-        .Where(m => m.Type.Equals("error", StringComparison.OrdinalIgnoreCase))
-        .GroupBy(m => (m.Type, m.Code, m.LineNumber, m.ColumnNumber))
-        .Select(g => g.First())
-        .ToList();
-
-    var warnings = allMessages
-        .Where(m => m.Type.Equals("warning", StringComparison.OrdinalIgnoreCase))
-        .GroupBy(m => (m.Type, m.Code, m.LineNumber, m.ColumnNumber))
-        .Select(g => g.First())
-        .ToList();
-
-    return (errors, warnings);
-  }
-
-  [GeneratedRegex(@"^(?<file>.*)\((?<line>\d+),(?<col>\d+)\): (?<type>error|warning) (?<code>\S+): (?<msg>.*)$", RegexOptions.IgnoreCase | RegexOptions.Compiled, "en-US")]
-  private static partial Regex MsBuildLoggingLine();
 }

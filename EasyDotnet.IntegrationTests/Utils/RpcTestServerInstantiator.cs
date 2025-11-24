@@ -79,4 +79,20 @@ public static class RpcTestServerInstantiator
       : await server.InvokeAsync<T>(targetName);
   }
 
+  public static async IAsyncEnumerable<T> InitializedOneShotStreamRequest<T>(
+      string targetName,
+      object? parameters = null)
+  {
+    using var server = await GetInitializedStreamServer();
+
+    var enumerable = parameters is not null
+        ? await server.InvokeWithParameterObjectAsync<IAsyncEnumerable<T>>(targetName, parameters)
+        : await server.InvokeAsync<IAsyncEnumerable<T>>(targetName);
+
+    await foreach (var item in enumerable)
+    {
+      yield return item;
+    }
+  }
+
 }

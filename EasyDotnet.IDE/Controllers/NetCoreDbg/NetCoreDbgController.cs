@@ -4,8 +4,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
-using EasyDotnet.Domain.Models.MsBuild.Project;
 using EasyDotnet.Infrastructure.Dap;
+using EasyDotnet.MsBuild;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Controllers.NetCoreDbg;

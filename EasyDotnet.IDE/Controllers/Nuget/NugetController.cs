@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
+using EasyDotnet.IDE;
 using EasyDotnet.Services;
 using StreamJsonRpc;
 
@@ -21,12 +22,12 @@ public class NugetController(IClientService clientService, NugetService nugetSer
   }
 
   [JsonRpcMethod("nuget/list-sources")]
-  public List<NugetSourceResponse> GetSources()
+  public IAsyncEnumerable<NugetSourceResponse> GetSources()
   {
     clientService.ThrowIfNotInitialized();
 
     var sources = nugetService.GetSources();
-    return [.. sources.Select(x => x.ToResponse())];
+    return sources.Select(x => x.ToResponse()).ToBatchedAsyncEnumerable(50);
   }
 
   [JsonRpcMethod("nuget/push")]
@@ -49,7 +50,7 @@ public class NugetController(IClientService clientService, NugetService nugetSer
         includePrerelease,
         sources);
 
-    return versions.OrderBy(v => v.Version).Select(v => v.ToNormalizedString()).AsAsyncEnumerable();
+    return versions.OrderBy(v => v.Version).Select(v => v.ToNormalizedString()).ToBatchedAsyncEnumerable(50);
   }
 
   [JsonRpcMethod("nuget/search-packages")]

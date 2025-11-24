@@ -23,6 +23,7 @@ public static class AspireServer
   public static async Task CreateAndStartAsync(
       string projectPath,
       INetcoreDbgService netcoreDbgService,
+      INotificationService notificationService,
       IClientService clientService,
       IMsBuildService msBuildService,
       ILogger<DcpServer> dcpLogger,
@@ -30,7 +31,7 @@ public static class AspireServer
       ILogger<NetcoreDbgService> logger2,
       CancellationToken cancellationToken = default)
   {
-    var dcpServer = await DcpServer.CreateAsync(dcpLogger, netcoreDbgService, msBuildService, clientService, debuggerProxyLogger, logger2, cancellationToken);
+    var dcpServer = await DcpServer.CreateAsync(dcpLogger, netcoreDbgService, notificationService, msBuildService, clientService, debuggerProxyLogger, logger2, cancellationToken);
     Console.WriteLine($"DCP server listening on port {dcpServer.Port}");
 
     StartAspireCliProcess(projectPath, dcpServer);

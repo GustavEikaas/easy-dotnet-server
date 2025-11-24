@@ -14,6 +14,7 @@ namespace EasyDotnet.IDE.Controllers.Aspire;
 public class AspireController(
   IMsBuildService msBuildService,
   INetcoreDbgService netcoreDbgService,
+  INotificationService notificationService,
   IClientService clientService,
   ILogger<AspireController> logger,
   ILogger<DcpServer> dcpLogger,
@@ -36,6 +37,7 @@ public class AspireController(
     await AspireServer.CreateAndStartAsync(
      projectPath,
      netcoreDbgService,
+     notificationService,
      clientService,
      msBuildService,
      dcpLogger,

@@ -1,113 +1,3 @@
-## UserSecretsController
-
-### `user-secrets/init`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| projectPath | string |   |
-
-**Returns:** `Task<ProjectUserSecretsInitResponse>`
-
----
-
-## NetCoreDbgController
-
-### `debugger/start`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| request | DebuggerStartRequest |   |
-
-**Returns:** `Task<DebuggerStartResponse>`
-
----
-
-## MsBuildController
-
-### `msbuild/add-project-reference`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| projectPath | string |   |
-| targetPath | string |   |
-
-**Returns:** `Task<bool>`
-
-### `msbuild/build`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| request | BuildRequest |   |
-
-**Returns:** `Task<BuildResultResponse>`
-
-### `msbuild/list-project-reference`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| projectPath | string |   |
-
-**Returns:** `Task<List<string>>`
-
-### `msbuild/project-properties`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| request | ProjectPropertiesRequest |   |
-
-**Returns:** `Task<DotnetProject>`
-
-### `msbuild/remove-project-reference`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| projectPath | string |   |
-| targetPath | string |   |
-
-**Returns:** `Task<bool>`
-
----
-
-## LspController
-
-### `lsp/start`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| useRoslynator | bool | ✅  |
-| analyzerAssemblies | String[] | ✅  |
-
-**Returns:** `Task<LspStartResponse>`
-
----
-
-## LaunchProfileController
-
-### `launch-profiles`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| targetPath | string |   |
-
-**Returns:** `IAsyncEnumerable<LaunchProfileResponse>`
-
----
-
-## JsonCodeGen
-
-### `json-code-gen`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| jsonData | string |   |
-| filePath | string |   |
-| preferFileScopedNamespace | bool |   |
-
-**Returns:** `Task<BootstrapFileResultResponse>`
-
----
-
-## InitializeController
-
-### `initialize`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| request | InitializeRequest |   |
-
-**Returns:** `Task<InitializeResponse>`
-
----
-
 ## TestController
 
 ### `test/discover`
@@ -223,7 +113,7 @@ _No parameters_
 ### `nuget/list-sources`
 _No parameters_
 
-**Returns:** `List<NugetSourceResponse>`
+**Returns:** `IAsyncEnumerable<NugetSourceResponse>`
 
 ### `nuget/push`
 | Parameter | Type | Optional |
@@ -248,6 +138,116 @@ _No parameters_
 | sources | List<string> | ✅  |
 
 **Returns:** `Task<IAsyncEnumerable<NugetPackageMetadata>>`
+
+---
+
+## UserSecretsController
+
+### `user-secrets/init`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+
+**Returns:** `Task<ProjectUserSecretsInitResponse>`
+
+---
+
+## NetCoreDbgController
+
+### `debugger/start`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | DebuggerStartRequest |   |
+
+**Returns:** `Task<DebuggerStartResponse>`
+
+---
+
+## MsBuildController
+
+### `msbuild/add-project-reference`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+| targetPath | string |   |
+
+**Returns:** `Task<bool>`
+
+### `msbuild/build`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | BuildRequest |   |
+
+**Returns:** `Task<BuildResultResponse>`
+
+### `msbuild/list-project-reference`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+
+**Returns:** `Task<List<string>>`
+
+### `msbuild/project-properties`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | ProjectPropertiesRequest |   |
+
+**Returns:** `Task<DotnetProjectV1>`
+
+### `msbuild/remove-project-reference`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+| targetPath | string |   |
+
+**Returns:** `Task<bool>`
+
+---
+
+## LspController
+
+### `lsp/start`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| useRoslynator | bool | ✅  |
+| analyzerAssemblies | String[] | ✅  |
+
+**Returns:** `Task<LspStartResponse>`
+
+---
+
+## LaunchProfileController
+
+### `launch-profiles`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| targetPath | string |   |
+
+**Returns:** `IAsyncEnumerable<LaunchProfileResponse>`
+
+---
+
+## JsonCodeGen
+
+### `json-code-gen`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| jsonData | string |   |
+| filePath | string |   |
+| preferFileScopedNamespace | bool |   |
+
+**Returns:** `Task<BootstrapFileResultResponse>`
+
+---
+
+## InitializeController
+
+### `initialize`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | InitializeRequest |   |
+
+**Returns:** `Task<InitializeResponse>`
 
 ---
 

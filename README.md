@@ -29,7 +29,7 @@ This file includes:
 - Return types
 - The associated controller for each method
 
-You can regenerate this file at any time by running the server with the `--generate-rpc-docs` flag:
+You can regenerate this file at any time by running the server with the `generate-rpc-docs` command:
 
 ```bash
-dotnet run -- --generate-rpc-docs
+dotnet run generate-rpc-docs -- --format markdown

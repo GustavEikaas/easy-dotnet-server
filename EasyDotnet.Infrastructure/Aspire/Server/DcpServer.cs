@@ -16,6 +16,7 @@ public record EnvVar(string Name, string Value);
 public sealed class DcpServer : IAsyncDisposable
 {
   private readonly INetcoreDbgService _netcoreDbgService;
+  private readonly INotificationService _notificationService;
   private readonly ILogger<NetcoreDbgService> _logger;
   private readonly ILogger<DebuggerProxy> _debuggerProxyLogger;
   private readonly IClientService _clientService;
@@ -33,6 +34,7 @@ public sealed class DcpServer : IAsyncDisposable
 
   private DcpServer(
       INetcoreDbgService netcoreDbgService,
+      INotificationService notificationService,
       IClientService clientService,
       IMsBuildService msBuildService,
       string token,
@@ -43,6 +45,7 @@ public sealed class DcpServer : IAsyncDisposable
 )
   {
     _netcoreDbgService = netcoreDbgService;
+    _notificationService = notificationService;
     _msBuildService = msBuildService;
     _clientService = clientService;
     Token = token;
@@ -52,9 +55,10 @@ public sealed class DcpServer : IAsyncDisposable
     _logger = logger;
   }
 
-  public static async Task<DcpServer> CreateAsync(
+  public static Task<DcpServer> CreateAsync(
       ILogger<DcpServer> logger,
       INetcoreDbgService netcoreDbgService,
+      INotificationService notificationService,
       IMsBuildService msBuildService,
       IClientService clientService,
       ILogger<DebuggerProxy> debuggerProxyLogger,
@@ -70,36 +74,33 @@ public sealed class DcpServer : IAsyncDisposable
 
     listener.Start();
 
-    var server = new DcpServer(netcoreDbgService, clientService, msBuildService, token, listener, port, debuggerProxyLogger, logger2);
+    var server = new DcpServer(netcoreDbgService, notificationService, clientService, msBuildService, token, listener, port, debuggerProxyLogger, logger2);
     server.StartListening();
 
     logger.LogInformation("DCP server listening on port {Port}", port);
 
-    return server;
+    return Task.FromResult(server);
   }
 
-  private void StartListening()
-  {
-    _listenerTask = Task.Run(async () =>
-    {
-      while (!_cts.Token.IsCancellationRequested)
-      {
-        try
-        {
-          var context = await _listener.GetContextAsync();
-          _ = Task.Run(() => HandleRequestAsync(context), _cts.Token);
-        }
-        catch (HttpListenerException) when (_cts.Token.IsCancellationRequested)
-        {
-          break;
-        }
-        catch (Exception ex)
-        {
-          _logger.LogError(ex, "Error accepting HTTP request");
-        }
-      }
-    });
-  }
+  private void StartListening() => _listenerTask = Task.Run(async () =>
+                                    {
+                                      while (!_cts.Token.IsCancellationRequested)
+                                      {
+                                        try
+                                        {
+                                          var context = await _listener.GetContextAsync();
+                                          _ = Task.Run(() => HandleRequestAsync(context), _cts.Token);
+                                        }
+                                        catch (HttpListenerException) when (_cts.Token.IsCancellationRequested)
+                                        {
+                                          break;
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                          _logger.LogError(ex, "Error accepting HTTP request");
+                                        }
+                                      }
+                                    });
 
   private async Task HandleRequestAsync(HttpListenerContext context)
   {
@@ -248,7 +249,7 @@ public sealed class DcpServer : IAsyncDisposable
         throw new InvalidOperationException("DCP does not support non-debugging");
       }
 
-      var x = new NetcoreDbgService(_logger, _debuggerProxyLogger);
+      var x = new NetcoreDbgService(_logger, _debuggerProxyLogger, _notificationService);
       var envVars = BuildEnvironmentVariables(payload);
 
       var binaryPath = _clientService.ClientOptions!.DebuggerOptions!.BinaryPath!;

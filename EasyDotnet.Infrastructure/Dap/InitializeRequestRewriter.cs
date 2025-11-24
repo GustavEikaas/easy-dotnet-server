@@ -1,5 +1,5 @@
 using EasyDotnet.Domain.Models.LaunchProfile;
-using EasyDotnet.Domain.Models.MsBuild.Project;
+using EasyDotnet.MsBuild;
 
 namespace EasyDotnet.Infrastructure.Dap;
 
@@ -7,7 +7,7 @@ public static class InitializeRequestRewriter
 {
   public static Task<InterceptableAttachRequest> CreateInitRequestBasedOnProjectType(DotnetProject project, LaunchProfile? launchProfile, InterceptableAttachRequest request, string cwd, int seq, int? processId)
   {
-    if (project.IsTestProject && project.TestingPlatformDotnetTestSupport != true && processId is not null)
+    if (project.IsTestProject && !project.TestingPlatformDotnetTestSupport && processId is not null)
     {
       return CreateAttachRequestAsync(request, processId.Value, cwd);
     }

@@ -5,13 +5,13 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Domain.Models.LaunchProfile;
-using EasyDotnet.Domain.Models.MsBuild.Project;
 using EasyDotnet.Infrastructure.Dap;
+using EasyDotnet.MsBuild;
 using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Infrastructure.Services;
 
-public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<DebuggerProxy> debuggerProxyLogger) : INetcoreDbgService
+public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<DebuggerProxy> debuggerProxyLogger, INotificationService notificationService) : INetcoreDbgService
 {
   private static readonly JsonSerializerOptions SerializerOptions = new()
   {
@@ -105,8 +105,8 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
                 }
 
                 // logger.LogInformation(
-                    // "[TCP] setBreakpoints request: {message}",
-                    // JsonSerializer.Serialize(setBpReq, LoggingSerializerOptions));
+                // "[TCP] setBreakpoints request: {message}",
+                // JsonSerializer.Serialize(setBpReq, LoggingSerializerOptions));
 
                 return JsonSerializer.Serialize(setBpReq, SerializerOptions);
 
@@ -163,18 +163,25 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
           TriggerCleanup();
         };
 
-        _process.Start();
+        try
+        {
+          _process.Start();
+        }
+        catch (Exception e)
+        {
+          await notificationService.DisplayError($"Debugger failed to start: {e.Message}");
+        }
 
         var debuggerDap = new Dap.Debugger(_process.StandardInput.BaseStream, _process.StandardOutput.BaseStream, async (msg) =>
         {
           try
           {
-            return msg switch
+            return await (msg switch
             {
-              Response res => JsonSerializer.Serialize(res, SerializerOptions),// logger.LogInformation("[DBG] response: {message}", JsonSerializer.Serialize(res, LoggingSerializerOptions));
-              Event e => JsonSerializer.Serialize(e, SerializerOptions),// logger.LogInformation("[DBG] event: {message}", JsonSerializer.Serialize(e, LoggingSerializerOptions));
+              Response res => Task.FromResult(JsonSerializer.Serialize(res, SerializerOptions)),// logger.LogInformation("[DBG] response: {message}", JsonSerializer.Serialize(res, LoggingSerializerOptions));
+              Event e => Task.FromResult(JsonSerializer.Serialize(e, SerializerOptions)),// logger.LogInformation("[DBG] event: {message}", JsonSerializer.Serialize(e, LoggingSerializerOptions));
               _ => throw new Exception($"Unsupported DAP message from debugger: {msg}"),
-            };
+            });
           }
           catch (Exception)
           {
