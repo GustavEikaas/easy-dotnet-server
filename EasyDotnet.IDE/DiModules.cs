@@ -36,7 +36,7 @@ public static class DiModules
     services.AddMemoryCache();
     services.AddSingleton(jsonRpc);
     services.AddSingleton<IClientService, ClientService>();
-    services.AddSingleton<INetcoreDbgService, NetcoreDbgService>();
+    services.AddTransient<INetcoreDbgService, NetcoreDbgService>();
     services.AddSingleton<IVisualStudioLocator, VisualStudioLocator>();
     services.AddSingleton<IFileSystem, FileSystem>();
     services.AddSingleton<RoslynService>();
