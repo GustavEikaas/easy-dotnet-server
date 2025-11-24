@@ -24,9 +24,7 @@ public class NetCoreDbgController(IMsBuildService msBuildService, ILaunchProfile
   [JsonRpcMethod("debugger/start")]
   public async Task<DebuggerStartResponse> StartDebugger(DebuggerStartRequest request, CancellationToken cancellationToken)
   {
-
     var project = await msBuildService.GetOrSetProjectPropertiesAsync(request.TargetPath, request.TargetFramework, request.Configuration ?? "Debug", cancellationToken);
-
     var launchProfile = !string.IsNullOrEmpty(request.LaunchProfileName)
         ? (launchProfileService.GetLaunchProfiles(request.TargetPath)
            is { } profiles && profiles.TryGetValue(request.LaunchProfileName, out var profile)

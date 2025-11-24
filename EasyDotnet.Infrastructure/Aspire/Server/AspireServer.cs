@@ -33,9 +33,7 @@ public static class AspireServer
   {
     var dcpServer = await DcpServer.CreateAsync(dcpLogger, netcoreDbgService, notificationService, msBuildService, clientService, debuggerProxyLogger, logger2, cancellationToken);
     Console.WriteLine($"DCP server listening on port {dcpServer.Port}");
-
     StartAspireCliProcess(projectPath, dcpServer);
-
   }
 
   private static System.Diagnostics.Process StartAspireCliProcess(string projectPath, DcpServer dcpServer)
@@ -52,9 +50,6 @@ public static class AspireServer
 
     psi.Environment["DEBUG_SESSION_PORT"] = $"localhost:{dcpServer.Port}";
     psi.Environment["DEBUG_SESSION_TOKEN"] = dcpServer.Token;
-    // psi.Environment["DEBUG_SESSION_CERTIFICATE"] = dcpServer.CertificateBase64;
-
-    // env.DCP_INSTANCE_ID_PREFIX = debugSessionId + '-';
     psi.Environment["DEBUG_SESSION_RUN_MODE"] = "Debug";
     psi.Environment["ASPIRE_EXTENSION_DEBUG_RUN_MODE"] = "Debug";
     var cap = new[] { "project", "prompting", "baseline.v1", "secret-prompts.v1", "ms-dotnettools.csharp", "devkit", "ms-dotnettools.csdevkit" };
@@ -70,12 +65,50 @@ public static class AspireServer
     Console.WriteLine($"Starting Aspire CLI with DCP server at localhost:{dcpServer.Port}");
 
     var cliProcess = System.Diagnostics.Process.Start(psi) ?? throw new Exception("Failed to start Aspire CLI");
+    string? pendingUrl = null;
 
     cliProcess.OutputDataReceived += (_, e) =>
+    {
+      if (string.IsNullOrEmpty(e.Data))
+        return;
+
+      var line = e.Data;
+
+      if (pendingUrl == null)
       {
-        if (!string.IsNullOrEmpty(e.Data))
-          Console.WriteLine("[Aspire CLI] " + e.Data);
-      };
+        var idx = line.IndexOf("http", StringComparison.OrdinalIgnoreCase);
+        if (idx >= 0)
+        {
+          pendingUrl = line[idx..].Trim();
+        }
+      }
+      else
+      {
+        pendingUrl += line.Trim();
+      }
+
+      if (pendingUrl != null &&
+      Uri.TryCreate(pendingUrl, UriKind.Absolute, out var uri))
+      {
+        try
+        {
+          var psi = new ProcessStartInfo
+          {
+            FileName = uri.ToString(),
+            UseShellExecute = true
+          };
+          System.Diagnostics.Process.Start(psi);
+        }
+        catch (Exception ex)
+        {
+          Console.WriteLine("Failed to open browser: " + ex.Message);
+        }
+
+        pendingUrl = null;
+      }
+
+      Console.WriteLine("[Aspire CLI] " + line);
+    };
 
     cliProcess.ErrorDataReceived += (_, e) =>
         {
