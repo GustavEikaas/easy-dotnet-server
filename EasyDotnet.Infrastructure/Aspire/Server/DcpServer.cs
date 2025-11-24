@@ -26,7 +26,6 @@ public sealed class DcpServer : IAsyncDisposable
   private readonly Dictionary<string, Queue<object>> _pendingNotificationsByDcpId = [];
   private readonly CancellationTokenSource _cts = new();
   private readonly Dictionary<string, int> _debuggerSessionMap = [];
-  //Store a dictionary of runId -> debuggerSessionId
   private Task? _listenerTask;
 
   public int Port { get; }
@@ -272,7 +271,6 @@ public sealed class DcpServer : IAsyncDisposable
       var id = await _clientService.RequestStartDebugSession("127.0.0.1", port);
       _debuggerSessionMap.Add(runId, id);
 
-      // Send process restarted notification
       var pid = debug ? null : serviceProcess?.Id;
       await SendNotificationToDcpAsync(dcpId, new
       {
@@ -347,7 +345,6 @@ public sealed class DcpServer : IAsyncDisposable
 
     _webSocketsByDcpId[dcpId] = webSocket;
 
-    // Send any pending notifications
     if (_pendingNotificationsByDcpId.TryGetValue(dcpId, out var pendingQueue))
     {
       while (pendingQueue.Count > 0)
@@ -358,7 +355,6 @@ public sealed class DcpServer : IAsyncDisposable
       _pendingNotificationsByDcpId.Remove(dcpId);
     }
 
-    // Keep connection alive and handle pings (required by protocol 2024-04-23)
     var buffer = new byte[1024 * 4];
     while (webSocket.State == WebSocketState.Open && !_cts.Token.IsCancellationRequested)
     {
@@ -373,7 +369,6 @@ public sealed class DcpServer : IAsyncDisposable
         }
         else if (result.MessageType == WebSocketMessageType.Text)
         {
-          // Handle any messages from DCP if needed
           var message = Encoding.UTF8.GetString(buffer, 0, result.Count);
           _logger.LogDebug("Received WebSocket message from DCP: {Message}", message);
         }
@@ -417,8 +412,8 @@ public sealed class DcpServer : IAsyncDisposable
     {
       error = new
       {
-        code = code,
-        message = message,
+        code,
+        message,
         details = Array.Empty<object>()
       }
     };
@@ -477,18 +472,7 @@ public sealed class DcpServer : IAsyncDisposable
 
     _logger.LogInformation("Applying {Count} environment variables from payload", payload.Env.Length);
 
-    // Check for ASPNETCORE_URLS specifically
-    var aspnetcoreUrls = payload.Env.FirstOrDefault(e => e.Name.Equals("ASPNETCORE_URLS", StringComparison.OrdinalIgnoreCase));
-    if (aspnetcoreUrls != null)
-    {
-      _logger.LogCritical("!!! ASPNETCORE_URLS = {Value} !!!", aspnetcoreUrls.Value);
-    }
-    else
-    {
-      _logger.LogWarning("!!! ASPNETCORE_URLS not found in env vars !!!");
-    }
 
-    // Log all URL- or PORT-related env vars
     foreach (var envVar in payload.Env.Where(e =>
         e.Name.Contains("URL", StringComparison.OrdinalIgnoreCase) ||
         e.Name.Contains("PORT", StringComparison.OrdinalIgnoreCase)))
@@ -496,7 +480,6 @@ public sealed class DcpServer : IAsyncDisposable
       _logger.LogInformation("  {Name} = {Value}", envVar.Name, envVar.Value);
     }
 
-    // Populate dictionary
     foreach (var envVar in payload.Env)
     {
       if (string.IsNullOrWhiteSpace(envVar.Name))
@@ -539,7 +522,6 @@ public sealed class DcpServer : IAsyncDisposable
   }
 }
 
-// Supporting types matching the spec
 public class RunSession
 {
   public required string RunId { get; init; }
