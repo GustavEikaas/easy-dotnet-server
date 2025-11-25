@@ -134,11 +134,14 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
     var stderr = await proc.StandardError.ReadToEndAsync(cancellationToken);
 
     await proc.WaitForExitAsync(cancellationToken);
-
-    var output = string.IsNullOrWhiteSpace(stdout) ? stderr : stdout;
-
-    AnsiConsole.MarkupLine($"[green]Roslyn Version:[/] {output.Trim()}");
-
-    return 0;
+    if (proc.ExitCode == 0)
+    {
+      AnsiConsole.MarkupLine($"[green]Roslyn Version:[/] {stdout.Trim()}");
+    }
+    else
+    {
+      AnsiConsole.WriteException(new Exception(stderr));
+    }
+    return proc.ExitCode;
   }
 }
