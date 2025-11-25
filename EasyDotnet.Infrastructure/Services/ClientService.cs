@@ -11,6 +11,7 @@ public sealed record PromptConfirmRequest(string Prompt, bool DefaultValue);
 public sealed record PromptSelectionRequest(string Prompt, SelectionOption[] Choices, string? DefaultSelectionId);
 public sealed record PromptMultiSelectionRequest(string Prompt, SelectionOption[] Choices);
 public sealed record StartDebugSessionRequest(string Host, int Port);
+public sealed record TerminateDebugSessionRequest(int SessionId);
 
 public class ClientService(JsonRpc rpc) : IClientService
 {
@@ -32,21 +33,30 @@ public class ClientService(JsonRpc rpc) : IClientService
   public async Task<bool> RequestSetBreakpoint(string path, int lineNumber) => await rpc.InvokeWithParameterObjectAsync<bool>("setBreakpoint", new SetBreakpointRequest(path, lineNumber));
   public async Task<bool> RequestConfirmation(string prompt, bool defaultValue) => await rpc.InvokeWithParameterObjectAsync<bool>("promptConfirm", new PromptConfirmRequest(prompt, defaultValue));
   public async Task<string?> RequestString(string prompt, string? defaultValue) => await rpc.InvokeWithParameterObjectAsync<string?>("promptString", new PromptString(prompt, defaultValue));
+
   public async Task<SelectionOption?> RequestSelection(string prompt, SelectionOption[] choices, string? defaultSelectionId = null)
   {
     var request = new PromptSelectionRequest(prompt, choices, defaultSelectionId);
     var selectedId = await rpc.InvokeWithParameterObjectAsync<string?>("promptSelection", request);
     return selectedId == null ? null : choices.FirstOrDefault(option => option.Id == selectedId);
   }
+
   public async Task<SelectionOption[]?> RequestMultiSelection(string prompt, SelectionOption[] choices)
   {
     var request = new PromptMultiSelectionRequest(prompt, choices);
     var selectedIds = await rpc.InvokeWithParameterObjectAsync<string[]?>("promptMultiSelection", request);
     return selectedIds == null ? null : [.. choices.Where(option => selectedIds.Contains(option.Id))];
   }
+
   public async Task<int> RequestStartDebugSession(string host, int port)
   {
     var request = new StartDebugSessionRequest(host, port);
     return await rpc.InvokeWithParameterObjectAsync<int>("startDebugSession", request);
+  }
+
+  public async Task<bool> RequestTerminateDebugSession(int sessionId)
+  {
+    var request = new TerminateDebugSessionRequest(sessionId);
+    return await rpc.InvokeWithParameterObjectAsync<bool>("terminateDebugSession", request);
   }
 }
