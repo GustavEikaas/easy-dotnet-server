@@ -12,6 +12,7 @@ using EasyDotnet.Infrastructure.Aspire;
 using EasyDotnet.Infrastructure.Process;
 using EasyDotnet.Infrastructure.Services;
 using EasyDotnet.Services;
+using EasyDotnet.TestRunner.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog;
@@ -62,6 +63,8 @@ public static class DiModules
     services.AddSingleton<IDotNetRestoreService, DotNetRestoreService>();
     services.AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>();
     services.AddSingleton<INuGetPackageResolutionService, NuGetPackageResolutionService>();
+
+    services.AddTestRunner();
 
     AssemblyScanner.GetControllerTypes().ForEach(x => services.AddTransient(x));
 
