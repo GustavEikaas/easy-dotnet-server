@@ -19,6 +19,7 @@ public abstract record NodeType
   // TODO: can we add TestClass?
   // public sealed record TestClass : NodeType;
   public sealed record TestMethod : NodeType;
+  public sealed record TestGroup : NodeType;
   public sealed record Subcase : NodeType;
 }
 

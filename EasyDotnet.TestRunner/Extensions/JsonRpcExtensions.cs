@@ -18,6 +18,12 @@ public static class JsonRpcExtensions
       return new NoOpResponse();
     });
 
+    rpcServer.AddLocalRpcMethod("testrunner/discover", async (CancellationToken ct) =>
+    {
+      await runner.StartDiscoveryAsync(ct);
+      return new NoOpResponse();
+    });
+
     return rpcServer;
   }
 }

@@ -3,8 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using EasyDotnet.Application.Interfaces;
-using EasyDotnet.Types;
-using EasyDotnet.VSTest;
+using EasyDotnet.Domain.Models.Test;
 using Microsoft.Extensions.Logging;
 using Microsoft.TestPlatform.VsTestConsole.TranslationLayer;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel;
@@ -13,7 +12,8 @@ using Microsoft.VisualStudio.TestPlatform.ObjectModel.Logging;
 
 namespace EasyDotnet.Services;
 
-public class VsTestService(IMsBuildService msBuildService, ILogger<VsTestService> logService)
+
+public class VsTestService(IMsBuildService msBuildService, ILogger<VsTestService> logService) : IVsTestService
 {
   public List<DiscoveredTest> RunDiscover(string dllPath)
   {
@@ -173,7 +173,8 @@ public class PlaygroundTestDiscoveryHandler(ILogger<VsTestService> logger) : ITe
 
 internal sealed class TestRunHandler() : ITestRunEventsHandler
 {
-  public List<TestResult> Results = [];
+  public List<Microsoft.VisualStudio.TestPlatform.ObjectModel.TestResult> Results = [];
+
 
   public void HandleLogMessage(TestMessageLevel level, string? message) { }
 
@@ -189,4 +190,58 @@ internal sealed class TestRunHandler() : ITestRunEventsHandler
   }
 
   public int LaunchProcessWithDebuggerAttached(TestProcessStartInfo testProcessStartInfo) => throw new NotImplementedException();
+}
+
+
+internal class TestSessionHandler : ITestSessionEventsHandler
+{
+  public TestSessionInfo? TestSessionInfo { get; private set; }
+
+  public void HandleLogMessage(TestMessageLevel level, string? message) => throw new NotImplementedException();
+
+  public void HandleRawMessage(string rawMessage) { }
+  public void HandleStartTestSessionComplete(StartTestSessionCompleteEventArgs? eventArgs) => TestSessionInfo = eventArgs?.TestSessionInfo;
+  public void HandleStopTestSessionComplete(StopTestSessionCompleteEventArgs? eventArgs) { }
+}
+
+
+public static class TestCaseExtensions
+{
+  public static DiscoveredTest ToDiscoveredTest(this TestCase x)
+  {
+    var name = x.DisplayName.Contains('.') ? x.DisplayName : x.FullyQualifiedName;
+    return new()
+    {
+      Id = x.Id.ToString(),
+      Namespace = x.FullyQualifiedName,
+      Name = name,
+      FilePath = x.CodeFilePath?.Replace("\\", "/"),
+      LineNumber = x.LineNumber,
+      DisplayName = x.DisplayName
+    };
+  }
+
+
+  public static TestRunResult ToTestRunResult(this Microsoft.VisualStudio.TestPlatform.ObjectModel.TestResult x) => new()
+  {
+    Duration = (long?)x.Duration.TotalMilliseconds,
+    StackTrace = (x.ErrorStackTrace?.Split(Environment.NewLine) ?? []),
+    ErrorMessage = x.ErrorMessage?.Split(Environment.NewLine) ?? [],
+    Id = x.TestCase.Id.ToString(),
+    Outcome = GetTestOutcome(x.Outcome),
+    StdOut = (x.GetStandardOutput()?.Split(Environment.NewLine) ?? [])
+  };
+
+  public static string GetTestOutcome(TestOutcome outcome) => outcome switch
+  {
+    TestOutcome.None => "none",
+    TestOutcome.Passed => "passed",
+    TestOutcome.Failed => "failed",
+    TestOutcome.Skipped => "skipped",
+    TestOutcome.NotFound => "not found",
+    _ => "",
+  };
+
+  private static string? GetStandardOutput(this Microsoft.VisualStudio.TestPlatform.ObjectModel.TestResult testResult)
+    => testResult.Messages.FirstOrDefault(message => message.Category == TestResultMessage.StandardOutCategory)?.Text;
 }

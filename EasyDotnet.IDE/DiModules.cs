@@ -52,7 +52,7 @@ public static class DiModules
     services.AddTransient<ILaunchProfileService, LaunchProfileService>();
     services.AddTransient<INotificationService, NotificationService>();
     services.AddTransient<NugetService>();
-    services.AddTransient<VsTestService>();
+    services.AddTransient<IVsTestService, VsTestService>();
     services.AddTransient<MtpService>();
     services.AddTransient<OutdatedService>();
 

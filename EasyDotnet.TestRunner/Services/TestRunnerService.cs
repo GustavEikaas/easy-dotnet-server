@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Data;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.TestRunner.Models;
 using EasyDotnet.TestRunner.Notifications;
@@ -8,9 +9,10 @@ using StreamJsonRpc;
 namespace EasyDotnet.TestRunner.Services;
 
 
-public class TestRunnerService(JsonRpc jsonRpc, IMsBuildService msBuildService, ISolutionService solutionService) : ITestRunner
+public class TestRunnerService(JsonRpc jsonRpc, IMsBuildService msBuildService, ISolutionService solutionService, IVsTestService vsTestService) : ITestRunner
 {
   private TestNode? _solutionNode;
+  private readonly List<ProjectTfm> _projects = [];
   private readonly Dictionary<string, NodeRegistry> _projectTfmRegistries = [];
   private bool _isInitialized;
 
@@ -62,6 +64,7 @@ public class TestRunnerService(JsonRpc jsonRpc, IMsBuildService msBuildService, 
       _projectTfmRegistries[tfm.Id] = new NodeRegistry();
 
       var node = tfm.ToTestNode(_solutionNode.Id);
+      _projects.Add(tfm);
       OnRegisterTest(node);
     }
 
@@ -72,6 +75,135 @@ public class TestRunnerService(JsonRpc jsonRpc, IMsBuildService msBuildService, 
   public Task StartDiscoveryAsync(CancellationToken cancellationToken)
   {
     if (!_isInitialized) throw new InvalidOperationException("Testrunner has not been initialized");
+
+    //TODO: rebuild
+    //msbuild _projects.select(x => x.ProjectFilePath)
+
+    _projects.ToList().ForEach(async (val) =>
+    {
+      var project = await msBuildService.GetOrSetProjectPropertiesAsync(val.ProjectFilePath, val.TargetFramework, cancellationToken: cancellationToken);
+      var registry = _projectTfmRegistries[val.Id] ?? throw new InvalidOperationException($"No node registry found for {val.DisplayName}");
+      await OperationScopeAsync(registry, (tracker, ct) =>
+      {
+        tracker.UpdateStatus(val.ToTestNode(_solutionNode!.Id), new TestNodeStatus.Discovering());
+
+
+
+        if (project.TestingPlatformDotnetTestSupport)
+        {
+          // MTP
+        }
+        else
+        {
+
+          // TODO:
+          // if test.DisplayName.StartsWith(project.RootNamespace) strip it away
+          // collapse namespaces with only one child
+          // the last .xxx of the ns is the actual test name so we should drop that
+
+          foreach (var test in vsTestService.RunDiscover(project.TargetPath!))
+          {
+            var ns = test.Name ?? test.Namespace ?? "";
+            var parts = ns.Split('.', StringSplitOptions.RemoveEmptyEntries);
+
+            if (parts.Length == 0) continue;
+
+            var methodName = parts[^1];
+            var namespaceParts = parts[..^1];
+
+            // Start at project level
+            var parentId = val.Id;
+
+            // Build namespace hierarchy
+            var currentNamespace = "";
+            foreach (var part in namespaceParts)
+            {
+              currentNamespace = string.IsNullOrEmpty(currentNamespace)
+                  ? part
+                  : $"{currentNamespace}.{part}";
+
+              var nsNodeId = $"ns:{currentNamespace}";
+
+              if (!registry.TryGetNode(nsNodeId, out _))
+              {
+                var nsNode = new TestNode(
+                    nsNodeId,
+                    part,          // displayName
+                    parentId,      // parentId
+                    null,          // file path
+                    null,          // line
+                    new NodeType.Namespace()
+                );
+                tracker.RegisterNode(nsNode);
+              }
+
+              parentId = nsNodeId;
+            }
+
+
+            if (test.DisplayName.Contains('('))
+            {
+
+              var testGroupId = test.DisplayName.Split('(')[0];
+
+
+              if (!registry.TryGetNode(testGroupId, out _))
+              {
+                var testGroup = new TestNode(
+                  testGroupId,
+                  GetMethodName(test.DisplayName),
+                  parentId,
+                  test.FilePath,
+                  LineNumber: null,
+                  new NodeType.TestGroup()
+                );
+
+                tracker.RegisterNode(testGroup);
+              }
+
+              //TODO: need to make a parent with a deterministic id that all the sibling cases would also produce
+              var subCase = new TestNode(
+                  test.Id,
+                  GetArguments(test.DisplayName),
+                  testGroupId,
+                  test.FilePath,
+                  test.LineNumber,
+                  new NodeType.Subcase()
+              );
+
+              tracker.RegisterNode(subCase);
+            }
+            else
+            {
+              var testNode = new TestNode(
+                  test.Id,
+                  GetMethodName(test.DisplayName),
+                  parentId,
+                  test.FilePath,
+                  test.LineNumber,
+                  new NodeType.TestMethod()
+              );
+
+              tracker.RegisterNode(testNode);
+            }
+          }
+
+          // tests.ForEach(x =>
+          // {
+          //   var y = new TestNode(x.Id, x.DisplayName, val.Id, x.FilePath, x.LineNumber, new NodeType.TestMethod());
+          //   tracker.RegisterNode(y);
+          // });
+          // Vstest
+        }
+        //We push tests as they are discovered to the client, once the entire discovery is finished we can add aggregated data like "total tests"
+        // this can live under an optional field in testnode similiar to code_lens stuff totalTests, failedLastOp, passedLastOp, skippedLastOp, conclusion
+
+
+        return Task.CompletedTask;
+      }, cancellationToken);
+    });
+
+
     //immediately register a node that represents the solution testnode
     //start resolving the projects in the sln
     //one by one register the projects as testnodes
@@ -114,6 +246,31 @@ public class TestRunnerService(JsonRpc jsonRpc, IMsBuildService msBuildService, 
     }
   }
 
+  private static string GetMethodName(string raw)
+  {
+    if (string.IsNullOrEmpty(raw))
+      return raw;
+
+    var lastDot = raw.LastIndexOf('.');
+    var methodPart = lastDot >= 0 ? raw[(lastDot + 1)..] : raw;
+
+    var parenIdx = methodPart.IndexOf('(');
+    if (parenIdx > 0)
+      methodPart = methodPart[..parenIdx];
+
+    return methodPart;
+  }
+
+  private static string GetArguments(string raw)
+  {
+    var start = raw.IndexOf('(');
+    var end = raw.LastIndexOf(')');
+    if (start >= 0 && end > start)
+      return raw[start..(end + 1)];
+
+    return string.Empty;
+  }
+
   private void OnRegisterTest(TestNode testNode)
   {
     var _ = jsonRpc.NotifyWithParameterObjectAsync("registerTest", testNode);
@@ -133,7 +290,6 @@ public class TestRunnerService(JsonRpc jsonRpc, IMsBuildService msBuildService, 
     );
 
 }
-
 
 public class NodeRegistry
 {
