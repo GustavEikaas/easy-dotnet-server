@@ -3,10 +3,10 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using EasyDotnet.Domain.Models.Test;
 using EasyDotnet.Extensions;
 using EasyDotnet.MTP;
 using EasyDotnet.MTP.RPC;
-using EasyDotnet.Types;
 
 namespace EasyDotnet.Services;
 

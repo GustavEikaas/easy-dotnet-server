@@ -5,16 +5,16 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
-using EasyDotnet.IDE;
+using EasyDotnet.Controllers;
+using EasyDotnet.Domain.Models.Test;
 using EasyDotnet.MsBuild;
 using EasyDotnet.MTP;
 using EasyDotnet.Services;
-using EasyDotnet.Types;
 using StreamJsonRpc;
 
-namespace EasyDotnet.Controllers.Test;
+namespace EasyDotnet.IDE.Controllers.Test;
 
-public class TestController(IClientService clientService, MtpService mtpService, VsTestService vsTestService, IMsBuildService msBuildService) : BaseController
+public class TestController(IClientService clientService, MtpService mtpService, IVsTestService vsTestService, IMsBuildService msBuildService) : BaseController
 {
 
   [JsonRpcMethod("test/discover")]

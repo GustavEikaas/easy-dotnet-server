@@ -1,4 +1,4 @@
-namespace EasyDotnet.Types;
+namespace EasyDotnet.Domain.Models.Test;
 
 public sealed record DiscoveredTest
 {

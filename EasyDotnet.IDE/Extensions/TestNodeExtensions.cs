@@ -1,6 +1,6 @@
 using System;
+using EasyDotnet.Domain.Models.Test;
 using EasyDotnet.MTP.RPC.Models;
-using EasyDotnet.Types;
 using StreamJsonRpc;
 
 namespace EasyDotnet.Extensions;
@@ -28,7 +28,7 @@ public static class TestNodeExtensions
     Outcome = test.Node.ExecutionState,
     Duration = (long?)test.Node.Duration,
     ErrorMessage = test.Node.Message?.Split(Environment.NewLine) ?? [],
-    StackTrace = (test.Node.StackTrace?.Split(Environment.NewLine) ?? []).AsAsyncEnumerable(),
-    StdOut = (test.Node.StandardOutput?.Split(Environment.NewLine) ?? []).AsAsyncEnumerable()
+    StackTrace = (test.Node.StackTrace?.Split(Environment.NewLine) ?? []),
+    StdOut = (test.Node.StandardOutput?.Split(Environment.NewLine) ?? []),
   };
 }
