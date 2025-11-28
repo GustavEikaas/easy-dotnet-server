@@ -38,7 +38,7 @@ public class TestController(IClientService clientService, MtpService mtpService,
     }
     else
     {
-      return vsTestService.RunDiscover(project.TargetPath!).ToBatchedAsyncEnumerable(30);
+      return (await vsTestService.RunDiscover(project.TargetPath!)).ToBatchedAsyncEnumerable(30);
     }
   }
 
@@ -69,7 +69,7 @@ public class TestController(IClientService clientService, MtpService mtpService,
     }
     else
     {
-      return vsTestService.RunTests(project.TargetPath!, [.. filter.Select(x => Guid.Parse(x.Uid))]).ToBatchedAsyncEnumerable(30);
+      return (await vsTestService.RunTests(project.TargetPath!, [.. filter.Select(x => Guid.Parse(x.Uid))])).ToBatchedAsyncEnumerable(30);
     }
   }
 
