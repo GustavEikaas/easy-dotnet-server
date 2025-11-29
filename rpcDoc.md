@@ -1,26 +1,3 @@
-## TestController
-
-### `test/discover`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| projectPath | string |   |
-| targetFrameworkMoniker | string | ✅  |
-| configuration | string | ✅  |
-
-**Returns:** `Task<IAsyncEnumerable<DiscoveredTest>>`
-
-### `test/run`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| projectPath | string |   |
-| configuration | string |   |
-| filter | RunRequestNode[] |   |
-| targetFrameworkMoniker | string | ✅  |
-
-**Returns:** `Task<IAsyncEnumerable<TestRunResult>>`
-
----
-
 ## TemplateController
 
 ### `template/instantiate`
@@ -149,6 +126,29 @@ _No parameters_
 | projectPath | string |   |
 
 **Returns:** `Task<ProjectUserSecretsInitResponse>`
+
+---
+
+## TestController
+
+### `test/discover`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+| targetFrameworkMoniker | string | ✅  |
+| configuration | string | ✅  |
+
+**Returns:** `Task<IAsyncEnumerable<DiscoveredTest>>`
+
+### `test/run`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+| configuration | string |   |
+| filter | RunRequestNode[] |   |
+| targetFrameworkMoniker | string | ✅  |
+
+**Returns:** `Task<IAsyncEnumerable<TestRunResult>>`
 
 ---
 
