@@ -11,7 +11,7 @@ using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Infrastructure.Services;
 
-public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<DebuggerProxy> debuggerProxyLogger, INotificationService notificationService) : INetcoreDbgService
+public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<DebuggerProxy> debuggerProxyLogger, INotificationService notificationService, ListSimplifier listSimplifier) : INetcoreDbgService
 {
   private static readonly JsonSerializerOptions SerializerOptions = new()
   {
@@ -33,8 +33,8 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
   private TcpClient? _client;
   private (System.Diagnostics.Process, int)? _vsTestAttach;
   private Task? _disposeTask;
-  private int _clientSeq;
-  private int GetNextSequence() => Interlocked.Increment(ref _clientSeq);
+  private IDebuggerProxy? _proxy;
+
 
   public Task Completion => _completionSource.Task;
 
@@ -58,6 +58,7 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
     _listener.Start();
     var assignedPort = ((IPEndPoint)_listener.LocalEndpoint).Port;
     logger.LogInformation("Listening for client on port {port}.", assignedPort);
+
     _sessionTask = Task.Run(async () =>
     {
       try
@@ -77,11 +78,12 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
         }
 
         var tcpStream = _client.GetStream();
-        var clientDap = new Client(tcpStream, tcpStream, async (msg) =>
+
+        // Client message refiner
+        var clientDap = new Client(tcpStream, tcpStream, async (msg, proxy) =>
         {
           try
           {
-            msg.Seq = GetNextSequence();
             switch (msg)
             {
               case InterceptableAttachRequest attachReq:
@@ -100,19 +102,14 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
                 if (OperatingSystem.IsWindows())
                 {
                   logger.LogInformation("[TCP] Intercepted set breakpoints request: Normalizing path separators");
-                  setBpReq.Arguments.Source.Path =
-                      setBpReq.Arguments.Source.Path.Replace('/', '\\');
+                  setBpReq.Arguments.Source.Path = setBpReq.Arguments.Source.Path.Replace('/', '\\');
                 }
 
-                logger.LogInformation(
-                    "[TCP] setBreakpoints request: {message}",
-                    JsonSerializer.Serialize(setBpReq, LoggingSerializerOptions));
-
+                logger.LogInformation("[TCP] setBreakpoints request: {message}", JsonSerializer.Serialize(setBpReq, LoggingSerializerOptions));
                 return JsonSerializer.Serialize(setBpReq, SerializerOptions);
 
               case Request req:
                 logger.LogInformation("[TCP] request: {message}", JsonSerializer.Serialize(req, LoggingSerializerOptions));
-                Console.WriteLine($"Request command: {req.Command}");
                 return JsonSerializer.Serialize(req, SerializerOptions);
 
               default:
@@ -156,18 +153,30 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
           await notificationService.DisplayError($"Debugger failed to start: {e.Message}");
         }
 
-        var debuggerDap = new Dap.Debugger(_process.StandardInput.BaseStream, _process.StandardOutput.BaseStream, (msg) =>
+        // Debugger message refiner
+        var debuggerDap = new Dap.Debugger(_process.StandardInput.BaseStream, _process.StandardOutput.BaseStream, async (msg, proxy) =>
         {
           try
           {
             switch (msg)
             {
+              case VariablesResponse variablesRes:
+                logger.LogInformation("[DBG] variables response: {message}", JsonSerializer.Serialize(variablesRes, LoggingSerializerOptions));
+
+                await listSimplifier.SimplifyListVariablesInResponseAsync(variablesRes, proxy, CancellationToken.None);
+
+                var jsonToReturn = JsonSerializer.Serialize(variablesRes, SerializerOptions);
+                logger.LogInformation("About to return modified response");
+                return jsonToReturn;
+
               case Response res:
                 logger.LogInformation("[DBG] response: {message}", JsonSerializer.Serialize(res, LoggingSerializerOptions));
-                return Task.FromResult(JsonSerializer.Serialize(res, SerializerOptions));
+                return JsonSerializer.Serialize(res, SerializerOptions);
+
               case Event e:
                 logger.LogInformation("[DBG] event: {message}", JsonSerializer.Serialize(e, LoggingSerializerOptions));
-                return Task.FromResult(JsonSerializer.Serialize(e, SerializerOptions));
+                return JsonSerializer.Serialize(e, SerializerOptions);
+
               default:
                 throw new Exception($"Unsupported DAP message from debugger: {msg}");
             }
@@ -179,11 +188,11 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
           }
         });
 
-        var proxy = new DebuggerProxy(clientDap, debuggerDap, debuggerProxyLogger);
+        // Create and start the proxy with the new architecture
+        _proxy = new DebuggerProxy(clientDap, debuggerDap, debuggerProxyLogger);
+        _proxy.Start(_cancellationTokenSource.Token, TriggerCleanup);
 
-        proxy.Start(_cancellationTokenSource.Token, TriggerCleanup);
-
-        await proxy.Completion;
+        await _proxy.Completion;
 
         _completionSource.SetResult(true);
       }
@@ -227,7 +236,6 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
 
   public async ValueTask DisposeAsync()
   {
-    _clientSeq = 0;
     if (_cancellationTokenSource?.IsCancellationRequested == false)
     {
       _cancellationTokenSource.Cancel();
@@ -267,6 +275,7 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
 
     await _disposeTask;
   }
+
   private void SafeDisposeProcess(System.Diagnostics.Process? process, string processName)
   {
     if (process == null) return;

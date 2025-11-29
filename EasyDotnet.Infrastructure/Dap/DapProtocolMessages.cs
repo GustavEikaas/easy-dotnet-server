@@ -85,3 +85,27 @@ public class Source
   public required string Name { get; set; }
   public required string Path { get; set; }
 }
+
+public class VariablesResponse : Response
+{
+  public new VariablesResponseBody? Body { get; set; }
+}
+
+public class VariablesResponseBody
+{
+  public required List<Variable> Variables { get; set; }
+}
+
+public class Variable
+{
+  public required string Name { get; set; }
+  public required string Value { get; set; }
+  public required string Type { get; set; }
+  public string? EvaluateName { get; set; }
+  public int? VariablesReference { get; set; }
+  public int? NamedVariables { get; set; }
+  public int? IndexedVariables { get; set; }
+
+  [JsonExtensionData]
+  public Dictionary<string, JsonElement>? ExtraProperties { get; set; }
+}

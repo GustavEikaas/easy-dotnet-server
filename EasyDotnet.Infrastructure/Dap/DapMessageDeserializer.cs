@@ -23,7 +23,6 @@ public static class DapMessageDeserializer
     }
 
     var result = JsonSerializer.Deserialize<ProtocolMessage>(json, Options);
-
     return result is null ? throw new JsonException("Failed to deserialize JSON into ProtocolMessage.") : result;
   }
 
@@ -51,19 +50,30 @@ public static class DapMessageDeserializer
       };
     }
 
-    private static Response DeserializeResponse(JsonElement root, JsonSerializerOptions options) => JsonSerializer.Deserialize<Response>(root.GetRawText(), options)!;
+    private static Response DeserializeResponse(JsonElement root, JsonSerializerOptions options)
+    {
+      if (root.TryGetProperty("command", out var cmdProp))
+      {
+        var cmd = cmdProp.GetString();
+        switch (cmd?.ToLowerInvariant())
+        {
+          case "variables":
+            return JsonSerializer.Deserialize<VariablesResponse>(root.GetRawText(), options)!;
+        }
+      }
+
+      return JsonSerializer.Deserialize<Response>(root.GetRawText(), options)!;
+    }
 
     private static ProtocolMessage DeserializeRequest(JsonElement root, JsonSerializerOptions options)
     {
       if (root.TryGetProperty("command", out var cmdProp))
       {
         var cmd = cmdProp.GetString();
-
         switch (cmd?.ToLowerInvariant())
         {
           case "attach":
             return JsonSerializer.Deserialize<InterceptableAttachRequest>(root.GetRawText(), options)!;
-
           case "setbreakpoints":
             return JsonSerializer.Deserialize<SetBreakpointsRequest>(root.GetRawText(), options)!;
         }
