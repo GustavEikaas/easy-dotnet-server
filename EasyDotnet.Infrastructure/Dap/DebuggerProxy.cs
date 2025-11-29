@@ -11,6 +11,7 @@ public interface IDebuggerProxy
   Task Completion { get; }
   void Start(CancellationToken cancellationToken, Action? onDisconnect = null);
   Task<Response> RunInternalRequestAsync(Request request, CancellationToken cancellationToken);
+  Task<VariablesResponse?> GetVariablesAsync(int variablesReference, CancellationToken cancellationToken);
 }
 
 public class DebuggerProxy : IDebuggerProxy
@@ -19,7 +20,7 @@ public class DebuggerProxy : IDebuggerProxy
   private readonly Debugger _debugger;
   private readonly IMessageChannels _channels;
   private readonly IRequestTracker _requestTracker;
-  private readonly IMessageProcessor _messageProcessor;
+  private readonly MessageProcessor _messageProcessor;
   private readonly ILogger<DebuggerProxy>? _logger;
   private readonly TaskCompletionSource<bool> _completionSource = new();
 
@@ -44,7 +45,6 @@ public class DebuggerProxy : IDebuggerProxy
   {
   }
 
-  // Constructor for testing with injected dependencies
   public DebuggerProxy(
     Client client,
     Debugger debugger,
@@ -61,7 +61,7 @@ public class DebuggerProxy : IDebuggerProxy
     _messageProcessor = new MessageProcessor(
       _channels,
       _requestTracker,
-      this, // Pass proxy instance to processor
+      this,
       _client.MessageRefiner,
       _debugger.MessageRefiner,
       logger != null ? new LoggerFactory().CreateLogger<MessageProcessor>() : null
@@ -122,19 +122,35 @@ public class DebuggerProxy : IDebuggerProxy
   {
     var tcs = new TaskCompletionSource<Response>();
 
-    // Register the internal request and get proxy seq
     var proxySeq = _requestTracker.RegisterProxyRequest(tcs, cancellationToken);
     request.Seq = proxySeq;
 
     _logger?.LogDebug("Proxy internal request seq {proxySeq}, command: {command}", proxySeq, request.Command);
 
-    // Serialize and send to debugger
     var json = JsonSerializer.Serialize(request, SerializerOptions);
     await _channels.ProxyToDebuggerWriter.WriteAsync(json, cancellationToken);
 
-    // Wait for response with cancellation support
     using var registration = cancellationToken.Register(() => tcs.TrySetCanceled(cancellationToken));
     return await tcs.Task;
+  }
+
+  public async Task<VariablesResponse?> GetVariablesAsync(
+    int variablesReference,
+    CancellationToken cancellationToken)
+  {
+    var request = new Request
+    {
+      Seq = 0,
+      Type = "request",
+      Command = "variables",
+      Arguments = JsonSerializer.SerializeToElement(new
+      {
+        variablesReference
+      }, SerializerOptions)
+    };
+
+    var response = await RunInternalRequestAsync(request, cancellationToken);
+    return response as VariablesResponse;
   }
 
   private async Task StartClientReaderAsync(CancellationToken cancellationToken, Action? onDisconnect)

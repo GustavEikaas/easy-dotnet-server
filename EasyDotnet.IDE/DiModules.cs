@@ -9,6 +9,7 @@ using EasyDotnet.Application.Interfaces;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.Utils;
 using EasyDotnet.Infrastructure.Aspire;
+using EasyDotnet.Infrastructure.Dap;
 using EasyDotnet.Infrastructure.Process;
 using EasyDotnet.Infrastructure.Services;
 using EasyDotnet.Services;
@@ -44,7 +45,7 @@ public static class DiModules
     services.AddSingleton<IProcessQueue, ProcessQueue>();
     services.AddSingleton<TemplateEngineService>();
 
-    services.AddTransient<ListSimplifier>();
+    services.AddTransient<ValueConverterService>();
     services.AddTransient<IMsBuildService, MsBuildService>();
     services.AddTransient<IAspireService, AspireService>();
     services.AddTransient<IJsonCodeGenService, JsonCodeGenService>();

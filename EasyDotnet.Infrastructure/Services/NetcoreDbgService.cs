@@ -11,7 +11,7 @@ using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Infrastructure.Services;
 
-public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<DebuggerProxy> debuggerProxyLogger, INotificationService notificationService, ListSimplifier listSimplifier) : INetcoreDbgService
+public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<DebuggerProxy> debuggerProxyLogger, INotificationService notificationService, ValueConverterService valueConverterService) : INetcoreDbgService
 {
   private static readonly JsonSerializerOptions SerializerOptions = new()
   {
@@ -153,7 +153,6 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
           await notificationService.DisplayError($"Debugger failed to start: {e.Message}");
         }
 
-        // Debugger message refiner
         var debuggerDap = new Dap.Debugger(_process.StandardInput.BaseStream, _process.StandardOutput.BaseStream, async (msg, proxy) =>
         {
           try
@@ -163,11 +162,9 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
               case VariablesResponse variablesRes:
                 logger.LogInformation("[DBG] variables response: {message}", JsonSerializer.Serialize(variablesRes, LoggingSerializerOptions));
 
-                await listSimplifier.SimplifyListVariablesInResponseAsync(variablesRes, proxy, CancellationToken.None);
+                await valueConverterService.TryConvertAsync(variablesRes, proxy, CancellationToken.None);
 
-                var jsonToReturn = JsonSerializer.Serialize(variablesRes, SerializerOptions);
-                logger.LogInformation("About to return modified response");
-                return jsonToReturn;
+                return JsonSerializer.Serialize(variablesRes, SerializerOptions);
 
               case Response res:
                 logger.LogInformation("[DBG] response: {message}", JsonSerializer.Serialize(res, LoggingSerializerOptions));
