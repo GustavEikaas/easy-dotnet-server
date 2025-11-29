@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Types;
 using EasyDotnet.VSTest;
@@ -11,25 +13,46 @@ using Microsoft.VisualStudio.TestPlatform.ObjectModel;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Client;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Logging;
 
-namespace EasyDotnet.Services;
+namespace EasyDotnet.IDE.Services;
 
 public class VsTestService(IMsBuildService msBuildService, ILogger<VsTestService> logService)
 {
-  public List<DiscoveredTest> RunDiscover(string dllPath)
+  private readonly TimeSpan _queueTimeout = TimeSpan.FromMinutes(5);
+  private readonly SemaphoreSlim _vstestLock = new(1, 1);
+
+  public async Task<List<DiscoveredTest>> RunDiscover(string dllPath, CancellationToken cancellationToken)
   {
-    var vsTestPath = GetVsTestPath();
-    logService.LogInformation("Using VSTest path: {vsTestPath}", vsTestPath);
-    var discoveredTests = Discover(vsTestPath, [dllPath]);
-    discoveredTests.TryGetValue(Path.GetFileName(dllPath), out var tests);
-    return tests ?? [];
+    await _vstestLock.WaitAsync(_queueTimeout, cancellationToken);
+    try
+    {
+
+      var vsTestPath = GetVsTestPath();
+      logService.LogInformation("Using VSTest path: {vsTestPath}", vsTestPath);
+      var discoveredTests = Discover(vsTestPath, [dllPath]);
+      discoveredTests.TryGetValue(Path.GetFileName(dllPath), out var tests);
+      return tests ?? [];
+    }
+    finally
+    {
+      _vstestLock.Release();
+    }
   }
 
-  public List<TestRunResult> RunTests(string dllPath, Guid[] testIds)
+  public async Task<List<TestRunResult>> RunTests(string dllPath, Guid[] testIds, CancellationToken cancellationToken)
   {
-    var vsTestPath = GetVsTestPath();
-    logService.LogInformation("Using VSTest path: {vsTestPath}", vsTestPath);
-    var testResults = RunTests(vsTestPath, dllPath, testIds);
-    return testResults;
+
+    await _vstestLock.WaitAsync(_queueTimeout, cancellationToken);
+    try
+    {
+      var vsTestPath = GetVsTestPath();
+      logService.LogInformation("Using VSTest path: {vsTestPath}", vsTestPath);
+      return RunTests(vsTestPath, dllPath, testIds);
+
+    }
+    finally
+    {
+      _vstestLock.Release();
+    }
   }
 
   private string GetVsTestPath()

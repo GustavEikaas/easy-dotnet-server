@@ -5,14 +5,15 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
-using EasyDotnet.IDE;
+using EasyDotnet.Controllers;
+using EasyDotnet.IDE.Services;
 using EasyDotnet.MsBuild;
 using EasyDotnet.MTP;
 using EasyDotnet.Services;
 using EasyDotnet.Types;
 using StreamJsonRpc;
 
-namespace EasyDotnet.Controllers.Test;
+namespace EasyDotnet.IDE.Controllers.Test;
 
 public class TestController(IClientService clientService, MtpService mtpService, VsTestService vsTestService, IMsBuildService msBuildService) : BaseController
 {
@@ -38,7 +39,7 @@ public class TestController(IClientService clientService, MtpService mtpService,
     }
     else
     {
-      return vsTestService.RunDiscover(project.TargetPath!).ToBatchedAsyncEnumerable(30);
+      return (await vsTestService.RunDiscover(project.TargetPath!, token)).ToBatchedAsyncEnumerable(30);
     }
   }
 
@@ -69,7 +70,7 @@ public class TestController(IClientService clientService, MtpService mtpService,
     }
     else
     {
-      return vsTestService.RunTests(project.TargetPath!, [.. filter.Select(x => Guid.Parse(x.Uid))]).ToBatchedAsyncEnumerable(30);
+      return (await vsTestService.RunTests(project.TargetPath!, [.. filter.Select(x => Guid.Parse(x.Uid))], token)).ToBatchedAsyncEnumerable(30);
     }
   }
 
