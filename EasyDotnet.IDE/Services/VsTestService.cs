@@ -70,7 +70,6 @@ public class VsTestService(IMsBuildService msBuildService, ILogger<VsTestService
     };
 
     var runner = new VsTestConsoleWrapper(vsTestConsolePath);
-    runner.StartSession();
     var sessionHandler = new TestSessionHandler();
     var discoveryHandler = new PlaygroundTestDiscoveryHandler(logService);
     runner.DiscoverTests(testDllPath, null, options, sessionHandler.TestSessionInfo, discoveryHandler);
