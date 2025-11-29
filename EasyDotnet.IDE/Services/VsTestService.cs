@@ -13,16 +13,16 @@ using Microsoft.VisualStudio.TestPlatform.ObjectModel;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Client;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Logging;
 
-namespace EasyDotnet.Services;
-
-// add simple semaphore slim queue with singleton
+namespace EasyDotnet.IDE.Services;
 
 public class VsTestService(IMsBuildService msBuildService, ILogger<VsTestService> logService)
 {
+  private readonly TimeSpan _queueTimeout = TimeSpan.FromMinutes(5);
   private readonly SemaphoreSlim _vstestLock = new(1, 1);
-  public async Task<List<DiscoveredTest>> RunDiscover(string dllPath)
+
+  public async Task<List<DiscoveredTest>> RunDiscover(string dllPath, CancellationToken cancellationToken)
   {
-    await _vstestLock.WaitAsync();
+    await _vstestLock.WaitAsync(_queueTimeout, cancellationToken);
     try
     {
 
@@ -38,10 +38,10 @@ public class VsTestService(IMsBuildService msBuildService, ILogger<VsTestService
     }
   }
 
-  public async Task<List<TestRunResult>> RunTests(string dllPath, Guid[] testIds)
+  public async Task<List<TestRunResult>> RunTests(string dllPath, Guid[] testIds, CancellationToken cancellationToken)
   {
 
-    await _vstestLock.WaitAsync();
+    await _vstestLock.WaitAsync(_queueTimeout, cancellationToken);
     try
     {
       var vsTestPath = GetVsTestPath();
