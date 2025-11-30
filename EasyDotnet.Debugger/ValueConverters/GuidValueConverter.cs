@@ -48,6 +48,8 @@ public class GuidValueConverter() : IValueConverter
     var j = GetByte("_j");
     var k = GetByte("_k");
 
+    //TOOD: if all of them are 0 just return "null", possibly need a better way to tell if a var is null
+
     var guid = new Guid(a, b, c, d, e, f, g, h, i, j, k);
 
     val.VariablesReference = 0;

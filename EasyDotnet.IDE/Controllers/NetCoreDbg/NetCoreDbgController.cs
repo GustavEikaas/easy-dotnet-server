@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
@@ -48,7 +47,7 @@ public class NetCoreDbgController(
 
     var res = StartVsTestIfApplicable(project, request.TargetPath);
 
-    var port = await netcoreDbgService.Start(binaryPath, async (request) => await InitializeRequestRewriter.CreateInitRequestBasedOnProjectType(project, launchProfile, request, project.ProjectDir!, res?.Item2), () =>
+    var port = await netcoreDbgService.Start(binaryPath, async (request) => await InitializeRequestRewriter.CreateInitRequestBasedOnProjectType(project, launchProfile, request, project.ProjectDir!, res?.Item2), clientService?.ClientOptions?.DebuggerOptions?.ApplyValueConverters ?? false, () =>
     {
       if (res is { } value)
       {

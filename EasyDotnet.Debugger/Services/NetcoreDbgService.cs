@@ -38,6 +38,7 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
   public async Task<int> Start(
     string binaryPath,
     Func<InterceptableAttachRequest, Task<InterceptableAttachRequest>> rewriter,
+    bool applyValueConverters,
     Action OnDispose)
   {
     if (_disposeTask != null)
@@ -155,7 +156,10 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
               case VariablesResponse variablesRes:
                 logger.LogInformation("[DBG] variables response: {message}", JsonSerializer.Serialize(variablesRes, LoggingSerializerOptions));
 
-                await valueConverterService.TryConvertAsync(variablesRes, proxy, CancellationToken.None);
+                if (applyValueConverters)
+                {
+                  await valueConverterService.TryConvertAsync(variablesRes, proxy, CancellationToken.None);
+                }
 
                 return JsonSerializer.Serialize(variablesRes, SerializerOptions);
 
