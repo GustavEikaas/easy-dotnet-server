@@ -1,6 +1,6 @@
 using System.Text;
 using System.Text.Json;
-using EasyDotnet.Infrastructure.Dap;
+using EasyDotnet.Debugger.Messages;
 using Nerdbank.Streams;
 
 namespace EasyDotnet.Infrastructure.Tests.Dap;

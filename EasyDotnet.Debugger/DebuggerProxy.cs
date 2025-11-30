@@ -1,7 +1,8 @@
 using System.Text.Json;
+using EasyDotnet.Debugger.Messages;
 using Microsoft.Extensions.Logging;
 
-namespace EasyDotnet.Infrastructure.Dap;
+namespace EasyDotnet.Debugger;
 
 public record Client(Stream Input, Stream Output, Func<ProtocolMessage, IDebuggerProxy, Task<string>>? MessageRefiner);
 public record Debugger(Stream Input, Stream Output, Func<ProtocolMessage, IDebuggerProxy, Task<string>>? MessageRefiner);

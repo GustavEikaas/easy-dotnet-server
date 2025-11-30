@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
+using EasyDotnet.Debugger.Messages;
 
-namespace EasyDotnet.Infrastructure.Dap;
+namespace EasyDotnet.Debugger;
 
 public enum RequestOrigin
 {

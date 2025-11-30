@@ -1,6 +1,6 @@
 using System.Threading.Channels;
 
-namespace EasyDotnet.Infrastructure.Dap;
+namespace EasyDotnet.Debugger.Messages;
 
 public interface IMessageChannels
 {

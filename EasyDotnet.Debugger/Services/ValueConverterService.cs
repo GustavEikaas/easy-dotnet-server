@@ -1,7 +1,8 @@
-using EasyDotnet.Infrastructure.Dap.ValueConverters;
+using EasyDotnet.Debugger.Messages;
+using EasyDotnet.Debugger.ValueConverters;
 using Microsoft.Extensions.Logging;
 
-namespace EasyDotnet.Infrastructure.Dap;
+namespace EasyDotnet.Debugger.Services;
 
 /// <summary>
 /// Interface for converting debugger variable representations to more user-friendly formats.

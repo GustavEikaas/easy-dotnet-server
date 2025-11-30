@@ -1,4 +1,7 @@
-namespace EasyDotnet.Infrastructure.Dap.ValueConverters;
+using EasyDotnet.Debugger.Messages;
+using EasyDotnet.Debugger.Services;
+
+namespace EasyDotnet.Debugger.ValueConverters;
 
 public class GuidValueConverter() : IValueConverter
 {

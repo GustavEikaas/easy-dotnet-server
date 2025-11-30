@@ -1,7 +1,8 @@
-
+using EasyDotnet.Debugger.Messages;
+using EasyDotnet.Debugger.Services;
 using Microsoft.Extensions.Logging;
 
-namespace EasyDotnet.Infrastructure.Dap.ValueConverters;
+namespace EasyDotnet.Debugger.ValueConverters;
 
 public class ListValueConverter(ILogger<IValueConverter> logger) : IValueConverter
 {
