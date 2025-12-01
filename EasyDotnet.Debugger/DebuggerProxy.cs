@@ -14,6 +14,7 @@ public interface IDebuggerProxy
   Task<Response> RunInternalRequestAsync(Request request, CancellationToken cancellationToken);
   Task<VariablesResponse?> GetVariablesAsync(int variablesReference, CancellationToken cancellationToken);
   Task WriteProxyToClientAsync(string json, CancellationToken cancellationToken);
+  RequestContext? GetAndRemoveContext(int proxySeq);
 }
 
 public class DebuggerProxy : IDebuggerProxy
@@ -120,7 +121,10 @@ public class DebuggerProxy : IDebuggerProxy
     }, cancellationToken);
   }
 
-  public async Task WriteProxyToClientAsync(string json, CancellationToken cancellationToken) => await DapMessageWriter.WriteDapMessageAsync(json, _client.Input, cancellationToken);
+  public async Task WriteProxyToClientAsync(string json, CancellationToken cancellationToken)
+    => await _channels.ProxyToClientWriter.WriteAsync(json, cancellationToken);
+
+  public RequestContext? GetAndRemoveContext(int proxySeq) => _requestTracker.GetAndRemoveContext(proxySeq);
 
   public async Task<Response> RunInternalRequestAsync(Request request, CancellationToken cancellationToken)
   {

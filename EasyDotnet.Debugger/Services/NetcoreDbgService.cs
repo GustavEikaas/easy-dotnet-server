@@ -98,7 +98,9 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
                   if (converter is not null)
                   {
                     var result = await converter.TryConvertAsync(varRequest.Arguments.VariablesReference, proxy, CancellationToken.None);
-                    await proxy.WriteProxyToClientAsync(JsonSerializer.Serialize(result), CancellationToken.None);
+                    var x = proxy.GetAndRemoveContext(varRequest.Seq) ?? throw new Exception("Proxy request not found");
+                    result.RequestSeq = x.OriginalSeq;
+                    await proxy.WriteProxyToClientAsync(JsonSerializer.Serialize(result, SerializerOptions), CancellationToken.None);
                     return null;
                   }
                 }

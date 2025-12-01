@@ -14,6 +14,7 @@ public partial class ListValueConverter() : IValueConverter
   {
     var internals = await proxy.GetVariablesAsync(id, cancellationToken) ?? throw new Exception($"variables request for {id} returned null");
     var itemsVariable = internals.Body!.Variables.FirstOrDefault(v => v.Name == "_items");
+    var x = itemsVariable?.GetType();
     var sizeVariable = internals.Body!.Variables.FirstOrDefault(v => v.Name == "_size");
 
     if (itemsVariable?.VariablesReference.HasValue != true ||
@@ -22,7 +23,7 @@ public partial class ListValueConverter() : IValueConverter
       return internals;
     }
 
-    if (!int.TryParse(sizeVariable!.Value, out var actualSize))
+    if (sizeVariable == null || !int.TryParse(sizeVariable.Value, out var actualSize))
     {
       return internals;
     }
@@ -48,6 +49,6 @@ public partial class ListValueConverter() : IValueConverter
     return int.TryParse(trimmed, out var index) ? index : -1;
   }
 
-  [GeneratedRegex(@"^System\.Collections\.Generic\.List`1(<.*>)?$", RegexOptions.Compiled)]
+  [GeneratedRegex(@"^System\.Collections\.Generic\.List<.*>$", RegexOptions.Compiled)]
   private static partial Regex AnyList();
 }
