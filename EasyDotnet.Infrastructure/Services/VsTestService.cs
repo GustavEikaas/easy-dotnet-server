@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading.Channels;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Domain.Models.Test;
 using Microsoft.Extensions.Logging;
@@ -10,26 +12,95 @@ using Microsoft.VisualStudio.TestPlatform.ObjectModel;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Client;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Logging;
 
-namespace EasyDotnet.Services;
+namespace EasyDotnet.Infrastructure.Services;
 
 
-public class VsTestService(IMsBuildService msBuildService, ILogger<VsTestService> logService) : IVsTestService
+internal sealed class VsTestOperationQueue
 {
-  public List<DiscoveredTest> RunDiscover(string dllPath)
+  private readonly SemaphoreSlim _lock = new(1, 1);
+
+  public async Task<T> Enqueue<T>(Func<Task<T>> operation)
   {
-    var vsTestPath = GetVsTestPath();
-    logService.LogInformation("Using VSTest path: {vsTestPath}", vsTestPath);
-    var discoveredTests = Discover(vsTestPath, [dllPath]);
-    discoveredTests.TryGetValue(Path.GetFileName(dllPath), out var tests);
-    return tests ?? [];
+    await _lock.WaitAsync();
+    try
+    {
+      return await operation();
+    }
+    finally
+    {
+      _lock.Release();
+    }
   }
+
+  public async Task Enqueue(Func<Task> operation)
+  {
+    await _lock.WaitAsync();
+    try
+    {
+      await operation();
+    }
+    finally
+    {
+      _lock.Release();
+    }
+  }
+}
+
+
+
+public class VsTestService(IMsBuildService msBuildService, ILogger<VsTestService> logger) : IVsTestService
+{
+  private readonly VsTestOperationQueue _queue = new();
+
+  public IAsyncEnumerable<DiscoveredTest> DiscoverAsync(string[] dllPaths, CancellationToken ct)
+          => RunQueuedDiscovery(dllPaths, ct);
+
+
+  private async IAsyncEnumerable<DiscoveredTest> RunQueuedDiscovery(
+      string[] dllPaths,
+      [EnumeratorCancellation] CancellationToken ct)
+  {
+    var channel = Channel.CreateUnbounded<DiscoveredTest>();
+
+    var jobCompletion = new TaskCompletionSource();
+
+    await _queue.Enqueue(() =>
+    {
+      try
+      {
+        var vsTestPath = GetVsTestPath();
+        var wrapper = new VsTestConsoleWrapper(vsTestPath);
+        var session = new TestSessionHandler();
+        var handler = new StreamedDiscoveryHandler(channel, logger);
+
+        wrapper.DiscoverTests(dllPaths, null, new TestPlatformOptions(), session.TestSessionInfo, handler);
+        return Task.CompletedTask;
+      }
+      catch (Exception ex)
+      {
+        jobCompletion.SetException(ex);
+        throw;
+      }
+      finally
+      {
+        channel.Writer.TryComplete();
+        jobCompletion.TrySetResult();
+      }
+    });
+
+    await foreach (var item in channel.Reader.ReadAllAsync(ct))
+    {
+      yield return item;
+    }
+  }
+
 
   public List<TestRunResult> RunTests(string dllPath, Guid[] testIds)
   {
     var vsTestPath = GetVsTestPath();
-    logService.LogInformation("Using VSTest path: {vsTestPath}", vsTestPath);
-    var testResults = RunTests(vsTestPath, dllPath, testIds);
-    return testResults;
+    logger.LogInformation("Using VSTest path: {vsTestPath}", vsTestPath);
+    throw new NotImplementedException();
+    // return testResults;
   }
 
   private string GetVsTestPath()
@@ -37,143 +108,44 @@ public class VsTestService(IMsBuildService msBuildService, ILogger<VsTestService
     var sdk = msBuildService.QuerySdkInstallations();
     return Path.Join(sdk.ToList()[0].MSBuildPath, "vstest.console.dll");
   }
-
-  private Dictionary<string, List<DiscoveredTest>> Discover(string vsTestConsolePath, string[] testDllPath)
-  {
-    var options = new TestPlatformOptions
-    {
-      CollectMetrics = false,
-      SkipDefaultAdapters = false
-    };
-
-    var runner = new VsTestConsoleWrapper(vsTestConsolePath);
-    var sessionHandler = new TestSessionHandler();
-    var discoveryHandler = new PlaygroundTestDiscoveryHandler(logService);
-    runner.DiscoverTests(testDllPath, null, options, sessionHandler.TestSessionInfo, discoveryHandler);
-
-    return discoveryHandler.TestCases.GroupBy(x => Path.GetFileName(x.Source)).ToDictionary(x => x.Key, y => y.Select(x => x.ToDiscoveredTest()).ToList());
-  }
-
-  private List<TestRunResult> RunTests(string vsTestPath, string dllPath, Guid[] testIds)
-  {
-    var options = new TestPlatformOptions
-    {
-      CollectMetrics = false,
-      SkipDefaultAdapters = false
-    };
-
-    var discoveryHandler = new PlaygroundTestDiscoveryHandler(logService);
-    var testHost = new VsTestConsoleWrapper(vsTestPath);
-    var sessionHandler = new TestSessionHandler();
-    var handler = new TestRunHandler();
-
-    //TODO: Caching mechanism to prevent rediscovery on each run request.
-    //Alternative check for overloads of RunTests that support both dllPath and testIds
-    testHost.DiscoverTests([dllPath], null, options, sessionHandler.TestSessionInfo, discoveryHandler);
-    var runTests = discoveryHandler.TestCases.Where(x => testIds.Contains(x.Id));
-    testHost.RunTests(runTests, null, options, sessionHandler.TestSessionInfo, handler);
-
-    return [.. handler.Results.Select(x => x.ToTestRunResult())];
-  }
 }
 
-public class PlaygroundTestDiscoveryHandler(ILogger<VsTestService> logger) : ITestDiscoveryEventsHandler, ITestDiscoveryEventsHandler2
+public sealed class StreamedDiscoveryHandler(Channel<DiscoveredTest> channel, ILogger log) :
+    ITestDiscoveryEventsHandler, ITestDiscoveryEventsHandler2
 {
-  public List<TestCase> TestCases { get; internal set; } = [];
-
   public void HandleDiscoveredTests(IEnumerable<TestCase>? discoveredTestCases)
   {
-    if (discoveredTestCases == null)
-      return;
-
-
-    logger.LogInformation("HandleDiscoveredTests called with {count} test cases.", discoveredTestCases.Count());
+    if (discoveredTestCases == null) return;
 
     foreach (var tc in discoveredTestCases)
     {
-      logger.LogInformation(
-          "  [+] Discovered test: {name} ({id}) in {source}",
-          tc.DisplayName, tc.Id, tc.Source);
-      TestCases.Add(tc);
+      log.LogInformation("[+] Discovered {name}", tc.DisplayName);
+      channel.Writer.TryWrite(tc.ToDiscoveredTest());
     }
-
   }
 
-  public void HandleDiscoveryComplete(long totalTests, IEnumerable<TestCase>? lastChunk, bool isAborted)
+  public void HandleDiscoveryComplete(long totalTests, IEnumerable<TestCase>? lastChunk, bool aborted)
   {
-    logger.LogInformation(
-        "HandleDiscoveryComplete(long,int,bool): total={totalTests}, isAborted={isAborted}",
-        totalTests, isAborted);
-
     if (lastChunk != null)
     {
-      var list = lastChunk.ToList();
-      logger.LogInformation("HandleDiscoveryComplete received final chunk of {count} tests.", list.Count);
-
-      foreach (var tc in list)
-      {
-        logger.LogInformation(
-            "  [+] Final chunk test: {name} ({id}) in {source}",
-            tc.DisplayName, tc.Id, tc.Source);
-      }
-
-      TestCases.AddRange(list);
+      foreach (var tc in lastChunk)
+        channel.Writer.TryWrite(tc.ToDiscoveredTest());
     }
+
+    channel.Writer.TryComplete();
   }
 
   public void HandleDiscoveryComplete(DiscoveryCompleteEventArgs args, IEnumerable<TestCase>? lastChunk)
-  {
-    logger.LogInformation(
-        "HandleDiscoveryComplete(DiscoveryCompleteEventArgs): total={totalTests}, aborted={aborted}",
-        args.TotalCount, args.IsAborted);
+      => HandleDiscoveryComplete(args.TotalCount, lastChunk, args.IsAborted);
 
-    if (lastChunk != null)
-    {
-      var list = lastChunk.ToList();
-
-      logger.LogInformation("HandleDiscoveryComplete2 final chunk size: {count}", list.Count);
-
-      foreach (var tc in list)
-      {
-        logger.LogInformation(
-            "  [+] Final chunk test: {name} ({id}) in {source}",
-            tc.DisplayName, tc.Id, tc.Source);
-      }
-
-      TestCases.AddRange(list);
-    }
-  }
-
-  public void HandleLogMessage(TestMessageLevel level, string? message)
-  {
-    switch (level)
-    {
-      case TestMessageLevel.Informational:
-        logger.LogInformation("[VSTest] {Message}", message);
-        break;
-
-      case TestMessageLevel.Warning:
-        logger.LogWarning("[VSTest] {Message}", message);
-        break;
-
-      case TestMessageLevel.Error:
-        logger.LogError("[VSTest] {Message}", message);
-        break;
-
-      default:
-        logger.LogInformation("[VSTest:Unknown] {Message}", message);
-        break;
-    }
-  }
-
-  public void HandleRawMessage(string rawMessage) =>
-    logger.LogDebug("[VSTest:Raw] {RawMessage}", rawMessage);
+  public void HandleLogMessage(TestMessageLevel level, string? message) { }
+  public void HandleRawMessage(string rawMessage) { }
 }
 
 
 internal sealed class TestRunHandler() : ITestRunEventsHandler
 {
-  public List<Microsoft.VisualStudio.TestPlatform.ObjectModel.TestResult> Results = [];
+  public List<TestResult> Results = [];
 
 
   public void HandleLogMessage(TestMessageLevel level, string? message) { }

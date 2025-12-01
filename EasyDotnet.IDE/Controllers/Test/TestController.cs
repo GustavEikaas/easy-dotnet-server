@@ -38,7 +38,8 @@ public class TestController(IClientService clientService, MtpService mtpService,
     }
     else
     {
-      return vsTestService.RunDiscover(project.TargetPath!).ToBatchedAsyncEnumerable(30);
+      throw new NotImplementedException();
+      // return vsTestService.RunDiscover(project.TargetPath!).ToBatchedAsyncEnumerable(30);
     }
   }
 

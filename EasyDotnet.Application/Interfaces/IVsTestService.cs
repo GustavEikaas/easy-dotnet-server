@@ -4,6 +4,6 @@ namespace EasyDotnet.Application.Interfaces;
 
 public interface IVsTestService
 {
-  List<DiscoveredTest> RunDiscover(string dllPath);
+  IAsyncEnumerable<DiscoveredTest> DiscoverAsync(string[] dllPaths, CancellationToken cancellationToken);
   List<TestRunResult> RunTests(string dllPath, Guid[] testIds);
 }

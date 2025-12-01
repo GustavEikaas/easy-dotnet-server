@@ -72,22 +72,17 @@ public class TestRunnerService(JsonRpc jsonRpc, IMsBuildService msBuildService, 
   }
 
 
-  public Task StartDiscoveryAsync(CancellationToken cancellationToken)
+  public async Task StartDiscoveryAsync(CancellationToken cancellationToken)
   {
     if (!_isInitialized) throw new InvalidOperationException("Testrunner has not been initialized");
 
-    //TODO: rebuild
-    //msbuild _projects.select(x => x.ProjectFilePath)
-
-    _projects.ToList().ForEach(async (val) =>
+    await Task.WhenAll(_projects.Select(async (val) =>
     {
       var project = await msBuildService.GetOrSetProjectPropertiesAsync(val.ProjectFilePath, val.TargetFramework, cancellationToken: cancellationToken);
       var registry = _projectTfmRegistries[val.Id] ?? throw new InvalidOperationException($"No node registry found for {val.DisplayName}");
-      await OperationScopeAsync(registry, (tracker, ct) =>
+      await OperationScopeAsync(registry, async (tracker, ct) =>
       {
         tracker.UpdateStatus(val.ToTestNode(_solutionNode!.Id), new TestNodeStatus.Discovering());
-
-
 
         if (project.TestingPlatformDotnetTestSupport)
         {
@@ -100,8 +95,9 @@ public class TestRunnerService(JsonRpc jsonRpc, IMsBuildService msBuildService, 
           // if test.DisplayName.StartsWith(project.RootNamespace) strip it away
           // collapse namespaces with only one child
           // the last .xxx of the ns is the actual test name so we should drop that
+          // need to extract the actual classname
 
-          foreach (var test in vsTestService.RunDiscover(project.TargetPath!))
+          await foreach (var test in vsTestService.DiscoverAsync([project.TargetPath!], cancellationToken))
           {
             var ns = test.Name ?? test.Namespace ?? "";
             var parts = ns.Split('.', StringSplitOptions.RemoveEmptyEntries);
@@ -124,18 +120,15 @@ public class TestRunnerService(JsonRpc jsonRpc, IMsBuildService msBuildService, 
 
               var nsNodeId = $"ns:{currentNamespace}";
 
-              if (!registry.TryGetNode(nsNodeId, out _))
-              {
-                var nsNode = new TestNode(
-                    nsNodeId,
-                    part,          // displayName
-                    parentId,      // parentId
-                    null,          // file path
-                    null,          // line
-                    new NodeType.Namespace()
-                );
-                tracker.RegisterNode(nsNode);
-              }
+              var nsNode = new TestNode(
+                  nsNodeId,
+                  part,          // displayName
+                  parentId,      // parentId
+                  null,          // file path
+                  null,          // line
+                  new NodeType.Namespace()
+              );
+              tracker.RegisterNode(nsNode);
 
               parentId = nsNodeId;
             }
@@ -143,23 +136,17 @@ public class TestRunnerService(JsonRpc jsonRpc, IMsBuildService msBuildService, 
 
             if (test.DisplayName.Contains('('))
             {
-
               var testGroupId = test.DisplayName.Split('(')[0];
+              var testGroup = new TestNode(
+                testGroupId,
+                GetMethodName(test.DisplayName),
+                parentId,
+                test.FilePath,
+                LineNumber: null,
+                new NodeType.TestGroup()
+              );
 
-
-              if (!registry.TryGetNode(testGroupId, out _))
-              {
-                var testGroup = new TestNode(
-                  testGroupId,
-                  GetMethodName(test.DisplayName),
-                  parentId,
-                  test.FilePath,
-                  LineNumber: null,
-                  new NodeType.TestGroup()
-                );
-
-                tracker.RegisterNode(testGroup);
-              }
+              tracker.RegisterNode(testGroup);
 
               //TODO: need to make a parent with a deterministic id that all the sibling cases would also produce
               var subCase = new TestNode(
@@ -188,20 +175,20 @@ public class TestRunnerService(JsonRpc jsonRpc, IMsBuildService msBuildService, 
             }
           }
 
-          // tests.ForEach(x =>
-          // {
-          //   var y = new TestNode(x.Id, x.DisplayName, val.Id, x.FilePath, x.LineNumber, new NodeType.TestMethod());
-          //   tracker.RegisterNode(y);
-          // });
-          // Vstest
+          //TODO: collapse namespaces and reorder children on client side
+          //we loop over all nodes in our registry and collapse namespaces with single children
+          //then we loop over these new nodes, sending registerNode to client node, after each registerNode we need to send a new notification called "changeParent", which tells the client that a node was given a new parentId
+          //after that we can call "removeNode"
+          CollapseSingleChildNamespaces(registry, val.Id);
         }
+
+        tracker.UpdateStatus(val.ToTestNode(_solutionNode!.Id), new TestNodeStatus.Idle());
         //We push tests as they are discovered to the client, once the entire discovery is finished we can add aggregated data like "total tests"
         // this can live under an optional field in testnode similiar to code_lens stuff totalTests, failedLastOp, passedLastOp, skippedLastOp, conclusion
 
 
-        return Task.CompletedTask;
       }, cancellationToken);
-    });
+    }));
 
 
     //immediately register a node that represents the solution testnode
@@ -216,11 +203,90 @@ public class TestRunnerService(JsonRpc jsonRpc, IMsBuildService msBuildService, 
     ///push a discovery status update
     ///// the discovery service supports yielding and will give us one by one test (at this point we can start pushing tests to the client)
     /////once the discovery is finished we can clear the status of the project
-    return Task.CompletedTask;
+    return;
   }
 
   public Task RunTestsAsync(RunRequest request, CancellationToken cancellationToken) => throw new NotImplementedException();
   public Task DebugTestsAsync(DebugRequest request, CancellationToken cancellationToken) => throw new NotImplementedException();
+
+  /// <summary>
+  /// Collapse chains of single-child namespace nodes in a project.
+  /// Works entirely from the registry and sends notifications for changeParent and removeNode.
+  /// </summary>
+
+  private void CollapseSingleChildNamespaces(NodeRegistry registry, string rootId)
+  {
+    // Build parent -> children lookup
+    var childrenByParent = registry.GetAllNodes()
+        .GroupBy(n => n.ParentId!)
+        .ToDictionary(g => g.Key, g => g.ToList());
+
+    // Recursive collapse
+    void Collapse(string parentId)
+    {
+      if (!childrenByParent.TryGetValue(parentId, out var children)) return;
+
+      // Copy list to avoid modification issues
+      foreach (var child in children.ToList())
+      {
+        Collapse(child.Id); // process depth-first
+      }
+
+      // Only consider namespace nodes
+      var namespaces = children.Where(c => c.Type is NodeType.Namespace).ToList();
+
+      foreach (var ns in namespaces)
+      {
+        var current = ns;
+        var mergedNameParts = new List<string> { current.DisplayName };
+
+        // Follow single-child namespace chains
+        while (childrenByParent.TryGetValue(current.Id, out var singleChildList)
+               && singleChildList.Count == 1
+               && singleChildList[0].Type is NodeType.Namespace)
+        {
+          var child = singleChildList[0];
+
+          mergedNameParts.Add(child.DisplayName);
+
+          // Move child's children to current node
+          if (childrenByParent.TryGetValue(child.Id, out var grandChildren))
+          {
+            foreach (var gc in grandChildren)
+            {
+              // Reparent to current node
+              OnChangeParent(gc.Id, current.Id);
+              childrenByParent[current.Id].Add(gc);
+            }
+          }
+
+          // Remove child node
+          OnRemoveNode(child.Id);
+
+          // Remove from temporary lookup
+          childrenByParent.Remove(child.Id);
+
+          current = child; // move along chain
+        }
+
+        // Merge names into current node
+        if (mergedNameParts.Count > 1)
+        {
+          var newName = string.Join('.', mergedNameParts);
+          var mergedNode = registry.TryGetNode(ns.Id, out var original) ? original : null;
+          if (mergedNode != null)
+          {
+            var updatedNode = mergedNode with { DisplayName = newName };
+            OnChangeParent(updatedNode.Id, mergedNode.ParentId ?? string.Empty);
+            // Note: If you have a "changeDisplayName" notification, call it here
+          }
+        }
+      }
+    }
+
+    Collapse(rootId); // start from root
+  }
+
 
   /// <summary>
   /// Encapsulates a "scoped operation" on test nodes.
@@ -276,6 +342,16 @@ public class TestRunnerService(JsonRpc jsonRpc, IMsBuildService msBuildService, 
     var _ = jsonRpc.NotifyWithParameterObjectAsync("registerTest", testNode);
   }
 
+  private void OnRemoveNode(string id)
+  {
+    var _ = jsonRpc.NotifyWithParameterObjectAsync("removeNode", new { nodeId = id });
+  }
+
+  private void OnChangeParent(string id, string parentId)
+  {
+    var _ = jsonRpc.NotifyWithParameterObjectAsync("changeParent", new { targetId = id, newParentId = parentId });
+  }
+
   private void OnUpdateStatus(TestNodeStatusUpdateNotification notification)
   {
     var _ = jsonRpc.NotifyWithParameterObjectAsync("updateStatus", notification);
@@ -313,8 +389,15 @@ public class NodeScopeTracker(
 {
   public List<TestNode> RegisteredNodes { get; } = [];
 
+  //TODO: xml doc explaining behavior
+  //add UpdateNode if the need occurs
   public void RegisterNode(TestNode node)
   {
+    if (globalNodes.TryGetValue(node.Id, out _))
+    {
+      return;
+    }
+    //TODO: ignore duplicates
     RegisteredNodes.Add(node);
     globalNodes[node.Id] = node;
     onRegisterTest?.Invoke(node);
