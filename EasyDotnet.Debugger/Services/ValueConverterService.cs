@@ -12,70 +12,53 @@ public interface IValueConverter
   /// <summary>
   /// Determines if this converter can handle the given variables response.
   /// </summary>
-  bool CanConvert(VariablesResponse response);
+  bool CanConvert(Variable val);
 
   /// <summary>
   /// Converts the variables response to a simplified format.
   /// Should not throw - return false if conversion fails.
   /// </summary>
-  Task<bool> TryConvertAsync(
-    VariablesResponse response,
+  Task<VariablesResponse> TryConvertAsync(
+    int id,
     IDebuggerProxy proxy,
     CancellationToken cancellationToken);
 }
 
-public class ValueConverterService(ILogger<IValueConverter> logger)
+public class ValueConverterService(ILogger<ValueConverterService> logger)
 {
 
+  private readonly Dictionary<long, IValueConverter> _variablesReferenceMap = [];
+
   public readonly List<IValueConverter> ValueConverters = [
-    new ListValueConverter(logger),
-    new GuidValueConverter()
+    new ListValueConverter(),
+    // new GuidValueConverter()
   ];
 
-  /// <summary>
-  /// Applies the first applicable converter to the response.
-  /// Only one converter will be applied per response.
-  /// </summary>
-  public async Task<bool> TryConvertAsync(
-    VariablesResponse response,
-    IDebuggerProxy proxy,
-    CancellationToken cancellationToken)
+  public void RegisterVariablesReferences(VariablesResponse response)
   {
-    if (response.Body?.Variables == null || response.Body.Variables.Count == 0)
-    {
-      return false;
-    }
+    if (response.Body?.Variables == null)
+      return;
 
-    foreach (var converter in ValueConverters)
+    foreach (var variable in response.Body.Variables)
     {
-      if (!converter.CanConvert(response))
-      {
+      if (variable.VariablesReference is not int id || id <= 0)
         continue;
-      }
 
-      try
+      var converter = ValueConverters.FirstOrDefault(c => c.CanConvert(variable));
+      if (converter != null)
       {
-        logger.LogDebug("Attempting conversion with {converterType}", converter.GetType().Name);
-
-        var success = await converter.TryConvertAsync(response, proxy, cancellationToken);
-
-        if (success)
-        {
-          logger.LogInformation(
-            "Successfully converted response using {converterType}",
-            converter.GetType().Name);
-          return true;
-        }
-      }
-      catch (Exception ex)
-      {
-        logger.LogWarning(
-          ex,
-          "Converter {converterType} failed, falling back to original response",
-          converter.GetType().Name);
+        logger.LogInformation($"[ValueConverter] added ref to {id} for {nameof(converter)}");
+        _variablesReferenceMap[id] = converter;
       }
     }
+  }
 
-    return false;
+  public void ClearVariablesReferenceMap() => _variablesReferenceMap.Clear();
+
+  public IValueConverter? TryGetConverterFor(int id)
+  {
+    _variablesReferenceMap.TryGetValue(id, out var valueConverter);
+    return valueConverter;
+
   }
 }

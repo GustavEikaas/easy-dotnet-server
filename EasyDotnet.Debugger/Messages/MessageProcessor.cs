@@ -12,8 +12,8 @@ public class MessageProcessor(
   IMessageChannels channels,
   IRequestTracker requestTracker,
   IDebuggerProxy proxy,
-  Func<ProtocolMessage, IDebuggerProxy, Task<string>>? clientMessageRefiner = null,
-  Func<ProtocolMessage, IDebuggerProxy, Task<string>>? debuggerMessageRefiner = null,
+  Func<ProtocolMessage, IDebuggerProxy, Task<string?>>? clientMessageRefiner = null,
+  Func<ProtocolMessage, IDebuggerProxy, Task<string?>>? debuggerMessageRefiner = null,
   ILogger<MessageProcessor>? logger = null) : IMessageProcessor
 {
   private static readonly JsonSerializerOptions SerializerOptions = new()
@@ -112,6 +112,11 @@ public class MessageProcessor(
       ? await clientMessageRefiner(request, proxy)
       : JsonSerializer.Serialize(request, SerializerOptions);
 
+    if (json is null)
+    {
+      return;
+    }
+
     // Send to debugger
     await channels.ProxyToDebuggerWriter.WriteAsync(json, cancellationToken);
   }
@@ -174,6 +179,10 @@ public class MessageProcessor(
 
     logger?.LogDebug("Refiner completed for seq={seq}, writing to client", context.OriginalSeq);
 
+    if (json is null)
+    {
+      return;
+    }
     // Send to client
     await channels.ProxyToClientWriter.WriteAsync(json, cancellationToken);
 
@@ -189,6 +198,10 @@ public class MessageProcessor(
       ? await debuggerMessageRefiner(evt, proxy)
       : JsonSerializer.Serialize(evt, SerializerOptions);
 
+    if (json is null)
+    {
+      return;
+    }
     // Forward all events to client
     await channels.ProxyToClientWriter.WriteAsync(json, cancellationToken);
   }

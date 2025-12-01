@@ -1,65 +1,45 @@
+using System.Text.RegularExpressions;
 using EasyDotnet.Debugger.Messages;
 using EasyDotnet.Debugger.Services;
-using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Debugger.ValueConverters;
 
-public class ListValueConverter(ILogger<IValueConverter> logger) : IValueConverter
+public partial class ListValueConverter() : IValueConverter
 {
-  public bool CanConvert(VariablesResponse response)
+  public bool CanConvert(Variable val) => !string.IsNullOrEmpty(val.Type)
+      && AnyList().IsMatch(
+        val.Type);
+
+  public async Task<VariablesResponse> TryConvertAsync(int id, IDebuggerProxy proxy, CancellationToken cancellationToken)
   {
-    if (response.Body?.Variables == null || response.Body.Variables.Count == 0)
-    {
-      return false;
-    }
-
-    var hasItems = response.Body.Variables.Any(v => v.Name == "_items");
-    var hasSize = response.Body.Variables.Any(v => v.Name == "_size");
-    var hasCapacity = response.Body.Variables.Any(v => v.Name == "Capacity");
-
-    return hasItems && hasSize && hasCapacity;
-  }
-
-  public async Task<bool> TryConvertAsync(VariablesResponse response, IDebuggerProxy proxy, CancellationToken cancellationToken)
-  {
-
-    var itemsVariable = response.Body!.Variables.FirstOrDefault(v => v.Name == "_items");
-    var sizeVariable = response.Body!.Variables.FirstOrDefault(v => v.Name == "_size");
-    logger.LogInformation("Detected List internal structure, simplifying...");
+    var internals = await proxy.GetVariablesAsync(id, cancellationToken) ?? throw new Exception($"variables request for {id} returned null");
+    var itemsVariable = internals.Body!.Variables.FirstOrDefault(v => v.Name == "_items");
+    var sizeVariable = internals.Body!.Variables.FirstOrDefault(v => v.Name == "_size");
 
     if (itemsVariable?.VariablesReference.HasValue != true ||
         itemsVariable?.VariablesReference <= 0)
     {
-      return false;
+      return internals;
     }
 
     if (!int.TryParse(sizeVariable!.Value, out var actualSize))
     {
-      logger.LogWarning("Could not parse _size value: {value}", sizeVariable.Value);
-      return false;
+      return internals;
     }
 
     var itemsArrayResponse = await proxy.GetVariablesAsync(itemsVariable!.VariablesReference!.Value, cancellationToken);
 
     if (itemsArrayResponse?.Body?.Variables == null)
     {
-      logger.LogWarning("Failed to get _items array variables");
-      return false;
+      return internals;
     }
 
-    var actualItems = itemsArrayResponse.Body.Variables
+    internals.Body.Variables = [.. itemsArrayResponse.Body.Variables
       .Where(v => v.Name.StartsWith('[') && v.Name.EndsWith(']'))
       .OrderBy(v => ParseArrayIndex(v.Name))
-      .Take(actualSize)
-      .ToList();
+      .Take(actualSize)];
 
-    logger.LogInformation(
-      "Simplified List: showing {actual} items (out of {capacity} capacity)",
-      actualItems.Count,
-      itemsArrayResponse.Body.Variables.Count);
-
-    response.Body.Variables = actualItems;
-    return true;
+    return internals;
   }
 
   private static int ParseArrayIndex(string name)
@@ -67,4 +47,7 @@ public class ListValueConverter(ILogger<IValueConverter> logger) : IValueConvert
     var trimmed = name.Trim('[', ']');
     return int.TryParse(trimmed, out var index) ? index : -1;
   }
+
+  [GeneratedRegex(@"^System\.Collections\.Generic\.List`1(<.*>)?$", RegexOptions.Compiled)]
+  private static partial Regex AnyList();
 }

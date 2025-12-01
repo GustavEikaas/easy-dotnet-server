@@ -50,20 +50,31 @@ public static class DapMessageDeserializer
       };
     }
 
-    private static Response DeserializeResponse(JsonElement root, JsonSerializerOptions options)
+
+    private static ProtocolMessage DeserializeResponse(JsonElement root, JsonSerializerOptions options)
     {
-      if (root.TryGetProperty("command", out var cmdProp))
+      if (root.TryGetProperty("success", out var successProp) &&
+          successProp.ValueKind == JsonValueKind.False)
       {
-        var cmd = cmdProp.GetString();
-        switch (cmd?.ToLowerInvariant())
-        {
-          case "variables":
-            return JsonSerializer.Deserialize<VariablesResponse>(root.GetRawText(), options)!;
-        }
+        return JsonSerializer.Deserialize<ErrorResponse>(root.GetRawText(), options)!;
       }
 
-      return JsonSerializer.Deserialize<Response>(root.GetRawText(), options)!;
+      if (!root.TryGetProperty("command", out var cmdProp))
+      {
+        throw new JsonException(
+            $"Successful DAP response missing required property 'command': {root.GetRawText()}"
+        );
+      }
+
+      var cmd = cmdProp.GetString()?.ToLowerInvariant();
+
+      return cmd switch
+      {
+        "variables" => JsonSerializer.Deserialize<VariablesResponse>(root.GetRawText(), options)!,
+        _ => JsonSerializer.Deserialize<Response>(root.GetRawText(), options)!,
+      };
     }
+
 
     private static ProtocolMessage DeserializeRequest(JsonElement root, JsonSerializerOptions options)
     {
@@ -74,6 +85,8 @@ public static class DapMessageDeserializer
         {
           case "attach":
             return JsonSerializer.Deserialize<InterceptableAttachRequest>(root.GetRawText(), options)!;
+          case "variables":
+            return JsonSerializer.Deserialize<InterceptableVariablesRequest>(root.GetRawText(), options)!;
           case "setbreakpoints":
             return JsonSerializer.Deserialize<SetBreakpointsRequest>(root.GetRawText(), options)!;
         }

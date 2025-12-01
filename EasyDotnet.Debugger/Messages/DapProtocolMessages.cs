@@ -25,6 +25,15 @@ public class Event : ProtocolMessage
   public JsonElement? Body { get; set; }
 }
 
+public class ErrorResponse : ProtocolMessage
+{
+  [JsonPropertyName("request_seq")]
+  public int RequestSeq { get; set; }
+  public bool Success { get; set; }
+  public string? Message { get; set; }
+  public JsonElement? Body { get; set; }
+}
+
 public class Response : ProtocolMessage
 {
   [JsonPropertyName("request_seq")]
@@ -33,19 +42,6 @@ public class Response : ProtocolMessage
   public required string Command { get; set; }
   public string? Message { get; set; }
   public JsonElement? Body { get; set; }
-}
-
-public class ErrorResponse : Response
-{
-  public new required ErrorBody Body { get; set; }
-}
-
-public class ErrorBody
-{
-  public JsonElement? Error { get; set; }
-
-  [JsonExtensionData]
-  public Dictionary<string, JsonElement>? ExtraProperties { get; set; } = [];
 }
 
 public class InterceptableAttachRequest : Request
@@ -104,8 +100,20 @@ public class Variable
   public string? EvaluateName { get; set; }
   public int? VariablesReference { get; set; }
   public int? NamedVariables { get; set; }
-  public int? IndexedVariables { get; set; }
 
+  [JsonExtensionData]
+  public Dictionary<string, JsonElement>? ExtraProperties { get; set; }
+}
+
+
+public class InterceptableVariablesRequest : Request
+{
+  public new InterceptableVariablesArguments? Arguments { get; set; } = new();
+}
+
+public class InterceptableVariablesArguments
+{
+  public int VariablesReference { get; set; }
   [JsonExtensionData]
   public Dictionary<string, JsonElement>? ExtraProperties { get; set; }
 }

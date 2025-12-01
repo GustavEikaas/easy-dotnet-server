@@ -4,8 +4,8 @@ using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Debugger;
 
-public record Client(Stream Input, Stream Output, Func<ProtocolMessage, IDebuggerProxy, Task<string>>? MessageRefiner);
-public record Debugger(Stream Input, Stream Output, Func<ProtocolMessage, IDebuggerProxy, Task<string>>? MessageRefiner);
+public record Client(Stream Input, Stream Output, Func<ProtocolMessage, IDebuggerProxy, Task<string?>>? MessageRefiner);
+public record Debugger(Stream Input, Stream Output, Func<ProtocolMessage, IDebuggerProxy, Task<string?>>? MessageRefiner);
 
 public interface IDebuggerProxy
 {
@@ -13,6 +13,7 @@ public interface IDebuggerProxy
   void Start(CancellationToken cancellationToken, Action? onDisconnect = null);
   Task<Response> RunInternalRequestAsync(Request request, CancellationToken cancellationToken);
   Task<VariablesResponse?> GetVariablesAsync(int variablesReference, CancellationToken cancellationToken);
+  Task WriteProxyToClientAsync(string json, CancellationToken cancellationToken);
 }
 
 public class DebuggerProxy : IDebuggerProxy
@@ -118,6 +119,8 @@ public class DebuggerProxy : IDebuggerProxy
       linkedCts.Dispose();
     }, cancellationToken);
   }
+
+  public async Task WriteProxyToClientAsync(string json, CancellationToken cancellationToken) => await DapMessageWriter.WriteDapMessageAsync(json, _client.Input, cancellationToken);
 
   public async Task<Response> RunInternalRequestAsync(Request request, CancellationToken cancellationToken)
   {

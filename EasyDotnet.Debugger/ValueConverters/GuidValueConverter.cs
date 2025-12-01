@@ -12,6 +12,8 @@ public class GuidValueConverter() : IValueConverter
     return val is not null;
   }
 
+  public bool CanConvert(Variable val) => throw new NotImplementedException();
+
   public async Task<bool> TryConvertAsync(
       VariablesResponse response,
       IDebuggerProxy proxy,
@@ -58,4 +60,5 @@ public class GuidValueConverter() : IValueConverter
     return true;
   }
 
+  Task<VariablesResponse> IValueConverter.TryConvertAsync(int id, IDebuggerProxy proxy, CancellationToken cancellationToken) => throw new NotImplementedException();
 }
