@@ -58,7 +58,6 @@ public class MessageProcessor(
     {
       await foreach (var message in channels.DebuggerToProxyReader.ReadAllAsync(cancellationToken))
       {
-        // Process messages concurrently to avoid blocking when refiners make internal requests
         var task = Task.Run(async () =>
         {
           try
@@ -68,20 +67,18 @@ public class MessageProcessor(
           catch (Exception ex)
           {
             logger?.LogError(ex, "Error handling debugger message");
-            throw; // Re-throw to propagate to Task.WhenAll
+            throw;
           }
         }, cancellationToken);
 
         tasks.Add(task);
       }
 
-      // Wait for all message handlers to complete
       await Task.WhenAll(tasks);
     }
     catch (OperationCanceledException)
     {
       logger?.LogInformation("Debugger message processing cancelled");
-      // Wait for any in-flight handlers
       await Task.WhenAll(tasks.Where(t => !t.IsCompleted));
     }
     catch (Exception ex)
@@ -99,7 +96,6 @@ public class MessageProcessor(
       return;
     }
 
-    // Register and assign new proxy seq
     var originalSeq = request.Seq;
     var proxySeq = requestTracker.RegisterClientRequest(originalSeq);
     request.Seq = proxySeq;
@@ -107,7 +103,6 @@ public class MessageProcessor(
     logger?.LogDebug("Client request {originalSeq} -> proxy seq {proxySeq}, command: {command}",
       originalSeq, proxySeq, request.Command);
 
-    // Apply message refiner if available
     var json = clientMessageRefiner != null
       ? await clientMessageRefiner(request, proxy)
       : JsonSerializer.Serialize(request, SerializerOptions);
@@ -117,7 +112,6 @@ public class MessageProcessor(
       return;
     }
 
-    // Send to debugger
     await channels.ProxyToDebuggerWriter.WriteAsync(json, cancellationToken);
   }
 
@@ -157,9 +151,6 @@ public class MessageProcessor(
     if (context.Origin == RequestOrigin.Proxy)
     {
       logger?.LogDebug("Completing proxy request: seq={seq}", response.RequestSeq);
-      // Complete the internal request WITHOUT running refiners
-      // This prevents deadlocks when refiners make internal requests
-      // Refiners only run on client-originated traffic
       context.CompletionSource.TrySetResult(response);
       logger?.LogDebug("Completed proxy request: seq={seq}", response.RequestSeq);
       return;
@@ -167,12 +158,9 @@ public class MessageProcessor(
 
     logger?.LogDebug("Processing client response: seq={seq}, about to run refiner", response.RequestSeq);
 
-    // Client-originated request - restore original client seq
-    response.Seq = response.Seq; // Keep response seq as-is
+    response.Seq = response.Seq;
     response.RequestSeq = context.OriginalSeq;
 
-    // Apply message refiner if available
-    // This can safely make internal requests since we're not blocking the processor
     var json = debuggerMessageRefiner != null
       ? await debuggerMessageRefiner(response, proxy)
       : JsonSerializer.Serialize(response, SerializerOptions);
@@ -183,7 +171,7 @@ public class MessageProcessor(
     {
       return;
     }
-    // Send to client
+
     await channels.ProxyToClientWriter.WriteAsync(json, cancellationToken);
 
     logger?.LogDebug("HandleDebuggerResponseAsync END: seq={seq}", context.OriginalSeq);
@@ -193,7 +181,6 @@ public class MessageProcessor(
   {
     logger?.LogDebug("Debugger event: {eventName}", evt.EventName);
 
-    // Apply message refiner if available
     var json = debuggerMessageRefiner != null
       ? await debuggerMessageRefiner(evt, proxy)
       : JsonSerializer.Serialize(evt, SerializerOptions);
@@ -202,7 +189,6 @@ public class MessageProcessor(
     {
       return;
     }
-    // Forward all events to client
     await channels.ProxyToClientWriter.WriteAsync(json, cancellationToken);
   }
 }

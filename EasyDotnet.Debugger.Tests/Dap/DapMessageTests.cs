@@ -3,7 +3,7 @@ using System.Text.Json;
 using EasyDotnet.Debugger.Messages;
 using Nerdbank.Streams;
 
-namespace EasyDotnet.Infrastructure.Tests.Dap;
+namespace EasyDotnet.Debugger.Tests.Dap;
 
 public class DapMessageReaderTests
 {
