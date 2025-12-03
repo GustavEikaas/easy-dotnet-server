@@ -75,19 +75,19 @@ public class DebuggerProxy : IDebuggerProxy
   {
     var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
-    var clientReaderTask = StartClientReaderAsync(linkedCts.Token, () =>
+    var clientReaderTask = StartClientReaderAsync(() =>
     {
       _logger?.LogInformation("Client stream disconnected");
       linkedCts.Cancel();
       onDisconnect?.Invoke();
-    });
+    }, linkedCts.Token);
 
-    var debuggerReaderTask = StartDebuggerReaderAsync(linkedCts.Token, () =>
+    var debuggerReaderTask = StartDebuggerReaderAsync(() =>
     {
       _logger?.LogInformation("Debugger stream disconnected");
       linkedCts.Cancel();
       onDisconnect?.Invoke();
-    });
+    }, linkedCts.Token);
 
     var clientWriterTask = StartClientWriterAsync(linkedCts.Token);
     var debuggerWriterTask = StartDebuggerWriterAsync(linkedCts.Token);
@@ -137,7 +137,7 @@ public class DebuggerProxy : IDebuggerProxy
 
     await _channels.ProxyToDebuggerWriter.WriteAsync(request, cancellationToken);
 
-    using var registration = cancellationToken.Register(() => tcs.TrySetCanceled(cancellationToken));
+    await using var registration = cancellationToken.Register(() => tcs.TrySetCanceled(cancellationToken));
     return await tcs.Task;
   }
 
@@ -160,7 +160,7 @@ public class DebuggerProxy : IDebuggerProxy
     return response as VariablesResponse;
   }
 
-  private async Task StartClientReaderAsync(CancellationToken cancellationToken, Action? onDisconnect)
+  private async Task StartClientReaderAsync(Action onDisconnect, CancellationToken cancellationToken)
   {
     try
     {
@@ -193,7 +193,7 @@ public class DebuggerProxy : IDebuggerProxy
     }
   }
 
-  private async Task StartDebuggerReaderAsync(CancellationToken cancellationToken, Action? onDisconnect)
+  private async Task StartDebuggerReaderAsync(Action onDisconnect, CancellationToken cancellationToken)
   {
     try
     {
