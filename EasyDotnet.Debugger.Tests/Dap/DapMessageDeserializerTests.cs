@@ -1,7 +1,7 @@
 using System.Text.Json;
-using EasyDotnet.Infrastructure.Dap;
+using EasyDotnet.Debugger.Messages;
 
-namespace EasyDotnet.Infrastructure.Tests.Dap;
+namespace EasyDotnet.Debugger.Tests.Dap;
 
 public class DapMessageDeserializerTests
 {

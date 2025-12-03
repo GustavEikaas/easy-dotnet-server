@@ -1,7 +1,7 @@
 using System.Text;
 using System.Text.Json;
 
-namespace EasyDotnet.Infrastructure.Dap;
+namespace EasyDotnet.Debugger.Messages;
 
 public static class DapMessageReader
 {

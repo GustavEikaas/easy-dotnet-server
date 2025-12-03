@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace EasyDotnet.Infrastructure.Dap;
+namespace EasyDotnet.Debugger.Messages;
 
 public class ProtocolMessage
 {
@@ -25,6 +25,15 @@ public class Event : ProtocolMessage
   public JsonElement? Body { get; set; }
 }
 
+public class ErrorResponse : ProtocolMessage
+{
+  [JsonPropertyName("request_seq")]
+  public int RequestSeq { get; set; }
+  public bool Success { get; set; }
+  public string? Message { get; set; }
+  public JsonElement? Body { get; set; }
+}
+
 public class Response : ProtocolMessage
 {
   [JsonPropertyName("request_seq")]
@@ -33,19 +42,6 @@ public class Response : ProtocolMessage
   public required string Command { get; set; }
   public string? Message { get; set; }
   public JsonElement? Body { get; set; }
-}
-
-public class ErrorResponse : Response
-{
-  public new required ErrorBody Body { get; set; }
-}
-
-public class ErrorBody
-{
-  public JsonElement? Error { get; set; }
-
-  [JsonExtensionData]
-  public Dictionary<string, JsonElement>? ExtraProperties { get; set; } = [];
 }
 
 public class InterceptableAttachRequest : Request
@@ -84,4 +80,40 @@ public class Source
 {
   public required string Name { get; set; }
   public required string Path { get; set; }
+}
+
+public class VariablesResponse : Response
+{
+  public new VariablesResponseBody? Body { get; set; }
+}
+
+public class VariablesResponseBody
+{
+  public required List<Variable> Variables { get; set; }
+}
+
+public class Variable
+{
+  public required string Name { get; set; }
+  public required string Value { get; set; }
+  public required string Type { get; set; }
+  public string? EvaluateName { get; set; }
+  public int? VariablesReference { get; set; }
+  public int? NamedVariables { get; set; }
+
+  [JsonExtensionData]
+  public Dictionary<string, JsonElement>? ExtraProperties { get; set; }
+}
+
+
+public class InterceptableVariablesRequest : Request
+{
+  public new InterceptableVariablesArguments? Arguments { get; set; } = new();
+}
+
+public class InterceptableVariablesArguments
+{
+  public int VariablesReference { get; set; }
+  [JsonExtensionData]
+  public Dictionary<string, JsonElement>? ExtraProperties { get; set; }
 }

@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace EasyDotnet.Infrastructure.Dap;
+namespace EasyDotnet.Debugger.Messages;
 
 public static class DapMessageDeserializer
 {
@@ -23,7 +23,6 @@ public static class DapMessageDeserializer
     }
 
     var result = JsonSerializer.Deserialize<ProtocolMessage>(json, Options);
-
     return result is null ? throw new JsonException("Failed to deserialize JSON into ProtocolMessage.") : result;
   }
 
@@ -51,19 +50,43 @@ public static class DapMessageDeserializer
       };
     }
 
-    private static Response DeserializeResponse(JsonElement root, JsonSerializerOptions options) => JsonSerializer.Deserialize<Response>(root.GetRawText(), options)!;
+
+    private static ProtocolMessage DeserializeResponse(JsonElement root, JsonSerializerOptions options)
+    {
+      if (root.TryGetProperty("success", out var successProp) &&
+          successProp.ValueKind == JsonValueKind.False)
+      {
+        return JsonSerializer.Deserialize<ErrorResponse>(root.GetRawText(), options)!;
+      }
+
+      if (!root.TryGetProperty("command", out var cmdProp))
+      {
+        throw new JsonException(
+            $"Successful DAP response missing required property 'command': {root.GetRawText()}"
+        );
+      }
+
+      var cmd = cmdProp.GetString()?.ToLowerInvariant();
+
+      return cmd switch
+      {
+        "variables" => JsonSerializer.Deserialize<VariablesResponse>(root.GetRawText(), options)!,
+        _ => JsonSerializer.Deserialize<Response>(root.GetRawText(), options)!,
+      };
+    }
+
 
     private static ProtocolMessage DeserializeRequest(JsonElement root, JsonSerializerOptions options)
     {
       if (root.TryGetProperty("command", out var cmdProp))
       {
         var cmd = cmdProp.GetString();
-
         switch (cmd?.ToLowerInvariant())
         {
           case "attach":
             return JsonSerializer.Deserialize<InterceptableAttachRequest>(root.GetRawText(), options)!;
-
+          case "variables":
+            return JsonSerializer.Deserialize<InterceptableVariablesRequest>(root.GetRawText(), options)!;
           case "setbreakpoints":
             return JsonSerializer.Deserialize<SetBreakpointsRequest>(root.GetRawText(), options)!;
         }

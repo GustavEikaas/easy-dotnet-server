@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using DotNetOutdated.Core.Services;
 using EasyDotnet.Application.Interfaces;
+using EasyDotnet.Debugger;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.Utils;
 using EasyDotnet.Infrastructure.Aspire;
@@ -36,7 +37,6 @@ public static class DiModules
     services.AddMemoryCache();
     services.AddSingleton(jsonRpc);
     services.AddSingleton<IClientService, ClientService>();
-    services.AddSingleton<INetcoreDbgService, NetcoreDbgService>();
     services.AddSingleton<IVisualStudioLocator, VisualStudioLocator>();
     services.AddSingleton<IFileSystem, FileSystem>();
     services.AddSingleton<RoslynService>();
@@ -62,6 +62,8 @@ public static class DiModules
     services.AddSingleton<IDotNetRestoreService, DotNetRestoreService>();
     services.AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>();
     services.AddSingleton<INuGetPackageResolutionService, NuGetPackageResolutionService>();
+
+    services.AddDebugger();
 
     AssemblyScanner.GetControllerTypes().ForEach(x => services.AddTransient(x));
 

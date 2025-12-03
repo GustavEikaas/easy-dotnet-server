@@ -2,22 +2,14 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
-using System.Text.Json.Serialization;
-using EasyDotnet.Application.Interfaces;
-using EasyDotnet.Domain.Models.LaunchProfile;
-using EasyDotnet.Infrastructure.Dap;
-using EasyDotnet.MsBuild;
+using EasyDotnet.Debugger.Interfaces;
+using EasyDotnet.Debugger.Messages;
 using Microsoft.Extensions.Logging;
 
-namespace EasyDotnet.Infrastructure.Services;
+namespace EasyDotnet.Debugger.Services;
 
-public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<DebuggerProxy> debuggerProxyLogger, INotificationService notificationService) : INetcoreDbgService
+public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<DebuggerProxy> debuggerProxyLogger, ValueConverterService valueConverterService) : INetcoreDbgService
 {
-  private static readonly JsonSerializerOptions SerializerOptions = new()
-  {
-    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-  };
 
   private static readonly JsonSerializerOptions LoggingSerializerOptions = new()
   {
@@ -29,16 +21,21 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
   private CancellationTokenSource? _cancellationTokenSource;
   private Task? _sessionTask;
   private TcpListener? _listener;
-  private System.Diagnostics.Process? _process;
+  private Process? _process;
   private TcpClient? _client;
-  private (System.Diagnostics.Process, int)? _vsTestAttach;
   private Task? _disposeTask;
-  private int _clientSeq;
-  private int GetNextSequence() => Interlocked.Increment(ref _clientSeq);
+  private DebuggerProxy? _proxy;
+  private Action? _onDispose;
+
 
   public Task Completion => _completionSource.Task;
 
-  public async Task<int> Start(string binaryPath, DotnetProject project, string projectPath, LaunchProfile? launchProfile, (System.Diagnostics.Process, int)? vsTestAttach)
+  public async Task<int> Start(
+    string binaryPath,
+    Func<InterceptableAttachRequest, Task<InterceptableAttachRequest>> rewriter,
+    bool applyValueConverters,
+    Action<Exception> onProcessFailedToStart,
+    Action onDispose)
   {
     if (_disposeTask != null)
     {
@@ -47,17 +44,16 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
       {
         await _disposeTask;
       }
-      catch
-      {
-      }
+      catch { }
     }
-    _vsTestAttach = vsTestAttach;
+    _onDispose = onDispose;
     _cancellationTokenSource = new CancellationTokenSource();
 
     _listener = new TcpListener(IPAddress.Any, 0);
     _listener.Start();
     var assignedPort = ((IPEndPoint)_listener.LocalEndpoint).Port;
     logger.LogInformation("Listening for client on port {port}.", assignedPort);
+
     _sessionTask = Task.Run(async () =>
     {
       try
@@ -77,43 +73,48 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
         }
 
         var tcpStream = _client.GetStream();
-        var clientDap = new Client(tcpStream, tcpStream, async (msg) =>
+
+        var clientDap = new Client(tcpStream, tcpStream, async (msg, proxy) =>
         {
           try
           {
-            msg.Seq = GetNextSequence();
             switch (msg)
             {
               case InterceptableAttachRequest attachReq:
-                var modified = await InitializeRequestRewriter.CreateInitRequestBasedOnProjectType(
-                    project,
-                    launchProfile,
-                    attachReq,
-                    Path.GetDirectoryName(projectPath)!,
-                    attachReq.Seq,
-                    vsTestAttach?.Item2
-                );
+                var modified = await rewriter(attachReq);
                 logger.LogInformation("[TCP] Intercepted attach request: {modified}", JsonSerializer.Serialize(modified, LoggingSerializerOptions));
-                return JsonSerializer.Serialize(modified, SerializerOptions);
+                return modified;
+
+              case InterceptableVariablesRequest varRequest:
+
+                if (varRequest.Arguments?.VariablesReference is not null)
+                {
+                  var converter = valueConverterService.TryGetConverterFor(varRequest.Arguments.VariablesReference);
+                  if (converter is not null)
+                  {
+                    var result = await converter.TryConvertAsync(varRequest.Arguments.VariablesReference, proxy, CancellationToken.None);
+                    var x = proxy.GetAndRemoveContext(varRequest.Seq) ?? throw new Exception("Proxy request not found");
+                    result.RequestSeq = x.OriginalSeq;
+                    await proxy.WriteProxyToClientAsync(result, CancellationToken.None);
+                    return null;
+                  }
+                }
+                logger.LogInformation("[TCP] Intercepted variables request: {modified}", JsonSerializer.Serialize(varRequest, LoggingSerializerOptions));
+                return varRequest;
 
               case SetBreakpointsRequest setBpReq:
                 if (OperatingSystem.IsWindows())
                 {
                   logger.LogInformation("[TCP] Intercepted set breakpoints request: Normalizing path separators");
-                  setBpReq.Arguments.Source.Path =
-                      setBpReq.Arguments.Source.Path.Replace('/', '\\');
+                  setBpReq.Arguments.Source.Path = setBpReq.Arguments.Source.Path.Replace('/', '\\');
                 }
 
-                logger.LogInformation(
-                    "[TCP] setBreakpoints request: {message}",
-                    JsonSerializer.Serialize(setBpReq, LoggingSerializerOptions));
-
-                return JsonSerializer.Serialize(setBpReq, SerializerOptions);
+                logger.LogInformation("[TCP] setBreakpoints request: {message}", JsonSerializer.Serialize(setBpReq, LoggingSerializerOptions));
+                return setBpReq;
 
               case Request req:
                 logger.LogInformation("[TCP] request: {message}", JsonSerializer.Serialize(req, LoggingSerializerOptions));
-                Console.WriteLine($"Request command: {req.Command}");
-                return JsonSerializer.Serialize(req, SerializerOptions);
+                return req;
 
               default:
                 throw new Exception($"Unsupported DAP message from client: {msg}");
@@ -126,7 +127,7 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
           }
         });
 
-        _process = new System.Diagnostics.Process
+        _process = new Process
         {
           StartInfo = new ProcessStartInfo
           {
@@ -153,21 +154,37 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
         }
         catch (Exception e)
         {
-          await notificationService.DisplayError($"Debugger failed to start: {e.Message}");
+          onProcessFailedToStart(e);
+          TriggerCleanup();
         }
 
-        var debuggerDap = new Dap.Debugger(_process.StandardInput.BaseStream, _process.StandardOutput.BaseStream, (msg) =>
+        var debuggerDap = new Debugger(_process.StandardInput.BaseStream, _process.StandardOutput.BaseStream, (msg, _) =>
         {
           try
           {
             switch (msg)
             {
+              case VariablesResponse variablesRes:
+                logger.LogInformation("[DBG] variables response: {message}", JsonSerializer.Serialize(variablesRes, LoggingSerializerOptions));
+                if (applyValueConverters)
+                {
+                  valueConverterService.RegisterVariablesReferences(variablesRes);
+                }
+
+                return Task.FromResult((ProtocolMessage?)variablesRes);
+
               case Response res:
                 logger.LogInformation("[DBG] response: {message}", JsonSerializer.Serialize(res, LoggingSerializerOptions));
-                return Task.FromResult(JsonSerializer.Serialize(res, SerializerOptions));
+                return Task.FromResult((ProtocolMessage?)res);
+
               case Event e:
+                if (e.EventName == "stopped")
+                {
+                  valueConverterService.ClearVariablesReferenceMap();
+                }
                 logger.LogInformation("[DBG] event: {message}", JsonSerializer.Serialize(e, LoggingSerializerOptions));
-                return Task.FromResult(JsonSerializer.Serialize(e, SerializerOptions));
+                return Task.FromResult((ProtocolMessage?)e);
+
               default:
                 throw new Exception($"Unsupported DAP message from debugger: {msg}");
             }
@@ -179,11 +196,10 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
           }
         });
 
-        var proxy = new DebuggerProxy(clientDap, debuggerDap, debuggerProxyLogger);
+        _proxy = new DebuggerProxy(clientDap, debuggerDap, debuggerProxyLogger);
+        _proxy.Start(_cancellationTokenSource.Token, TriggerCleanup);
 
-        proxy.Start(_cancellationTokenSource.Token, TriggerCleanup);
-
-        await proxy.Completion;
+        await _proxy.Completion;
 
         _completionSource.SetResult(true);
       }
@@ -227,7 +243,6 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
 
   public async ValueTask DisposeAsync()
   {
-    _clientSeq = 0;
     if (_cancellationTokenSource?.IsCancellationRequested == false)
     {
       _cancellationTokenSource.Cancel();
@@ -240,6 +255,7 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
         try
         {
           await _sessionTask.WaitAsync(TimeSpan.FromSeconds(10));
+          _onDispose?.Invoke();
         }
         catch (TimeoutException)
         {
@@ -255,19 +271,13 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
       _listener?.Stop();
       SafeDisposeProcess(_process, "Debugger");
 
-      if (_vsTestAttach.HasValue)
-      {
-        var (process, pid) = _vsTestAttach.Value;
-        SafeDisposeProcess(process, "VsTest");
-        SafeDisposeProcessById(pid, "VsTestHost");
-      }
-
       _cancellationTokenSource?.Dispose();
     });
 
     await _disposeTask;
   }
-  private void SafeDisposeProcess(System.Diagnostics.Process? process, string processName)
+
+  private void SafeDisposeProcess(Process? process, string processName)
   {
     if (process == null) return;
 
@@ -301,23 +311,6 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
       {
         logger.LogWarning(ex, "Failed to dispose {processName} process", processName);
       }
-    }
-  }
-
-  private void SafeDisposeProcessById(int pid, string processName)
-  {
-    try
-    {
-      var process = System.Diagnostics.Process.GetProcessById(pid);
-      SafeDisposeProcess(process, $"{processName} (PID: {pid})");
-    }
-    catch (ArgumentException)
-    {
-      logger.LogInformation("{processName} (PID: {pid}) not found", processName, pid);
-    }
-    catch (Exception ex)
-    {
-      logger.LogWarning(ex, "Failed to get {processName} process by PID: {pid}", processName, pid);
     }
   }
 }
