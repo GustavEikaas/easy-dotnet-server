@@ -4,8 +4,8 @@ using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Debugger;
 
-public record Client(Stream Input, Stream Output, Func<ProtocolMessage, IDebuggerProxy, Task<string?>>? MessageRefiner);
-public record Debugger(Stream Input, Stream Output, Func<ProtocolMessage, IDebuggerProxy, Task<string?>>? MessageRefiner);
+public record Client(Stream Input, Stream Output, Func<ProtocolMessage, IDebuggerProxy, Task<ProtocolMessage?>>? MessageRefiner);
+public record Debugger(Stream Input, Stream Output, Func<ProtocolMessage, IDebuggerProxy, Task<ProtocolMessage?>>? MessageRefiner);
 
 public interface IDebuggerProxy
 {
@@ -13,7 +13,7 @@ public interface IDebuggerProxy
   void Start(CancellationToken cancellationToken, Action? onDisconnect = null);
   Task<Response> RunInternalRequestAsync(Request request, CancellationToken cancellationToken);
   Task<VariablesResponse?> GetVariablesAsync(int variablesReference, CancellationToken cancellationToken);
-  Task WriteProxyToClientAsync(string json, CancellationToken cancellationToken);
+  Task WriteProxyToClientAsync(ProtocolMessage response, CancellationToken cancellationToken);
   RequestContext? GetAndRemoveContext(int proxySeq);
 }
 
@@ -121,7 +121,7 @@ public class DebuggerProxy : IDebuggerProxy
     }, cancellationToken);
   }
 
-  public async Task WriteProxyToClientAsync(string json, CancellationToken cancellationToken)
+  public async Task WriteProxyToClientAsync(ProtocolMessage json, CancellationToken cancellationToken)
     => await _channels.ProxyToClientWriter.WriteAsync(json, cancellationToken);
 
   public RequestContext? GetAndRemoveContext(int proxySeq) => _requestTracker.GetAndRemoveContext(proxySeq);
@@ -135,8 +135,7 @@ public class DebuggerProxy : IDebuggerProxy
 
     _logger?.LogDebug("Proxy internal request seq {proxySeq}, command: {command}", proxySeq, request.Command);
 
-    var json = JsonSerializer.Serialize(request, SerializerOptions);
-    await _channels.ProxyToDebuggerWriter.WriteAsync(json, cancellationToken);
+    await _channels.ProxyToDebuggerWriter.WriteAsync(request, cancellationToken);
 
     using var registration = cancellationToken.Register(() => tcs.TrySetCanceled(cancellationToken));
     return await tcs.Task;

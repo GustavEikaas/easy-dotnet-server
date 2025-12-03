@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using EasyDotnet.Debugger.Interfaces;
 using EasyDotnet.Debugger.Messages;
 using Microsoft.Extensions.Logging;
@@ -11,11 +10,6 @@ namespace EasyDotnet.Debugger.Services;
 
 public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<DebuggerProxy> debuggerProxyLogger, ValueConverterService valueConverterService) : INetcoreDbgService
 {
-  private static readonly JsonSerializerOptions SerializerOptions = new()
-  {
-    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-  };
 
   private static readonly JsonSerializerOptions LoggingSerializerOptions = new()
   {
@@ -88,7 +82,7 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
               case InterceptableAttachRequest attachReq:
                 var modified = await rewriter(attachReq);
                 logger.LogInformation("[TCP] Intercepted attach request: {modified}", JsonSerializer.Serialize(modified, LoggingSerializerOptions));
-                return JsonSerializer.Serialize(modified, SerializerOptions);
+                return modified;
 
               case InterceptableVariablesRequest varRequest:
 
@@ -100,12 +94,12 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
                     var result = await converter.TryConvertAsync(varRequest.Arguments.VariablesReference, proxy, CancellationToken.None);
                     var x = proxy.GetAndRemoveContext(varRequest.Seq) ?? throw new Exception("Proxy request not found");
                     result.RequestSeq = x.OriginalSeq;
-                    await proxy.WriteProxyToClientAsync(JsonSerializer.Serialize(result, SerializerOptions), CancellationToken.None);
+                    await proxy.WriteProxyToClientAsync(result, CancellationToken.None);
                     return null;
                   }
                 }
                 logger.LogInformation("[TCP] Intercepted variables request: {modified}", JsonSerializer.Serialize(varRequest, LoggingSerializerOptions));
-                return JsonSerializer.Serialize(varRequest, SerializerOptions);
+                return varRequest;
 
               case SetBreakpointsRequest setBpReq:
                 if (OperatingSystem.IsWindows())
@@ -115,11 +109,11 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
                 }
 
                 logger.LogInformation("[TCP] setBreakpoints request: {message}", JsonSerializer.Serialize(setBpReq, LoggingSerializerOptions));
-                return JsonSerializer.Serialize(setBpReq, SerializerOptions);
+                return setBpReq;
 
               case Request req:
                 logger.LogInformation("[TCP] request: {message}", JsonSerializer.Serialize(req, LoggingSerializerOptions));
-                return JsonSerializer.Serialize(req, SerializerOptions);
+                return req;
 
               default:
                 throw new Exception($"Unsupported DAP message from client: {msg}");
@@ -175,11 +169,11 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
 
                 valueConverterService.RegisterVariablesReferences(variablesRes);
 
-                return Task.FromResult((string?)JsonSerializer.Serialize(variablesRes, SerializerOptions));
+                return Task.FromResult((ProtocolMessage?)variablesRes);
 
               case Response res:
                 logger.LogInformation("[DBG] response: {message}", JsonSerializer.Serialize(res, LoggingSerializerOptions));
-                return Task.FromResult((string?)JsonSerializer.Serialize(res, SerializerOptions));
+                return Task.FromResult((ProtocolMessage?)res);
 
               case Event e:
                 if (e.EventName == "stopped")
@@ -187,7 +181,7 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
                   valueConverterService.ClearVariablesReferenceMap();
                 }
                 logger.LogInformation("[DBG] event: {message}", JsonSerializer.Serialize(e, LoggingSerializerOptions));
-                return Task.FromResult((string?)JsonSerializer.Serialize(e, SerializerOptions));
+                return Task.FromResult((ProtocolMessage?)e);
 
               default:
                 throw new Exception($"Unsupported DAP message from debugger: {msg}");

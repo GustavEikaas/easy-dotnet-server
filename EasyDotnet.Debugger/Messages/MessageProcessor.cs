@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Debugger.Messages;
@@ -12,16 +11,10 @@ public class MessageProcessor(
   IMessageChannels channels,
   IRequestTracker requestTracker,
   IDebuggerProxy proxy,
-  Func<ProtocolMessage, IDebuggerProxy, Task<string?>>? clientMessageRefiner = null,
-  Func<ProtocolMessage, IDebuggerProxy, Task<string?>>? debuggerMessageRefiner = null,
+  Func<ProtocolMessage, IDebuggerProxy, Task<ProtocolMessage?>>? clientMessageRefiner = null,
+  Func<ProtocolMessage, IDebuggerProxy, Task<ProtocolMessage?>>? debuggerMessageRefiner = null,
   ILogger<MessageProcessor>? logger = null) : IMessageProcessor
 {
-  private static readonly JsonSerializerOptions SerializerOptions = new()
-  {
-    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-    DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-  };
-
   public async Task ProcessMessagesAsync(CancellationToken cancellationToken)
   {
     var clientTask = ProcessClientMessagesAsync(cancellationToken);
@@ -105,7 +98,7 @@ public class MessageProcessor(
 
     var json = clientMessageRefiner != null
       ? await clientMessageRefiner(request, proxy)
-      : JsonSerializer.Serialize(request, SerializerOptions);
+      : request;
 
     if (json is null)
     {
@@ -163,7 +156,7 @@ public class MessageProcessor(
 
     var json = debuggerMessageRefiner != null
       ? await debuggerMessageRefiner(response, proxy)
-      : JsonSerializer.Serialize(response, SerializerOptions);
+      : response;
 
     logger?.LogDebug("Refiner completed for seq={seq}, writing to client", context.OriginalSeq);
 
@@ -183,7 +176,7 @@ public class MessageProcessor(
 
     var json = debuggerMessageRefiner != null
       ? await debuggerMessageRefiner(evt, proxy)
-      : JsonSerializer.Serialize(evt, SerializerOptions);
+      : evt;
 
     if (json is null)
     {

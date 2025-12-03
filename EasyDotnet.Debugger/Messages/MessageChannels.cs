@@ -10,11 +10,11 @@ public interface IMessageChannels
   ChannelReader<ProtocolMessage> DebuggerToProxyReader { get; }
   ChannelWriter<ProtocolMessage> DebuggerToProxyWriter { get; }
 
-  ChannelReader<string> ProxyToClientReader { get; }
-  ChannelWriter<string> ProxyToClientWriter { get; }
+  ChannelReader<ProtocolMessage> ProxyToClientReader { get; }
+  ChannelWriter<ProtocolMessage> ProxyToClientWriter { get; }
 
-  ChannelReader<string> ProxyToDebuggerReader { get; }
-  ChannelWriter<string> ProxyToDebuggerWriter { get; }
+  ChannelReader<ProtocolMessage> ProxyToDebuggerReader { get; }
+  ChannelWriter<ProtocolMessage> ProxyToDebuggerWriter { get; }
 
   void CompleteAll();
 }
@@ -23,8 +23,8 @@ public class MessageChannels : IMessageChannels
 {
   private readonly Channel<ProtocolMessage> _clientToProxy;
   private readonly Channel<ProtocolMessage> _debuggerToProxy;
-  private readonly Channel<string> _proxyToClient;
-  private readonly Channel<string> _proxyToDebugger;
+  private readonly Channel<ProtocolMessage> _proxyToClient;
+  private readonly Channel<ProtocolMessage> _proxyToDebugger;
 
   public MessageChannels()
   {
@@ -40,13 +40,13 @@ public class MessageChannels : IMessageChannels
       SingleWriter = true
     });
 
-    _proxyToClient = Channel.CreateUnbounded<string>(new UnboundedChannelOptions
+    _proxyToClient = Channel.CreateUnbounded<ProtocolMessage>(new UnboundedChannelOptions
     {
       SingleReader = true,
       SingleWriter = true
     });
 
-    _proxyToDebugger = Channel.CreateUnbounded<string>(new UnboundedChannelOptions
+    _proxyToDebugger = Channel.CreateUnbounded<ProtocolMessage>(new UnboundedChannelOptions
     {
       SingleReader = true,
       SingleWriter = true
@@ -59,11 +59,11 @@ public class MessageChannels : IMessageChannels
   public ChannelReader<ProtocolMessage> DebuggerToProxyReader => _debuggerToProxy.Reader;
   public ChannelWriter<ProtocolMessage> DebuggerToProxyWriter => _debuggerToProxy.Writer;
 
-  public ChannelReader<string> ProxyToClientReader => _proxyToClient.Reader;
-  public ChannelWriter<string> ProxyToClientWriter => _proxyToClient.Writer;
+  public ChannelReader<ProtocolMessage> ProxyToClientReader => _proxyToClient.Reader;
+  public ChannelWriter<ProtocolMessage> ProxyToClientWriter => _proxyToClient.Writer;
 
-  public ChannelReader<string> ProxyToDebuggerReader => _proxyToDebugger.Reader;
-  public ChannelWriter<string> ProxyToDebuggerWriter => _proxyToDebugger.Writer;
+  public ChannelReader<ProtocolMessage> ProxyToDebuggerReader => _proxyToDebugger.Reader;
+  public ChannelWriter<ProtocolMessage> ProxyToDebuggerWriter => _proxyToDebugger.Writer;
 
   public void CompleteAll()
   {
