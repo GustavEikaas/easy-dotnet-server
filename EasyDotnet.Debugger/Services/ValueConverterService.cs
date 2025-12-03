@@ -31,7 +31,9 @@ public class ValueConverterService(ILogger<ValueConverterService> logger)
 
   public readonly List<IValueConverter> ValueConverters = [
     new ListValueConverter(),
-    new GuidValueConverter()
+    new GuidValueConverter(),
+    new DateTimeValueConverter(),
+    new TupleValueConverter()
   ];
 
   public void RegisterVariablesReferences(VariablesResponse response)
@@ -47,7 +49,7 @@ public class ValueConverterService(ILogger<ValueConverterService> logger)
       var converter = ValueConverters.FirstOrDefault(c => c.CanConvert(variable));
       if (converter != null)
       {
-        logger.LogInformation($"[ValueConverter] added ref to {id} for {nameof(converter)}");
+        logger.LogDebug("[ValueConverter] added ref to {id} for {converter}", id, nameof(converter));
         _variablesReferenceMap[id] = converter;
       }
     }

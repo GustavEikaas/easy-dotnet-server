@@ -44,15 +44,7 @@ public class GuidValueConverter() : IValueConverter
 
     var guid = new Guid(a, b, c, d, e, f, g, h, i, j, k);
 
-    variablesResponse.Body.Variables = [
-      new Variable()
-      {
-        Value = guid == Guid.Empty ?  $"Guid.Empty {Guid.Empty}" : guid.ToString(),
-        Name = "Value",
-        VariablesReference = 0,
-        EvaluateName = "Value",
-        Type = "System.Guid" }
-      ];
+    variablesResponse.Body.AssignComputedResult(guid == Guid.Empty ? $"Guid.Empty {Guid.Empty}" : guid.ToString());
 
     return variablesResponse;
   }
