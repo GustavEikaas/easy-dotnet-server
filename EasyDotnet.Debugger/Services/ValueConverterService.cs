@@ -31,7 +31,7 @@ public class ValueConverterService(ILogger<ValueConverterService> logger)
 
   public readonly List<IValueConverter> ValueConverters = [
     new ListValueConverter(),
-    // new GuidValueConverter()
+    new GuidValueConverter()
   ];
 
   public void RegisterVariablesReferences(VariablesResponse response)

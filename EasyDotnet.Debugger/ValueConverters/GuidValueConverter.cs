@@ -6,37 +6,29 @@ namespace EasyDotnet.Debugger.ValueConverters;
 public class GuidValueConverter() : IValueConverter
 {
 
-  public bool CanConvert(VariablesResponse response)
+  public bool CanConvert(Variable val) => val.Type == "System.Guid";
+
+  public async Task<VariablesResponse> TryConvertAsync(int id, IDebuggerProxy proxy, CancellationToken cancellationToken)
   {
-    var val = response.Body?.Variables.Find(x => x.Type == "System.Guid" && x.VariablesReference != 0);
-    return val is not null;
-  }
+    var variablesResponse = await proxy.GetVariablesAsync(id, cancellationToken);
+    if (variablesResponse is null)
+    {
+      throw new Exception($"Failed to resolve variables by ID {id}");
+    }
 
-  public bool CanConvert(Variable val) => throw new NotImplementedException();
-
-  public async Task<bool> TryConvertAsync(
-      VariablesResponse response,
-      IDebuggerProxy proxy,
-      CancellationToken cancellationToken)
-  {
-    var val = response.Body?.Variables
-        .Find(x => x.Type == "System.Guid" && x.VariablesReference != 0);
-
-    if (val == null || val.VariablesReference is null or 0)
-      return false;
-
-    var fields = await proxy.GetVariablesAsync(val.VariablesReference.Value, cancellationToken);
-    if (fields?.Body?.Variables is null)
-      return false;
+    if (variablesResponse.Body?.Variables is null)
+    {
+      return variablesResponse;
+    }
 
     int GetInt(string name) =>
-        int.Parse(fields.Body.Variables.First(v => v.Name == name).Value);
+        int.Parse(variablesResponse.Body.Variables.First(v => v.Name == name).Value);
 
     short GetShort(string name) =>
-        short.Parse(fields.Body.Variables.First(v => v.Name == name).Value);
+        short.Parse(variablesResponse.Body.Variables.First(v => v.Name == name).Value);
 
     byte GetByte(string name) =>
-        byte.Parse(fields.Body.Variables.First(v => v.Name == name).Value);
+        byte.Parse(variablesResponse.Body.Variables.First(v => v.Name == name).Value);
 
     var a = GetInt("_a");
     var b = GetShort("_b");
@@ -50,15 +42,18 @@ public class GuidValueConverter() : IValueConverter
     var j = GetByte("_j");
     var k = GetByte("_k");
 
-    //TOOD: if all of them are 0 just return "null", possibly need a better way to tell if a var is null
-
     var guid = new Guid(a, b, c, d, e, f, g, h, i, j, k);
 
-    val.VariablesReference = 0;
-    val.Value = guid.ToString();
+    variablesResponse.Body.Variables = [
+      new Variable()
+      {
+        Value = guid == Guid.Empty ?  $"Guid.Empty {Guid.Empty}" : guid.ToString(),
+        Name = "Value",
+        VariablesReference = 0,
+        EvaluateName = "Value",
+        Type = "System.Guid" }
+      ];
 
-    return true;
+    return variablesResponse;
   }
-
-  Task<VariablesResponse> IValueConverter.TryConvertAsync(int id, IDebuggerProxy proxy, CancellationToken cancellationToken) => throw new NotImplementedException();
 }
