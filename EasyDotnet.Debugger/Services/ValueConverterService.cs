@@ -33,7 +33,8 @@ public class ValueConverterService(ILogger<ValueConverterService> logger)
     new ListValueConverter(),
     new GuidValueConverter(),
     new DateTimeValueConverter(),
-    new TupleValueConverter()
+    new TupleValueConverter(),
+    new QueueValueConverter()
   ];
 
   public void RegisterVariablesReferences(VariablesResponse response)

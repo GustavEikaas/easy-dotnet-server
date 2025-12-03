@@ -27,9 +27,9 @@ public partial class TupleValueConverter() : IValueConverter
     static int ParseIndex(string name)
         => int.TryParse(name["Item".Length..], out var i) ? i : int.MaxValue;
 
-    variablesResponse.Body = new VariablesResponseBody() { Variables = [] };
-    variablesResponse.Body.Variables =
-        [.. vars
+    variablesResponse.Body = new VariablesResponseBody()
+    {
+      Variables = [.. vars
             .Where(v => v.Name.StartsWith("Item"))
             .OrderBy(v => ParseIndex(v.Name))
             .Select((v, idx) => new Variable
@@ -39,7 +39,8 @@ public partial class TupleValueConverter() : IValueConverter
               Type = v.Type,
               EvaluateName = v.EvaluateName,
               VariablesReference = v.VariablesReference
-            })];
+            })]
+    };
 
     return variablesResponse;
   }
