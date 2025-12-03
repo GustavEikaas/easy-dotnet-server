@@ -1,6 +1,6 @@
+using System.Text.RegularExpressions;
 using EasyDotnet.Debugger.Messages;
 using EasyDotnet.Debugger.Services;
-using System.Text.RegularExpressions;
 
 namespace EasyDotnet.Debugger.ValueConverters;
 
