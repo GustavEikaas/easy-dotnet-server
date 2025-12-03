@@ -25,6 +25,7 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
   private TcpClient? _client;
   private Task? _disposeTask;
   private DebuggerProxy? _proxy;
+  private Action? _onDispose;
 
 
   public Task Completion => _completionSource.Task;
@@ -33,6 +34,7 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
     string binaryPath,
     Func<InterceptableAttachRequest, Task<InterceptableAttachRequest>> rewriter,
     bool applyValueConverters,
+    Action<Exception> onProcessFailedToStart,
     Action onDispose)
   {
     if (_disposeTask != null)
@@ -44,6 +46,7 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
       }
       catch { }
     }
+    _onDispose = onDispose;
     _cancellationTokenSource = new CancellationTokenSource();
 
     _listener = new TcpListener(IPAddress.Any, 0);
@@ -151,9 +154,8 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
         }
         catch (Exception e)
         {
-          //TODO:
-          throw new Exception(e.Message);
-          // await notificationService.DisplayError($"Debugger failed to start: {e.Message}");
+          onProcessFailedToStart(e);
+          TriggerCleanup();
         }
 
         var debuggerDap = new Debugger(_process.StandardInput.BaseStream, _process.StandardOutput.BaseStream, (msg, _) =>
@@ -253,6 +255,7 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
         try
         {
           await _sessionTask.WaitAsync(TimeSpan.FromSeconds(10));
+          _onDispose?.Invoke();
         }
         catch (TimeoutException)
         {

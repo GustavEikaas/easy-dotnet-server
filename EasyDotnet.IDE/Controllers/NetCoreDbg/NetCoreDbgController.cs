@@ -25,6 +25,7 @@ public class NetCoreDbgController(
   IMsBuildService msBuildService,
   ILaunchProfileService launchProfileService,
   INetcoreDbgService netcoreDbgService,
+  INotificationService notificationService,
   IClientService clientService,
   ILogger<NetCoreDbgController> logger) : BaseController
 {
@@ -47,15 +48,20 @@ public class NetCoreDbgController(
 
     var res = StartVsTestIfApplicable(project, request.TargetPath);
 
-    var port = await netcoreDbgService.Start(binaryPath, async (request) => await InitializeRequestRewriter.CreateInitRequestBasedOnProjectType(project, launchProfile, request, project.ProjectDir!, res?.Item2), clientService?.ClientOptions?.DebuggerOptions?.ApplyValueConverters ?? false, () =>
-    {
-      if (res is { } value)
-      {
-        var (process, pid) = value;
-        SafeDisposeProcess(res.Value.Item1, "VsTest");
-        SafeDisposeProcessById(pid, "VsTestHost");
-      }
-    });
+    var port = await netcoreDbgService.Start(
+      binaryPath,
+      async (request) => await InitializeRequestRewriter.CreateInitRequestBasedOnProjectType(project, launchProfile, request, project.ProjectDir!, res?.Item2),
+      clientService?.ClientOptions?.DebuggerOptions?.ApplyValueConverters ?? false,
+      (e) => notificationService.DisplayError(e.Message),
+      () =>
+        {
+          if (res is { } value)
+          {
+            var (process, pid) = value;
+            SafeDisposeProcess(res.Value.Item1, "VsTest");
+            SafeDisposeProcessById(pid, "VsTestHost");
+          }
+        });
     // TODO: register debug session
     return new DebuggerStartResponse(true, port);
   }
