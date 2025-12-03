@@ -42,9 +42,7 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
       {
         await _disposeTask;
       }
-      catch
-      {
-      }
+      catch { }
     }
     _cancellationTokenSource = new CancellationTokenSource();
 
@@ -166,8 +164,10 @@ public class NetcoreDbgService(ILogger<NetcoreDbgService> logger, ILogger<Debugg
             {
               case VariablesResponse variablesRes:
                 logger.LogInformation("[DBG] variables response: {message}", JsonSerializer.Serialize(variablesRes, LoggingSerializerOptions));
-
-                valueConverterService.RegisterVariablesReferences(variablesRes);
+                if (applyValueConverters)
+                {
+                  valueConverterService.RegisterVariablesReferences(variablesRes);
+                }
 
                 return Task.FromResult((ProtocolMessage?)variablesRes);
 
