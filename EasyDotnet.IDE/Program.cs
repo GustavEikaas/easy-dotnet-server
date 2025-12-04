@@ -16,6 +16,7 @@ static class Program
       config.SetApplicationName("easydotnet");
       config.SetApplicationVersion(Assembly.GetExecutingAssembly().GetName().Version!.ToString());
 
+      config.AddCommand<OutputWindowCommand>("output");
       config.AddCommand<GenerateRpcDocsCommand>("generate-rpc-docs")
               .WithDescription("Generate RPC documentation in JSON or Markdown format.");
 
