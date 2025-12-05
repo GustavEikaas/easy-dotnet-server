@@ -13,7 +13,8 @@ public class DebugSessionFactory(ILoggerFactory loggerFactory) : IDebugSessionFa
     bool applyValueConverters)
   {
     var valueConverterService = new ValueConverterService(
-      loggerFactory.CreateLogger<ValueConverterService>());
+      loggerFactory.CreateLogger<ValueConverterService>(),
+      loggerFactory);
 
     var tcpServer = new TcpDebugServer(
       loggerFactory.CreateLogger<TcpDebugServer>());

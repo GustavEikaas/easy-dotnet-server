@@ -19,22 +19,25 @@ public class TcpDebugServer : ITcpDebugServer
     _listener = new TcpListener(IPAddress.Any, 0);
     _listener.Start();
     Port = ((IPEndPoint)_listener.LocalEndpoint).Port;
-    _logger.LogDebug("TCP server listening on port {port}", Port);
+    _logger.LogDebug("TCP server listening on port {Port}", Port);
   }
 
   public async Task<Stream> AcceptClientAsync(TimeSpan timeout, CancellationToken cancellationToken)
   {
     _logger.LogInformation("Waiting for client connection...");
 
-    _client = await _listener.AcceptTcpClientAsync().WaitAsync(timeout, cancellationToken);
+    _client = await _listener.AcceptTcpClientAsync()
+      .WaitAsync(timeout, cancellationToken);
 
-    _logger.LogInformation("Client connected from {endpoint}", _client.Client.RemoteEndPoint);
+    _logger.LogInformation("Client connected from {Endpoint}", _client.Client.RemoteEndPoint);
 
     return _client.GetStream();
   }
 
   public void Stop()
   {
+    _logger.LogDebug("Stop called");
+
     try
     {
       _client?.Close();
@@ -58,6 +61,7 @@ public class TcpDebugServer : ITcpDebugServer
 
   public async ValueTask DisposeAsync()
   {
+    _logger.LogDebug("DisposeAsync called");
     Stop();
     await Task.CompletedTask;
   }
