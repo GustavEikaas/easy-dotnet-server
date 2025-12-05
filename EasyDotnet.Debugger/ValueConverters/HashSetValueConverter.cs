@@ -75,22 +75,18 @@ public class HashSetValueConverter(ILogger<HashSetValueConverter> logger) : Valu
        {
          try
          {
-           // Get the Entry struct fields
            var entryResponse = await proxy.GetVariablesAsync(
              entry.VariablesReference!.Value,
              cancellationToken);
 
            if (entryResponse?.Body?.Variables is null || entryResponse.Body.Variables.Count == 0)
            {
-             return null; // Skip empty entries
+             return null;
            }
 
            var entryFields = entryResponse.Body.Variables;
            var entryLookup = ValueConverterHelpers.BuildFieldLookup(entryFields);
 
-           // Check if this entry is active by looking at the HashCode field
-           // HashCode == -1 means the entry is unused/deleted
-           // HashCode >= 0 means the entry is in use
            if (!ValueConverterHelpers.TryGetInt(entryLookup, "HashCode", out var hashCode))
            {
              Logger.LogDebug("[HashSet] Entry missing 'HashCode' field, skipping");
@@ -100,10 +96,9 @@ public class HashSetValueConverter(ILogger<HashSetValueConverter> logger) : Valu
            if (hashCode == -1)
            {
              Logger.LogDebug("[HashSet] Entry is unused (HashCode=-1), skipping");
-             return null; // This entry is not in use
+             return null;
            }
 
-           // Extract the "Value" field from the Entry struct
            if (!ValueConverterHelpers.TryGetVariable(entryFields, "Value", out var valueVar))
            {
              Logger.LogWarning("[HashSet] Active entry missing 'Value' field");
@@ -124,7 +119,6 @@ public class HashSetValueConverter(ILogger<HashSetValueConverter> logger) : Valu
 
     var results = await Task.WhenAll(activeTasks);
 
-    // Filter out nulls and assign indices
     var activeEntries = results
       .Where(v => v != null)
       .Select((v, idx) => new Variable
