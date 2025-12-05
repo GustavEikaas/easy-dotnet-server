@@ -9,7 +9,7 @@ public static class Configurator
   public static IServiceCollection AddDebugger(this IServiceCollection services)
   {
     services.AddTransient<ValueConverterService>();
-    services.AddSingleton<INetcoreDbgService, NetcoreDbgService>();
+    services.AddTransient<INetcoreDbgService, NetcoreDbgService>();
     return services;
 
   }

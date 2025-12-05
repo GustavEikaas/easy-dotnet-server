@@ -19,6 +19,7 @@ public interface IDebuggerProxy
 
 public class DebuggerProxy : IDebuggerProxy
 {
+  private int _isCompleting;
   private readonly Client _client;
   private readonly Debugger _debugger;
   private readonly IMessageChannels _channels;
@@ -169,7 +170,6 @@ public class DebuggerProxy : IDebuggerProxy
         var json = await DapMessageReader.ReadDapMessageAsync(_client.Output, cancellationToken);
         if (json == null)
         {
-          _logger?.LogInformation("Client stream closed");
           break;
         }
 
@@ -189,7 +189,12 @@ public class DebuggerProxy : IDebuggerProxy
     finally
     {
       _channels.ClientToProxyWriter.Complete();
-      onDisconnect?.Invoke();
+
+      if (Interlocked.CompareExchange(ref _isCompleting, 1, 0) == 0)
+      {
+        _logger?.LogDebug("Initiating proxy shutdown.");
+        onDisconnect?.Invoke();
+      }
     }
   }
 
@@ -202,7 +207,6 @@ public class DebuggerProxy : IDebuggerProxy
         var json = await DapMessageReader.ReadDapMessageAsync(_debugger.Output, cancellationToken);
         if (json == null)
         {
-          _logger?.LogInformation("Debugger stream closed");
           break;
         }
 
@@ -222,7 +226,12 @@ public class DebuggerProxy : IDebuggerProxy
     finally
     {
       _channels.DebuggerToProxyWriter.Complete();
-      onDisconnect?.Invoke();
+
+      if (Interlocked.CompareExchange(ref _isCompleting, 1, 0) == 0)
+      {
+        _logger?.LogDebug("Initiating proxy shutdown.");
+        onDisconnect?.Invoke();
+      }
     }
   }
 
