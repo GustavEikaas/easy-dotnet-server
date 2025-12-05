@@ -1,51 +1,65 @@
 using EasyDotnet.Debugger.Messages;
-using EasyDotnet.Debugger.Services;
+using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Debugger.ValueConverters;
 
-public class GuidValueConverter() : IValueConverter
+public class GuidValueConverter(ILogger<GuidValueConverter> logger) : ValueConverterBase(logger)
 {
+  protected override string ConverterName => "Guid";
 
-  public bool CanConvert(Variable val) => val.Type == "System.Guid";
+  public override bool CanConvert(Variable val) => val.Type == "System.Guid";
 
-  public async Task<VariablesResponse> TryConvertAsync(int id, IDebuggerProxy proxy, CancellationToken cancellationToken)
+  public override async Task<VariablesResponse> TryConvertAsync(
+    int id,
+    IDebuggerProxy proxy,
+    CancellationToken cancellationToken)
   {
-    var variablesResponse = await proxy.GetVariablesAsync(id, cancellationToken);
-    if (variablesResponse is null)
+    var response = await proxy.GetVariablesAsync(id, cancellationToken);
+
+    if (response == null)
     {
-      throw new Exception($"Failed to resolve variables by ID {id}");
+      LogFailure("Proxy returned null response", id);
+      throw new InvalidOperationException($"Failed to get variables for reference {id}");
     }
 
-    if (variablesResponse.Body?.Variables is null)
+    if (!ValidateResponse(response, id, out var variables))
     {
-      return variablesResponse;
+      return response;
     }
 
-    int GetInt(string name) =>
-        int.Parse(variablesResponse.Body.Variables.First(v => v.Name == name).Value);
+    var lookup = ValueConverterHelpers.BuildFieldLookup(variables);
 
-    short GetShort(string name) =>
-        short.Parse(variablesResponse.Body.Variables.First(v => v.Name == name).Value);
+    if (!ValueConverterHelpers.TryGetInt(lookup, "_a", out var a) ||
+        !ValueConverterHelpers.TryGetShort(lookup, "_b", out var b) ||
+        !ValueConverterHelpers.TryGetShort(lookup, "_c", out var c) ||
+        !ValueConverterHelpers.TryGetByte(lookup, "_d", out var d) ||
+        !ValueConverterHelpers.TryGetByte(lookup, "_e", out var e) ||
+        !ValueConverterHelpers.TryGetByte(lookup, "_f", out var f) ||
+        !ValueConverterHelpers.TryGetByte(lookup, "_g", out var g) ||
+        !ValueConverterHelpers.TryGetByte(lookup, "_h", out var h) ||
+        !ValueConverterHelpers.TryGetByte(lookup, "_i", out var i) ||
+        !ValueConverterHelpers.TryGetByte(lookup, "_j", out var j) ||
+        !ValueConverterHelpers.TryGetByte(lookup, "_k", out var k))
+    {
+      LogFailure("Missing or invalid GUID fields", id);
+      return response;
+    }
 
-    byte GetByte(string name) =>
-        byte.Parse(variablesResponse.Body.Variables.First(v => v.Name == name).Value);
+    try
+    {
+      var guid = new Guid(a, b, c, d, e, f, g, h, i, j, k);
 
-    var a = GetInt("_a");
-    var b = GetShort("_b");
-    var c = GetShort("_c");
-    var d = GetByte("_d");
-    var e = GetByte("_e");
-    var f = GetByte("_f");
-    var g = GetByte("_g");
-    var h = GetByte("_h");
-    var i = GetByte("_i");
-    var j = GetByte("_j");
-    var k = GetByte("_k");
+      var formatted = guid == Guid.Empty
+        ? $"Guid.Empty ({Guid.Empty:D})"
+        : guid.ToString("D");
 
-    var guid = new Guid(a, b, c, d, e, f, g, h, i, j, k);
-
-    variablesResponse.Body.AssignComputedResult(guid == Guid.Empty ? $"Guid.Empty {Guid.Empty}" : guid.ToString());
-
-    return variablesResponse;
+      response.Body!.AssignComputedResult(formatted);
+      return response;
+    }
+    catch (ArgumentException ex)
+    {
+      LogFailure($"Invalid GUID constructor arguments: {ex.Message}", id);
+      return response;
+    }
   }
 }

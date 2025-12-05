@@ -1,48 +1,77 @@
 using System.Text.RegularExpressions;
 using EasyDotnet.Debugger.Messages;
-using EasyDotnet.Debugger.Services;
+using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Debugger.ValueConverters;
 
-public partial class TupleValueConverter() : IValueConverter
+public partial class TupleValueConverter(ILogger<TupleValueConverter> logger) : ValueConverterBase(logger)
 {
-  public bool CanConvert(Variable val)
+  protected override string ConverterName => "Tuple";
+
+  public override bool CanConvert(Variable val)
       => TupleRegex().IsMatch(val.Type);
 
-  public async Task<VariablesResponse> TryConvertAsync(
+  public override async Task<VariablesResponse> TryConvertAsync(
       int id,
       IDebuggerProxy proxy,
       CancellationToken cancellationToken)
   {
-    var variablesResponse = await proxy.GetVariablesAsync(id, cancellationToken) ?? throw new Exception($"Failed to resolve variables by ID {id}");
-    var vars = variablesResponse.Body?.Variables;
-    if (vars is null)
-      return variablesResponse;
+    var response = await proxy.GetVariablesAsync(id, cancellationToken);
 
-    var items = vars
-        .Where(v => v.Name.StartsWith("Item"))
-        .OrderBy(v => ParseIndex(v.Name))
+    if (response == null)
+    {
+      LogFailure("Proxy returned null response", id);
+      throw new InvalidOperationException($"Failed to get variables for reference {id}");
+    }
+
+    if (!ValidateResponse(response, id, out var variables))
+    {
+      return response;
+    }
+
+    try
+    {
+      var tupleItems = variables
+        .Where(v => v.Name.StartsWith("Item", StringComparison.Ordinal))
+        .Select(v => new { Variable = v, Index = ParseItemIndex(v.Name) })
+        .Where(x => x.Index > 0)
+        .OrderBy(x => x.Index)
+        .Select(x => new Variable
+        {
+          Name = $"[{x.Index}]",
+          Value = x.Variable.Value,
+          Type = x.Variable.Type,
+          EvaluateName = x.Variable.EvaluateName,
+          VariablesReference = x.Variable.VariablesReference
+        })
         .ToList();
 
-    static int ParseIndex(string name)
-        => int.TryParse(name["Item".Length..], out var i) ? i : int.MaxValue;
+      if (tupleItems.Count == 0)
+      {
+        LogFailure("No valid Item fields found in tuple", id);
+        return response;
+      }
 
-    variablesResponse.Body = new VariablesResponseBody()
+      response.Body!.Variables = tupleItems;
+
+      Logger.LogDebug("[Tuple] Reformatted {Count} tuple items", tupleItems.Count);
+
+      return response;
+    }
+    catch (Exception ex)
     {
-      Variables = [.. vars
-            .Where(v => v.Name.StartsWith("Item"))
-            .OrderBy(v => ParseIndex(v.Name))
-            .Select((v, idx) => new Variable
-            {
-              Name = $"[{idx + 1}]",
-              Value = v.Value,
-              Type = v.Type,
-              EvaluateName = v.EvaluateName,
-              VariablesReference = v.VariablesReference
-            })]
-    };
+      LogFailure($"Error reformatting tuple items: {ex.Message}", id);
+      return response;
+    }
+  }
 
-    return variablesResponse;
+  private static int ParseItemIndex(string name)
+  {
+    if (!name.StartsWith("Item", StringComparison.Ordinal))
+      return -1;
+
+    var indexPart = name["Item".Length..];
+    return int.TryParse(indexPart, out var index) ? index : -1;
   }
 
   [GeneratedRegex(@"^System\.Tuple(<.*>)?$", RegexOptions.Compiled)]

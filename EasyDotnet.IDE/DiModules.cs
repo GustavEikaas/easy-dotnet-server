@@ -43,6 +43,8 @@ public static class DiModules
     services.AddSingleton<ISolutionService, SolutionService>();
     services.AddSingleton<IProcessQueue, ProcessQueue>();
     services.AddSingleton<TemplateEngineService>();
+    services.AddSingleton<IDebugSessionManager, DebugSessionManager>();
+    services.AddSingleton<IDebugOrchestrator, DebugOrchestrator>();
 
     services.AddTransient<IMsBuildService, MsBuildService>();
     services.AddTransient<IAspireService, AspireService>();

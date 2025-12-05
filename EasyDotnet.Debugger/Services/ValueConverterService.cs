@@ -24,19 +24,19 @@ public interface IValueConverter
     CancellationToken cancellationToken);
 }
 
-public class ValueConverterService(ILogger<ValueConverterService> logger)
+public class ValueConverterService(
+  ILogger<ValueConverterService> logger,
+  ILoggerFactory loggerFactory)
 {
-
   private readonly Dictionary<long, IValueConverter> _variablesReferenceMap = [];
-
   public readonly List<IValueConverter> ValueConverters = [
-    new ListValueConverter(),
-    new GuidValueConverter(),
-    new DateTimeValueConverter(),
-    new TupleValueConverter(),
-    new QueueValueConverter(),
-    new HashSetValueConverter()
-  ];
+      new DateTimeValueConverter(loggerFactory.CreateLogger<DateTimeValueConverter>()),
+      new GuidValueConverter(loggerFactory.CreateLogger<GuidValueConverter>()),
+      new HashSetValueConverter(loggerFactory.CreateLogger<HashSetValueConverter>()),
+      new QueueValueConverter(loggerFactory.CreateLogger<QueueValueConverter>()),
+      new ListValueConverter(loggerFactory.CreateLogger<ListValueConverter>()),
+      new TupleValueConverter(loggerFactory.CreateLogger<TupleValueConverter>())
+    ];
 
   public void RegisterVariablesReferences(VariablesResponse response)
   {
