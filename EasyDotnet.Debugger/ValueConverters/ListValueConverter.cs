@@ -1,46 +1,80 @@
 using System.Text.RegularExpressions;
 using EasyDotnet.Debugger.Messages;
-using EasyDotnet.Debugger.Services;
+using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Debugger.ValueConverters;
 
-public partial class ListValueConverter() : IValueConverter
+public partial class ListValueConverter(ILogger<ListValueConverter> logger) : ValueConverterBase(logger)
 {
-  public bool CanConvert(Variable val) => !string.IsNullOrEmpty(val.Type)
+  protected override string ConverterName => "List";
+
+  public override bool CanConvert(Variable val) => !string.IsNullOrEmpty(val.Type)
       && AnyList().IsMatch(
         val.Type);
 
-  public async Task<VariablesResponse> TryConvertAsync(int id, IDebuggerProxy proxy, CancellationToken cancellationToken)
+  public override async Task<VariablesResponse> TryConvertAsync(int id, IDebuggerProxy proxy, CancellationToken cancellationToken)
   {
-    var internals = await proxy.GetVariablesAsync(id, cancellationToken) ?? throw new Exception($"variables request for {id} returned null");
-    var itemsVariable = internals.Body!.Variables.FirstOrDefault(v => v.Name == "_items");
-    var x = itemsVariable?.GetType();
-    var sizeVariable = internals.Body!.Variables.FirstOrDefault(v => v.Name == "_size");
+    var response = await proxy.GetVariablesAsync(id, cancellationToken);
 
-    if (itemsVariable?.VariablesReference.HasValue != true ||
-        itemsVariable?.VariablesReference <= 0)
+    if (response == null)
     {
-      return internals;
+      LogFailure("Proxy returned null response", id);
+      throw new InvalidOperationException($"Failed to get variables for reference {id}");
     }
 
-    if (sizeVariable == null || !int.TryParse(sizeVariable.Value, out var actualSize))
+    if (!ValidateResponse(response, id, out var variables))
     {
-      return internals;
+      return response;
     }
 
-    var itemsArrayResponse = await proxy.GetVariablesAsync(itemsVariable!.VariablesReference!.Value, cancellationToken);
-
-    if (itemsArrayResponse?.Body?.Variables == null)
+    if (!ValueConverterHelpers.TryGetVariable(variables, "_items", out var itemsVar) ||
+        itemsVar.VariablesReference is null or 0)
     {
-      return internals;
+      LogFailure("Missing _items field or invalid reference", id);
+      return response;
     }
 
-    internals.Body.Variables = [.. itemsArrayResponse.Body.Variables
-      .Where(v => v.Name.StartsWith('[') && v.Name.EndsWith(']'))
-      .OrderBy(v => ParseArrayIndex(v.Name))
-      .Take(actualSize)];
+    var lookup = ValueConverterHelpers.BuildFieldLookup(variables);
+    if (!ValueConverterHelpers.TryGetInt(lookup, "_size", out var actualSize))
+    {
+      LogFailure("Missing or invalid _size field", id);
+      return response;
+    }
 
-    return internals;
+    var itemsResponse = await proxy.GetVariablesAsync(
+      itemsVar.VariablesReference.Value,
+      cancellationToken);
+
+    if (!ValidateResponse(itemsResponse, itemsVar.VariablesReference.Value, out var items))
+    {
+      LogFailure("Failed to retrieve _items array", id);
+      return response;
+    }
+
+    try
+    {
+      var activeItems = items
+        .Where(v => v.Name.StartsWith('[') && v.Name.EndsWith(']'))
+        .Select(v => new { Variable = v, Index = ParseArrayIndex(v.Name) })
+        .Where(x => x.Index >= 0 && x.Index < actualSize)
+        .OrderBy(x => x.Index)
+        .Select(x => x.Variable)
+        .ToList();
+
+      response.Body!.Variables = activeItems;
+
+      Logger.LogDebug(
+        "[List] Filtered to {ActiveCount} items (from capacity {TotalCount})",
+        activeItems.Count,
+        items.Count);
+
+      return response;
+    }
+    catch (Exception ex)
+    {
+      LogFailure($"Error filtering list items: {ex.Message}", id);
+      return response;
+    }
   }
 
   private static int ParseArrayIndex(string name)

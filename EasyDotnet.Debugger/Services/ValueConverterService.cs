@@ -33,9 +33,9 @@ public class ValueConverterService(
       new DateTimeValueConverter(loggerFactory.CreateLogger<DateTimeValueConverter>()),
       new GuidValueConverter(loggerFactory.CreateLogger<GuidValueConverter>()),
       new HashSetValueConverter(loggerFactory.CreateLogger<HashSetValueConverter>()),
-      new QueueValueConverter(),
-      new ListValueConverter(),
-      new TupleValueConverter()
+      new QueueValueConverter(loggerFactory.CreateLogger<QueueValueConverter>()),
+      new ListValueConverter(loggerFactory.CreateLogger<ListValueConverter>()),
+      new TupleValueConverter(loggerFactory.CreateLogger<TupleValueConverter>())
     ];
 
   public void RegisterVariablesReferences(VariablesResponse response)

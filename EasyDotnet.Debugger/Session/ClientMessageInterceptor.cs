@@ -63,6 +63,8 @@ public class ClientMessageInterceptor(
           proxy,
           cancellationToken);
 
+        valueConverterService.RegisterVariablesReferences(result);
+
         var context = proxy.GetAndRemoveContext(request.Seq)
           ?? throw new Exception("Proxy request not found");
 

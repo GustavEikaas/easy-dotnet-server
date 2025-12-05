@@ -53,7 +53,7 @@ public class DateTimeValueConverter(ILogger<DateTimeValueConverter> logger) : Va
         .AddTicks(extraTicks);
 
       var formatted = dt == default
-        ? "DateTime. MinValue (0001-01-01T00:00:00. 0000000)"
+        ? "DateTime.MinValue (0001-01-01T00:00:00. 0000000)"
         : FormatDateTime(dt);
 
       response!.Body!.AssignComputedResult(formatted);
