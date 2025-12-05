@@ -8,7 +8,6 @@ using EasyDotnet.Debugger.Interfaces;
 using EasyDotnet.Infrastructure.Dap;
 using EasyDotnet.IDE.Controllers.NetCoreDbg;
 using EasyDotnet.MsBuild;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.IO;
 
@@ -27,7 +26,7 @@ public interface IDebugOrchestrator
     DebuggerStartRequest request,
     CancellationToken cancellationToken);
 
-  INetcoreDbgService? GetSessionService(string dllPath);
+  Debugger.DebugSession? GetSessionService(string dllPath);
 
   Task StopDebugSessionAsync(string dllPath);
 
@@ -38,14 +37,14 @@ public interface IDebugOrchestrator
 
 public class DebugOrchestrator(
   IDebugSessionManager debugSessionManager,
-  IServiceProvider serviceProvider,
+  IDebugSessionFactory debugSessionFactory,
   IMsBuildService msBuildService,
   ILaunchProfileService launchProfileService,
   INotificationService notificationService,
   IClientService clientService,
   ILogger<DebugOrchestrator> logger) : IDebugOrchestrator
 {
-  private readonly ConcurrentDictionary<string, INetcoreDbgService> _sessionServices = new();
+  private readonly ConcurrentDictionary<string, Debugger.DebugSession> _sessionServices = new();
 
   public async Task<int> StartClientDebugSessionAsync(
     string dllPath,
@@ -134,7 +133,7 @@ public class DebugOrchestrator(
   public bool HasActiveSession(string dllPath) =>
     debugSessionManager.HasActiveSession(dllPath);
 
-  public INetcoreDbgService? GetSessionService(string dllPath)
+  public Debugger.DebugSession? GetSessionService(string dllPath)
   {
     _sessionServices.TryGetValue(dllPath, out var service);
     return service;
@@ -170,12 +169,12 @@ public class DebugOrchestrator(
 
       var vsTestResult = StartVsTestIfApplicable(project, request.TargetPath);
 
-      var netcoreDbgService = serviceProvider.GetRequiredService<INetcoreDbgService>();
-      _sessionServices[dllPath] = netcoreDbgService;
+      var session = debugSessionFactory.Create();
+      _sessionServices[dllPath] = session;
 
       try
       {
-        var port = netcoreDbgService.Start(
+        var port = session.Start(
             binaryPath,
             async (attachRequest) =>
                 await InitializeRequestRewriter.CreateInitRequestBasedOnProjectType(
@@ -304,4 +303,5 @@ public class DebugOrchestrator(
       }
     }
   }
+
 }

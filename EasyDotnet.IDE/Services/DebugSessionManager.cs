@@ -17,7 +17,7 @@ public enum DebugSessionState
 
 public class DebugSession
 {
-  public required string ProjectPath { get; init; }
+  public required string DllPath { get; init; }
   public string? SessionId { get; init; }
   public DebugSessionState State { get; set; }
   public DateTime StartedAt { get; init; }
@@ -44,7 +44,7 @@ public class DebugSessionManager(ILogger<DebugSessionManager> logger) : IDebugSe
 {
   private static readonly TimeSpan LockTimeout = TimeSpan.FromSeconds(10);
   private readonly ConcurrentDictionary<string, DebugSession> _activeSessions = new();
-  private readonly ConcurrentDictionary<string, SemaphoreSlim> _projectLocks = new();
+  private readonly ConcurrentDictionary<string, SemaphoreSlim> _dllLocks = new();
 
   public async Task<int> StartServerSessionAsync(string projectPath, string sessionId,
     Func<Task<int>> sessionFactory, CancellationToken cancellationToken) => await StartSessionInternalAsync(projectPath, sessionId, sessionFactory, cancellationToken);
@@ -57,7 +57,7 @@ public class DebugSessionManager(ILogger<DebugSessionManager> logger) : IDebugSe
   {
 
     var projectName = Path.GetFileNameWithoutExtension(projectPath);
-    var lockObj = _projectLocks.GetOrAdd(projectPath, _ => new SemaphoreSlim(1, 1));
+    var lockObj = _dllLocks.GetOrAdd(projectPath, _ => new SemaphoreSlim(1, 1));
 
     try
     {
@@ -96,7 +96,7 @@ public class DebugSessionManager(ILogger<DebugSessionManager> logger) : IDebugSe
 
       var session = new DebugSession
       {
-        ProjectPath = projectPath,
+        DllPath = projectPath,
         SessionId = sessionId,
         State = DebugSessionState.Starting,
         StartedAt = DateTime.UtcNow
@@ -147,7 +147,7 @@ public class DebugSessionManager(ILogger<DebugSessionManager> logger) : IDebugSe
       return;
     }
 
-    var lockObj = _projectLocks.GetOrAdd(projectPath, _ => new SemaphoreSlim(1, 1));
+    var lockObj = _dllLocks.GetOrAdd(projectPath, _ => new SemaphoreSlim(1, 1));
 
     try
     {
