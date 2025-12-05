@@ -169,45 +169,46 @@ public class DebugOrchestrator(
 
       var vsTestResult = StartVsTestIfApplicable(project, request.TargetPath);
 
-      var session = debugSessionFactory.Create();
-      _sessionServices[dllPath] = session;
-
-      try
-      {
-        var port = session.Start(
-            binaryPath,
-            async (attachRequest) =>
+      var session = debugSessionFactory.Create(async (attachRequest) =>
                 await InitializeRequestRewriter.CreateInitRequestBasedOnProjectType(
                     project,
                     launchProfile,
                     attachRequest,
                     project.ProjectDir!,
                     vsTestResult?.Item2),
-            clientService?.ClientOptions?.DebuggerOptions?.ApplyValueConverters ?? false,
-            (ex) =>
-            {
-              notificationService.DisplayError(ex.Message);
-              logger.LogError(ex, "Failed to start debugger process for {project}.", projectName);
-            },
-            async () =>
-            {
-              try
-              {
-                logger.LogDebug("Session cleanup callback invoked for {project}.", projectName);
-                await StopDebugSessionAsync(dllPath);
-              }
-              catch (Exception ex)
-              {
-                logger.LogError(ex, "Error during session cleanup for {project}.", projectName);
-              }
-              finally
-              {
-                CleanupVsTest(vsTestResult);
-              }
-            });
+            clientService?.ClientOptions?.DebuggerOptions?.ApplyValueConverters ?? false
+      );
+      _sessionServices[dllPath] = session;
 
-        logger.LogInformation("Debug session ready for {project} on port {port}.", projectName, port);
-        return port;
+      try
+      {
+        session.Start(
+           binaryPath,
+           (ex) =>
+           {
+             notificationService.DisplayError(ex.Message);
+             logger.LogError(ex, "Failed to start debugger process for {project}.", projectName);
+           },
+           async () =>
+           {
+             try
+             {
+               logger.LogDebug("Session cleanup callback invoked for {project}.", projectName);
+               await StopDebugSessionAsync(dllPath);
+             }
+             catch (Exception ex)
+             {
+               logger.LogError(ex, "Error during session cleanup for {project}.", projectName);
+             }
+             finally
+             {
+               CleanupVsTest(vsTestResult);
+             }
+           }, cancellationToken);
+
+        logger.LogInformation("Debug session ready for {project} on port {port}.", projectName, session.Port);
+
+        return session.Port;
       }
       catch (Exception ex)
       {
