@@ -25,14 +25,25 @@ public class IdeRunSessionHandler(
   public async Task<RunSession> HandleCreateAsync(
       string dcpId,
       ProjectLaunchConfiguration config,
-      CancellationToken cancellationToken)
+      CancellationToken cancellationToken = default)
   {
     var runId = RunSessionExtensions.GenerateRunId();
 
     logger.LogInformation(
-        "Creating run session {RunId} for project {ProjectPath}",
+        "Creating run session {RunId} for project {ProjectPath} with DCP ID {DcpId}",
         runId,
-        config.ProjectPath);
+        config.ProjectPath,
+        dcpId);
+
+    // Look up the session by DCP ID (already set during auth)
+    var aspireSession = sessionManager.GetSessionByDcpId(dcpId);
+
+    if (aspireSession == null)
+    {
+      logger.LogError("No Aspire session found for DCP ID: {DcpId}", dcpId);
+      throw new InvalidOperationException(
+          $"No Aspire session found for DCP ID: {dcpId}. This should not happen if auth worked.");
+    }
 
     // Get or load project properties
     var project = await msBuildService.GetOrSetProjectPropertiesAsync(

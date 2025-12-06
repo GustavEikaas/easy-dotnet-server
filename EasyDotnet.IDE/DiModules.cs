@@ -11,7 +11,6 @@ using EasyDotnet.Debugger;
 using EasyDotnet.IDE.Aspire;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.Utils;
-using EasyDotnet.Infrastructure.Aspire;
 using EasyDotnet.Infrastructure.Process;
 using EasyDotnet.Infrastructure.Services;
 using EasyDotnet.Services;
@@ -51,7 +50,6 @@ public static class DiModules
     services.AddSingleton<IDebugOrchestrator, DebugOrchestrator>();
 
     services.AddTransient<IMsBuildService, MsBuildService>();
-    services.AddTransient<IAspireService, AspireService>();
     services.AddTransient<IJsonCodeGenService, JsonCodeGenService>();
     services.AddTransient<UserSecretsService>();
     services.AddTransient<ILaunchProfileService, LaunchProfileService>();

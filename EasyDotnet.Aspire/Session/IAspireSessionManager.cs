@@ -13,9 +13,19 @@ public interface IAspireSessionManager
   AspireSession? GetSession(string projectPath);
 
   /// <summary>
+  /// Gets a session by its unique token
+  /// </summary>
+  AspireSession? GetSessionByToken(string token);
+
+  /// <summary>
   /// Gets a session by its DCP instance ID
   /// </summary>
   AspireSession? GetSessionByDcpId(string dcpId);
+
+  /// <summary>
+  /// Updates the DCP ID for a session when it connects
+  /// </summary>
+  void SetSessionDcpId(string token, string dcpId);
 
   /// <summary>
   /// Terminates a session and cleans up resources

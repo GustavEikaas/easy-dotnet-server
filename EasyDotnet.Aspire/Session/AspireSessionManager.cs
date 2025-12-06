@@ -6,6 +6,7 @@ namespace EasyDotnet.Aspire.Session;
 public class AspireSessionManager(ILogger<AspireSessionManager> logger) : IAspireSessionManager, IDisposable
 {
   private readonly ConcurrentDictionary<string, AspireSession> _sessionsByProjectPath = new();
+  private readonly ConcurrentDictionary<string, AspireSession> _sessionsByToken = new();
   private readonly ConcurrentDictionary<string, AspireSession> _sessionsByDcpId = new();
   private readonly ConcurrentDictionary<string, RunSession> _runSessionsById = new();
 
@@ -17,17 +18,17 @@ public class AspireSessionManager(ILogger<AspireSessionManager> logger) : IAspir
           $"Session already exists for project: {session.ProjectPath}");
     }
 
-    if (!_sessionsByDcpId.TryAdd(session.DcpId, session))
+    if (!_sessionsByToken.TryAdd(session.Token, session))
     {
       _sessionsByProjectPath.TryRemove(session.ProjectPath, out _);
       throw new InvalidOperationException(
-          $"Session already exists for DCP ID: {session.DcpId}");
+          $"Session already exists for token: {session.Token}");
     }
 
     logger.LogInformation(
-        "Aspire session added: Project={ProjectPath}, DcpId={DcpId}",
+        "Aspire session added: Project={ProjectPath}, Token={Token}",
         session.ProjectPath,
-        session.DcpId);
+        session.Token);
   }
 
   public AspireSession? GetSession(string projectPath)
@@ -36,10 +37,39 @@ public class AspireSessionManager(ILogger<AspireSessionManager> logger) : IAspir
     return session;
   }
 
+  public AspireSession? GetSessionByToken(string token)
+  {
+    _sessionsByToken.TryGetValue(token, out var session);
+    return session;
+  }
+
   public AspireSession? GetSessionByDcpId(string dcpId)
   {
     _sessionsByDcpId.TryGetValue(dcpId, out var session);
     return session;
+  }
+
+  public void SetSessionDcpId(string token, string dcpId)
+  {
+    var session = GetSessionByToken(token);
+    if (session == null)
+    {
+      throw new InvalidOperationException($"No session found for token: {token}");
+    }
+
+    if (!string.IsNullOrEmpty(session.DcpId) && session.DcpId != dcpId)
+    {
+      throw new InvalidOperationException(
+          $"Session already has DCP ID: {session.DcpId}, cannot change to {dcpId}");
+    }
+
+    session.DcpId = dcpId;
+    _sessionsByDcpId[dcpId] = session;
+
+    logger.LogInformation(
+        "Session DCP ID set: Token={Token}, DcpId={DcpId}",
+        token,
+        dcpId);
   }
 
   public async Task TerminateSessionAsync(
@@ -52,7 +82,12 @@ public class AspireSessionManager(ILogger<AspireSessionManager> logger) : IAspir
       return;
     }
 
-    _sessionsByDcpId.TryRemove(session.DcpId, out _);
+    _sessionsByToken.TryRemove(session.Token, out _);
+
+    if (!string.IsNullOrEmpty(session.DcpId))
+    {
+      _sessionsByDcpId.TryRemove(session.DcpId, out _);
+    }
 
     // Remove all run sessions for this Aspire session
     foreach (var runSession in session.RunSessions.Values)
@@ -69,11 +104,17 @@ public class AspireSessionManager(ILogger<AspireSessionManager> logger) : IAspir
     await Task.CompletedTask;
   }
 
-  public IReadOnlyCollection<AspireSession> GetActiveSessions() => [.. _sessionsByProjectPath.Values];
+  public IReadOnlyCollection<AspireSession> GetActiveSessions() => _sessionsByProjectPath.Values.ToList();
 
   public void AddRunSession(string dcpId, RunSession runSession)
   {
-    var session = GetSessionByDcpId(dcpId) ?? throw new InvalidOperationException($"No Aspire session found for DCP ID: {dcpId}");
+    var session = GetSessionByDcpId(dcpId);
+    if (session == null)
+    {
+      throw new InvalidOperationException(
+          $"No Aspire session found for DCP ID: {dcpId}");
+    }
+
     session.AddRunSession(runSession);
     _runSessionsById[runSession.RunId] = runSession;
 
@@ -121,6 +162,7 @@ public class AspireSessionManager(ILogger<AspireSessionManager> logger) : IAspir
     }
 
     _sessionsByProjectPath.Clear();
+    _sessionsByToken.Clear();
     _sessionsByDcpId.Clear();
     _runSessionsById.Clear();
   }

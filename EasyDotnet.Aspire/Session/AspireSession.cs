@@ -1,3 +1,4 @@
+// AspireSession.cs
 using System.Diagnostics;
 
 namespace EasyDotnet.Aspire.Session;
@@ -5,7 +6,8 @@ namespace EasyDotnet.Aspire.Session;
 public class AspireSession
 {
   public required string ProjectPath { get; init; }
-  public required string DcpId { get; init; }
+  public required string Token { get; init; } // Unique token for this session
+  public string? DcpId { get; set; } // Set when DCP connects
   public required Process AspireCliProcess { get; init; }
   public required DateTime StartedAt { get; init; }
   public required CancellationTokenSource SessionCts { get; init; }

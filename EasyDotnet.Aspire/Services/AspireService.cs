@@ -6,59 +6,68 @@ using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Aspire.Services;
 
-public class AspireService(
-    IDcpServer dcpServer,
-    IAspireSessionManager sessionManager,
-    AspireCliProcessFactory processFactory,
-    ILogger<AspireService> logger) : IAspireService
+public class AspireService : IAspireService
 {
+  private readonly IDcpServer _dcpServer;
+  private readonly IAspireSessionManager _sessionManager;
+  private readonly AspireCliProcessFactory _processFactory;
+  private readonly ILogger<AspireService> _logger;
+
+  public AspireService(
+      IDcpServer dcpServer,
+      IAspireSessionManager sessionManager,
+      AspireCliProcessFactory processFactory,
+      ILogger<AspireService> logger)
+  {
+    _dcpServer = dcpServer;
+    _sessionManager = sessionManager;
+    _processFactory = processFactory;
+    _logger = logger;
+  }
+
   public async Task<AspireSession> StartAsync(
       string projectPath,
       CancellationToken cancellationToken = default)
   {
     // Check if session already exists
-    var existingSession = sessionManager.GetSession(projectPath);
+    var existingSession = _sessionManager.GetSession(projectPath);
     if (existingSession != null)
     {
-      logger.LogWarning(
+      _logger.LogWarning(
           "Aspire session already exists for {ProjectPath}",
           projectPath);
       return existingSession;
     }
 
-    logger.LogInformation("Starting Aspire session for {ProjectPath}", projectPath);
+    _logger.LogInformation("Starting Aspire session for {ProjectPath}", projectPath);
 
     // Ensure DCP server is running
-    await dcpServer.EnsureStartedAsync(cancellationToken);
+    await _dcpServer.EnsureStartedAsync(cancellationToken);
 
-    // Generate DCP instance ID for this session
-    var dcpId = Guid.NewGuid().ToString("N");
 
     // Create and start the Aspire CLI process
-    var cliProcess = processFactory.CreateProcess(
+    var cliProcess = _processFactory.CreateProcess(
         projectPath,
-        dcpServer.Port,
-        dcpServer.Token,
-        dcpId);
+        _dcpServer.Port,
+        _dcpServer.Token);
 
     // Create the session
     var session = new AspireSession
     {
       ProjectPath = projectPath,
-      DcpId = dcpId,
       AspireCliProcess = cliProcess,
+      Token = _dcpServer.Token,
       StartedAt = DateTime.UtcNow,
       SessionCts = new CancellationTokenSource()
     };
 
     // Register the session
-    sessionManager.AddSession(session);
+    _sessionManager.AddSession(session);
 
-    logger.LogInformation(
-        "Aspire session started: Project={ProjectPath}, DcpId={DcpId}, Port={Port}",
+    _logger.LogInformation(
+        "Aspire session started: Project={ProjectPath},  Port={Port}",
         projectPath,
-        dcpId,
-        dcpServer.Port);
+        _dcpServer.Port);
 
     return session;
   }
@@ -67,16 +76,16 @@ public class AspireService(
       string projectPath,
       CancellationToken cancellationToken = default)
   {
-    logger.LogInformation("Stopping Aspire session for {ProjectPath}", projectPath);
+    _logger.LogInformation("Stopping Aspire session for {ProjectPath}", projectPath);
 
-    await sessionManager.TerminateSessionAsync(projectPath, cancellationToken);
+    await _sessionManager.TerminateSessionAsync(projectPath, cancellationToken);
 
-    logger.LogInformation("Aspire session stopped for {ProjectPath}", projectPath);
+    _logger.LogInformation("Aspire session stopped for {ProjectPath}", projectPath);
   }
 
   public AspireSessionStatus? GetSessionStatus(string projectPath)
   {
-    var session = sessionManager.GetSession(projectPath);
+    var session = _sessionManager.GetSession(projectPath);
     if (session == null)
     {
       return null;
@@ -95,17 +104,12 @@ public class AspireService(
 
 // ============================================================================
 
-public class AspireCliProcessFactory
+public class AspireCliProcessFactory(ILogger<AspireCliProcessFactory> logger)
 {
-  private readonly ILogger<AspireCliProcessFactory> _logger;
-
-  public AspireCliProcessFactory(ILogger<AspireCliProcessFactory> logger) => _logger = logger;
-
   public Process CreateProcess(
       string projectPath,
       int dcpPort,
-      string dcpToken,
-      string dcpId)
+      string sessionToken)
   {
     var workingDirectory = Path.GetDirectoryName(projectPath)
         ?? throw new ArgumentException("Invalid project path", nameof(projectPath));
@@ -120,9 +124,9 @@ public class AspireCliProcessFactory
       WorkingDirectory = workingDirectory
     };
 
-    // Set DCP environment variables
+    // Set DCP environment variables with session-specific token
     psi.Environment["DEBUG_SESSION_PORT"] = $"localhost:{dcpPort}";
-    psi.Environment["DEBUG_SESSION_TOKEN"] = dcpToken;
+    psi.Environment["DEBUG_SESSION_TOKEN"] = sessionToken;
     psi.Environment["DEBUG_SESSION_RUN_MODE"] = "Debug";
     psi.Environment["ASPIRE_EXTENSION_DEBUG_RUN_MODE"] = "Debug";
 
@@ -147,13 +151,10 @@ public class AspireCliProcessFactory
     };
     psi.Environment["DEBUG_SESSION_INFO"] = JsonSerializer.Serialize(runSessionInfo);
 
-    // Add DCP instance ID
-    psi.Environment["Microsoft-Developer-DCP-Instance-ID"] = dcpId;
-
-    _logger.LogInformation(
-        "Starting Aspire CLI process: Port={Port}, DcpId={DcpId}, WorkingDir={WorkingDir}",
+    logger.LogInformation(
+        "Starting Aspire CLI process: Port={Port}, Token={Token}, WorkingDir={WorkingDir}",
         dcpPort,
-        dcpId,
+        sessionToken,
         workingDirectory);
 
     var process = Process.Start(psi)
@@ -201,23 +202,23 @@ public class AspireCliProcessFactory
             UseShellExecute = true
           };
           Process.Start(psi);
-          _logger.LogInformation("Opened Aspire dashboard: {Url}", uri);
+          logger.LogInformation("Opened Aspire dashboard: {Url}", uri);
         }
         catch (Exception ex)
         {
-          _logger.LogWarning(ex, "Failed to open browser for {Url}", uri);
+          logger.LogWarning(ex, "Failed to open browser for {Url}", uri);
         }
         pendingUrl = null;
       }
 
-      _logger.LogDebug("[Aspire CLI] {Line}", line);
+      logger.LogDebug("[Aspire CLI] {Line}", line);
     };
 
     process.ErrorDataReceived += (_, e) =>
     {
       if (!string.IsNullOrEmpty(e.Data))
       {
-        _logger.LogWarning("[Aspire CLI Error] {Line}", e.Data);
+        logger.LogWarning("[Aspire CLI Error] {Line}", e.Data);
       }
     };
 

@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using EasyDotnet.Aspire.Models;
 using EasyDotnet.Aspire.Server.Handlers;
+using EasyDotnet.Aspire.Session;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -26,7 +27,7 @@ public sealed class DcpServer : IDcpServer, IAsyncDisposable
   private bool _isStarted;
 
   public int Port { get; private set; }
-  public string Token { get; }
+  public string Token { get; private set; }
   public bool IsRunning => _isStarted && !_cts.Token.IsCancellationRequested;
 
   public DcpServer(
@@ -115,11 +116,27 @@ public sealed class DcpServer : IDcpServer, IAsyncDisposable
         }
 
         var providedToken = authHeader.Substring("Bearer ".Length);
-        if (providedToken != Token)
+
+        // Look up session by token instead of validating against shared token
+        using var scope = _serviceProvider.CreateScope();
+        var sessionManager = scope.ServiceProvider.GetRequiredService<IAspireSessionManager>();
+        var session = sessionManager.GetSessionByToken(providedToken);
+
+        if (session == null)
         {
           await SendErrorResponseAsync(response, 401, "InvalidToken",
-              "Invalid token in Authorization header.");
+              "Invalid or unknown token in Authorization header.");
           return;
+        }
+
+        // Set DCP ID if this is the first request from this DCP instance
+        if (string.IsNullOrEmpty(session.DcpId))
+        {
+          sessionManager.SetSessionDcpId(providedToken, dcpId);
+          _logger.LogInformation(
+              "Associated DCP ID {DcpId} with session token {Token}",
+              dcpId,
+              providedToken);
         }
       }
 
@@ -164,7 +181,7 @@ public sealed class DcpServer : IDcpServer, IAsyncDisposable
     var runSessionInfo = new
     {
       ProtocolsSupported = _options.SupportedProtocols,
-      _options.SupportedLaunchConfigurations
+      SupportedLaunchConfigurations = _options.SupportedLaunchConfigurations
     };
     await SendJsonResponseAsync(response, 200, runSessionInfo);
   }
