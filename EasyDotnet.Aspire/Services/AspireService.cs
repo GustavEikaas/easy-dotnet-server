@@ -99,10 +99,7 @@ public class AspireCliProcessFactory
 {
   private readonly ILogger<AspireCliProcessFactory> _logger;
 
-  public AspireCliProcessFactory(ILogger<AspireCliProcessFactory> logger)
-  {
-    _logger = logger;
-  }
+  public AspireCliProcessFactory(ILogger<AspireCliProcessFactory> logger) => _logger = logger;
 
   public Process CreateProcess(
       string projectPath,
