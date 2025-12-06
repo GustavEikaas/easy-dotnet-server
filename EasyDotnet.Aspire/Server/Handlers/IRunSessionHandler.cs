@@ -10,7 +10,7 @@ public interface IRunSessionHandler
   /// </summary>
   Task<RunSession> HandleCreateAsync(
       string dcpId,
-      ProjectLaunchConfiguration config,
+      LaunchConfigurationDto config,
       CancellationToken cancellationToken = default);
 
   /// <summary>

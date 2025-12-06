@@ -7,7 +7,7 @@ public record EnvVar(string Name, string Value);
 public class RunSessionPayload
 {
   [JsonPropertyName("launch_configurations")]
-  public LaunchConfiguration[] LaunchConfigurations { get; set; } = [];
+  public LaunchConfigurationDto[] LaunchConfigurations { get; set; } = [];
 
   [JsonPropertyName("env")]
   public EnvVar[]? Env { get; set; }
@@ -16,22 +16,11 @@ public class RunSessionPayload
   public string[]? Args { get; set; }
 }
 
-[JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
-[JsonDerivedType(typeof(ProjectLaunchConfiguration), "project")]
-public class LaunchConfiguration
+public class LaunchConfigurationDto
 {
-  [JsonPropertyName("mode")]
-  public string? Mode { get; set; } // "Debug" or "NoDebug"
-}
-
-public class ProjectLaunchConfiguration : LaunchConfiguration
-{
-  [JsonPropertyName("project_path")]
-  public string ProjectPath { get; set; } = string.Empty;
-
-  [JsonPropertyName("launch_profile")]
+  public string? Type { get; set; }
+  public string? Mode { get; set; }
+  public string? ProjectPath { get; set; }
   public string? LaunchProfile { get; set; }
-
-  [JsonPropertyName("disable_launch_profile")]
   public bool? DisableLaunchProfile { get; set; }
 }

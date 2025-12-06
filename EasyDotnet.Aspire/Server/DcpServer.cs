@@ -200,6 +200,7 @@ public sealed class DcpServer : IDcpServer, IAsyncDisposable
       Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
     };
 
+
     var payload = JsonSerializer.Deserialize<RunSessionPayload>(json, options);
 
     _logger.LogInformation("Received run session request from DCP ID {DcpId}", dcpId);
@@ -212,21 +213,21 @@ public sealed class DcpServer : IDcpServer, IAsyncDisposable
 
     var launchConfig = payload.LaunchConfigurations[0];
 
-    if (launchConfig is not ProjectLaunchConfiguration projectConfig)
+    if (launchConfig.Type != "project")
     {
       await SendErrorResponseAsync(response, 400, "UnsupportedLaunchConfiguration",
           "Unsupported launch configuration type");
       return;
     }
 
-    if (string.IsNullOrEmpty(projectConfig.ProjectPath))
+    if (string.IsNullOrEmpty(launchConfig.ProjectPath))
     {
       await SendErrorResponseAsync(response, 400, "InvalidProjectConfiguration",
           "Project path is required for project launch configuration");
       return;
     }
 
-    _logger.LogInformation("Creating run session for project: {ProjectPath}", projectConfig.ProjectPath);
+    _logger.LogInformation("Creating run session for project: {ProjectPath}", launchConfig.ProjectPath);
 
     try
     {
@@ -234,7 +235,7 @@ public sealed class DcpServer : IDcpServer, IAsyncDisposable
       using var scope = _serviceProvider.CreateScope();
       var handler = scope.ServiceProvider.GetRequiredService<IRunSessionHandler>();
 
-      var runSession = await handler.HandleCreateAsync(dcpId, projectConfig, _cts.Token);
+      var runSession = await handler.HandleCreateAsync(dcpId, launchConfig, _cts.Token);
 
       // Send notification to DCP
       await SendNotificationAsync(dcpId, new
@@ -252,7 +253,7 @@ public sealed class DcpServer : IDcpServer, IAsyncDisposable
     }
     catch (Exception ex)
     {
-      _logger.LogError(ex, "Failed to create run session for {ProjectPath}", projectConfig.ProjectPath);
+      _logger.LogError(ex, "Failed to create run session for {ProjectPath}", launchConfig.ProjectPath);
       await SendErrorResponseAsync(response, 500, "SessionCreationFailed",
           $"Failed to create run session: {ex.Message}");
     }

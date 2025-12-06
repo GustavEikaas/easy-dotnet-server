@@ -24,7 +24,7 @@ public class IdeRunSessionHandler(
 {
   public async Task<RunSession> HandleCreateAsync(
       string dcpId,
-      ProjectLaunchConfiguration config,
+      LaunchConfigurationDto config,
       CancellationToken cancellationToken = default)
   {
     var runId = RunSessionExtensions.GenerateRunId();
@@ -47,13 +47,13 @@ public class IdeRunSessionHandler(
 
     // Get or load project properties
     var project = await msBuildService.GetOrSetProjectPropertiesAsync(
-        config.ProjectPath,
+        config.ProjectPath!,
         null,
         "Debug",
         cancellationToken);
 
     // Determine if debugging is enabled
-    var isDebug = config.Mode != "NoDebug";
+    var isDebug = true; // config.Mode != "NoDebug";
 
     if (!isDebug)
     {
@@ -64,7 +64,7 @@ public class IdeRunSessionHandler(
     {
       // Start the debug session through the orchestrator
       var debuggerPort = await debugOrchestrator.StartClientDebugSessionAsync(
-          config.ProjectPath,
+          config.ProjectPath!,
           new(project.ProjectPath!, project.TargetFramework, null, null),
           cancellationToken);
 
@@ -88,7 +88,7 @@ public class IdeRunSessionHandler(
       {
         RunId = runId,
         DcpId = dcpId,
-        ProjectPath = config.ProjectPath,
+        ProjectPath = config.ProjectPath!,
         DebuggerPort = debuggerPort,
         DebugSessionId = debugSessionId,
         IsDebug = isDebug,

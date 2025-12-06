@@ -1,73 +1,61 @@
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using EasyDotnet.Aspire.Server;
 using EasyDotnet.Aspire.Session;
 using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Aspire.Services;
 
-public class AspireService : IAspireService
+public class AspireService(
+    IDcpServer dcpServer,
+    IAspireSessionManager sessionManager,
+    AspireCliProcessFactory processFactory,
+    ILogger<AspireService> logger) : IAspireService
 {
-  private readonly IDcpServer _dcpServer;
-  private readonly IAspireSessionManager _sessionManager;
-  private readonly AspireCliProcessFactory _processFactory;
-  private readonly ILogger<AspireService> _logger;
-
-  public AspireService(
-      IDcpServer dcpServer,
-      IAspireSessionManager sessionManager,
-      AspireCliProcessFactory processFactory,
-      ILogger<AspireService> logger)
-  {
-    _dcpServer = dcpServer;
-    _sessionManager = sessionManager;
-    _processFactory = processFactory;
-    _logger = logger;
-  }
-
   public async Task<AspireSession> StartAsync(
       string projectPath,
       CancellationToken cancellationToken = default)
   {
     // Check if session already exists
-    var existingSession = _sessionManager.GetSession(projectPath);
+    var existingSession = sessionManager.GetSession(projectPath);
     if (existingSession != null)
     {
-      _logger.LogWarning(
+      logger.LogWarning(
           "Aspire session already exists for {ProjectPath}",
           projectPath);
       return existingSession;
     }
 
-    _logger.LogInformation("Starting Aspire session for {ProjectPath}", projectPath);
+    logger.LogInformation("Starting Aspire session for {ProjectPath}", projectPath);
 
     // Ensure DCP server is running
-    await _dcpServer.EnsureStartedAsync(cancellationToken);
+    await dcpServer.EnsureStartedAsync(cancellationToken);
 
 
     // Create and start the Aspire CLI process
-    var cliProcess = _processFactory.CreateProcess(
+    var cliProcess = processFactory.CreateProcess(
         projectPath,
-        _dcpServer.Port,
-        _dcpServer.Token);
+        dcpServer.Port,
+        dcpServer.Token);
 
     // Create the session
     var session = new AspireSession
     {
       ProjectPath = projectPath,
       AspireCliProcess = cliProcess,
-      Token = _dcpServer.Token,
+      Token = dcpServer.Token,
       StartedAt = DateTime.UtcNow,
       SessionCts = new CancellationTokenSource()
     };
 
     // Register the session
-    _sessionManager.AddSession(session);
+    sessionManager.AddSession(session);
 
-    _logger.LogInformation(
+    logger.LogInformation(
         "Aspire session started: Project={ProjectPath},  Port={Port}",
         projectPath,
-        _dcpServer.Port);
+        dcpServer.Port);
 
     return session;
   }
@@ -76,16 +64,16 @@ public class AspireService : IAspireService
       string projectPath,
       CancellationToken cancellationToken = default)
   {
-    _logger.LogInformation("Stopping Aspire session for {ProjectPath}", projectPath);
+    logger.LogInformation("Stopping Aspire session for {ProjectPath}", projectPath);
 
-    await _sessionManager.TerminateSessionAsync(projectPath, cancellationToken);
+    await sessionManager.TerminateSessionAsync(projectPath, cancellationToken);
 
-    _logger.LogInformation("Aspire session stopped for {ProjectPath}", projectPath);
+    logger.LogInformation("Aspire session stopped for {ProjectPath}", projectPath);
   }
 
   public AspireSessionStatus? GetSessionStatus(string projectPath)
   {
-    var session = _sessionManager.GetSession(projectPath);
+    var session = sessionManager.GetSession(projectPath);
     if (session == null)
     {
       return null;
@@ -166,10 +154,9 @@ public class AspireCliProcessFactory(ILogger<AspireCliProcessFactory> logger)
     return process;
   }
 
+
   private void SetupOutputHandling(Process process)
   {
-    string? pendingUrl = null;
-
     process.OutputDataReceived += (_, e) =>
     {
       if (string.IsNullOrEmpty(e.Data))
@@ -177,38 +164,29 @@ public class AspireCliProcessFactory(ILogger<AspireCliProcessFactory> logger)
 
       var line = e.Data;
 
-      // Try to detect and open dashboard URLs
-      if (pendingUrl == null)
-      {
-        var idx = line.IndexOf("http", StringComparison.OrdinalIgnoreCase);
-        if (idx >= 0)
-        {
-          pendingUrl = line[idx..].Trim();
-        }
-      }
-      else
-      {
-        pendingUrl += line.Trim();
-      }
+      logger.LogInformation("[ASPIRE] Opened Aspire dashboard: {Url}", e.Data);
 
-      if (pendingUrl != null &&
-          Uri.TryCreate(pendingUrl, UriKind.Absolute, out var uri))
+      var match = Regex.Match(line, @"https?://\S+");
+      if (match.Success)
       {
-        try
+        var url = match.Value;
+
+        if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
         {
-          var psi = new ProcessStartInfo
+          try
           {
-            FileName = uri.ToString(),
-            UseShellExecute = true
-          };
-          Process.Start(psi);
-          logger.LogInformation("Opened Aspire dashboard: {Url}", uri);
+            Process.Start(new ProcessStartInfo
+            {
+              FileName = uri.ToString(),
+              UseShellExecute = true
+            });
+            logger.LogInformation("Opened Aspire dashboard: {Url}", uri);
+          }
+          catch (Exception ex)
+          {
+            logger.LogWarning(ex, "Failed to open browser for {Url}", uri);
+          }
         }
-        catch (Exception ex)
-        {
-          logger.LogWarning(ex, "Failed to open browser for {Url}", uri);
-        }
-        pendingUrl = null;
       }
 
       logger.LogDebug("[Aspire CLI] {Line}", line);
@@ -225,4 +203,5 @@ public class AspireCliProcessFactory(ILogger<AspireCliProcessFactory> logger)
     process.BeginOutputReadLine();
     process.BeginErrorReadLine();
   }
+
 }
