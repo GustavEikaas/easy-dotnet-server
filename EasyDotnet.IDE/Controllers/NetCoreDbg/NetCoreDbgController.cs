@@ -1,17 +1,11 @@
 using System.Threading;
 using System.Threading.Tasks;
+using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
-using EasyDotnet.IDE.Services;
+using EasyDotnet.Domain.Models.NetcoreDbg;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Controllers.NetCoreDbg;
-
-public sealed record DebuggerStartRequest(
-  string TargetPath,
-  string? TargetFramework,
-  string? Configuration,
-  string? LaunchProfileName
-);
 
 public sealed record DebuggerStartResponse(bool Success, int Port);
 

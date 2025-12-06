@@ -9,6 +9,7 @@
   <ItemGroup>
     <ProjectReference Include="..\EasyDotnet.Domain\EasyDotnet.Domain.csproj" />
     <ProjectReference Include="..\EasyDotnet.MsBuild\EasyDotnet.MsBuild.csproj" />
+    <ProjectReference Include="..\EasyDotnet.Debugger\EasyDotnet.Debugger.csproj" />
   </ItemGroup>
 
 </Project>

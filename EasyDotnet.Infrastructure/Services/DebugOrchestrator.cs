@@ -6,34 +6,14 @@ using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Debugger.Interfaces;
-using EasyDotnet.IDE.Controllers.NetCoreDbg;
+using EasyDotnet.Domain.Models.NetcoreDbg;
 using EasyDotnet.Infrastructure.Dap;
+using EasyDotnet.Infrastructure.Services;
 using EasyDotnet.MsBuild;
 using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.IDE.Services;
 
-public interface IDebugOrchestrator
-{
-  Task<int> StartServerDebugSessionAsync(
-    string dllPath,
-    string sessionId,
-    DebuggerStartRequest request,
-    CancellationToken cancellationToken);
-
-  Task<int> StartClientDebugSessionAsync(
-    string dllPath,
-    DebuggerStartRequest request,
-    CancellationToken cancellationToken);
-
-  Debugger.DebugSession? GetSessionService(string dllPath);
-
-  Task StopDebugSessionAsync(string dllPath);
-
-  DebugSession? GetSession(string dllPath);
-
-  bool HasActiveSession(string dllPath);
-}
 
 public class DebugOrchestrator(
   IDebugSessionManager debugSessionManager,

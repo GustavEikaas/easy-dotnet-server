@@ -1,29 +1,8 @@
-using System;
 using System.Collections.Concurrent;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
+using EasyDotnet.Domain.Models.NetcoreDbg;
 using Microsoft.Extensions.Logging;
 
-namespace EasyDotnet.IDE.Services;
-
-public enum DebugSessionState
-{
-  Idle,
-  Starting,
-  Active,
-  Stopping
-}
-
-public class DebugSession
-{
-  public required string DllPath { get; init; }
-  public string? SessionId { get; init; }
-  public DebugSessionState State { get; set; }
-  public DateTime StartedAt { get; init; }
-  public TaskCompletionSource<bool> CleanupComplete { get; } = new();
-  public int? Port { get; set; }
-}
+namespace EasyDotnet.Infrastructure.Services;
 
 public interface IDebugSessionManager
 {
