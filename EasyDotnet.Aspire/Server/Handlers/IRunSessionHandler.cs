@@ -11,6 +11,7 @@ public interface IRunSessionHandler
   Task<RunSession> HandleCreateAsync(
       string dcpId,
       LaunchConfigurationDto config,
+      EnvVar[] envVars,
       CancellationToken cancellationToken = default);
 
   /// <summary>

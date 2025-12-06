@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
@@ -7,6 +8,7 @@ using EasyDotnet.Aspire.Models;
 using EasyDotnet.Aspire.Server;
 using EasyDotnet.Aspire.Server.Handlers;
 using EasyDotnet.Aspire.Session;
+using EasyDotnet.Domain.Models.NetcoreDbg;
 using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.IDE.Aspire;
@@ -25,8 +27,11 @@ public class IdeRunSessionHandler(
   public async Task<RunSession> HandleCreateAsync(
       string dcpId,
       LaunchConfigurationDto config,
-      CancellationToken cancellationToken = default)
+      EnvVar[] envVars,
+      CancellationToken cancellationToken)
   {
+
+    var x = envVars;
     var runId = RunSessionExtensions.GenerateRunId();
 
     logger.LogInformation(
@@ -53,19 +58,19 @@ public class IdeRunSessionHandler(
         cancellationToken);
 
     // Determine if debugging is enabled
-    var isDebug = true; // config.Mode != "NoDebug";
+    var isDebug = config.Mode != "NoDebug";
 
-    if (!isDebug)
-    {
-      throw new InvalidOperationException("Non-debug mode is not currently supported");
-    }
+    // if (!isDebug)
+    // {
+    //   throw new InvalidOperationException("Non-debug mode is not currently supported");
+    // }
 
     try
     {
       // Start the debug session through the orchestrator
       var debuggerPort = await debugOrchestrator.StartClientDebugSessionAsync(
           config.ProjectPath!,
-          new(project.ProjectPath!, project.TargetFramework, null, null),
+          new(project.ProjectPath!, project.TargetFramework, null, null, [.. envVars.Select(x => new EnvironmentVariable(x.Name, x.Value))]),
           cancellationToken);
 
       logger.LogInformation(

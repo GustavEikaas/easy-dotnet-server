@@ -1,18 +1,12 @@
-using System;
 using System.Collections.Concurrent;
-using System.Diagnostics;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Debugger.Interfaces;
 using EasyDotnet.Domain.Models.NetcoreDbg;
 using EasyDotnet.Infrastructure.Dap;
-using EasyDotnet.Infrastructure.Services;
 using EasyDotnet.MsBuild;
 using Microsoft.Extensions.Logging;
 
-namespace EasyDotnet.IDE.Services;
+namespace EasyDotnet.Infrastructure.Services;
 
 
 public class DebugOrchestrator(
@@ -155,7 +149,7 @@ public class DebugOrchestrator(
                     launchProfile,
                     attachRequest,
                     project.ProjectDir!,
-                    vsTestResult?.Item2),
+                    vsTestResult?.Item2, request.EnvironmentVariables ?? []),
             clientService?.ClientOptions?.DebuggerOptions?.ApplyValueConverters ?? false
       );
       _sessionServices[dllPath] = session;
@@ -217,11 +211,11 @@ public class DebugOrchestrator(
     }
   }
 
-  private static (Process, int)? StartVsTestIfApplicable(DotnetProject project, string projectPath) => project.IsTestProject && !project.TestingPlatformDotnetTestSupport
+  private static (System.Diagnostics.Process, int)? StartVsTestIfApplicable(DotnetProject project, string projectPath) => project.IsTestProject && !project.TestingPlatformDotnetTestSupport
       ? VsTestHelper.StartTestProcess(projectPath)
       : null;
 
-  private void CleanupVsTest((Process, int)? vsTestResult)
+  private void CleanupVsTest((System.Diagnostics.Process, int)? vsTestResult)
   {
     if (vsTestResult is { } value)
     {
@@ -235,7 +229,7 @@ public class DebugOrchestrator(
   {
     try
     {
-      var process = Process.GetProcessById(pid);
+      var process = System.Diagnostics.Process.GetProcessById(pid);
       SafeDisposeProcess(process, $"{processName} (PID: {pid})");
     }
     catch (ArgumentException)
@@ -248,7 +242,7 @@ public class DebugOrchestrator(
     }
   }
 
-  private void SafeDisposeProcess(Process? process, string processName)
+  private void SafeDisposeProcess(System.Diagnostics.Process? process, string processName)
   {
     if (process == null) return;
 

@@ -1,12 +1,13 @@
 using EasyDotnet.Debugger.Messages;
 using EasyDotnet.Domain.Models.LaunchProfile;
+using EasyDotnet.Domain.Models.NetcoreDbg;
 using EasyDotnet.MsBuild;
 
 namespace EasyDotnet.Infrastructure.Dap;
 
 public static class InitializeRequestRewriter
 {
-  public static Task<InterceptableAttachRequest> CreateInitRequestBasedOnProjectType(DotnetProject project, LaunchProfile? launchProfile, InterceptableAttachRequest request, string cwd, int? processId)
+  public static Task<InterceptableAttachRequest> CreateInitRequestBasedOnProjectType(DotnetProject project, LaunchProfile? launchProfile, InterceptableAttachRequest request, string cwd, int? processId, EnvironmentVariable[] environmentVariables)
   {
     if (project.IsTestProject && !project.TestingPlatformDotnetTestSupport && processId is not null)
     {
@@ -14,23 +15,23 @@ public static class InitializeRequestRewriter
     }
     else
     {
-      return CreateLaunchRequestAsync(request, project, launchProfile, cwd);
+      return CreateLaunchRequestAsync(request, project, launchProfile, cwd, environmentVariables);
     }
   }
 
-  private static Dictionary<string, string> BuildEnvironmentVariables(LaunchProfile? launchProfile) => launchProfile == null
-        ? []
+  private static Dictionary<string, string> BuildEnvironmentVariables(LaunchProfile? launchProfile, EnvironmentVariable[] environmentVariables) => launchProfile == null
+        ? environmentVariables?.ToDictionary(x => x.Name, x => x.Value) ?? []
         : launchProfile.EnvironmentVariables
             .Concat(
                 !string.IsNullOrEmpty(launchProfile.ApplicationUrl)
                     ? [new KeyValuePair<string, string>("ASPNETCORE_URLS", launchProfile.ApplicationUrl)]
                     : Array.Empty<KeyValuePair<string, string>>()
-            )
+            ).Concat(environmentVariables?.ToDictionary(x => x.Name, x => x.Value) ?? [])
             .ToDictionary(kv => kv.Key, kv => kv.Value);
 
-  private static async Task<InterceptableAttachRequest> CreateLaunchRequestAsync(InterceptableAttachRequest request, DotnetProject project, LaunchProfile? launchProfile, string cwd)
+  private static async Task<InterceptableAttachRequest> CreateLaunchRequestAsync(InterceptableAttachRequest request, DotnetProject project, LaunchProfile? launchProfile, string cwd, EnvironmentVariable[] environmentVariables)
   {
-    var env = BuildEnvironmentVariables(launchProfile);
+    var env = BuildEnvironmentVariables(launchProfile, environmentVariables);
     request.Type = "request";
     request.Arguments.Cwd = cwd;
     request.Command = "launch";

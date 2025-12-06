@@ -1,4 +1,3 @@
-using EasyDotnet.Debugger;
 using EasyDotnet.Domain.Models.NetcoreDbg;
 
 namespace EasyDotnet.Application.Interfaces;
@@ -20,7 +19,7 @@ public interface IDebugOrchestrator
 
   Task StopDebugSessionAsync(string dllPath);
 
-  Domain.Models.NetcoreDbg.DebugSession? GetSession(string dllPath);
+  DebugSession? GetSession(string dllPath);
 
   bool HasActiveSession(string dllPath);
 }

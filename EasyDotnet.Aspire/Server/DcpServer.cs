@@ -235,7 +235,7 @@ public sealed class DcpServer : IDcpServer, IAsyncDisposable
       using var scope = _serviceProvider.CreateScope();
       var handler = scope.ServiceProvider.GetRequiredService<IRunSessionHandler>();
 
-      var runSession = await handler.HandleCreateAsync(dcpId, launchConfig, _cts.Token);
+      var runSession = await handler.HandleCreateAsync(dcpId, launchConfig, payload.Env ?? [], _cts.Token);
 
       // Send notification to DCP
       await SendNotificationAsync(dcpId, new
