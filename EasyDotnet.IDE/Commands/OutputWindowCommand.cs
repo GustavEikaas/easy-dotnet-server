@@ -128,8 +128,8 @@ public static class ServerBuilder
     var handler = new HeaderDelimitedMessageHandler(writer, reader, formatter);
     var jsonRpc = new JsonRpc(handler);
 
-    jsonRpc.TraceSource.Switch.Level = SourceLevels.Verbose;
-    jsonRpc.TraceSource.Listeners.Add(new ConsoleTraceListener());
+    // jsonRpc.TraceSource.Switch.Level = SourceLevels.Verbose;
+    // jsonRpc.TraceSource.Listeners.Add(new ConsoleTraceListener());
     return jsonRpc;
   }
 
