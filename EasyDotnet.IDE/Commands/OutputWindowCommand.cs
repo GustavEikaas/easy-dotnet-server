@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using EasyDotnet.Debugger;
 using EasyDotnet.IDE.OutputWindow;
 using Newtonsoft.Json.Serialization;
 using Spectre.Console;
@@ -63,7 +64,7 @@ public sealed class OutputWindowCommand : AsyncCommand<OutputWindowCommand.Setti
         }
       };
 
-      jsonRpc.AddLocalRpcMethod("debugger/output", (string output) => AnsiConsole.Write(output));
+      jsonRpc.AddLocalRpcMethod("debugger/output", (DebugOutputEvent output) => AnsiConsole.Write(output.Output));
       jsonRpc.StartListening();
 
       await jsonRpc.Completion;

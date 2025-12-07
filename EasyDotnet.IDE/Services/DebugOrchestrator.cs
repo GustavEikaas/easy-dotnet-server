@@ -5,6 +5,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
+using EasyDotnet.Debugger;
 using EasyDotnet.Debugger.Interfaces;
 using EasyDotnet.IDE.Controllers.NetCoreDbg;
 using EasyDotnet.IDE.OutputWindow;
@@ -171,6 +172,7 @@ public class DebugOrchestrator(
 
       // START OUTPUT WINDOW IF REQUESTED
       string? outputWindowPipe = null;
+      Action<DebugOutputEvent>? outputHandler = null;
       var externalOutputWindow = clientService.ClientOptions?.DebuggerOptions?.ExternalOutputWindow;
 
       if (externalOutputWindow == true)
@@ -181,22 +183,35 @@ public class DebugOrchestrator(
           outputWindowPipe = await outputWindowManager.StartOutputWindowAsync(dllPath, cancellationToken);
 
           // Store pipe name in session
-          var managedSession = debugSessionManager.GetSession(dllPath);  // RENAMED from 'session'
+          var managedSession = debugSessionManager.GetSession(dllPath);
           if (managedSession != null)
           {
             managedSession.OutputWindowPipeName = outputWindowPipe;
           }
+
+          // Create output handler callback
+          outputHandler = (output) => _ = Task.Run(async () =>
+                  {
+                    try
+                    {
+                      await outputWindowManager.SendOutputAsync(dllPath, output);
+                    }
+                    catch (Exception ex)
+                    {
+                      logger.LogWarning(ex, "Failed to forward output to external window");
+                    }
+                  });
         }
         catch (Exception ex)
         {
           logger.LogError(ex, "Failed to start external output window for {project}, continuing without it", projectName);
-          // Continue without external window rather than failing the entire debug session
         }
       }
 
       var vsTestResult = StartVsTestIfApplicable(project, request.TargetPath);
 
-      var debugSession = debugSessionFactory.Create(  // RENAMED from 'session'
+      // Pass output handler to factory - it will suppress output events if handler is provided
+      var debugSession = debugSessionFactory.Create(
           async (attachRequest) =>
               await InitializeRequestRewriter.CreateInitRequestBasedOnProjectType(
                   project,
@@ -204,30 +219,15 @@ public class DebugOrchestrator(
                   attachRequest,
                   project.ProjectDir!,
                   vsTestResult?.Item2),
-          clientService?.ClientOptions?.DebuggerOptions?.ApplyValueConverters ?? false
+          clientService?.ClientOptions?.DebuggerOptions?.ApplyValueConverters ?? false,
+          outputHandler  // Pass the handler here
       );
-      _sessionServices[dllPath] = debugSession;  // UPDATED variable name
 
-      // HOOK UP OUTPUT FORWARDING TO EXTERNAL WINDOW
-      if (outputWindowPipe != null)
-      {
-        debugSession.OutputReceived += (sender, output) =>  // UPDATED variable name
-          _ = Task.Run(async () =>
-              {
-                try
-                {
-                  await outputWindowManager.SendOutputAsync(dllPath, output);
-                }
-                catch (Exception ex)
-                {
-                  logger.LogWarning(ex, "Failed to forward output to external window");
-                }
-              });
-      }
+      _sessionServices[dllPath] = debugSession;
 
       try
       {
-        debugSession.Start(  // UPDATED variable name
+        debugSession.Start(
            binaryPath,
            (ex) =>
            {
@@ -258,9 +258,9 @@ public class DebugOrchestrator(
              }
            }, cancellationToken);
 
-        logger.LogInformation("Debug session ready for {project} on port {port}.", projectName, debugSession.Port);  // UPDATED variable name
+        logger.LogInformation("Debug session ready for {project} on port {port}.", projectName, debugSession.Port);
 
-        return debugSession.Port;  // UPDATED variable name
+        return debugSession.Port;
       }
       catch (Exception ex)
       {

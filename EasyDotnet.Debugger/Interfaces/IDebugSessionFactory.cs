@@ -6,5 +6,7 @@ public interface IDebugSessionFactory
 {
   DebugSession Create(
     Func<InterceptableAttachRequest, Task<InterceptableAttachRequest>> attachRequestRewriter,
-    bool applyValueConverters);
+    bool applyValueConverters,
+    Action<DebugOutputEvent>? handleOutput = null
+  );
 }

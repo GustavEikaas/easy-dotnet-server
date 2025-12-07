@@ -10,7 +10,8 @@ public class DebugSessionFactory(ILoggerFactory loggerFactory) : IDebugSessionFa
 {
   public DebugSession Create(
     Func<InterceptableAttachRequest, Task<InterceptableAttachRequest>> attachRequestRewriter,
-    bool applyValueConverters)
+    bool applyValueConverters,
+    Action<DebugOutputEvent>? handleOutput = null)
   {
     var valueConverterService = new ValueConverterService(
       loggerFactory.CreateLogger<ValueConverterService>(),
@@ -30,7 +31,8 @@ public class DebugSessionFactory(ILoggerFactory loggerFactory) : IDebugSessionFa
     var debuggerInterceptor = new DebuggerMessageInterceptor(
       loggerFactory.CreateLogger<DebuggerMessageInterceptor>(),
       valueConverterService,
-      applyValueConverters);
+      applyValueConverters,
+      handleOutput);
 
     var coordinator = new DebugSessionCoordinator(
       loggerFactory.CreateLogger<DebugSessionCoordinator>(),

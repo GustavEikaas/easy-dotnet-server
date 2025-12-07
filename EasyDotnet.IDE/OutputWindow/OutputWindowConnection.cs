@@ -7,6 +7,7 @@ using System.IO;
 using System.IO.Pipes;
 using System.Threading;
 using System.Threading.Tasks;
+using EasyDotnet.Debugger;
 using EasyDotnet.IDE.Commands;
 using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
@@ -17,7 +18,7 @@ public interface IOutputWindowManager
 {
   Task<string?> StartOutputWindowAsync(string dllPath, CancellationToken cancellationToken);
   Task StopOutputWindowAsync(string dllPath);
-  Task SendOutputAsync(string dllPath, string output);
+  Task SendOutputAsync(string dllPath, DebugOutputEvent output);
   bool IsConnected(string dllPath);
 }
 
@@ -135,7 +136,7 @@ public class OutputWindowManager(ILogger<OutputWindowManager> logger) : IOutputW
     await CleanupConnectionAsync(connection.PipeServer, connection.Process, connection.JsonRpc);
   }
 
-  public async Task SendOutputAsync(string dllPath, string output)
+  public async Task SendOutputAsync(string dllPath, DebugOutputEvent output)
   {
     if (!_connections.TryGetValue(dllPath, out var connection))
     {
@@ -162,7 +163,7 @@ public class OutputWindowManager(ILogger<OutputWindowManager> logger) : IOutputW
     var startInfo = new ProcessStartInfo
     {
       FileName = "dotnet",
-      UseShellExecute = false,
+      UseShellExecute = true,
       CreateNoWindow = false,
       RedirectStandardOutput = false,
       RedirectStandardError = false
@@ -173,7 +174,7 @@ public class OutputWindowManager(ILogger<OutputWindowManager> logger) : IOutputW
 
     // --project <path>
     startInfo.ArgumentList.Add("--project");
-    startInfo.ArgumentList.Add(@"C:\Users\Gustav\repo\easy-dotnet-server\EasyDotnet.IDE");
+    startInfo.ArgumentList.Add(@"C:\Users\Gustav\repo\easy-dotnet-server-test\EasyDotnet.IDE");
 
     // separator so Spectre.Console receives the args
     startInfo.ArgumentList.Add("--");
