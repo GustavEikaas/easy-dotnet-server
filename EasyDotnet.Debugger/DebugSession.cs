@@ -5,7 +5,6 @@ namespace EasyDotnet.Debugger;
 public class DebugSession : IAsyncDisposable
 {
   private readonly DebugSessionCoordinator _coordinator;
-
   public Task Completion => _coordinator.Completion;
   public Task DisposalStarted => _coordinator.DisposalStarted;
   public int Port => _coordinator.Port;

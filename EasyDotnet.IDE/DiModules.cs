@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using DotNetOutdated.Core.Services;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Debugger;
+using EasyDotnet.IDE.OutputWindow;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.Utils;
 using EasyDotnet.Infrastructure.Aspire;
@@ -45,6 +46,7 @@ public static class DiModules
     services.AddSingleton<TemplateEngineService>();
     services.AddSingleton<IDebugSessionManager, DebugSessionManager>();
     services.AddSingleton<IDebugOrchestrator, DebugOrchestrator>();
+    services.AddSingleton<IOutputWindowManager, OutputWindowManager>();
 
     services.AddTransient<IMsBuildService, MsBuildService>();
     services.AddTransient<IAspireService, AspireService>();

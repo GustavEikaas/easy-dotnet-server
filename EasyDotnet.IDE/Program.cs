@@ -42,6 +42,12 @@ static class Program
             roslyn.AddCommand<RoslynStartCommand>("start")
             .WithDescription("Start the Roslyn Language Server over stdio.");
           });
+
+      config.AddBranch("debugger", debugger =>
+          {
+            debugger.SetDescription("Debugger server commands.");
+            debugger.AddCommand<OutputWindowCommand>("output");
+          });
     });
 
     return await app.RunAsync(args);
