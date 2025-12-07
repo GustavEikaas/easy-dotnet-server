@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Debugger.Interfaces;
 using EasyDotnet.IDE.Controllers.NetCoreDbg;
+using EasyDotnet.IDE.OutputWindow;
 using EasyDotnet.Infrastructure.Dap;
 using EasyDotnet.MsBuild;
 using Microsoft.Extensions.Logging;
@@ -42,6 +43,7 @@ public class DebugOrchestrator(
   ILaunchProfileService launchProfileService,
   INotificationService notificationService,
   IClientService clientService,
+  IOutputWindowManager outputWindowManager,
   ILogger<DebugOrchestrator> logger) : IDebugOrchestrator
 {
   private readonly ConcurrentDictionary<string, Debugger.DebugSession> _sessionServices = new();
@@ -167,22 +169,65 @@ public class DebugOrchestrator(
         throw new InvalidOperationException("Failed to start debugger, no binary path provided");
       }
 
+      // START OUTPUT WINDOW IF REQUESTED
+      string? outputWindowPipe = null;
+      var externalOutputWindow = clientService.ClientOptions?.DebuggerOptions?.ExternalOutputWindow;
+
+      if (externalOutputWindow == true)
+      {
+        try
+        {
+          logger.LogInformation("Starting external output window for {project}", projectName);
+          outputWindowPipe = await outputWindowManager.StartOutputWindowAsync(dllPath, cancellationToken);
+
+          // Store pipe name in session
+          var managedSession = debugSessionManager.GetSession(dllPath);  // RENAMED from 'session'
+          if (managedSession != null)
+          {
+            managedSession.OutputWindowPipeName = outputWindowPipe;
+          }
+        }
+        catch (Exception ex)
+        {
+          logger.LogError(ex, "Failed to start external output window for {project}, continuing without it", projectName);
+          // Continue without external window rather than failing the entire debug session
+        }
+      }
+
       var vsTestResult = StartVsTestIfApplicable(project, request.TargetPath);
 
-      var session = debugSessionFactory.Create(async (attachRequest) =>
-                await InitializeRequestRewriter.CreateInitRequestBasedOnProjectType(
-                    project,
-                    launchProfile,
-                    attachRequest,
-                    project.ProjectDir!,
-                    vsTestResult?.Item2),
-            clientService?.ClientOptions?.DebuggerOptions?.ApplyValueConverters ?? false
+      var debugSession = debugSessionFactory.Create(  // RENAMED from 'session'
+          async (attachRequest) =>
+              await InitializeRequestRewriter.CreateInitRequestBasedOnProjectType(
+                  project,
+                  launchProfile,
+                  attachRequest,
+                  project.ProjectDir!,
+                  vsTestResult?.Item2),
+          clientService?.ClientOptions?.DebuggerOptions?.ApplyValueConverters ?? false
       );
-      _sessionServices[dllPath] = session;
+      _sessionServices[dllPath] = debugSession;  // UPDATED variable name
+
+      // HOOK UP OUTPUT FORWARDING TO EXTERNAL WINDOW
+      if (outputWindowPipe != null)
+      {
+        debugSession.OutputReceived += (sender, output) =>  // UPDATED variable name
+          _ = Task.Run(async () =>
+              {
+                try
+                {
+                  await outputWindowManager.SendOutputAsync(dllPath, output);
+                }
+                catch (Exception ex)
+                {
+                  logger.LogWarning(ex, "Failed to forward output to external window");
+                }
+              });
+      }
 
       try
       {
-        session.Start(
+        debugSession.Start(  // UPDATED variable name
            binaryPath,
            (ex) =>
            {
@@ -194,6 +239,13 @@ public class DebugOrchestrator(
              try
              {
                logger.LogDebug("Session cleanup callback invoked for {project}.", projectName);
+
+               // CLEANUP OUTPUT WINDOW
+               if (outputWindowPipe != null)
+               {
+                 await outputWindowManager.StopOutputWindowAsync(dllPath);
+               }
+
                await StopDebugSessionAsync(dllPath);
              }
              catch (Exception ex)
@@ -206,13 +258,19 @@ public class DebugOrchestrator(
              }
            }, cancellationToken);
 
-        logger.LogInformation("Debug session ready for {project} on port {port}.", projectName, session.Port);
+        logger.LogInformation("Debug session ready for {project} on port {port}.", projectName, debugSession.Port);  // UPDATED variable name
 
-        return session.Port;
+        return debugSession.Port;  // UPDATED variable name
       }
       catch (Exception ex)
       {
         logger.LogError(ex, "Failed to start debug session for {project}.", projectName);
+
+        // CLEANUP OUTPUT WINDOW ON FAILURE
+        if (outputWindowPipe != null)
+        {
+          await outputWindowManager.StopOutputWindowAsync(dllPath);
+        }
 
         if (_sessionServices.TryRemove(dllPath, out var service))
         {

@@ -17,6 +17,7 @@ public enum DebugSessionState
 
 public class DebugSession
 {
+  public string? OutputWindowPipeName { get; set; }
   public required string DllPath { get; init; }
   public string? SessionId { get; init; }
   public DebugSessionState State { get; set; }
