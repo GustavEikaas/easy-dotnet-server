@@ -20,6 +20,9 @@
     <None Include="bin\Release\net8.0\Tools\**\*" Pack="true" PackagePath="tools/" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.9" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.9" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.9" />
     <PackageReference Include="DotNetOutdatedTool.Core" Version="4.6.8" />
     <PackageReference Include="Microsoft.CodeAnalysis" Version="4.14.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />

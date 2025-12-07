@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Debugger;
 using EasyDotnet.IDE.Commands;
+using EasyDotnet.IDE.Utils;
 using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
 
@@ -37,6 +38,8 @@ public class OutputWindowManager(ILogger<OutputWindowManager> logger) : IOutputW
   private readonly ConcurrentDictionary<string, OutputWindowConnection> _connections = new();
   private static readonly TimeSpan ConnectionTimeout = TimeSpan.FromSeconds(10);
 
+  // Update your OutputWindowManager.cs StartOutputWindowAsync method
+
   public async Task<string?> StartOutputWindowAsync(string dllPath, CancellationToken cancellationToken)
   {
     var projectName = Path.GetFileNameWithoutExtension(dllPath);
@@ -47,7 +50,8 @@ public class OutputWindowManager(ILogger<OutputWindowManager> logger) : IOutputW
       return null;
     }
 
-    var pipeName = $"easydotnet-debug-{Guid.NewGuid()}";
+    // Use PipeUtils to generate cross-platform compatible pipe name
+    var pipeName = PipeUtils.GeneratePipeName();
 
     try
     {
@@ -168,7 +172,7 @@ public class OutputWindowManager(ILogger<OutputWindowManager> logger) : IOutputW
       RedirectStandardOutput = false,
       RedirectStandardError = false
     };
-    startInfo.ArgumentList.Add("C:/Users/Gustav/repo/easy-dotnet-server/EasyDotnet.IDE/bin/Debug/net8.0/EasyDotnet.IDE.dll");
+    startInfo.ArgumentList.Add("/home/gus/repo/easy-dotnet-server/EasyDotnet.IDE/bin/Debug/net8.0/EasyDotnet.IDE.dll");
     // startInfo.ArgumentList.Add("easydotnet");
     startInfo.ArgumentList.Add("debugger");
     startInfo.ArgumentList.Add("output");
