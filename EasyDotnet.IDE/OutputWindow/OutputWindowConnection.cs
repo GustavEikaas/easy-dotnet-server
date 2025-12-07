@@ -228,7 +228,7 @@ public class OutputWindowManager(ILogger<OutputWindowManager> logger) : IOutputW
       {
         if (!process.HasExited)
         {
-          process.Kill();
+          process.Kill(entireProcessTree: true);
           await process.WaitForExitAsync();
         }
         process.Dispose();
