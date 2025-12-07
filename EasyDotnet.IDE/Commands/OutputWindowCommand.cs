@@ -1,6 +1,5 @@
 using System;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -84,39 +83,55 @@ public sealed class OutputWindowCommand : AsyncCommand<OutputWindowCommand.Setti
 
   private static void FormatAndDisplayOutput(DebugOutputEvent outputEvent)
   {
-    // Choose color based on category
-    var color = outputEvent.Category switch
+    if (outputEvent.Source != null)
     {
-      "stdout" => "white",
-      "stderr" => "red",
-      "console" => "cyan",
-      "telemetry" => "grey",
-      _ => "white"
-    };
-
-    // Build prefix with metadata if available
-    var prefix = "";
-
-    if (outputEvent.Source?.Name != null)
-    {
-      prefix += $"[dim]{Markup.Escape(outputEvent.Source.Name)}[/]";
-
-      if (outputEvent.Line.HasValue)
-      {
-        prefix += $"[dim]:{outputEvent.Line}[/]";
-
-        if (outputEvent.Column.HasValue)
-        {
-          prefix += $"[dim]:{outputEvent.Column}[/]";
-        }
-      }
-
-      prefix += " ";
+      return;
     }
 
-    // Display the output
-    Console.Write(prefix);
-    Console.Write($"[{color}]{Markup.Escape(outputEvent.Output)}[/]");
+    foreach (var line in outputEvent.Output)
+    {
+      if (string.IsNullOrWhiteSpace(line))
+      {
+        AnsiConsole.WriteLine();
+        continue;
+      }
+
+      var color = DetectColorFromLine(line);
+      AnsiConsole.Markup($"[{color}]{Markup.Escape(line)}[/]");
+      AnsiConsole.WriteLine();
+    }
+  }
+
+  private static string DetectColorFromLine(string line)
+  {
+    var lowerLine = line.ToLowerInvariant();
+
+    if (lowerLine.Contains(": trace:"))
+      return "grey dim";
+
+    if (lowerLine.Contains(": debug:"))
+      return "grey";
+
+    if (lowerLine.Contains(": information:"))
+      return "white";
+
+    if (lowerLine.Contains(": warning:"))
+      return "yellow";
+
+    if (lowerLine.Contains(": error:"))
+      return "red";
+
+    if (lowerLine.Contains(": critical:"))
+      return "red bold";
+
+    if (lowerLine.TrimStart().StartsWith("at ") ||
+        line.StartsWith("   at ") ||
+        (lowerLine.StartsWith("system.") && lowerLine.Contains("exception")))
+    {
+      return "red dim";
+    }
+
+    return "white";
   }
 }
 

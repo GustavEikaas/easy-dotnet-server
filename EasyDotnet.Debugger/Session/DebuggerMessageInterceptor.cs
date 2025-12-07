@@ -55,6 +55,8 @@ public class DebuggerMessageInterceptor(
 
   private Task<ProtocolMessage?> HandleEvent(Event evt)
   {
+
+    logger.LogInformation("[DEBUGGER] Event: {evt}", JsonSerializer.Serialize(evt));
     if (evt.EventName == "stopped")
     {
       valueConverterService.ClearVariablesReferenceMap();
@@ -93,12 +95,10 @@ public class DebuggerMessageInterceptor(
         return;
       }
 
-      // Extract category (default to "console")
       var category = bodyJson.TryGetProperty("category", out var categoryElement)
         ? categoryElement.GetString() ?? "console"
         : "console";
 
-      // Extract optional source information
       DebugOutputSource? source = null;
       if (bodyJson.TryGetProperty("source", out var sourceElement))
       {
@@ -116,51 +116,14 @@ public class DebuggerMessageInterceptor(
         };
       }
 
-      // Extract optional line number
-      int? line = bodyJson.TryGetProperty("line", out var lineElement)
-        ? lineElement.GetInt32()
-        : null;
-
-      // Extract optional column
-      int? column = bodyJson.TryGetProperty("column", out var columnElement)
-        ? columnElement.GetInt32()
-        : null;
-
-      // Extract optional group
-      var group = bodyJson.TryGetProperty("group", out var groupElement)
-        ? groupElement.GetString()
-        : null;
-
-      // Extract optional data (can be any JSON)
-      object? data = null;
-      if (bodyJson.TryGetProperty("data", out var dataElement))
-      {
-        data = dataElement.ValueKind switch
-        {
-          JsonValueKind.String => dataElement.GetString(),
-          JsonValueKind.Number => dataElement.GetDouble(),
-          JsonValueKind.True => true,
-          JsonValueKind.False => false,
-          JsonValueKind.Object => dataElement.Clone(),
-          JsonValueKind.Array => dataElement.Clone(),
-          _ => null
-        };
-      }
-
-      // Create the output event
       var outputEvent = new DebugOutputEvent
       {
-        Output = output,
+        Output = output.Split([Environment.NewLine], StringSplitOptions.RemoveEmptyEntries),
         Category = category,
         Source = source,
-        Line = line,
-        Column = column,
-        Group = group,
-        Data = data,
         Timestamp = DateTime.UtcNow
       };
 
-      // Forward to external handler
       handleOutput?.Invoke(outputEvent);
     }
     catch (Exception ex)

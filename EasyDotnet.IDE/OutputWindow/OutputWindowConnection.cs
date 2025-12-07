@@ -168,18 +168,8 @@ public class OutputWindowManager(ILogger<OutputWindowManager> logger) : IOutputW
       RedirectStandardOutput = false,
       RedirectStandardError = false
     };
-
-    // dotnet run
-    startInfo.ArgumentList.Add("run");
-
-    // --project <path>
-    startInfo.ArgumentList.Add("--project");
-    startInfo.ArgumentList.Add(@"C:\Users\Gustav\repo\easy-dotnet-server-test\EasyDotnet.IDE");
-
-    // separator so Spectre.Console receives the args
-    startInfo.ArgumentList.Add("--");
-
-    // your app's command: debugger output <pipeName>
+    startInfo.ArgumentList.Add("C:/Users/Gustav/repo/easy-dotnet-server/EasyDotnet.IDE/bin/Debug/net8.0/EasyDotnet.IDE.dll");
+    // startInfo.ArgumentList.Add("easydotnet");
     startInfo.ArgumentList.Add("debugger");
     startInfo.ArgumentList.Add("output");
     startInfo.ArgumentList.Add(pipeName);
