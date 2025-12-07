@@ -41,33 +41,27 @@ public sealed class OutputWindowCommand : AsyncCommand<OutputWindowCommand.Setti
     }
 
     var connection = new PipeConnection();
-
     try
     {
       AnsiConsole.MarkupLine($"Connecting to debugger via pipe '{settings.PipeName}'...");
 
-      var stream = await connection.ConnectAsync(
-        settings.PipeName,
-        cancellationToken);
+      var stream = await connection.ConnectAsync(settings.PipeName, cancellationToken);
 
       AnsiConsole.Clear();
-      AnsiConsole.MarkupLine("✓ Connected to debugger");
+
+      AnsiConsole.MarkupLine("[green]✓ Connected to debugger[/]");
+      AnsiConsole.WriteLine();
 
       var jsonRpc = ServerBuilder.Build(stream, stream);
 
-      jsonRpc.Disconnected += (sender, args) =>
-      {
-        AnsiConsole.MarkupLine("[yellow]Debugger disconnected[/]");
-        if (args.Exception != null)
-        {
-          AnsiConsole.WriteException(args.Exception);
-        }
-      };
+      jsonRpc.AddLocalRpcMethod("debugger/output", (DebugOutputEvent outputEvent) => FormatAndDisplayOutput(outputEvent));
 
-      jsonRpc.AddLocalRpcMethod("debugger/output", (DebugOutputEvent output) => AnsiConsole.Write(output.Output));
+      jsonRpc.Disconnected += (sender, args) => AnsiConsole.MarkupLine("[yellow]Debugger disconnected[/]");
+
       jsonRpc.StartListening();
 
       await jsonRpc.Completion;
+
       return 0;
     }
     catch (TimeoutException ex)
@@ -86,6 +80,43 @@ public sealed class OutputWindowCommand : AsyncCommand<OutputWindowCommand.Setti
       AnsiConsole.WriteException(ex);
       return 1;
     }
+  }
+
+  private static void FormatAndDisplayOutput(DebugOutputEvent outputEvent)
+  {
+    // Choose color based on category
+    var color = outputEvent.Category switch
+    {
+      "stdout" => "white",
+      "stderr" => "red",
+      "console" => "cyan",
+      "telemetry" => "grey",
+      _ => "white"
+    };
+
+    // Build prefix with metadata if available
+    var prefix = "";
+
+    if (outputEvent.Source?.Name != null)
+    {
+      prefix += $"[dim]{Markup.Escape(outputEvent.Source.Name)}[/]";
+
+      if (outputEvent.Line.HasValue)
+      {
+        prefix += $"[dim]:{outputEvent.Line}[/]";
+
+        if (outputEvent.Column.HasValue)
+        {
+          prefix += $"[dim]:{outputEvent.Column}[/]";
+        }
+      }
+
+      prefix += " ";
+    }
+
+    // Display the output
+    Console.Write(prefix);
+    Console.Write($"[{color}]{Markup.Escape(outputEvent.Output)}[/]");
   }
 }
 
