@@ -172,8 +172,8 @@ public class OutputWindowManager(ILogger<OutputWindowManager> logger) : IOutputW
       RedirectStandardOutput = false,
       RedirectStandardError = false
     };
-    startInfo.ArgumentList.Add("/home/gus/repo/easy-dotnet-server/EasyDotnet.IDE/bin/Debug/net8.0/EasyDotnet.IDE.dll");
-    // startInfo.ArgumentList.Add("easydotnet");
+    // startInfo.ArgumentList.Add("/home/gus/repo/easy-dotnet-server/EasyDotnet.IDE/bin/Debug/net8.0/EasyDotnet.IDE.dll");
+    startInfo.ArgumentList.Add("easydotnet");
     startInfo.ArgumentList.Add("debugger");
     startInfo.ArgumentList.Add("output");
     startInfo.ArgumentList.Add(pipeName);
