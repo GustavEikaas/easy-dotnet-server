@@ -1,9 +1,7 @@
 ﻿using System.Reflection;
-using System;
 using System.Threading.Tasks;
 using EasyDotnet.IDE.Commands;
 using Spectre.Console.Cli;
-using System.Linq;
 
 namespace EasyDotnet.IDE;
 
