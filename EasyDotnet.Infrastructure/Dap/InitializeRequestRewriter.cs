@@ -185,3 +185,22 @@ public static partial class InitializeRequestRewriter
   [GeneratedRegex(@"\$\(([^)]+)\)", RegexOptions.Compiled)]
   private static partial Regex MsBuildVar();
 }
+
+
+// {
+//   "profiles": {
+//     "FullTest": {
+//       "commandName": "Project",
+//       "workingDirectory": "$(ProjectDir)\\Properties",
+//       "applicationUrl": "https://localhost:5001;http://localhost:5000",
+//       "commandLineArgs": "--config $(ProjectDir)\\appsettings.json --output $(OutDir) --name $(AssemblyName) --path \"C:\\My Documents\\data. txt\" --verbose",
+//       "environmentVariables": {
+//         "ASPNETCORE_ENVIRONMENT": "Development",
+//         "DATA_PATH": "$(OutDir)\\data",
+//         "USER_CONFIG": "$(UserProfile)\\.myapp\\config.json",
+//         "PROJECT_NAME": "$(AssemblyName)",
+//         "CUSTOM_MESSAGE": "Hello from launchSettings!"
+//       }
+//     }
+//   }
+// }
