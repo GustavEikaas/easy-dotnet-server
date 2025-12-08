@@ -21,6 +21,13 @@ public static class MsBuildProperties
           Deserialize: MsBuildValueParsers.AsPath
       );
 
+  public static readonly MsBuildProperty<string?> OutDir =
+      new(
+          Name: "OutDir",
+          Description: "Specifies the directory for build outputs e.g bin\\Debug\\net8.0\\ .",
+          Deserialize: MsBuildValueParsers.AsPath
+      );
+
   public static readonly MsBuildProperty<string?> OutputType =
       new(
           Name: "OutputType",
@@ -32,6 +39,20 @@ public static class MsBuildProperties
       new(
           Name: "TargetExt",
           Description: "Specifies the file extension of the build output, such as '.dll' or '.exe'.",
+          Deserialize: MsBuildValueParsers.AsString
+      );
+
+  public static readonly MsBuildProperty<string?> TargetDir =
+      new(
+          Name: "TargetDir",
+          Description: "Fully qualified path to output folder e.g C:\\easy-dotnet-server\\EasyDotnet.IDE\\bin\\Debug\\net8.0\\ ",
+          Deserialize: MsBuildValueParsers.AsPath
+      );
+
+  public static readonly MsBuildProperty<string?> TargetName =
+      new(
+          Name: "TargetName",
+          Description: "Filename of output e.g EasyDotnet.IDE",
           Deserialize: MsBuildValueParsers.AsString
       );
 
@@ -564,6 +585,13 @@ public static class MsBuildProperties
       new(
           Name: "MSBuildProjectName",
           Description: "Specifies the name of the project file without its extension.",
+          Deserialize: MsBuildValueParsers.AsString
+      );
+
+  public static readonly MsBuildProperty<string?> ProjectName =
+      new(
+          Name: "ProjectName",
+          Description: "Name of project e.g EasyDotnet.IDE",
           Deserialize: MsBuildValueParsers.AsString
       );
 

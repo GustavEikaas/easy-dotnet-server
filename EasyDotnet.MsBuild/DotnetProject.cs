@@ -4,7 +4,10 @@ public record DotnetProject
 (
     string? OutputPath,
     string? OutputType,
+    string? OutDir,
     string? TargetExt,
+    string? TargetDir,
+    string? TargetName,
     bool IsTestProject,
     bool IsTestingPlatformApplication,
     string? AssemblyName,
@@ -81,6 +84,7 @@ public record DotnetProject
     string? TargetFrameworkIdentifier,
     string? MSBuildProjectName,
     string? ProjectDir,
+    string? ProjectName,
     string? MSBuildProjectFullPath,
     string? MicrosoftNETBuildTasksDirectoryRoot,
     string? MicrosoftNETBuildTasksDirectory,
