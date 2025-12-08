@@ -27,27 +27,22 @@ public static partial class InitializeRequestRewriter
     }
   }
 
-  private static Dictionary<string, string> BuildEnvironmentVariables(
-    LaunchProfile? launchProfile,
-    DotnetProject project)
+  private static Dictionary<string, string> BuildEnvironmentVariables(LaunchProfile? launchProfile)
   {
     if (launchProfile == null)
       return [];
 
     var env = new Dictionary<string, string>();
 
-    // Interpolate environment variables from launch profile
     foreach (var kvp in launchProfile.EnvironmentVariables)
     {
-      var interpolated = InterpolateVariables(kvp.Value, project);
-      if (!string.IsNullOrWhiteSpace(interpolated))
-        env[kvp.Key] = interpolated;
+      if (!string.IsNullOrWhiteSpace(kvp.Value))
+        env[kvp.Key] = kvp.Value;
     }
 
-    // Add ASPNETCORE_URLS if ApplicationUrl is specified
     if (!string.IsNullOrEmpty(launchProfile.ApplicationUrl))
     {
-      env["ASPNETCORE_URLS"] = InterpolateVariables(launchProfile.ApplicationUrl, project);
+      env["ASPNETCORE_URLS"] = launchProfile.ApplicationUrl;
     }
 
     return env;
@@ -59,12 +54,14 @@ public static partial class InitializeRequestRewriter
     LaunchProfile? launchProfile,
     string cwd)
   {
-    var env = BuildEnvironmentVariables(launchProfile, project);
+    var env = BuildEnvironmentVariables(launchProfile);
+
     request.Type = "request";
-    //TODO: crash out if cwd is invalid
+
     request.Arguments.Cwd = !string.IsNullOrWhiteSpace(launchProfile?.WorkingDirectory)
-        ? InterpolateVariables(launchProfile.WorkingDirectory, project)
+        ? NormalizePath(InterpolateVariables(launchProfile.WorkingDirectory, project))
         : cwd;
+
     request.Command = "launch";
     request.Arguments.Request = "launch";
     request.Arguments.Program = project.TargetPath;
@@ -72,7 +69,8 @@ public static partial class InitializeRequestRewriter
     if (!string.IsNullOrWhiteSpace(launchProfile?.CommandLineArgs))
     {
       var interpolatedArgs = InterpolateVariables(launchProfile.CommandLineArgs, project);
-      request.Arguments.Args = SplitCommandLineArgs(interpolatedArgs);
+      var normalizedArgs = NormalizePath(interpolatedArgs);
+      request.Arguments.Args = SplitCommandLineArgs(normalizedArgs);
     }
 
     request.Arguments.Env =
@@ -93,7 +91,6 @@ public static partial class InitializeRequestRewriter
     request.Arguments.Request = "attach";
     request.Arguments.ProcessId = processId;
     request.Arguments.Cwd = cwd;
-
     return await Task.FromResult(request);
   }
 
@@ -103,13 +100,25 @@ public static partial class InitializeRequestRewriter
       return input;
 
     var variables = BuildVariablesDictionary(project);
-    var result = input;
 
-    return MsBuildVarRegex.Replace(result, match =>
+    return MsBuildVarRegex.Replace(input, match =>
     {
       var varName = match.Groups[1].Value;
       return variables.TryGetValue(varName, out var value) ? value : match.Value;
     });
+  }
+
+  private static string NormalizePath(string path)
+  {
+    if (string.IsNullOrWhiteSpace(path))
+      return path;
+
+    if (Path.DirectorySeparatorChar == '/')
+    {
+      return path.Replace('\\', '/');
+    }
+
+    return path;
   }
 
   private static string[] SplitCommandLineArgs(string commandLineArgs)
@@ -128,7 +137,6 @@ public static partial class InitializeRequestRewriter
       if (c == '"')
       {
         inQuotes = !inQuotes;
-        // Don't include the quote character itself
       }
       else if (c == ' ' && !inQuotes)
       {
@@ -168,7 +176,7 @@ public static partial class InitializeRequestRewriter
     AddIfNotNull(variables, "ProjectName", project.ProjectName);
     AddIfNotNull(variables, "TargetFramework", project.TargetFramework);
 
-    // Env vars are automatically handled by netcoredbg but $(UserProfile) is special MSBuild syntax
+    // $(UserProfile) is special MSBuild syntax for user home directory
     AddIfNotNull(variables, "UserProfile", Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
 
     return variables;
@@ -185,22 +193,3 @@ public static partial class InitializeRequestRewriter
   [GeneratedRegex(@"\$\(([^)]+)\)", RegexOptions.Compiled)]
   private static partial Regex MsBuildVar();
 }
-
-
-// {
-//   "profiles": {
-//     "FullTest": {
-//       "commandName": "Project",
-//       "workingDirectory": "$(ProjectDir)\\Properties",
-//       "applicationUrl": "https://localhost:5001;http://localhost:5000",
-//       "commandLineArgs": "--config $(ProjectDir)\\appsettings.json --output $(OutDir) --name $(AssemblyName) --path \"C:\\My Documents\\data. txt\" --verbose",
-//       "environmentVariables": {
-//         "ASPNETCORE_ENVIRONMENT": "Development",
-//         "DATA_PATH": "$(OutDir)\\data",
-//         "USER_CONFIG": "$(UserProfile)\\.myapp\\config.json",
-//         "PROJECT_NAME": "$(AssemblyName)",
-//         "CUSTOM_MESSAGE": "Hello from launchSettings!"
-//       }
-//     }
-//   }
-// }

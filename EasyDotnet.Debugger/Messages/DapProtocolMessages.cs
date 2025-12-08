@@ -57,6 +57,9 @@ public class InterceptableAttachArguments
   public string? Cwd { get; set; }
   public string[]? Args { get; set; }
   public Dictionary<string, string>? Env { get; set; }
+
+  [JsonExtensionData]
+  public Dictionary<string, JsonElement> Other { get; set; } = [];
 }
 
 public class SetBreakpointsRequest : Request
