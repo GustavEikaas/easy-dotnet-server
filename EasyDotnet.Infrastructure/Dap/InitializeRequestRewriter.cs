@@ -61,6 +61,7 @@ public static partial class InitializeRequestRewriter
   {
     var env = BuildEnvironmentVariables(launchProfile, project);
     request.Type = "request";
+    //TODO: crash out if cwd is invalid
     request.Arguments.Cwd = !string.IsNullOrWhiteSpace(launchProfile?.WorkingDirectory)
         ? InterpolateVariables(launchProfile.WorkingDirectory, project)
         : cwd;

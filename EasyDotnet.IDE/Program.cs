@@ -12,14 +12,7 @@ static class Program
   public static async Task<int> Main(string[] args)
   {
     var app = new CommandApp<RunCommand>();
-    Console.WriteLine(string.Join(',', args));
-    Console.WriteLine("=== Raw Arguments ===");
-    for (var i = 0; i < args.Length; i++)
-    {
-      Console.WriteLine($"Arg[{i}]: '{args[i]}'");
-      Console.WriteLine($"  Length: {args[i].Length}");
-      Console.WriteLine($"  Bytes: {string.Join(" ", args[i].Select(c => ((int)c).ToString("X2")))}");
-    }
+
     app.Configure(config =>
     {
       config.SetApplicationName("easydotnet");
