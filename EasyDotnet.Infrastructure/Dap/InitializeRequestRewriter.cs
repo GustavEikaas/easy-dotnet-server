@@ -6,13 +6,16 @@ using EasyDotnet.MsBuild;
 
 namespace EasyDotnet.Infrastructure.Dap;
 
-public static class InitializeRequestRewriter
+public static partial class InitializeRequestRewriter
 {
+  private static readonly Regex MsBuildVarRegex = MsBuildVar();
 
-  private static readonly Regex MsBuildVarRegex = new(@"\$\(([^)]+)\)", RegexOptions.Compiled);
-  private static readonly Regex WindowsEnvVarRegex = new("%([^%]+)%", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-
-  public static Task<InterceptableAttachRequest> CreateInitRequestBasedOnProjectType(DotnetProject project, LaunchProfile? launchProfile, InterceptableAttachRequest request, string cwd, int? processId)
+  public static Task<InterceptableAttachRequest> CreateInitRequestBasedOnProjectType(
+    DotnetProject project,
+    LaunchProfile? launchProfile,
+    InterceptableAttachRequest request,
+    string cwd,
+    int? processId)
   {
     if (project.IsTestProject && !project.TestingPlatformDotnetTestSupport && processId is not null)
     {
@@ -24,41 +27,65 @@ public static class InitializeRequestRewriter
     }
   }
 
-  private static Dictionary<string, string> BuildEnvironmentVariables(LaunchProfile? launchProfile) => launchProfile == null
-        ? []
-        : launchProfile.EnvironmentVariables
-            .Concat(
-                !string.IsNullOrEmpty(launchProfile.ApplicationUrl)
-                    ? [new KeyValuePair<string, string>("ASPNETCORE_URLS", launchProfile.ApplicationUrl)]
-                    : Array.Empty<KeyValuePair<string, string>>()
-            )
-            .ToDictionary(kv => kv.Key, kv => kv.Value);
-
-  private static async Task<InterceptableAttachRequest> CreateLaunchRequestAsync(InterceptableAttachRequest request, DotnetProject project, LaunchProfile? launchProfile, string cwd)
+  private static Dictionary<string, string> BuildEnvironmentVariables(
+    LaunchProfile? launchProfile,
+    DotnetProject project)
   {
+    if (launchProfile == null)
+      return [];
 
-    var env = BuildEnvironmentVariables(launchProfile);
+    var env = new Dictionary<string, string>();
+
+    // Interpolate environment variables from launch profile
+    foreach (var kvp in launchProfile.EnvironmentVariables)
+    {
+      var interpolated = InterpolateVariables(kvp.Value, project);
+      if (!string.IsNullOrWhiteSpace(interpolated))
+        env[kvp.Key] = interpolated;
+    }
+
+    // Add ASPNETCORE_URLS if ApplicationUrl is specified
+    if (!string.IsNullOrEmpty(launchProfile.ApplicationUrl))
+    {
+      env["ASPNETCORE_URLS"] = InterpolateVariables(launchProfile.ApplicationUrl, project);
+    }
+
+    return env;
+  }
+
+  private static async Task<InterceptableAttachRequest> CreateLaunchRequestAsync(
+    InterceptableAttachRequest request,
+    DotnetProject project,
+    LaunchProfile? launchProfile,
+    string cwd)
+  {
+    var env = BuildEnvironmentVariables(launchProfile, project);
     request.Type = "request";
-    request.Arguments.Cwd = cwd;
+    request.Arguments.Cwd = !string.IsNullOrWhiteSpace(launchProfile?.WorkingDirectory)
+        ? InterpolateVariables(launchProfile.WorkingDirectory, project)
+        : cwd;
     request.Command = "launch";
     request.Arguments.Request = "launch";
-    request.Arguments.Program = project.TargetPath!;
+    request.Arguments.Program = project.TargetPath;
 
     if (!string.IsNullOrWhiteSpace(launchProfile?.CommandLineArgs))
     {
       var interpolatedArgs = InterpolateVariables(launchProfile.CommandLineArgs, project);
-      request.Arguments.Args = ParseCommandLineArgs(interpolatedArgs);
+      request.Arguments.Args = SplitCommandLineArgs(interpolatedArgs);
     }
 
     request.Arguments.Env =
         (request.Arguments.Env ?? [])
-        .Concat(env ?? Enumerable.Empty<KeyValuePair<string, string>>())
+        .Concat(env)
         .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
 
     return await Task.FromResult(request);
   }
 
-  private static async Task<InterceptableAttachRequest> CreateAttachRequestAsync(InterceptableAttachRequest request, int processId, string cwd)
+  private static async Task<InterceptableAttachRequest> CreateAttachRequestAsync(
+    InterceptableAttachRequest request,
+    int processId,
+    string cwd)
   {
     request.Type = "request";
     request.Command = "attach";
@@ -77,55 +104,31 @@ public static class InitializeRequestRewriter
     var variables = BuildVariablesDictionary(project);
     var result = input;
 
-    // Replace MSBuild-style variables: $(VarName)
-    result = MsBuildVarRegex.Replace(result, match =>
+    return MsBuildVarRegex.Replace(result, match =>
     {
       var varName = match.Groups[1].Value;
       return variables.TryGetValue(varName, out var value) ? value : match.Value;
     });
-
-    // Replace Windows environment variables: %VarName%
-    result = WindowsEnvVarRegex.Replace(result, match =>
-    {
-      var varName = match.Groups[1].Value;
-      return Environment.GetEnvironmentVariable(varName) ?? match.Value;
-    });
-
-    return result;
   }
 
-  private static string[] ParseCommandLineArgs(string commandLineArgs)
+  private static string[] SplitCommandLineArgs(string commandLineArgs)
   {
+    if (string.IsNullOrWhiteSpace(commandLineArgs))
+    {
+      return [];
+    }
+
     var args = new List<string>();
     var currentArg = new StringBuilder();
     var inQuotes = false;
-    var escapeNext = false;
 
-    for (var i = 0; i < commandLineArgs.Length; i++)
+    foreach (var c in commandLineArgs)
     {
-      var c = commandLineArgs[i];
-
-      // Handle escape sequences
-      if (escapeNext)
-      {
-        currentArg.Append(c);
-        escapeNext = false;
-        continue;
-      }
-
-      // Check for escape character before quote
-      if (c == '\\' && i + 1 < commandLineArgs.Length && commandLineArgs[i + 1] == '"')
-      {
-        escapeNext = true;
-        continue;
-      }
-
-      // Handle quotes
       if (c == '"')
       {
         inQuotes = !inQuotes;
+        // Don't include the quote character itself
       }
-      // Handle spaces (argument separators)
       else if (c == ' ' && !inQuotes)
       {
         if (currentArg.Length > 0)
@@ -134,14 +137,12 @@ public static class InitializeRequestRewriter
           currentArg.Clear();
         }
       }
-      // Regular character
       else
       {
         currentArg.Append(c);
       }
     }
 
-    // Add the last argument if any
     if (currentArg.Length > 0)
     {
       args.Add(currentArg.ToString());
@@ -165,7 +166,8 @@ public static class InitializeRequestRewriter
     AddIfNotNull(variables, "AssemblyName", project.AssemblyName);
     AddIfNotNull(variables, "ProjectName", project.ProjectName);
     AddIfNotNull(variables, "TargetFramework", project.TargetFramework);
-    //Env vars are automatically handled by netcoredbg but $(UserProfile) is special syntax
+
+    // Env vars are automatically handled by netcoredbg but $(UserProfile) is special MSBuild syntax
     AddIfNotNull(variables, "UserProfile", Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
 
     return variables;
@@ -178,20 +180,7 @@ public static class InitializeRequestRewriter
       dict[key] = value;
     }
   }
+
+  [GeneratedRegex(@"\$\(([^)]+)\)", RegexOptions.Compiled)]
+  private static partial Regex MsBuildVar();
 }
-
-
-// {
-//   "profiles": {
-//     "verbose": {
-//       "commandName": "Project",
-//       "dotnetRunMessages": true,
-//       "launchBrowser": true,
-//       "applicationUrl": "https://localhost:5001;http://localhost:5000",
-//       "environmentVariables": {
-//         "ASPNETCORE_ENVIRONMENT": "Development"
-//       },
-//       "commandLineArgs": "--version $(ProjectDir) $(OutDir) $(Configuration) $(TargetDir) $(TargetName) $(TargetFileName) $(TargetPath) $(SolutionDir) $(AssemblyName) $(UserProfile) %USERPROFILE% %TEMP%"
-//     }
-//   }
-// }

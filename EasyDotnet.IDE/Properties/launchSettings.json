@@ -8,7 +8,7 @@
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       },
-      "commandLineArgs": "--version $(ProjectDir) $(OutDir) $(Configuration) $(TargetDir) $(TargetName) $(TargetFileName) $(TargetPath) $(SolutionDir) $(AssemblyName) $(UserProfile) %USERPROFILE% %TEMP%"
+      "commandLineArgs": "--path \"C:\\My Documents\\file.txt\" --output \"D:\\Output Folder\""
     }
   }
 }
