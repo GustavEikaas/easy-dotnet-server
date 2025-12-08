@@ -1,4 +1,5 @@
 ﻿using System.Reflection;
+using System;
 using System.Threading.Tasks;
 using EasyDotnet.IDE.Commands;
 using Spectre.Console.Cli;
@@ -10,7 +11,7 @@ static class Program
   public static async Task<int> Main(string[] args)
   {
     var app = new CommandApp<RunCommand>();
-
+    Console.WriteLine(string.Join(',', args));
     app.Configure(config =>
     {
       config.SetApplicationName("easydotnet");
