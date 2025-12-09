@@ -36,6 +36,8 @@ static class Program
            .WithDescription("Build and run tests using VSTest.");
         });
 
+      config.AddCommand<ProjectLanguageServerCommand>("project-language-server");
+
       config.AddBranch("roslyn", roslyn =>
           {
             roslyn.SetDescription("Roslyn language server commands.");
