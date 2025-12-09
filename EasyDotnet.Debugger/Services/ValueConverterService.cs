@@ -45,7 +45,8 @@ public class ValueConverterService(
       new ReadOnlyDictionaryValueConverter(loggerFactory.CreateLogger<ReadOnlyDictionaryValueConverter>()),
       new VersionValueConverter(loggerFactory.CreateLogger<VersionValueConverter>()),
       new CancellationTokenValueConverter(loggerFactory.CreateLogger<CancellationTokenValueConverter>()),
-      new CancellationTokenSourceValueConverter(loggerFactory.CreateLogger<CancellationTokenSourceValueConverter>())
+      new CancellationTokenSourceValueConverter(loggerFactory.CreateLogger<CancellationTokenSourceValueConverter>()),
+      new TimeSpanValueConverter(loggerFactory.CreateLogger<TimeSpanValueConverter>()),
     ];
 
   public void RegisterVariablesReferences(VariablesResponse response)
