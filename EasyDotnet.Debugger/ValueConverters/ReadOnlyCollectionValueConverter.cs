@@ -34,7 +34,7 @@ public partial class ReadOnlyCollectionValueConverter(ILogger<ReadOnlyCollection
       response.Body!.Variables = [
         ValueConverterHelpers.TryGetVariable(variables, "Count", out var countVar)
           ? countVar
-          :  new Variable { Name = "Count", Value = "0", Type = "int", VariablesReference = 0 }
+          : ValueConverterHelpers.CreateEmptyListVariable()
       ];
 
       return response;

@@ -43,6 +43,14 @@ public static class ValueConverterHelpers
     }
   };
 
+  public static Variable CreateEmptyListVariable() => new()
+  {
+    Name = "Count",
+    Value = "0",
+    Type = "int",
+    VariablesReference = 0
+  };
+
   /// <summary>
   /// Mutates the existing response to contain only the computed result
   /// More efficient than cloning but modifies the original
