@@ -17,7 +17,7 @@ inputs:
   netcoredbgVersion:
     description: 'netcoredbg release version'
     required: true
-    default: '3.1.0-1009'
+    default: '3.1.2-1054'
 
 runs:
   using: "composite"
