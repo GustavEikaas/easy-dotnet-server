@@ -43,6 +43,14 @@ public static class ValueConverterHelpers
     }
   };
 
+  public static Variable CreateEmptyListVariable() => new()
+  {
+    Name = "Count",
+    Value = "0",
+    Type = "int",
+    VariablesReference = 0
+  };
+
   /// <summary>
   /// Mutates the existing response to contain only the computed result
   /// More efficient than cloning but modifies the original
@@ -116,6 +124,12 @@ public static class ValueConverterHelpers
 
     value = default;
     return false;
+  }
+
+  public static bool TryGetUInt(Dictionary<string, string> lookup, string name, out uint value)
+  {
+    value = 0;
+    return lookup.TryGetValue(name, out var variable) && uint.TryParse(variable, out value);
   }
 
   public static bool TryGetVariable(List<Variable> variables, string name, out Variable variable)

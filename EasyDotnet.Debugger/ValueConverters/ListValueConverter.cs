@@ -27,17 +27,30 @@ public partial class ListValueConverter(ILogger<ListValueConverter> logger) : Va
       return response;
     }
 
-    if (!ValueConverterHelpers.TryGetVariable(variables, "_items", out var itemsVar) ||
-        itemsVar.VariablesReference is null or 0)
-    {
-      LogFailure("Missing _items field or invalid reference", id);
-      return response;
-    }
-
     var lookup = ValueConverterHelpers.BuildFieldLookup(variables);
     if (!ValueConverterHelpers.TryGetInt(lookup, "_size", out var actualSize))
     {
       LogFailure("Missing or invalid _size field", id);
+      return response;
+    }
+
+    if (actualSize == 0)
+    {
+      Logger.LogDebug("[List] List is empty (size: 0)");
+
+      response.Body!.Variables = [
+        ValueConverterHelpers. TryGetVariable(variables, "Count", out var countVar)
+        ? countVar
+        : ValueConverterHelpers.CreateEmptyListVariable()
+      ];
+
+      return response;
+    }
+
+    if (!ValueConverterHelpers.TryGetVariable(variables, "_items", out var itemsVar) ||
+        itemsVar.VariablesReference is null or 0)
+    {
+      LogFailure("Missing _items field or invalid reference", id);
       return response;
     }
 
