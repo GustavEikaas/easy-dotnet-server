@@ -98,7 +98,7 @@ runs:
               "https://github.com/Samsung/netcoredbg/releases/download/${NETCOREDBG_VERSION}/netcoredbg-${platform}.tar.gz"
             
             mkdir -p "$ARTIFACTS_DIR/${platform}"
-            tar -xzf "$ARTIFACTS_DIR/netcoredbg-${platform}. tar.gz" -C "$ARTIFACTS_DIR/${platform}"
+            tar -xzf "$ARTIFACTS_DIR/netcoredbg-${platform}.tar.gz" -C "$ARTIFACTS_DIR/${platform}"
           fi
           
           # Copy to output with platform-specific folder
