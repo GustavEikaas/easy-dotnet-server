@@ -39,7 +39,9 @@ public class ValueConverterService(
       new ListValueConverter(loggerFactory.CreateLogger<ListValueConverter>()),
       new TupleValueConverter(loggerFactory.CreateLogger<TupleValueConverter>()),
       new ReadOnlyCollectionValueConverter(loggerFactory.CreateLogger<ReadOnlyCollectionValueConverter>()),
-      new ConcurrentDictionaryValueConverter(loggerFactory.CreateLogger<ConcurrentDictionaryValueConverter>())
+      new ConcurrentDictionaryValueConverter(loggerFactory.CreateLogger<ConcurrentDictionaryValueConverter>()),
+      new DictionaryValueConverter(loggerFactory.CreateLogger<DictionaryValueConverter>()),
+      new DictionaryEntryValueConverter(loggerFactory.CreateLogger<DictionaryEntryValueConverter>()),
     ];
 
   public void RegisterVariablesReferences(VariablesResponse response)

@@ -118,6 +118,12 @@ public static class ValueConverterHelpers
     return false;
   }
 
+  public static bool TryGetUInt(Dictionary<string, string> lookup, string name, out uint value)
+  {
+    value = 0;
+    return lookup.TryGetValue(name, out var variable) && uint.TryParse(variable, out value);
+  }
+
   public static bool TryGetVariable(List<Variable> variables, string name, out Variable variable)
   {
     variable = variables.FirstOrDefault(v => v.Name == name)!;
