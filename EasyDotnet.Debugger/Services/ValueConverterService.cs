@@ -42,6 +42,7 @@ public class ValueConverterService(
       new ConcurrentDictionaryValueConverter(loggerFactory.CreateLogger<ConcurrentDictionaryValueConverter>()),
       new DictionaryValueConverter(loggerFactory.CreateLogger<DictionaryValueConverter>()),
       new DictionaryEntryValueConverter(loggerFactory.CreateLogger<DictionaryEntryValueConverter>()),
+      new ReadOnlyDictionaryValueConverter(loggerFactory.CreateLogger<ReadOnlyDictionaryValueConverter>())
     ];
 
   public void RegisterVariablesReferences(VariablesResponse response)
