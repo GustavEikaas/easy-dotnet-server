@@ -26,6 +26,20 @@ public partial class ReadOnlyCollectionValueConverter(ILogger<ReadOnlyCollection
       return response;
     }
 
+    var lookup = ValueConverterHelpers.BuildFieldLookup(variables);
+    if (ValueConverterHelpers.TryGetInt(lookup, "Count", out var count) && count == 0)
+    {
+      Logger.LogDebug("[ReadOnlyCollection] Collection is empty (Count: 0)");
+
+      response.Body!.Variables = [
+        ValueConverterHelpers.TryGetVariable(variables, "Count", out var countVar)
+          ? countVar
+          :  new Variable { Name = "Count", Value = "0", Type = "int", VariablesReference = 0 }
+      ];
+
+      return response;
+    }
+
     if (!ValueConverterHelpers.TryGetVariable(variables, "list", out var listVar) ||
         listVar.VariablesReference is null or 0)
     {
