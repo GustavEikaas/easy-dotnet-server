@@ -6,7 +6,9 @@ using System.Reflection;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
+using EasyDotnet.Domain.Models.Client;
 using EasyDotnet.IDE.Utils;
+using EasyDotnet.Infrastructure.Services;
 using EasyDotnet.Notifications;
 using StreamJsonRpc;
 
@@ -41,11 +43,16 @@ public class InitializeController(IClientService clientService, IVisualStudioLoc
     clientService.ProjectInfo = request.ProjectInfo;
     clientService.ClientInfo = request.ClientInfo;
 
-    if (request.Options is not null)
+    clientService.ClientOptions = request.Options ?? new ClientOptions();
+    clientService.UseVisualStudio = clientService.ClientOptions.UseVisualStudio;
+
+    var debuggerOptions = clientService.ClientOptions.DebuggerOptions ?? new DebuggerOptions();
+    var binaryPath = debuggerOptions.BinaryPath ?? NetCoreDbgLocator.GetNetCoreDbgPath();
+
+    clientService.ClientOptions = clientService.ClientOptions with
     {
-      clientService.UseVisualStudio = request.Options.UseVisualStudio;
-      clientService.ClientOptions = request.Options;
-    }
+      DebuggerOptions = debuggerOptions with { BinaryPath = binaryPath }
+    };
 
     var supportsSingleFileExecution = msBuildService.QuerySdkInstallations().Any(x => x.Version.Major >= 10);
 
