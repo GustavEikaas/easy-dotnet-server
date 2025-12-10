@@ -71,6 +71,8 @@ runs:
       shell: bash
       run: |
         NETCOREDBG_VERSION="${{ inputs.netcoredbgVersion }}"
+        NETCOREDBG_MACOS_ARM_VERSION="${{ inputs.netcoredbgArmVersion }}"
+
         OUTPUT_PATH="${{ inputs.roslynOutputPath }}/netcoredbg"
         ARTIFACTS_DIR="artifacts/netcoredbg"
         
@@ -109,15 +111,10 @@ runs:
         ARM_TARGET_DIR="osx-arm64"
         echo "Downloading netcoredbg (macOS ARM64) from Cliffback..."
 
-        DOWNLOAD_URL="https://github.com/Cliffback/netcoredbg-macOS-arm64.nvim/releases/download/3.1.2-1054/netcoredbg-osx-arm64.tar.gz"
+        DOWNLOAD_URL="https://github.com/Cliffback/netcoredbg-macOS-arm64.nvim/releases/download/${NETCOREDBG_MACOS_ARM_VERSION}/netcoredbg-osx-arm64.tar.gz"
         DOWNLOAD_PATH="$ARTIFACTS_DIR/netcoredbg-${ARM_PLATFORM}.tar.gz"
 
         curl -sSL -o "$DOWNLOAD_PATH" "$DOWNLOAD_URL"
-
-        echo "Downloaded file type:" && file "$DOWNLOAD_PATH"
-        echo "First 20 lines of download (should NOT contain HTML):"
-        head -20 "$DOWNLOAD_PATH"
-
         mkdir -p "$ARTIFACTS_DIR/${ARM_PLATFORM}"
 
         if file "$DOWNLOAD_PATH" | grep -qi 'gzip compressed'; then
