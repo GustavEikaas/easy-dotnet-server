@@ -105,18 +105,29 @@ runs:
           echo "✓ Extracted netcoredbg to $OUTPUT_PATH/${target_dir}"
         done
 
-        # Download macOS ARM from Cliffback
         ARM_PLATFORM="osx-arm64"
         ARM_TARGET_DIR="osx-arm64"
         echo "Downloading netcoredbg (macOS ARM64) from Cliffback..."
-        curl -L -o "$ARTIFACTS_DIR/netcoredbg-${ARM_PLATFORM}.tar.gz" \
-          "https://github.com/Cliffback/netcoredbg-macOS-arm64.nvim/releases/download/${NETCOREDBG_ARM_VERSION}/netcoredbg-osx-arm64.tar.gz"
+
+        DOWNLOAD_URL="https://github.com/Cliffback/netcoredbg-macOS-arm64.nvim/releases/download/${NETCOREDBG_ARM_VERSION}/netcoredbg-osx-arm64.tar.gz"
+        DOWNLOAD_PATH="$ARTIFACTS_DIR/netcoredbg-${ARM_PLATFORM}.tar.gz"
+
+        curl -sSL -o "$DOWNLOAD_PATH" "$DOWNLOAD_URL"
+
+        echo "Downloaded file type:" && file "$DOWNLOAD_PATH"
+        echo "First 20 lines of download (should NOT contain HTML):"
+        head -20 "$DOWNLOAD_PATH"
 
         mkdir -p "$ARTIFACTS_DIR/${ARM_PLATFORM}"
-        tar -xzf "$ARTIFACTS_DIR/netcoredbg-${ARM_PLATFORM}.tar.gz" -C "$ARTIFACTS_DIR/${ARM_PLATFORM}"
 
-        mkdir -p "$OUTPUT_PATH/${ARM_TARGET_DIR}"
-        cp -r "$ARTIFACTS_DIR/${ARM_PLATFORM}/netcoredbg/"* "$OUTPUT_PATH/${ARM_TARGET_DIR}/"
-        echo "✓ Extracted netcoredbg (macOS ARM64) to $OUTPUT_PATH/${ARM_TARGET_DIR}"
+        if file "$DOWNLOAD_PATH" | grep -qi 'gzip compressed'; then
+          tar -xzf "$DOWNLOAD_PATH" -C "$ARTIFACTS_DIR/${ARM_PLATFORM}"
+          mkdir -p "$OUTPUT_PATH/${ARM_TARGET_DIR}"
+          cp -r "$ARTIFACTS_DIR/${ARM_PLATFORM}/netcoredbg/"* "$OUTPUT_PATH/${ARM_TARGET_DIR}/"
+          echo "✓ Extracted netcoredbg (macOS ARM64) to $OUTPUT_PATH/${ARM_TARGET_DIR}"
+        else
+          echo "::error::Downloaded netcoredbg-osx-arm64.tar.gz is not a valid gzipped tarball!"
+          exit 1
+        fi
 
         echo "All netcoredbg platforms bundled successfully!"
