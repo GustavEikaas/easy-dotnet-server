@@ -18,6 +18,10 @@ inputs:
     description: 'netcoredbg release version'
     required: true
     default: '3.1.2-1054'
+  netcoredbgArmVersion:
+    description: '(Cliffback) netcoredbg ARM release version'
+    required: true
+    default: '3.1.2-1054'
 
 runs:
   using: "composite"
@@ -73,39 +77,46 @@ runs:
         mkdir -p "$ARTIFACTS_DIR"
         mkdir -p "$OUTPUT_PATH"
         
-        # Define platforms and their output directories
         declare -A platforms=(
           ["linux-amd64"]="linux-x64"
           ["linux-arm64"]="linux-arm64"
           ["osx-amd64"]="osx-x64"
           ["win64"]="win-x64"
         )
-        
-        # Download and extract each platform
+
+        # Download Samsung repo platforms
         for platform in "${!platforms[@]}"; do
           target_dir="${platforms[$platform]}"
           echo "Downloading netcoredbg for $platform..."
           
           if [[ "$platform" == "win64" ]]; then
-            # Windows uses . zip
             curl -L -o "$ARTIFACTS_DIR/netcoredbg-${platform}.zip" \
               "https://github.com/Samsung/netcoredbg/releases/download/${NETCOREDBG_VERSION}/netcoredbg-${platform}.zip"
-            
             unzip -q "$ARTIFACTS_DIR/netcoredbg-${platform}.zip" -d "$ARTIFACTS_DIR/${platform}"
           else
-            # Linux and macOS use .tar.gz
             curl -L -o "$ARTIFACTS_DIR/netcoredbg-${platform}.tar.gz" \
               "https://github.com/Samsung/netcoredbg/releases/download/${NETCOREDBG_VERSION}/netcoredbg-${platform}.tar.gz"
-            
             mkdir -p "$ARTIFACTS_DIR/${platform}"
             tar -xzf "$ARTIFACTS_DIR/netcoredbg-${platform}.tar.gz" -C "$ARTIFACTS_DIR/${platform}"
           fi
           
-          # Copy to output with platform-specific folder
           mkdir -p "$OUTPUT_PATH/${target_dir}"
           cp -r "$ARTIFACTS_DIR/${platform}/netcoredbg/"* "$OUTPUT_PATH/${target_dir}/"
-          
           echo "✓ Extracted netcoredbg to $OUTPUT_PATH/${target_dir}"
         done
-        
+
+        # Download macOS ARM from Cliffback
+        ARM_PLATFORM="osx-arm64"
+        ARM_TARGET_DIR="osx-arm64"
+        echo "Downloading netcoredbg (macOS ARM64) from Cliffback..."
+        curl -L -o "$ARTIFACTS_DIR/netcoredbg-${ARM_PLATFORM}.tar.gz" \
+          "https://github.com/Cliffback/netcoredbg-macOS-arm64.nvim/releases/download/${NETCOREDBG_ARM_VERSION}/netcoredbg-osx-arm64.tar.gz"
+
+        mkdir -p "$ARTIFACTS_DIR/${ARM_PLATFORM}"
+        tar -xzf "$ARTIFACTS_DIR/netcoredbg-${ARM_PLATFORM}.tar.gz" -C "$ARTIFACTS_DIR/${ARM_PLATFORM}"
+
+        mkdir -p "$OUTPUT_PATH/${ARM_TARGET_DIR}"
+        cp -r "$ARTIFACTS_DIR/${ARM_PLATFORM}/netcoredbg/"* "$OUTPUT_PATH/${ARM_TARGET_DIR}/"
+        echo "✓ Extracted netcoredbg (macOS ARM64) to $OUTPUT_PATH/${ARM_TARGET_DIR}"
+
         echo "All netcoredbg platforms bundled successfully!"
