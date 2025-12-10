@@ -61,7 +61,13 @@ public static class NetCoreDbgLocator
 
     if (OperatingSystem.IsMacOS())
     {
-      return "osx-x64"; // netcoredbg only ships x64 for macOS
+      return RuntimeInformation.ProcessArchitecture switch
+      {
+        Architecture.Arm64 => "osx-arm64",
+        Architecture.X64 => "osx-x64",
+        _ => throw new PlatformNotSupportedException(
+            $"macOS architecture '{RuntimeInformation.ProcessArchitecture}' is not supported")
+      };
     }
 
     throw new PlatformNotSupportedException(
