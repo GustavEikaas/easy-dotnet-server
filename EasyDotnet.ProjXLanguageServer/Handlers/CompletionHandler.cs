@@ -1,6 +1,6 @@
 using System.Xml;
 using System.Xml.Linq;
-using EasyDotnet.MsBuild;
+using EasyDotnet.MsBuild.ProjectModel;
 using EasyDotnet.ProjXLanguageServer.Services;
 using Microsoft.VisualStudio.LanguageServer.Protocol;
 using StreamJsonRpc;

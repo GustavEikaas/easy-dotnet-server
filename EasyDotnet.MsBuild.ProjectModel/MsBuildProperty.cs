@@ -1,4 +1,4 @@
-namespace EasyDotnet.MsBuild;
+namespace EasyDotnet.MsBuild.ProjectModel;
 
 /// <summary>
 /// Defines a typed MSBuild property with its name, documentation, and deserializer.

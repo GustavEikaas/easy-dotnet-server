@@ -7,8 +7,4 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\EasyDotnet.MsBuild.ProjectModel\EasyDotnet.MsBuild.ProjectModel.csproj" />
-  </ItemGroup>
-
 </Project>

@@ -1,4 +1,4 @@
-namespace EasyDotnet.MsBuild;
+namespace EasyDotnet.MsBuild.ProjectModel;
 
 public static class MsBuildValueParsers
 {

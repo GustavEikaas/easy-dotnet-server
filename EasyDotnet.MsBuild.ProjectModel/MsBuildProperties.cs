@@ -1,4 +1,4 @@
-namespace EasyDotnet.MsBuild;
+namespace EasyDotnet.MsBuild.ProjectModel;
 
 public record MsBuildPropertyInfo(string Name, string Description);
 
@@ -26,6 +26,15 @@ public static class MsBuildProperties
             Name: (string)prop!.GetType().GetProperty("Name")!.GetValue(prop)!,
             Description: (string)prop.GetType().GetProperty("Description")!.GetValue(prop)!
         ));
+
+
+
+  public static readonly MsBuildProperty<bool> Nullable =
+      new(
+          Name: "Nullable",
+          Description: "Whether nullable reference types are enabled",
+          Deserialize: MsBuildValueParsers.AsBool
+      );
 
   public static readonly MsBuildProperty<string?> OutputPath =
       new(

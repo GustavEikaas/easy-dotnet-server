@@ -1,3 +1,5 @@
+using EasyDotnet.MsBuild.ProjectModel;
+
 namespace EasyDotnet.MsBuild.Tests.ValueParsers;
 
 public class AsStringTests
