@@ -1,11 +1,12 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using EasyDotnet.ProjectLanguageServer;
+using EasyDotnet.ProjXLanguageServer;
 using Spectre.Console.Cli;
+
 namespace EasyDotnet.IDE.Commands;
 
-public class ProjectLanguageServerCommand : AsyncCommand<ProjectLanguageServerCommand.Settings>
+public class ProjXLanguageServerCommand : AsyncCommand<ProjXLanguageServerCommand.Settings>
 {
   public sealed class Settings : CommandSettings;
 
@@ -15,4 +16,3 @@ public class ProjectLanguageServerCommand : AsyncCommand<ProjectLanguageServerCo
     return 0;
   }
 }
-

@@ -23,7 +23,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EasyDotnet.Debugger", "Easy
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EasyDotnet.Debugger.Tests", "EasyDotnet.Debugger.Tests\EasyDotnet.Debugger.Tests.csproj", "{776612F7-3EC3-4DAE-9B95-144BCF1094BE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EasyDotnet.ProjectLanguageServer", "EasyDotnet.ProjectLanguageServer\EasyDotnet.ProjectLanguageServer.csproj", "{3C3DA7B6-8796-493F-A886-05EEB7C23D24}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EasyDotnet.ProjXLanguageServer", "EasyDotnet.ProjXLanguageServer\EasyDotnet.ProjXLanguageServer.csproj", "{3C3DA7B6-8796-493F-A886-05EEB7C23D24}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

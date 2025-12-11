@@ -1,9 +1,9 @@
-using EasyDotnet.ProjectLanguageServer.Services;
-using EasyDotnet.ProjectLanguageServer.Utils;
+using EasyDotnet.ProjXLanguageServer.Services;
+using EasyDotnet.ProjXLanguageServer.Utils;
 using Microsoft.Extensions.DependencyInjection;
 using StreamJsonRpc;
 
-namespace EasyDotnet.ProjectLanguageServer;
+namespace EasyDotnet.ProjXLanguageServer;
 
 public static class DiModules
 {
@@ -12,6 +12,7 @@ public static class DiModules
     var services = new ServiceCollection();
     services.AddSingleton(jsonRpc);
     services.AddSingleton<IDocumentManager, DocumentManager>();
+    services.AddSingleton<IDiagnosticsService, DiagnosticsService>();
     AssemblyScanner.GetControllerTypes().ForEach(x => services.AddTransient(x));
 
     return services.BuildServiceProvider();
