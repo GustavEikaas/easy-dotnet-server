@@ -7,6 +7,7 @@ public record MsBuildProperty<T>(
     string Name,
     string Description,
     Func<IReadOnlyDictionary<string, string?>, string, T> Deserialize,
+    MsBuildPropertyKind? Kind = null,
     bool IsComputed = false
 )
 {
