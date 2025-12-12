@@ -4,7 +4,7 @@ using StreamJsonRpc;
 
 namespace EasyDotnet.ProjXLanguageServer.Handlers;
 
-public class TextDocumentHandler(JsonRpc jsonRpc, IDocumentManager documentManager) : BaseController(jsonRpc)
+public class TextDocumentHandler(IDocumentManager documentManager) : BaseController
 {
   [JsonRpcMethod("textDocument/didOpen", UseSingleObjectParameterDeserialization = true)]
   public void OnDidOpenTextDocument(DidOpenTextDocumentParams @params) => documentManager.OpenDocument(

@@ -6,7 +6,7 @@ using StreamJsonRpc;
 
 namespace EasyDotnet.ProjXLanguageServer.Handlers;
 
-public class CompletionHandler(IDocumentManager documentManager, JsonRpc jsonRpc) : BaseController(jsonRpc)
+public class CompletionHandler(IDocumentManager documentManager) : BaseController
 {
   [JsonRpcMethod("textDocument/completion", UseSingleObjectParameterDeserialization = true)]
   public CompletionList GetCompletion(CompletionParams completionParams)

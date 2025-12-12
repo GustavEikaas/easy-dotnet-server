@@ -3,7 +3,7 @@ using StreamJsonRpc;
 
 namespace EasyDotnet.ProjXLanguageServer.Handlers;
 
-public class InitializeHandler(JsonRpc jsonRpc) : BaseController(jsonRpc)
+public class InitializeHandler : BaseController
 {
   [JsonRpcMethod("initialize", UseSingleObjectParameterDeserialization = true)]
   public Task<InitializeResult> InitializeAsync(InitializeParams param)
@@ -29,7 +29,10 @@ public class InitializeHandler(JsonRpc jsonRpc) : BaseController(jsonRpc)
   }
 
   [JsonRpcMethod("initialized")]
-  public void Initialized(InitializedParams param) => _ = LogAsync(MessageType.Info, "Client initialized.");
+  public void Initialized(InitializedParams param)
+  {
+
+  }
 
   [JsonRpcMethod("shutdown")]
   public Task Shutdown() => Task.CompletedTask;
