@@ -1,5 +1,14 @@
 namespace EasyDotnet.MsBuild;
 
+public enum MsBuildPropertyKind
+{
+  UserFacing,      // Set in .csproj normally
+  SdkPrivate,      // Used by Microsoft.NET.Sdk targets only
+  Environment,     // Set by VS or CLI
+  Infrastructure,  // Targeting packs, tool paths, etc.
+  Derived          // Computed or inferred
+}
+
 public record MsBuildPropertyInfo(string Name, string Description);
 
 /// <summary>
@@ -16,43 +25,53 @@ public static class MsBuildProperties
         .Where(prop => prop is not null && !(bool)prop.GetType().GetProperty("IsComputed")!.GetValue(prop)!)
         .Select(prop => (string)prop?.GetType().GetProperty("Name")!.GetValue(prop)!);
 
-  public static IEnumerable<MsBuildPropertyInfo> GetAllPropertiesWithDocs() => typeof(MsBuildProperties)
-         .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
-         .Where(f => f.FieldType.IsGenericType &&
-                     f.FieldType.GetGenericTypeDefinition() == typeof(MsBuildProperty<>))
-         .Select(f => f.GetValue(null))
-         .Where(prop => prop is not null && !(bool)prop.GetType().GetProperty("IsComputed")!.GetValue(prop)!)
-         .Select(prop => new MsBuildPropertyInfo(
-             Name: (string)prop!.GetType().GetProperty("Name")!.GetValue(prop)!,
-             Description: (string)prop.GetType().GetProperty("Description")!.GetValue(prop)!
-         ));
+  public static IEnumerable<MsBuildPropertyInfo> GetAllPropertiesWithDocs() =>
+      typeof(MsBuildProperties)
+          .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+          .Where(f => f.FieldType.IsGenericType &&
+                      f.FieldType.GetGenericTypeDefinition() == typeof(MsBuildProperty<>))
+          .Select(f => f.GetValue(null))
+          .Where(prop => prop is not null && !(bool)prop!.GetType()
+                           .GetProperty("IsComputed")!
+                           .GetValue(prop)! && (MsBuildPropertyKind)prop!.GetType()
+                           .GetProperty("Kind")!
+                           .GetValue(prop)!
+                       == MsBuildPropertyKind.UserFacing)
+          .Select(prop => new MsBuildPropertyInfo(
+              Name: (string)prop!.GetType().GetProperty("Name")!.GetValue(prop)!,
+              Description: (string)prop.GetType().GetProperty("Description")!.GetValue(prop)!
+          ));
 
   public static readonly MsBuildProperty<bool> Nullable =
       new(
           Name: "Nullable",
           Description: "Whether nullable reference types are enabled",
-          Deserialize: MsBuildValueParsers.AsBool
+          Deserialize: MsBuildValueParsers.AsBool,
+          Kind: MsBuildPropertyKind.UserFacing
       );
 
   public static readonly MsBuildProperty<string?> OutputPath =
       new(
           Name: "OutputPath",
           Description: "Specifies the directory for build outputs (DLL, EXE, etc.).",
-          Deserialize: MsBuildValueParsers.AsPath
+          Deserialize: MsBuildValueParsers.AsPath,
+          Kind: MsBuildPropertyKind.UserFacing
       );
 
   public static readonly MsBuildProperty<string?> OutDir =
       new(
           Name: "OutDir",
           Description: "Specifies the directory for build outputs e.g bin\\Debug\\net8.0\\ .",
-          Deserialize: MsBuildValueParsers.AsPath
+          Deserialize: MsBuildValueParsers.AsPath,
+          Kind: MsBuildPropertyKind.UserFacing
       );
 
   public static readonly MsBuildProperty<string?> OutputType =
       new(
           Name: "OutputType",
           Description: "Specifies the type of build output to generate, such as 'Exe', 'Library', or 'WinExe'.",
-          Deserialize: MsBuildValueParsers.AsString
+          Deserialize: MsBuildValueParsers.AsString,
+          Kind: MsBuildPropertyKind.UserFacing
       );
 
   public static readonly MsBuildProperty<string?> TargetExt =
@@ -94,35 +113,40 @@ public static class MsBuildProperties
       new(
           Name: "AssemblyName",
           Description: "Defines the name of the compiled assembly without its file extension. Typically matches the project name unless overridden.",
-          Deserialize: MsBuildValueParsers.AsString
+          Deserialize: MsBuildValueParsers.AsString,
+          Kind: MsBuildPropertyKind.UserFacing
       );
 
   public static readonly MsBuildProperty<string?> TargetFramework =
       new(
           Name: "TargetFramework",
           Description: "Specifies the target framework moniker (TFM) for the project, such as 'net8.0' or 'net6.0-windows'.",
-          Deserialize: MsBuildValueParsers.AsString
+          Deserialize: MsBuildValueParsers.AsString,
+          Kind: MsBuildPropertyKind.UserFacing
       );
 
   public static readonly MsBuildProperty<string[]?> TargetFrameworks =
       new(
           Name: "TargetFrameworks",
           Description: "Specifies multiple target framework monikers (TFMs) for multi-targeted projects, separated by semicolons (e.g., 'net6.0;net8.0').",
-          Deserialize: MsBuildValueParsers.AsStringList
+          Deserialize: MsBuildValueParsers.AsStringList,
+          Kind: MsBuildPropertyKind.UserFacing
       );
 
   public static readonly MsBuildProperty<string?> UserSecretsId =
       new(
           Name: "UserSecretsId",
           Description: "Specifies the unique identifier used by the .NET User Secrets feature to locate secrets.json during development.",
-          Deserialize: MsBuildValueParsers.AsString
+          Deserialize: MsBuildValueParsers.AsString,
+          Kind: MsBuildPropertyKind.UserFacing
       );
 
   public static readonly MsBuildProperty<bool> TestingPlatformDotnetTestSupport =
       new(
           Name: "TestingPlatformDotnetTestSupport",
           Description: "Indicates whether the project supports running tests using the 'dotnet test' command on the Testing Platform.",
-          Deserialize: MsBuildValueParsers.AsBool
+          Deserialize: MsBuildValueParsers.AsBool,
+          Kind: MsBuildPropertyKind.UserFacing
       );
 
   public static readonly MsBuildProperty<string?> TargetPath =
@@ -136,42 +160,48 @@ public static class MsBuildProperties
       new(
           Name: "GeneratePackageOnBuild",
           Description: "Indicates whether the project should automatically generate a NuGet package when it is built.",
-          Deserialize: MsBuildValueParsers.AsBool
+          Deserialize: MsBuildValueParsers.AsBool,
+          Kind: MsBuildPropertyKind.UserFacing
       );
 
   public static readonly MsBuildProperty<bool> IsPackable =
       new(
           Name: "IsPackable",
           Description: "Indicates whether the project can be packaged into a NuGet package. False disables packing even if GeneratePackageOnBuild is true.",
-          Deserialize: MsBuildValueParsers.AsBool
+          Deserialize: MsBuildValueParsers.AsBool,
+          Kind: MsBuildPropertyKind.UserFacing
       );
 
   public static readonly MsBuildProperty<string?> PackageId =
       new(
           Name: "PackageId",
           Description: "Specifies the identifier (ID) of the NuGet package to be generated from the project.",
-          Deserialize: MsBuildValueParsers.AsString
+          Deserialize: MsBuildValueParsers.AsString,
+          Kind: MsBuildPropertyKind.UserFacing
       );
 
   public static readonly MsBuildProperty<Version?> Version =
       new(
           Name: "Version",
           Description: "Specifies the version number of the NuGet package for the project (e.g., '1.0.0').",
-          Deserialize: MsBuildValueParsers.AsVersion
+          Deserialize: MsBuildValueParsers.AsVersion,
+          Kind: MsBuildPropertyKind.UserFacing
       );
 
   public static readonly MsBuildProperty<string?> PackageOutputPath =
       new(
           Name: "PackageOutputPath",
           Description: "Specifies the directory where the generated NuGet package will be placed after building.",
-          Deserialize: MsBuildValueParsers.AsPath
+          Deserialize: MsBuildValueParsers.AsPath,
+          Kind: MsBuildPropertyKind.UserFacing
       );
 
   public static readonly MsBuildProperty<string?> TargetFrameworkVersion =
       new(
           Name: "TargetFrameworkVersion",
           Description: "Specifies the version of the target framework for the project, such as 'v4.8' for .NET Framework or null for .NET Core/NET 5+ projects.",
-          Deserialize: MsBuildValueParsers.AsString
+          Deserialize: MsBuildValueParsers.AsString,
+          Kind: MsBuildPropertyKind.UserFacing
       );
 
   public static readonly MsBuildProperty<bool> UsingMicrosoftNETSdk =
@@ -213,21 +243,24 @@ public static class MsBuildProperties
       new(
           Name: "UseIISExpress",
           Description: "Indicates whether the project is configured to run using IIS Express for local development.",
-          Deserialize: MsBuildValueParsers.AsBool
+          Deserialize: MsBuildValueParsers.AsBool,
+          Kind: MsBuildPropertyKind.UserFacing
       );
 
   public static readonly MsBuildProperty<string?> LangVersion =
       new(
           Name: "LangVersion",
           Description: "Specifies the C# language version used by the project (e.g., '10.0', 'latest').",
-          Deserialize: MsBuildValueParsers.AsString
+          Deserialize: MsBuildValueParsers.AsString,
+          Kind: MsBuildPropertyKind.UserFacing
       );
 
   public static readonly MsBuildProperty<string?> RootNamespace =
       new(
           Name: "RootNamespace",
           Description: "Specifies the default root namespace for the project. Used when generating classes and resources without an explicit namespace.",
-          Deserialize: MsBuildValueParsers.AsString
+          Deserialize: MsBuildValueParsers.AsString,
+          Kind: MsBuildPropertyKind.UserFacing
       );
 
   public static readonly MsBuildProperty<bool> IsAspireHost =
@@ -513,7 +546,8 @@ public static class MsBuildProperties
       new(
           Name: "TreatWarningsAsErrors",
           Description: "Indicates whether compiler warnings should be treated as errors, causing the build to fail on warnings.",
-          Deserialize: MsBuildValueParsers.AsBool
+          Deserialize: MsBuildValueParsers.AsBool,
+          Kind: MsBuildPropertyKind.UserFacing
       );
 
   public static readonly MsBuildProperty<string?> MSBuildToolsPath =
@@ -577,7 +611,8 @@ public static class MsBuildProperties
       new(
           Name: "NoWarn",
           Description: "Specifies a list of compiler warning codes to suppress, separated by semicolons (e.g., '1701;1702').",
-          Deserialize: MsBuildValueParsers.AsStringList
+          Deserialize: MsBuildValueParsers.AsStringList,
+          Kind: MsBuildPropertyKind.UserFacing
       );
 
   public static readonly MsBuildProperty<string?> VisualStudioVersion =
@@ -864,7 +899,8 @@ public static class MsBuildProperties
       new(
           Name: "Configurations",
           Description: "Specifies the build configurations available in the project, separated by semicolons (e.g., 'Debug;Release').",
-          Deserialize: MsBuildValueParsers.AsStringList
+          Deserialize: MsBuildValueParsers.AsStringList,
+          Kind: MsBuildPropertyKind.UserFacing
       );
 
   public static readonly MsBuildProperty<string?> Configuration =
@@ -878,14 +914,16 @@ public static class MsBuildProperties
       new(
           Name: "Platforms",
           Description: "Specifies the target platforms available for the project, separated by semicolons (e.g., 'AnyCPU').",
-          Deserialize: MsBuildValueParsers.AsStringList
+          Deserialize: MsBuildValueParsers.AsStringList,
+          Kind: MsBuildPropertyKind.UserFacing
       );
 
   public static readonly MsBuildProperty<string?> Platform =
       new(
           Name: "Platform",
           Description: "Specifies the active platform for the current build (e.g., 'AnyCPU', 'x86', 'x64').",
-          Deserialize: MsBuildValueParsers.AsString
+          Deserialize: MsBuildValueParsers.AsString,
+          Kind: MsBuildPropertyKind.UserFacing
       );
 
   public static readonly MsBuildProperty<bool> DebugSymbols =
@@ -1011,7 +1049,8 @@ public static class MsBuildProperties
       new(
           Name: "GenerateAssemblyInfo",
           Description: "Indicates whether the project is configured to generate assembly metadata (AssemblyInfo) automatically.",
-          Deserialize: MsBuildValueParsers.AsBool
+          Deserialize: MsBuildValueParsers.AsBool,
+          Kind: MsBuildPropertyKind.UserFacing
       );
 
   public static readonly MsBuildProperty<string?> TargetFileName =
@@ -1046,7 +1085,8 @@ public static class MsBuildProperties
       new(
           Name: "SelfContained",
           Description: "Indicates whether the project is published as a self-contained application including the .NET runtime.",
-          Deserialize: MsBuildValueParsers.AsBool
+          Deserialize: MsBuildValueParsers.AsBool,
+          Kind: MsBuildPropertyKind.UserFacing
       );
 
   public static readonly MsBuildProperty<string?> UserProfileRuntimeStorePath =
