@@ -1,5 +1,7 @@
 namespace EasyDotnet.MsBuild;
 
+public record MsBuildPropertyInfo(string Name, string Description);
+
 /// <summary>
 /// Commonly used MSBuild properties.
 /// </summary>
@@ -13,6 +15,24 @@ public static class MsBuildProperties
         .Select(f => f.GetValue(null))
         .Where(prop => prop is not null && !(bool)prop.GetType().GetProperty("IsComputed")!.GetValue(prop)!)
         .Select(prop => (string)prop?.GetType().GetProperty("Name")!.GetValue(prop)!);
+
+  public static IEnumerable<MsBuildPropertyInfo> GetAllPropertiesWithDocs() => typeof(MsBuildProperties)
+         .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+         .Where(f => f.FieldType.IsGenericType &&
+                     f.FieldType.GetGenericTypeDefinition() == typeof(MsBuildProperty<>))
+         .Select(f => f.GetValue(null))
+         .Where(prop => prop is not null && !(bool)prop.GetType().GetProperty("IsComputed")!.GetValue(prop)!)
+         .Select(prop => new MsBuildPropertyInfo(
+             Name: (string)prop!.GetType().GetProperty("Name")!.GetValue(prop)!,
+             Description: (string)prop.GetType().GetProperty("Description")!.GetValue(prop)!
+         ));
+
+  public static readonly MsBuildProperty<bool> Nullable =
+      new(
+          Name: "Nullable",
+          Description: "Whether nullable reference types are enabled",
+          Deserialize: MsBuildValueParsers.AsBool
+      );
 
   public static readonly MsBuildProperty<string?> OutputPath =
       new(
