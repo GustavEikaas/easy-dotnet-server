@@ -7,6 +7,7 @@ namespace EasyDotnet.Debugger.Session;
 public class DebuggerProcessHost(ILogger<DebuggerProcessHost> logger) : IDebuggerProcessHost
 {
   private Process? _process;
+  public int? ProcessId => _process?.Id;
 
   public Stream StandardInput => _process?.StandardInput.BaseStream
     ?? throw new InvalidOperationException("Process not started");
