@@ -1055,4 +1055,11 @@ public static class MsBuildProperties
           Description: "Specifies the directory path for the user's runtime store, used for storing precompiled runtime assets.",
           Deserialize: MsBuildValueParsers.AsPath
       );
+
+  public static readonly MsBuildProperty<string?> TargetPlatformIdentifier =
+      new(
+          Name: "TargetPlatformIdentifier",
+          Description: "Specifies the target platform family for the build (e.g., 'Windows', 'android', 'ios', 'maccatalyst', 'tvos', 'browser-wasm'). This is inferred from the TargetFramework and can be used in conditional logic for platform-specific builds.",
+          Deserialize: MsBuildValueParsers.AsString
+      );
 }
