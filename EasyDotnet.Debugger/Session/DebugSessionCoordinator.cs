@@ -15,12 +15,15 @@ public class DebugSessionCoordinator(
   private CancellationTokenSource? _cts;
   private readonly TaskCompletionSource<bool> _completionSource = new();
   private readonly TaskCompletionSource<bool> _disposalStartedSource = new();
+  private readonly TaskCompletionSource<bool> _processStartedSource = new();
   private int _isDisposing;
   private Func<Task>? _onDispose;
 
+  public Task ProcessStarted => _processStartedSource.Task;
   public Task Completion => _completionSource.Task;
   public Task DisposalStarted => _disposalStartedSource.Task;
   public int Port => tcpServer.Port;
+  public int? ProcessId => processHost?.ProcessId;
 
   public void Start(
    string debuggerBinaryPath,
@@ -52,10 +55,13 @@ public class DebugSessionCoordinator(
         try
         {
           processHost.Start(debuggerBinaryPath, "--interpreter=vscode");
+          _processStartedSource.SetResult(true);
+          logger.LogInformation("Debugger process started successfully");
         }
         catch (Exception ex)
         {
           logger.LogError(ex, "Failed to start debugger process");
+          _processStartedSource.SetException(ex);
           onProcessFailedToStart(ex);
           await TriggerCleanupAsync();
           throw;
@@ -103,6 +109,7 @@ public class DebugSessionCoordinator(
     }
 
     _disposalStartedSource.TrySetResult(true);
+    _processStartedSource.TrySetCanceled();
     logger.LogInformation("Beginning shutdown");
 
     _cts?.Cancel();
