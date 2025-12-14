@@ -8,6 +8,8 @@ public class DebugSession : IAsyncDisposable
 
   public Task Completion => _coordinator.Completion;
   public Task DisposalStarted => _coordinator.DisposalStarted;
+  public Task ProcessStarted => _coordinator.ProcessStarted;
+  public int? ProcessId => _coordinator.ProcessId;
   public int Port => _coordinator.Port;
 
   internal DebugSession(DebugSessionCoordinator coordinator) => _coordinator = coordinator;
