@@ -1,5 +1,7 @@
 namespace EasyDotnet.MsBuild;
 
+public record MsBuildPropertyInfo(string Name, string Description);
+
 /// <summary>
 /// Commonly used MSBuild properties.
 /// </summary>
@@ -14,10 +16,35 @@ public static class MsBuildProperties
         .Where(prop => prop is not null && !(bool)prop.GetType().GetProperty("IsComputed")!.GetValue(prop)!)
         .Select(prop => (string)prop?.GetType().GetProperty("Name")!.GetValue(prop)!);
 
+  public static IEnumerable<MsBuildPropertyInfo> GetAllPropertiesWithDocs() => typeof(MsBuildProperties)
+         .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+         .Where(f => f.FieldType.IsGenericType &&
+                     f.FieldType.GetGenericTypeDefinition() == typeof(MsBuildProperty<>))
+         .Select(f => f.GetValue(null))
+         .Where(prop => prop is not null && !(bool)prop.GetType().GetProperty("IsComputed")!.GetValue(prop)!)
+         .Select(prop => new MsBuildPropertyInfo(
+             Name: (string)prop!.GetType().GetProperty("Name")!.GetValue(prop)!,
+             Description: (string)prop.GetType().GetProperty("Description")!.GetValue(prop)!
+         ));
+
+  public static readonly MsBuildProperty<bool> Nullable =
+      new(
+          Name: "Nullable",
+          Description: "Whether nullable reference types are enabled",
+          Deserialize: MsBuildValueParsers.AsBool
+      );
+
   public static readonly MsBuildProperty<string?> OutputPath =
       new(
           Name: "OutputPath",
           Description: "Specifies the directory for build outputs (DLL, EXE, etc.).",
+          Deserialize: MsBuildValueParsers.AsPath
+      );
+
+  public static readonly MsBuildProperty<string?> OutDir =
+      new(
+          Name: "OutDir",
+          Description: "Specifies the directory for build outputs e.g bin\\Debug\\net8.0\\ .",
           Deserialize: MsBuildValueParsers.AsPath
       );
 
@@ -32,6 +59,20 @@ public static class MsBuildProperties
       new(
           Name: "TargetExt",
           Description: "Specifies the file extension of the build output, such as '.dll' or '.exe'.",
+          Deserialize: MsBuildValueParsers.AsString
+      );
+
+  public static readonly MsBuildProperty<string?> TargetDir =
+      new(
+          Name: "TargetDir",
+          Description: "Fully qualified path to output folder e.g C:\\easy-dotnet-server\\EasyDotnet.IDE\\bin\\Debug\\net8.0\\ ",
+          Deserialize: MsBuildValueParsers.AsPath
+      );
+
+  public static readonly MsBuildProperty<string?> TargetName =
+      new(
+          Name: "TargetName",
+          Description: "Filename of output e.g EasyDotnet.IDE",
           Deserialize: MsBuildValueParsers.AsString
       );
 
@@ -564,6 +605,13 @@ public static class MsBuildProperties
       new(
           Name: "MSBuildProjectName",
           Description: "Specifies the name of the project file without its extension.",
+          Deserialize: MsBuildValueParsers.AsString
+      );
+
+  public static readonly MsBuildProperty<string?> ProjectName =
+      new(
+          Name: "ProjectName",
+          Description: "Name of project e.g EasyDotnet.IDE",
           Deserialize: MsBuildValueParsers.AsString
       );
 

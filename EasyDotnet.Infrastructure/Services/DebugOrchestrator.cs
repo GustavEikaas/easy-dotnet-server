@@ -149,7 +149,7 @@ public class DebugOrchestrator(
                     launchProfile,
                     attachRequest,
                     project.ProjectDir!,
-                    vsTestResult?.Item2, request.EnvironmentVariables ?? []),
+                    vsTestResult?.Item2, request.EnvironmentVariables?.ToDictionary(x => x.Name, x => x.Value) ?? []),
             clientService?.ClientOptions?.DebuggerOptions?.ApplyValueConverters ?? false
       );
       _sessionServices[dllPath] = session;

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using EasyDotnet.Debugger.Messages;
 using EasyDotnet.Debugger.ValueConverters;
 using Microsoft.Extensions.Logging;
@@ -28,14 +29,27 @@ public class ValueConverterService(
   ILogger<ValueConverterService> logger,
   ILoggerFactory loggerFactory)
 {
-  private readonly Dictionary<long, IValueConverter> _variablesReferenceMap = [];
+  private readonly ConcurrentDictionary<long, IValueConverter> _variablesReferenceMap = new();
+
   public readonly List<IValueConverter> ValueConverters = [
       new DateTimeValueConverter(loggerFactory.CreateLogger<DateTimeValueConverter>()),
       new GuidValueConverter(loggerFactory.CreateLogger<GuidValueConverter>()),
       new HashSetValueConverter(loggerFactory.CreateLogger<HashSetValueConverter>()),
       new QueueValueConverter(loggerFactory.CreateLogger<QueueValueConverter>()),
       new ListValueConverter(loggerFactory.CreateLogger<ListValueConverter>()),
-      new TupleValueConverter(loggerFactory.CreateLogger<TupleValueConverter>())
+      new TupleValueConverter(loggerFactory.CreateLogger<TupleValueConverter>()),
+      new ReadOnlyCollectionValueConverter(loggerFactory.CreateLogger<ReadOnlyCollectionValueConverter>()),
+      new ConcurrentDictionaryValueConverter(loggerFactory.CreateLogger<ConcurrentDictionaryValueConverter>()),
+      new DictionaryValueConverter(loggerFactory.CreateLogger<DictionaryValueConverter>()),
+      new DictionaryEntryValueConverter(loggerFactory.CreateLogger<DictionaryEntryValueConverter>()),
+      new ReadOnlyDictionaryValueConverter(loggerFactory.CreateLogger<ReadOnlyDictionaryValueConverter>()),
+      new VersionValueConverter(loggerFactory.CreateLogger<VersionValueConverter>()),
+      new CancellationTokenValueConverter(loggerFactory.CreateLogger<CancellationTokenValueConverter>()),
+      new CancellationTokenSourceValueConverter(loggerFactory.CreateLogger<CancellationTokenSourceValueConverter>()),
+      new TimeSpanValueConverter(loggerFactory.CreateLogger<TimeSpanValueConverter>()),
+      new TimeOnlyValueConverter(loggerFactory.CreateLogger<TimeOnlyValueConverter>()),
+      new DateOnlyValueConverter(loggerFactory.CreateLogger<DateOnlyValueConverter>()),
+      new StopwatchValueConverter(loggerFactory.CreateLogger<StopwatchValueConverter>()),
     ];
 
   public void RegisterVariablesReferences(VariablesResponse response)

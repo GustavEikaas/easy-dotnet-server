@@ -6,13 +6,20 @@ using System.Reflection;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
+using EasyDotnet.Domain.Models.Client;
 using EasyDotnet.IDE.Utils;
+using EasyDotnet.Infrastructure.Services;
 using EasyDotnet.Notifications;
+using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Controllers.Initialize;
 
-public class InitializeController(IClientService clientService, IVisualStudioLocator locator, IMsBuildService msBuildService) : BaseController
+public class InitializeController(
+  IClientService clientService,
+  IVisualStudioLocator locator,
+  IMsBuildService msBuildService,
+  ILogger<InitializeController> logger) : BaseController
 {
   [JsonRpcMethod("initialize")]
   public async Task<InitializeResponse> Initialize(InitializeRequest request)
@@ -41,11 +48,16 @@ public class InitializeController(IClientService clientService, IVisualStudioLoc
     clientService.ProjectInfo = request.ProjectInfo;
     clientService.ClientInfo = request.ClientInfo;
 
-    if (request.Options is not null)
+    clientService.ClientOptions = request.Options ?? new ClientOptions();
+    clientService.UseVisualStudio = clientService.ClientOptions.UseVisualStudio;
+
+    var debuggerOptions = clientService.ClientOptions.DebuggerOptions ?? new DebuggerOptions();
+    var binaryPath = debuggerOptions.BinaryPath ?? TryGetNetcoreDbgPath();
+
+    clientService.ClientOptions = clientService.ClientOptions with
     {
-      clientService.UseVisualStudio = request.Options.UseVisualStudio;
-      clientService.ClientOptions = request.Options;
-    }
+      DebuggerOptions = debuggerOptions with { BinaryPath = binaryPath }
+    };
 
     var supportsSingleFileExecution = msBuildService.QuerySdkInstallations().Any(x => x.Version.Major >= 10);
 
@@ -66,6 +78,21 @@ public class InitializeController(IClientService clientService, IVisualStudioLoc
     {
       return null;
     }
+  }
+
+  private string? TryGetNetcoreDbgPath()
+  {
+    try
+    {
+      var debuggerPath = NetCoreDbgLocator.GetNetCoreDbgPath();
+      logger.LogInformation("Using bundled netcoredg: {debuggerPath}", debuggerPath);
+      return debuggerPath;
+    }
+    catch (Exception e)
+    {
+      logger.LogError(e, "Failed to locate netcoredbg");
+    }
+    return null;
   }
 
   private static List<string> GetRpcPaths() =>

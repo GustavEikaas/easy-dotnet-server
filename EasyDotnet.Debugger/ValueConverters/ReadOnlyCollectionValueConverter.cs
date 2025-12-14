@@ -4,13 +4,12 @@ using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Debugger.ValueConverters;
 
-public partial class ListValueConverter(ILogger<ListValueConverter> logger) : ValueConverterBase(logger)
+public partial class ReadOnlyCollectionValueConverter(ILogger<ReadOnlyCollectionValueConverter> logger) : ValueConverterBase(logger)
 {
-  protected override string ConverterName => "List";
+  protected override string ConverterName => "ReadOnlyCollection";
 
   public override bool CanConvert(Variable val) => !string.IsNullOrEmpty(val.Type)
-      && AnyList().IsMatch(
-        val.Type);
+      && ReadOnlyCollectionRegex().IsMatch(val.Type);
 
   public override async Task<VariablesResponse> TryConvertAsync(int id, IDebuggerProxy proxy, CancellationToken cancellationToken)
   {
@@ -28,64 +27,57 @@ public partial class ListValueConverter(ILogger<ListValueConverter> logger) : Va
     }
 
     var lookup = ValueConverterHelpers.BuildFieldLookup(variables);
-    if (!ValueConverterHelpers.TryGetInt(lookup, "_size", out var actualSize))
+    if (ValueConverterHelpers.TryGetInt(lookup, "Count", out var count) && count == 0)
     {
-      LogFailure("Missing or invalid _size field", id);
-      return response;
-    }
-
-    if (actualSize == 0)
-    {
-      Logger.LogDebug("[List] List is empty (size: 0)");
+      Logger.LogDebug("[ReadOnlyCollection] Collection is empty (Count: 0)");
 
       response.Body!.Variables = [
-        ValueConverterHelpers. TryGetVariable(variables, "Count", out var countVar)
-        ? countVar
-        : ValueConverterHelpers.CreateEmptyListVariable()
+        ValueConverterHelpers.TryGetVariable(variables, "Count", out var countVar)
+          ? countVar
+          : ValueConverterHelpers.CreateEmptyListVariable()
       ];
 
       return response;
     }
 
-    if (!ValueConverterHelpers.TryGetVariable(variables, "_items", out var itemsVar) ||
-        itemsVar.VariablesReference is null or 0)
+    if (!ValueConverterHelpers.TryGetVariable(variables, "list", out var listVar) ||
+        listVar.VariablesReference is null or 0)
     {
-      LogFailure("Missing _items field or invalid reference", id);
+      LogFailure("Missing list field or invalid reference", id);
       return response;
     }
 
-    var itemsResponse = await proxy.GetVariablesAsync(
-      itemsVar.VariablesReference.Value,
+    var listResponse = await proxy.GetVariablesAsync(
+      listVar.VariablesReference.Value,
       cancellationToken);
 
-    if (!ValidateResponse(itemsResponse, itemsVar.VariablesReference.Value, out var items))
+    if (!ValidateResponse(listResponse, listVar.VariablesReference.Value, out var listVariables))
     {
-      LogFailure("Failed to retrieve _items array", id);
+      LogFailure("Failed to retrieve list contents", id);
       return response;
     }
 
     try
     {
-      var activeItems = items
+      var items = listVariables
         .Where(v => v.Name.StartsWith('[') && v.Name.EndsWith(']'))
         .Select(v => new { Variable = v, Index = ParseArrayIndex(v.Name) })
-        .Where(x => x.Index >= 0 && x.Index < actualSize)
+        .Where(x => x.Index >= 0)
         .OrderBy(x => x.Index)
         .Select(x => x.Variable)
         .ToList();
 
-      response.Body!.Variables = activeItems;
+      response.Body!.Variables = items;
 
       Logger.LogDebug(
-        "[List] Filtered to {ActiveCount} items (from capacity {TotalCount})",
-        activeItems.Count,
+        "[ReadOnlyCollection] Unwrapped to {ItemCount} items",
         items.Count);
 
       return response;
     }
     catch (Exception ex)
     {
-      LogFailure($"Error filtering list items: {ex.Message}", id);
+      LogFailure($"Error unwrapping ReadOnlyCollection: {ex.Message}", id);
       return response;
     }
   }
@@ -96,6 +88,6 @@ public partial class ListValueConverter(ILogger<ListValueConverter> logger) : Va
     return int.TryParse(trimmed, out var index) ? index : -1;
   }
 
-  [GeneratedRegex(@"^System\.Collections\.Generic\.List<.*>$", RegexOptions.Compiled)]
-  private static partial Regex AnyList();
+  [GeneratedRegex(@"^System\.Collections\.ObjectModel\.ReadOnlyCollection<.*>$", RegexOptions.Compiled)]
+  private static partial Regex ReadOnlyCollectionRegex();
 }

@@ -5,7 +5,10 @@ public static class DotnetProjectDeserializer
   public static DotnetProject FromBag(MsBuildPropertyBag bag) => new(
         OutputPath: bag.Get(MsBuildProperties.OutputPath),
         OutputType: bag.Get(MsBuildProperties.OutputType),
+        OutDir: bag.Get(MsBuildProperties.OutDir),
         TargetExt: bag.Get(MsBuildProperties.TargetExt),
+        TargetDir: bag.Get(MsBuildProperties.TargetDir),
+        TargetName: bag.Get(MsBuildProperties.TargetName),
         IsTestProject: bag.Get(MsBuildProperties.IsTestProject),
         IsTestingPlatformApplication: bag.Get(MsBuildProperties.IsTestingPlatformApplication),
         AssemblyName: bag.Get(MsBuildProperties.AssemblyName),
@@ -82,6 +85,7 @@ public static class DotnetProjectDeserializer
         TargetFrameworkIdentifier: bag.Get(MsBuildProperties.TargetFrameworkIdentifier),
         MSBuildProjectName: bag.Get(MsBuildProperties.MSBuildProjectName),
         ProjectDir: bag.Get(MsBuildProperties.ProjectDir),
+        ProjectName: bag.Get(MsBuildProperties.ProjectName),
         MSBuildProjectFullPath: bag.Get(MsBuildProperties.MSBuildProjectFullPath),
         MicrosoftNETBuildTasksDirectoryRoot: bag.Get(MsBuildProperties.MicrosoftNETBuildTasksDirectoryRoot),
         MicrosoftNETBuildTasksDirectory: bag.Get(MsBuildProperties.MicrosoftNETBuildTasksDirectory),
