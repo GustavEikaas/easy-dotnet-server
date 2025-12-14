@@ -1,4 +1,3 @@
-using System.Diagnostics;
 
 namespace EasyDotnet.Aspire.Session;
 
@@ -10,7 +9,7 @@ public class RunSession
   public int? DebuggerPort { get; init; }
   public int? DebugSessionId { get; init; }
   public bool IsDebug { get; init; }
-  public Process? ServiceProcess { get; init; }
+  public int ProcessId { get; init; }
   public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
 }
 

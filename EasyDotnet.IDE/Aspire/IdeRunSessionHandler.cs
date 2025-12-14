@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -68,25 +69,27 @@ public class IdeRunSessionHandler(
     try
     {
       // Start the debug session through the orchestrator
-      var debuggerPort = await debugOrchestrator.StartClientDebugSessionAsync(
+      var debugSession = await debugOrchestrator.StartClientDebugSessionAsync(
           config.ProjectPath!,
           new(project.ProjectPath!, project.TargetFramework, null, null, [.. envVars.Select(x => new EnvironmentVariable(x.Name, x.Value))]),
           cancellationToken);
 
       logger.LogInformation(
           "Started debugger on port {Port} for {ProjectPath}",
-          debuggerPort,
+          debugSession.Port,
           config.ProjectPath);
 
       // Connect to the debugger through client service
       var debugSessionId = await clientService.RequestStartDebugSession(
           "127.0.0.1",
-          debuggerPort);
+          debugSession.Port);
 
       logger.LogInformation(
           "Connected to debug session {DebugSessionId} for {ProjectPath}",
           debugSessionId,
           config.ProjectPath);
+
+      await debugSession.ProcessStarted;
 
       // Create the run session
       var runSession = new RunSession
@@ -94,10 +97,10 @@ public class IdeRunSessionHandler(
         RunId = runId,
         DcpId = dcpId,
         ProjectPath = config.ProjectPath!,
-        DebuggerPort = debuggerPort,
+        DebuggerPort = debugSession.Port,
         DebugSessionId = debugSessionId,
         IsDebug = isDebug,
-        ServiceProcess = null // DCP manages the process
+        ProcessId = debugSession.ProcessId!.Value
       };
 
       // Register with session manager
@@ -145,7 +148,7 @@ public class IdeRunSessionHandler(
       {
         notification_type = "sessionTerminated",
         session_id = runId,
-        exit_code = runSession.ServiceProcess?.ExitCode ?? 0
+        exit_code = 0 //TODO:
       }, cancellationToken);
 
       // Remove from session manager

@@ -20,7 +20,7 @@ public class DebugOrchestrator(
 {
   private readonly ConcurrentDictionary<string, Debugger.DebugSession> _sessionServices = new();
 
-  public async Task<int> StartClientDebugSessionAsync(
+  public async Task<Debugger.DebugSession> StartClientDebugSessionAsync(
     string dllPath,
     DebuggerStartRequest request,
     CancellationToken cancellationToken)
@@ -46,7 +46,7 @@ public class DebugOrchestrator(
         cancellationToken);
   }
 
-  public async Task<int> StartServerDebugSessionAsync(
+  public async Task<Debugger.DebugSession> StartServerDebugSessionAsync(
     string dllPath,
     string sessionId,
     DebuggerStartRequest request,
@@ -113,7 +113,7 @@ public class DebugOrchestrator(
     return service;
   }
 
-  private async Task<int> StartDebugSessionInternalAsync(
+  private async Task<Debugger.DebugSession> StartDebugSessionInternalAsync(
     DebuggerStartRequest request,
     CancellationToken cancellationToken)
   {
@@ -135,7 +135,7 @@ public class DebugOrchestrator(
                 : null)
           : null;
 
-      var binaryPath = clientService.ClientOptions?.DebuggerOptions?.BinaryPath;
+      var binaryPath = clientService.ClientOptions?.DebuggerOptions?.BinaryPath ?? NetCoreDbgLocator.GetNetCoreDbgPath();
       if (string.IsNullOrEmpty(binaryPath))
       {
         throw new InvalidOperationException("Failed to start debugger, no binary path provided");
@@ -182,7 +182,7 @@ public class DebugOrchestrator(
 
         logger.LogInformation("Debug session ready for {project} on port {port}.", projectName, session.Port);
 
-        return session.Port;
+        return session;
       }
       catch (Exception ex)
       {

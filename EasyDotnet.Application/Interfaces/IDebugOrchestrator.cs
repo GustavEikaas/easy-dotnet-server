@@ -4,13 +4,13 @@ namespace EasyDotnet.Application.Interfaces;
 
 public interface IDebugOrchestrator
 {
-  Task<int> StartServerDebugSessionAsync(
+  Task<Debugger.DebugSession> StartServerDebugSessionAsync(
     string dllPath,
     string sessionId,
     DebuggerStartRequest request,
     CancellationToken cancellationToken);
 
-  Task<int> StartClientDebugSessionAsync(
+  Task<Debugger.DebugSession> StartClientDebugSessionAsync(
     string dllPath,
     DebuggerStartRequest request,
     CancellationToken cancellationToken);

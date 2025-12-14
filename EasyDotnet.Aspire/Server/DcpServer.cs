@@ -242,8 +242,15 @@ public sealed class DcpServer : IDcpServer, IAsyncDisposable
       {
         notification_type = "processRestarted",
         session_id = runSession.RunId,
-        pid = runSession.ServiceProcess?.Id
+        dcp_id = dcpId,
+        pid = runSession.ProcessId
       });
+
+      _logger.LogInformation("RunSession processRestarted: {val}", JsonSerializer.Serialize(runSession, new JsonSerializerOptions()
+      {
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+      }));
 
       response.StatusCode = 201;
       response.Headers.Add("Location", $"http://localhost:{Port}/run_session/{runSession.RunId}");

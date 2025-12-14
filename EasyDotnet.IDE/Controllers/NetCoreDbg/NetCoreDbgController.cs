@@ -14,12 +14,12 @@ public class NetCoreDbgController(IDebugOrchestrator debugOrchestrator) : BaseCo
   [JsonRpcMethod("debugger/start")]
   public async Task<DebuggerStartResponse> StartDebugger(DebuggerStartRequest request, CancellationToken cancellationToken)
   {
-    var port = await debugOrchestrator.StartClientDebugSessionAsync(
+    var debugSession = await debugOrchestrator.StartClientDebugSessionAsync(
     request.TargetPath,
     request,
     cancellationToken);
 
-    return new DebuggerStartResponse(true, port);
+    return new DebuggerStartResponse(true, debugSession.Port);
   }
 
 }
