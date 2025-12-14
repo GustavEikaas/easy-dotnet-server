@@ -147,5 +147,7 @@ public static class DotnetProjectDeserializer
         BaseIntermediateOutputPath: bag.Get(MsBuildProperties.BaseIntermediateOutputPath),
         MSBuildProjectExtensionsPath: bag.Get(MsBuildProperties.MSBuildProjectExtensionsPath),
         SelfContained: bag.Get(MsBuildProperties.SelfContained),
-        UserProfileRuntimeStorePath: bag.Get(MsBuildProperties.UserProfileRuntimeStorePath));
+        UserProfileRuntimeStorePath: bag.Get(MsBuildProperties.UserProfileRuntimeStorePath),
+        TargetPlatformIdentifier: bag.Get(MsBuildProperties.TargetPlatformIdentifier)
+      );
 }

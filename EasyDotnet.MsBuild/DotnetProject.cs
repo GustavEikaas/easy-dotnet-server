@@ -146,5 +146,6 @@ public record DotnetProject
     string? BaseIntermediateOutputPath,
     string? MSBuildProjectExtensionsPath,
     bool SelfContained,
-    string? UserProfileRuntimeStorePath
+    string? UserProfileRuntimeStorePath,
+    string? TargetPlatformIdentifier
 );
