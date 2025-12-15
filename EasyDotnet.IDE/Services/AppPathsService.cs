@@ -51,43 +51,20 @@ public class AppPathsService : IAppPathsService
 
   private string InitializeCacheDirectory()
   {
-    try
+    var tempPath = Path.GetTempPath();
+    var appCachePath = Path.Combine(tempPath, "easy-dotnet");
+
+    if (!Directory.Exists(appCachePath))
     {
-      var tempPath = Path.GetTempPath();
-      var appCachePath = Path.Combine(tempPath, "easy-dotnet");
-
-      if (!Directory.Exists(appCachePath))
-      {
-        Directory.CreateDirectory(appCachePath);
-        _logger.LogInformation("Created cache directory at {Path}", appCachePath);
-      }
-      else
-      {
-        _logger.LogDebug("Using existing cache directory at {Path}", appCachePath);
-      }
-
-      return appCachePath;
+      Directory.CreateDirectory(appCachePath);
+      _logger.LogInformation("Created cache directory at {Path}", appCachePath);
     }
-    catch (Exception ex)
+    else
     {
-      _logger.LogError(ex, "Failed to initialize cache directory, falling back to current directory");
-      // Fallback to current directory if temp fails
-      var fallbackPath = Path.Combine(Directory.GetCurrentDirectory(), ".cache");
-
-      try
-      {
-        if (!Directory.Exists(fallbackPath))
-        {
-          Directory.CreateDirectory(fallbackPath);
-        }
-        return fallbackPath;
-      }
-      catch (Exception fallbackEx)
-      {
-        _logger.LogCritical(fallbackEx, "Failed to create fallback cache directory");
-        throw;
-      }
+      _logger.LogDebug("Using existing cache directory at {Path}", appCachePath);
     }
+
+    return appCachePath;
   }
 
   /// <summary>
@@ -123,27 +100,9 @@ public class AppPathsService : IAppPathsService
         _logger.LogDebug("Cache directory does not exist, nothing to clear");
         return;
       }
-
-      var files = Directory.GetFiles(CacheDirectory);
-      var deletedCount = 0;
-      var failedCount = 0;
-
-      foreach (var file in files)
-      {
-        try
-        {
-          File.Delete(file);
-          deletedCount++;
-          _logger.LogDebug("Deleted cache file: {File}", Path.GetFileName(file));
-        }
-        catch (Exception ex)
-        {
-          failedCount++;
-          _logger.LogWarning(ex, "Failed to delete cache file: {File}", Path.GetFileName(file));
-        }
-      }
-
-      _logger.LogInformation("Cache cleared: {Deleted} deleted, {Failed} failed", deletedCount, failedCount);
+      Directory.Delete(CacheDirectory, recursive: true);
+      _logger.LogInformation("Cache cleared successfully");
+      InitializeCacheDirectory();
     }
     catch (Exception ex)
     {
