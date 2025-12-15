@@ -19,6 +19,7 @@ public class UpdateCheckerService(
 {
   private readonly TimeSpan _updateCheckInterval = TimeSpan.FromHours(6);
   private static readonly JsonSerializerOptions JsonSerializerOptions = new() { WriteIndented = true };
+  private const string PackageId = "EasyDotnet";
 
   private string? _cachedUpdateMessage;
 
@@ -39,11 +40,10 @@ public class UpdateCheckerService(
       }
 
       var currentVersion = Assembly.GetExecutingAssembly().GetName().Version!;
-      var packageId = "EasyDotnet";
 
-      logger.LogDebug("Checking for updates to {PackageId} (current: {Version})", packageId, currentVersion);
+      logger.LogDebug("Checking for updates to {PackageId} (current: {Version})", PackageId, currentVersion);
 
-      var versions = await nugetService.GetPackageVersionsAsync(packageId, cancellationToken, false);
+      var versions = await nugetService.GetPackageVersionsAsync(PackageId, cancellationToken, false);
 
       var newerVersions = versions
         .Where(x => x.Version > currentVersion)
@@ -100,7 +100,7 @@ public class UpdateCheckerService(
     try
     {
       var cacheFile = appPaths.UpdateCheckCacheFile;
-      var cacheData = new UpdateCheckCache { LastCheckTime = checkTime };
+      var cacheData = new UpdateCheckCache(checkTime);
       var json = JsonSerializer.Serialize(cacheData, JsonSerializerOptions);
 
       await File.WriteAllTextAsync(cacheFile, json);
@@ -123,8 +123,5 @@ public class UpdateCheckerService(
     return "revision";
   }
 
-  private class UpdateCheckCache
-  {
-    public DateTime LastCheckTime { get; set; }
-  }
+  private record UpdateCheckCache(DateTime LastCheckTime);
 }
