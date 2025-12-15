@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
 using EasyDotnet.Domain.Models.Client;
+using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.Utils;
 using EasyDotnet.Infrastructure.Services;
 using EasyDotnet.Notifications;
@@ -19,6 +21,7 @@ public class InitializeController(
   IClientService clientService,
   IVisualStudioLocator locator,
   IMsBuildService msBuildService,
+  UpdateCheckerService updateCheckerService,
   ILogger<InitializeController> logger) : BaseController
 {
   [JsonRpcMethod("initialize")]
@@ -60,6 +63,7 @@ public class InitializeController(
     };
 
     var supportsSingleFileExecution = msBuildService.QuerySdkInstallations().Any(x => x.Version.Major >= 10);
+    _ = updateCheckerService.CheckForUpdates(CancellationToken.None);
 
     return new InitializeResponse(
         new ServerInfo("EasyDotnet", serverVersion.ToString()),
