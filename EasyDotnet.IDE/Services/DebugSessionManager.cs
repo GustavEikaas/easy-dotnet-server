@@ -17,7 +17,7 @@ public enum DebugSessionState
 
 public class DebugSession
 {
-  public required string DllPath { get; init; }
+  public required string ProjectPath { get; init; }
   public string? SessionId { get; init; }
   public DebugSessionState State { get; set; }
   public DateTime StartedAt { get; init; }
@@ -27,11 +27,11 @@ public class DebugSession
 
 public interface IDebugSessionManager
 {
-  Task<int> StartServerSessionAsync(string projectPath, string sessionId,
-    Func<Task<int>> sessionFactory, CancellationToken cancellationToken);
+  Task<Debugger.DebugSession> StartServerSessionAsync(string projectPath, string sessionId,
+    Func<Task<Debugger.DebugSession>> sessionFactory, CancellationToken cancellationToken);
 
-  Task<int> StartClientSessionAsync(string projectPath,
-    Func<Task<int>> sessionFactory, CancellationToken cancellationToken);
+  Task<Debugger.DebugSession> StartClientSessionAsync(string projectPath,
+    Func<Task<Debugger.DebugSession>> sessionFactory, CancellationToken cancellationToken);
 
   Task EndSessionAsync(string projectPath, CancellationToken cancellationToken);
 
@@ -44,20 +44,20 @@ public class DebugSessionManager(ILogger<DebugSessionManager> logger) : IDebugSe
 {
   private static readonly TimeSpan LockTimeout = TimeSpan.FromSeconds(10);
   private readonly ConcurrentDictionary<string, DebugSession> _activeSessions = new();
-  private readonly ConcurrentDictionary<string, SemaphoreSlim> _dllLocks = new();
+  private readonly ConcurrentDictionary<string, SemaphoreSlim> _projectLocks = new();
 
-  public async Task<int> StartServerSessionAsync(string projectPath, string sessionId,
-    Func<Task<int>> sessionFactory, CancellationToken cancellationToken) => await StartSessionInternalAsync(projectPath, sessionId, sessionFactory, cancellationToken);
+  public async Task<Debugger.DebugSession> StartServerSessionAsync(string projectPath, string sessionId,
+    Func<Task<Debugger.DebugSession>> sessionFactory, CancellationToken cancellationToken) => await StartSessionInternalAsync(projectPath, sessionId, sessionFactory, cancellationToken);
 
-  public async Task<int> StartClientSessionAsync(string projectPath,
-    Func<Task<int>> sessionFactory, CancellationToken cancellationToken) => await StartSessionInternalAsync(projectPath, null, sessionFactory, cancellationToken);
+  public async Task<Debugger.DebugSession> StartClientSessionAsync(string projectPath,
+    Func<Task<Debugger.DebugSession>> sessionFactory, CancellationToken cancellationToken) => await StartSessionInternalAsync(projectPath, null, sessionFactory, cancellationToken);
 
-  private async Task<int> StartSessionInternalAsync(string projectPath, string? sessionId,
-    Func<Task<int>> sessionFactory, CancellationToken cancellationToken)
+  private async Task<Debugger.DebugSession> StartSessionInternalAsync(string projectPath, string? sessionId,
+    Func<Task<Debugger.DebugSession>> sessionFactory, CancellationToken cancellationToken)
   {
 
     var projectName = Path.GetFileNameWithoutExtension(projectPath);
-    var lockObj = _dllLocks.GetOrAdd(projectPath, _ => new SemaphoreSlim(1, 1));
+    var lockObj = _projectLocks.GetOrAdd(projectPath, _ => new SemaphoreSlim(1, 1));
 
     try
     {
@@ -96,7 +96,7 @@ public class DebugSessionManager(ILogger<DebugSessionManager> logger) : IDebugSe
 
       var session = new DebugSession
       {
-        DllPath = projectPath,
+        ProjectPath = projectPath,
         SessionId = sessionId,
         State = DebugSessionState.Starting,
         StartedAt = DateTime.UtcNow
@@ -113,13 +113,13 @@ public class DebugSessionManager(ILogger<DebugSessionManager> logger) : IDebugSe
         logger.LogInformation("Starting debug session for {projectName} (SessionId: {sessionId})",
           projectPath, sessionId ?? "client-initiated");
 
-        var port = await sessionFactory();
+        var debuggerSession = await sessionFactory();
 
-        session.Port = port;
+        session.Port = debuggerSession.Port;
         session.State = DebugSessionState.Active;
 
-        logger.LogInformation("Debug session started for {projectName} on port {port}", projectName, port);
-        return port;
+        logger.LogInformation("Debug session started for {projectName} on port {port}", projectName, debuggerSession);
+        return debuggerSession;
       }
       catch (Exception ex)
       {
@@ -147,7 +147,7 @@ public class DebugSessionManager(ILogger<DebugSessionManager> logger) : IDebugSe
       return;
     }
 
-    var lockObj = _dllLocks.GetOrAdd(projectPath, _ => new SemaphoreSlim(1, 1));
+    var lockObj = _projectLocks.GetOrAdd(projectPath, _ => new SemaphoreSlim(1, 1));
 
     try
     {
