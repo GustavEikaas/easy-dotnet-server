@@ -154,6 +154,13 @@ public class DebugOrchestrator(
           request.Configuration ?? "Debug",
           cancellationToken);
 
+      var platform = project.GetPlatform();
+
+      if (platform != DotnetPlatform.None)
+      {
+        throw new InvalidOperationException($"Debugging for {platform} is not supported yet");
+      }
+
       var launchProfile = !string.IsNullOrEmpty(request.LaunchProfileName)
           ? (launchProfileService.GetLaunchProfiles(request.TargetPath)
              is { } profiles && profiles.TryGetValue(request.LaunchProfileName, out var profile)
