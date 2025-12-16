@@ -45,6 +45,8 @@ static class Program
             roslyn.AddCommand<RoslynStartCommand>("start")
             .WithDescription("Start the Roslyn Language Server over stdio.");
           });
+
+      config.AddBranch("search", s => s.AddCommand<SolutionSearchCommand>("solution"));
     });
 
     return await app.RunAsync(args);
