@@ -1,28 +1,36 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using EasyDotnet.MsBuild;
 using Spectre.Console.Cli;
 
 namespace EasyDotnet.IDE.Commands;
 
 public sealed class SolutionSearchCommand : AsyncCommand<SolutionSearchCommand.Settings>
 {
-  public sealed class Settings : CommandSettings;
+  public sealed class Settings : CommandSettings
+  {
+    [CommandOption("-d|--depth")]
+    public int? Depth { get; set; }
+  }
 
-  private static readonly HashSet<string> IgnoredFolders = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".git", "bin", "obj", "node_modules", ".vs", ".idea"
-    };
+  private static bool IsNotIgnored(string dirPath)
+  {
+    var dirName = Path.GetFileName(dirPath);
+    return dirName is not (".git" or "bin" or "obj" or "node_modules" or ".vs" or ".idea");
+  }
+
+  private static bool IsSolutionFile(string filePath) =>
+      filePath.EndsWith(FileTypes.SolutionExtension, StringComparison.OrdinalIgnoreCase) ||
+      filePath.EndsWith(FileTypes.SolutionXExtension, StringComparison.OrdinalIgnoreCase);
 
   public override Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
   {
-    var cwd = Directory.GetCurrentDirectory();
-    var solutions = new List<string>();
-
-    SearchRecursive(cwd, 0, 5, solutions);
+    var solutions = FindSolutionsRecursive(Directory.GetCurrentDirectory(), 0, settings.Depth);
 
     var json = JsonSerializer.Serialize(solutions);
     Console.WriteLine(json);
@@ -30,31 +38,29 @@ public sealed class SolutionSearchCommand : AsyncCommand<SolutionSearchCommand.S
     return Task.FromResult(0);
   }
 
-  private void SearchRecursive(string currentDir, int currentDepth, int maxDepth, List<string> results)
+  private static IEnumerable<string> FindSolutionsRecursive(string currentDir, int currentDepth, int? maxDepth)
   {
-    if (currentDepth > maxDepth) return;
+    if (maxDepth.HasValue && currentDepth > maxDepth.Value)
+      return [];
 
-    try
-    {
-      foreach (var file in Directory.EnumerateFiles(currentDir))
-      {
-        if (file.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) ||
-            file.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase))
-        {
-          results.Add(file);
-        }
-      }
+    var files = SafeEnumerateFiles(currentDir).Where(IsSolutionFile);
 
-      foreach (var dir in Directory.EnumerateDirectories(currentDir))
-      {
-        var dirName = Path.GetFileName(dir);
+    var subDirFiles = SafeEnumerateDirectories(currentDir)
+        .Where(IsNotIgnored)
+        .SelectMany(dir => FindSolutionsRecursive(dir, currentDepth + 1, maxDepth));
 
-        if (IgnoredFolders.Contains(dirName)) continue;
+    return files.Concat(subDirFiles);
+  }
 
-        SearchRecursive(dir, currentDepth + 1, maxDepth, results);
-      }
-    }
-    catch (UnauthorizedAccessException) { }
-    catch (Exception) { }
+  private static IEnumerable<string> SafeEnumerateFiles(string path)
+  {
+    try { return Directory.EnumerateFiles(path); }
+    catch { return []; }
+  }
+
+  private static IEnumerable<string> SafeEnumerateDirectories(string path)
+  {
+    try { return Directory.EnumerateDirectories(path); }
+    catch { return []; }
   }
 }
