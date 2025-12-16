@@ -1,3 +1,4 @@
+using System.Text.Json;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Domain.Models.MsBuild.Build;
 using EasyDotnet.Domain.Models.MsBuild.Project;
@@ -11,6 +12,10 @@ namespace EasyDotnet.Infrastructure.Services;
 
 public class MsBuildService(IVisualStudioLocator locator, IClientService clientService, IProcessQueue processQueue, IMemoryCache memoryCache, INotificationService notificationService, ISolutionService solutionService) : IMsBuildService
 {
+
+  private static readonly JsonSerializerOptions JsonSerializerOptions = new() { PropertyNameCaseInsensitive = true };
+  private static string GetCacheKeyProperties(string projectPath, string? targetFrameworkMoniker, string configuration) => $"{projectPath}-{targetFrameworkMoniker ?? ""}-{configuration ?? ""}";
+
   public SdkInstallation[] QuerySdkInstallations()
   {
     MSBuildLocator.AllowQueryAllRuntimeVersions = true;
@@ -101,7 +106,6 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
     return (map(errors), map(warnings));
   }
 
-
   private static string? AssignProject(string filePath, string targetPath, Dictionary<string, string> projectMap)
   {
     var normalizedFilePath = NormalizePath(filePath);
@@ -122,7 +126,6 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
 
     return null;
   }
-
 
   private Dictionary<string, string> GetProjectMap(string targetPath)
   {
@@ -147,9 +150,6 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
     throw new InvalidOperationException("Target must be a .csproj or (.sln, .slnx) file");
   }
 
-
-
-
   public async Task InvalidateProjectProperties(string projectPath, string? targetFrameworkMoniker = null, string configuration = "Debug")
   {
     memoryCache.Remove(GetCacheKeyProperties(projectPath, targetFrameworkMoniker, configuration));
@@ -165,7 +165,6 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
         _ => GetProjectPropertiesAsync(projectPath, targetFrameworkMoniker, configuration, cancellationToken)
     ) ?? throw new Exception("Failed to get project properties");
 
-  private static string GetCacheKeyProperties(string projectPath, string? targetFrameworkMoniker, string configuration) => $"{projectPath}-{targetFrameworkMoniker ?? ""}-{configuration ?? ""}";
 
   public async Task<DotnetProject> GetProjectPropertiesAsync(
       string projectPath,
@@ -223,6 +222,33 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
         .Select(relativePath => Path.GetFullPath(Path.Combine(projectDir, relativePath)))];
   }
 
+
+  public async Task<List<PackageReference>> GetPackageReferencesAsync(string projectPath, string targetFramework, CancellationToken cancellationToken = default)
+  {
+    var (success, stdOut, stdErr) = await processQueue.RunProcessAsync(
+        "dotnet",
+        $"list \"{projectPath}\" package --format json",
+        new ProcessOptions(true),
+        cancellationToken);
+
+    if (!success)
+    {
+      throw new InvalidOperationException($"Failed to get package references: {stdErr}");
+    }
+
+    var output = JsonSerializer.Deserialize<DotnetListPackageOutput>(stdOut, JsonSerializerOptions)
+            ;
+
+    if (output?.Projects == null)
+    {
+      return [];
+    }
+
+    return [.. output.Projects
+        .SelectMany(p => p.Frameworks)
+        .Where(f => f.Framework.Equals(targetFramework, StringComparison.OrdinalIgnoreCase))
+        .SelectMany(f => f.TopLevelPackages ?? Enumerable.Empty<PackageReference>())];
+  }
 
   public async Task<bool> AddProjectReferenceAsync(string projectPath, string targetPath, CancellationToken cancellationToken = default)
   {
@@ -347,5 +373,4 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
       _ => throw new InvalidOperationException("Unknown MSBuild type")
     };
   }
-
 }
