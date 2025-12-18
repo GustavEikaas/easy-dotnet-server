@@ -158,7 +158,8 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
     return MSBuildLocator.QueryVisualStudioInstances().Where(x => x.DiscoveryType == DiscoveryType.DotNetSdk).Any(x => x.Version >= new Version(10, 0));
   }
 
-  private static class RoslynExitCodes {
+  private static class RoslynExitCodes
+  {
     public const int SDKOutdated = 75;
   }
 }
