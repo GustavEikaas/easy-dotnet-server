@@ -55,7 +55,7 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
 
     if (!CheckRequiredDotnetSdk())
     {
-      throw new Exception("Roslyn requires minimum dotnet 10 installed");
+      return RoslynExitCodes.SDKOutdated;
     }
 
     var roslynLogDir = Path.Combine(
@@ -156,5 +156,9 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
   {
     MSBuildLocator.AllowQueryAllRuntimeVersions = true;
     return MSBuildLocator.QueryVisualStudioInstances().Where(x => x.DiscoveryType == DiscoveryType.DotNetSdk).Any(x => x.Version >= new Version(11, 0));
+  }
+
+  private static class RoslynExitCodes {
+    public const int SDKOutdated = 75;
   }
 }
