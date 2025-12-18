@@ -155,7 +155,7 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
   private static bool CheckRequiredDotnetSdk()
   {
     MSBuildLocator.AllowQueryAllRuntimeVersions = true;
-    return MSBuildLocator.QueryVisualStudioInstances().Where(x => x.DiscoveryType == DiscoveryType.DotNetSdk).Any(x => x.Version >= new Version(11, 0));
+    return MSBuildLocator.QueryVisualStudioInstances().Where(x => x.DiscoveryType == DiscoveryType.DotNetSdk).Any(x => x.Version >= new Version(10, 0));
   }
 
   private static class RoslynExitCodes {
