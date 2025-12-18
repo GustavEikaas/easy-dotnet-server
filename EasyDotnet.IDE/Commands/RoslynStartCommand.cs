@@ -2,9 +2,11 @@ using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Infrastructure.Services;
+using Microsoft.Build.Locator;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
@@ -49,6 +51,11 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
     if (settings.ShowVersion)
     {
       return await ShowRoslynVersion(roslynDllPath, cancellationToken);
+    }
+
+    if (!CheckRequiredDotnetSdk())
+    {
+      throw new Exception("Roslyn requires minimum dotnet 10 installed");
     }
 
     var roslynLogDir = Path.Combine(
@@ -143,5 +150,11 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
       AnsiConsole.WriteException(new Exception(stderr));
     }
     return proc.ExitCode;
+  }
+
+  private static bool CheckRequiredDotnetSdk()
+  {
+    MSBuildLocator.AllowQueryAllRuntimeVersions = true;
+    return MSBuildLocator.QueryVisualStudioInstances().Where(x => x.DiscoveryType == DiscoveryType.DotNetSdk).Any(x => x.Version >= new Version(11, 0));
   }
 }
