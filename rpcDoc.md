@@ -180,6 +180,14 @@ _No parameters_
 
 **Returns:** `Task<BuildResultResponse>`
 
+### `msbuild/list-package-reference`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+| targetFramework | string |   |
+
+**Returns:** `Task<IAsyncEnumerable<PackageReference>>`
+
 ### `msbuild/list-project-reference`
 | Parameter | Type | Optional |
 |-----------|------|----------|

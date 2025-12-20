@@ -48,6 +48,8 @@ public static class DiModules
     services.AddSingleton<TemplateEngineService>();
     services.AddSingleton<IDebugSessionManager, DebugSessionManager>();
     services.AddSingleton<IDebugOrchestrator, DebugOrchestrator>();
+    services.AddSingleton<IAppPathsService, AppPathsService>();
+    services.AddSingleton<UpdateCheckerService>();
 
     services.AddTransient<IMsBuildService, MsBuildService>();
     services.AddTransient<IJsonCodeGenService, JsonCodeGenService>();

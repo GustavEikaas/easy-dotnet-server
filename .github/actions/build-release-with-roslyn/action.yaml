@@ -9,7 +9,7 @@ inputs:
   roslynPackageVersion:
     description: 'NuGet package version for Roslyn LSP'
     required: true
-    default: '5.3.0-2.25560.18'
+    default: '5.3.0-2.25615.3'
   roslynOutputPath:
     description: 'Where to copy Roslyn DLLs inside project output'
     required: true
