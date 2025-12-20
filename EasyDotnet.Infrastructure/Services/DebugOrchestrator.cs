@@ -1,39 +1,13 @@
-using System;
 using System.Collections.Concurrent;
-using System.Diagnostics;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Debugger.Interfaces;
-using EasyDotnet.IDE.Controllers.NetCoreDbg;
+using EasyDotnet.Domain.Models.NetcoreDbg;
+using EasyDotnet.IDE.Services;
 using EasyDotnet.Infrastructure.Dap;
 using EasyDotnet.MsBuild;
 using Microsoft.Extensions.Logging;
 
-namespace EasyDotnet.IDE.Services;
-
-public interface IDebugOrchestrator
-{
-  Task<Debugger.DebugSession> StartServerDebugSessionAsync(
-    string projectPath,
-    string sessionId,
-    DebuggerStartRequest request,
-    CancellationToken cancellationToken);
-
-  Task<Debugger.DebugSession> StartClientDebugSessionAsync(
-    string projectPath,
-    DebuggerStartRequest request,
-    CancellationToken cancellationToken);
-
-  Debugger.DebugSession? GetSessionService(string projectPath);
-
-  Task StopDebugSessionAsync(string projectPath);
-
-  DebugSession? GetSession(string projectPath);
-
-  bool HasActiveSession(string projectPath);
-}
+namespace EasyDotnet.Infrastructure.Services;
 
 public class DebugOrchestrator(
   IDebugSessionManager debugSessionManager,
@@ -127,9 +101,6 @@ public class DebugOrchestrator(
     }
   }
 
-  public DebugSession? GetSession(string projectPath) =>
-    debugSessionManager.GetSession(projectPath);
-
   public bool HasActiveSession(string projectPath) =>
     debugSessionManager.HasActiveSession(projectPath);
 
@@ -168,7 +139,7 @@ public class DebugOrchestrator(
                 : null)
           : null;
 
-      var binaryPath = clientService.ClientOptions?.DebuggerOptions?.BinaryPath;
+      var binaryPath = clientService.ClientOptions?.DebuggerOptions?.BinaryPath ?? NetCoreDbgLocator.GetNetCoreDbgPath();
       if (string.IsNullOrEmpty(binaryPath))
       {
         throw new InvalidOperationException("Failed to start debugger, no binary path provided");
@@ -182,7 +153,7 @@ public class DebugOrchestrator(
                     launchProfile,
                     attachRequest,
                     project.ProjectDir!,
-                    vsTestResult?.Item2),
+                    vsTestResult?.Item2, request.EnvironmentVariables?.ToDictionary(x => x.Name, x => x.Value) ?? []),
             clientService?.ClientOptions?.DebuggerOptions?.ApplyValueConverters ?? false
       );
       _sessionServices[projectPath] = session;
@@ -244,11 +215,11 @@ public class DebugOrchestrator(
     }
   }
 
-  private static (Process, int)? StartVsTestIfApplicable(DotnetProject project, string projectPath) => project.IsTestProject && !project.TestingPlatformDotnetTestSupport
+  private static (System.Diagnostics.Process, int)? StartVsTestIfApplicable(DotnetProject project, string projectPath) => project.IsTestProject && !project.TestingPlatformDotnetTestSupport
       ? VsTestHelper.StartTestProcess(projectPath)
       : null;
 
-  private void CleanupVsTest((Process, int)? vsTestResult)
+  private void CleanupVsTest((System.Diagnostics.Process, int)? vsTestResult)
   {
     if (vsTestResult is { } value)
     {
@@ -262,7 +233,7 @@ public class DebugOrchestrator(
   {
     try
     {
-      var process = Process.GetProcessById(pid);
+      var process = System.Diagnostics.Process.GetProcessById(pid);
       SafeDisposeProcess(process, $"{processName} (PID: {pid})");
     }
     catch (ArgumentException)
@@ -275,7 +246,7 @@ public class DebugOrchestrator(
     }
   }
 
-  private void SafeDisposeProcess(Process? process, string processName)
+  private void SafeDisposeProcess(System.Diagnostics.Process? process, string processName)
   {
     if (process == null) return;
 
@@ -311,5 +282,4 @@ public class DebugOrchestrator(
       }
     }
   }
-
 }

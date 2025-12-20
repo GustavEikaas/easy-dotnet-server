@@ -15,7 +15,8 @@ public static partial class InitializeRequestRewriter
     LaunchProfile? launchProfile,
     InterceptableAttachRequest request,
     string cwd,
-    int? processId)
+    int? processId,
+    Dictionary<string, string>? environmentVariables = null)
   {
     if (project.IsTestProject && !project.TestingPlatformDotnetTestSupport && processId is not null)
     {
@@ -23,7 +24,7 @@ public static partial class InitializeRequestRewriter
     }
     else
     {
-      return CreateLaunchRequestAsync(request, project, launchProfile, cwd);
+      return CreateLaunchRequestAsync(request, project, launchProfile, cwd, environmentVariables);
     }
   }
 
@@ -52,7 +53,8 @@ public static partial class InitializeRequestRewriter
     InterceptableAttachRequest request,
     DotnetProject project,
     LaunchProfile? launchProfile,
-    string cwd)
+    string cwd,
+    Dictionary<string, string>? environmentVariables = null)
   {
     var env = BuildEnvironmentVariables(launchProfile);
 
@@ -74,9 +76,10 @@ public static partial class InitializeRequestRewriter
     }
 
     request.Arguments.Env =
-        (request.Arguments.Env ?? [])
-        .Concat(env)
-        .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+            (request.Arguments.Env ?? [])
+            .Concat(env)
+            .Concat(environmentVariables ?? [])
+            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
 
     return await Task.FromResult(request);
   }

@@ -6,10 +6,11 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using DotNetOutdated.Core.Services;
 using EasyDotnet.Application.Interfaces;
+using EasyDotnet.Aspire.Extensions;
 using EasyDotnet.Debugger;
+using EasyDotnet.IDE.Aspire;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.Utils;
-using EasyDotnet.Infrastructure.Aspire;
 using EasyDotnet.Infrastructure.Process;
 using EasyDotnet.Infrastructure.Services;
 using EasyDotnet.Services;
@@ -34,6 +35,8 @@ public static class DiModules
           builder.AddSerilog(Log.Logger, dispose: true);
         });
 
+
+    services.AddAspireInfrastructure<IdeRunSessionHandler>();
     services.AddMemoryCache();
     services.AddSingleton(jsonRpc);
     services.AddSingleton<IClientService, ClientService>();
@@ -49,7 +52,6 @@ public static class DiModules
     services.AddSingleton<UpdateCheckerService>();
 
     services.AddTransient<IMsBuildService, MsBuildService>();
-    services.AddTransient<IAspireService, AspireService>();
     services.AddTransient<IJsonCodeGenService, JsonCodeGenService>();
     services.AddTransient<UserSecretsService>();
     services.AddTransient<ILaunchProfileService, LaunchProfileService>();

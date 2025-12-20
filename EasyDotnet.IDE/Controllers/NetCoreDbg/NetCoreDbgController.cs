@@ -1,17 +1,11 @@
 using System.Threading;
 using System.Threading.Tasks;
+using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
-using EasyDotnet.IDE.Services;
+using EasyDotnet.Domain.Models.NetcoreDbg;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Controllers.NetCoreDbg;
-
-public sealed record DebuggerStartRequest(
-  string TargetPath,
-  string? TargetFramework,
-  string? Configuration,
-  string? LaunchProfileName
-);
 
 public sealed record DebuggerStartResponse(bool Success, int Port);
 
@@ -20,12 +14,12 @@ public class NetCoreDbgController(IDebugOrchestrator debugOrchestrator) : BaseCo
   [JsonRpcMethod("debugger/start")]
   public async Task<DebuggerStartResponse> StartDebugger(DebuggerStartRequest request, CancellationToken cancellationToken)
   {
-    var session = await debugOrchestrator.StartClientDebugSessionAsync(
+    var debugSession = await debugOrchestrator.StartClientDebugSessionAsync(
     request.TargetPath,
     request,
     cancellationToken);
 
-    return new DebuggerStartResponse(true, session.Port);
+    return new DebuggerStartResponse(true, debugSession.Port);
   }
 
 }

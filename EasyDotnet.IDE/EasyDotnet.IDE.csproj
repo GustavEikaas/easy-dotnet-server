@@ -48,6 +48,7 @@
   <ItemGroup>
     <ProjectReference Include="..\EasyDotnet.Infrastructure\EasyDotnet.Infrastructure.csproj" />
     <ProjectReference Include="..\EasyDotnet.Application\EasyDotnet.Application.csproj" />
+    <ProjectReference Include="..\EasyDotnet.Aspire\EasyDotnet.Aspire.csproj" />
     <ProjectReference Include="..\EasyDotnet.ProjXLanguageServer\EasyDotnet.ProjXLanguageServer.csproj" />
   </ItemGroup>
 </Project>
