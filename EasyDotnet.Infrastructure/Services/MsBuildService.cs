@@ -33,6 +33,58 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
 
   public string GetDotnetSdkBasePath() => Path.GetDirectoryName(Path.GetDirectoryName(QuerySdkInstallations().First().MSBuildPath))!;
 
+  public async Task<(DotnetProject[] LoadedProjects, string[] UnloadedProjects)> LoadProjects(
+      string[] projectPaths,
+      TimeSpan maxWait,
+      string? targetFrameworkMoniker = null,
+      string configuration = "Debug",
+      CancellationToken cancellationToken = default)
+  {
+    using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+    cts.CancelAfter(maxWait);
+
+    var tasks = projectPaths.Select(async projectPath =>
+    {
+      try
+      {
+        var project = await GetProjectPropertiesAsync(
+            projectPath,
+            targetFrameworkMoniker,
+            configuration,
+            cts.Token);
+        return (Success: true, Project: project, Path: projectPath);
+      }
+      catch (OperationCanceledException)
+      {
+        return (Success: false, Project: null, Path: projectPath);
+      }
+      catch (Exception)
+      {
+        return (Success: false, Project: (DotnetProject?)null, Path: projectPath);
+      }
+    }).ToList();
+
+    try
+    {
+      await Task.WhenAll(tasks);
+    }
+    catch (OperationCanceledException) { }
+
+    var results = await Task.WhenAll(tasks);
+
+    var loadedProjects = results
+        .Where(r => r.Success && r.Project != null)
+        .Select(r => r.Project!)
+        .ToArray();
+
+    var unloadedProjects = results
+        .Where(r => !r.Success)
+        .Select(r => r.Path)
+        .ToArray();
+
+    return (loadedProjects, unloadedProjects);
+  }
+
   public async Task<BuildResult> RequestBuildAsync(
          string targetPath,
          string? targetFrameworkMoniker,
@@ -236,8 +288,7 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
       throw new InvalidOperationException($"Failed to get package references: {stdErr}");
     }
 
-    var output = JsonSerializer.Deserialize<DotnetListPackageOutput>(stdOut, JsonSerializerOptions)
-            ;
+    var output = JsonSerializer.Deserialize<DotnetListPackageOutput>(stdOut, JsonSerializerOptions);
 
     if (output?.Projects == null)
     {
