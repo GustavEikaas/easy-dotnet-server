@@ -150,6 +150,11 @@ public record DotnetProject
     string? TargetPlatformIdentifier
 );
 
+public static class DotnetProjectExtensions
+{
+  public static bool IsRunnable(this DotnetProject project) => project.OutputType?.Equals("Exe", StringComparison.OrdinalIgnoreCase) == true || project.OutputType?.Equals("WinExe", StringComparison.OrdinalIgnoreCase) == true || project.UseIISExpress;
+}
+
 public static class DotnetProjectTfmExtensions
 {
   public static string? GetTfmPlatform(this DotnetProject project)
