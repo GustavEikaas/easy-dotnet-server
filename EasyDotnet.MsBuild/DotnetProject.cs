@@ -152,7 +152,7 @@ public record DotnetProject
 
 public static class DotnetProjectExtensions
 {
-  public static bool IsRunnable(this DotnetProject project) => project.OutputType?.Equals("Exe", StringComparison.OrdinalIgnoreCase) == true || project.OutputType?.Equals("WinExe", StringComparison.OrdinalIgnoreCase) == true;
+  public static bool IsRunnable(this DotnetProject project) => project.OutputType?.Equals("Exe", StringComparison.OrdinalIgnoreCase) == true || project.OutputType?.Equals("WinExe", StringComparison.OrdinalIgnoreCase) == true || project.UseIISExpress;
 }
 
 public static class DotnetProjectTfmExtensions
