@@ -34,8 +34,23 @@ public class WorkspaceController(IClientService clientService, WorkspaceService 
       throw new LocalRpcException($"Cannot build: {err.ErrorMessage}");
     }
 
-    using (new ProgressScope(clientService, "MSBuild", $"Building {selected.Display}..."))
+    // Entering the scope sends the "begin" notification
+    using (var progress = new ProgressScope(clientService, "MSBuild", $"Building {selected.Display}..."))
     {
+      // --- ARTIFICIAL TESTING BLOCK START ---
+      var stages = new[] { "Parsing project...", "Compiling source...", "Optimizing...", "Linking..." };
+      for (var i = 0; i < stages.Length; i++)
+      {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var percentage = (i + 1) * 25;
+        progress.Report(stages[i], percentage);
+
+        // Wait 1 second between stages to see the UI update
+        await Task.Delay(4000, cancellationToken);
+      }
+      // --- ARTIFICIAL TESTING BLOCK END ---
+
       var result = await msBuildService.RequestBuildAsync(
           selected.Data.GetPath(),
           null,
@@ -49,7 +64,7 @@ public class WorkspaceController(IClientService clientService, WorkspaceService 
           result.Errors.ToBatchedAsyncEnumerable(50),
           result.Warnings.ToBatchedAsyncEnumerable(50)
       );
-    }
+    } // Disposing here sends the "end" notification
   }
 
   private SelectionOption<ProjectEntry>[] GetSolutionOption()
