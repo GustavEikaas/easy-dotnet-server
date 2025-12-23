@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <PackageReference Include="Dunet" Version="1.11.3" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
   </ItemGroup>
 
   <ItemGroup>

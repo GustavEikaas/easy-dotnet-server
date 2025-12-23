@@ -12,6 +12,7 @@ using EasyDotnet.IDE.Utils;
 using EasyDotnet.Infrastructure.Aspire;
 using EasyDotnet.Infrastructure.Process;
 using EasyDotnet.Infrastructure.Services;
+using EasyDotnet.Infrastructure.Workspace;
 using EasyDotnet.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -47,6 +48,10 @@ public static class DiModules
     services.AddSingleton<IDebugOrchestrator, DebugOrchestrator>();
     services.AddSingleton<IAppPathsService, AppPathsService>();
     services.AddSingleton<UpdateCheckerService>();
+
+    services.AddFusionCache();
+    services.AddSingleton<WorkspaceProjectLoader>();
+    services.AddSingleton<WorkspaceService>();
 
     services.AddTransient<IMsBuildService, MsBuildService>();
     services.AddTransient<IAspireService, AspireService>();

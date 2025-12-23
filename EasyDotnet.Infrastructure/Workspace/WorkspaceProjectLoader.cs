@@ -11,17 +11,24 @@ public class WorkspaceProjectLoader(IFusionCache cache, IVisualStudioLocator loc
 
   public async Task<ProjectEntry> GetOrLoadAsync(string path, string? targetFrameworkMoniker, TimeSpan softTimeout)
   {
-    var project = await cache.GetOrSetAsync<ProjectEntry?>(
-        GetCacheKeyProperties(path, targetFrameworkMoniker),
-        async (_, cancellationToken) => await GetProjectPropertiesAsync(path, targetFrameworkMoniker, cancellationToken: cancellationToken),
-        options =>
-        {
-          options.AllowTimedOutFactoryBackgroundCompletion = true;
-          options.FactoryHardTimeout = softTimeout;
-          options.SetDurationMin(15);
-        });
+    try
+    {
+      var project = await cache.GetOrSetAsync<ProjectEntry?>(
+          GetCacheKeyProperties(path, targetFrameworkMoniker),
+          async (_, cancellationToken) => await GetProjectPropertiesAsync(path, targetFrameworkMoniker, cancellationToken: cancellationToken),
+          options =>
+          {
+            options.AllowTimedOutFactoryBackgroundCompletion = true;
+            options.FactoryHardTimeout = softTimeout;
+            options.SetDurationMin(15);
+          });
 
-    return project ?? new ProjectEntry.Unloaded(path);
+      return project ?? new ProjectEntry.Unloaded(path);
+    }
+    catch (SyntheticTimeoutException)
+    {
+      return new ProjectEntry.Unloaded(path);
+    }
   }
 
 

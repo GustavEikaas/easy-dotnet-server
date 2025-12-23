@@ -1,5 +1,6 @@
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Domain.Models.Client;
+using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
 
 namespace EasyDotnet.Infrastructure.Services;
@@ -8,12 +9,12 @@ public sealed record SetBreakpointRequest(string Path, int LineNumber);
 public sealed record OpenBufferRequest(string Path);
 public sealed record PromptString(string Prompt, string? DefaultValue);
 public sealed record PromptConfirmRequest(string Prompt, bool DefaultValue);
-public sealed record PromptSelectionRequest(string Prompt, SelectionOption[] Choices, string? DefaultSelectionId);
-public sealed record PromptMultiSelectionRequest(string Prompt, SelectionOption[] Choices);
+public sealed record PromptSelectionRequest<T>(string Prompt, SelectionOption<T>[] Choices, string? DefaultSelectionId);
+public sealed record PromptMultiSelectionRequest<T>(string Prompt, SelectionOption<T>[] Choices);
 public sealed record StartDebugSessionRequest(string Host, int Port);
 public sealed record TerminateDebugSessionRequest(int SessionId);
 
-public class ClientService(JsonRpc rpc) : IClientService
+public class ClientService(JsonRpc rpc, ILogger<IClientService> logger) : IClientService
 {
   public bool IsInitialized { get; set; }
   public bool UseVisualStudio { get; set; }
@@ -34,16 +35,34 @@ public class ClientService(JsonRpc rpc) : IClientService
   public async Task<bool> RequestConfirmation(string prompt, bool defaultValue) => await rpc.InvokeWithParameterObjectAsync<bool>("promptConfirm", new PromptConfirmRequest(prompt, defaultValue));
   public async Task<string?> RequestString(string prompt, string? defaultValue) => await rpc.InvokeWithParameterObjectAsync<string?>("promptString", new PromptString(prompt, defaultValue));
 
-  public async Task<SelectionOption?> RequestSelection(string prompt, SelectionOption[] choices, string? defaultSelectionId = null)
+  public async Task<SelectionOption<T>?> RequestSelection<T>(string prompt, SelectionOption<T>[] choices, string? defaultSelectionId = null)
   {
-    var request = new PromptSelectionRequest(prompt, choices, defaultSelectionId);
-    var selectedId = await rpc.InvokeWithParameterObjectAsync<string?>("promptSelection", request);
-    return selectedId == null ? null : choices.FirstOrDefault(option => option.Id == selectedId);
+    if (choices.Length == 0)
+    {
+      throw new InvalidOperationException($"Cannot show selection picker for '{prompt}': The list of choices is empty.");
+    }
+    else if (choices.Length == 1)
+    {
+      return choices[0];
+    }
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+
+    var request = new PromptSelectionRequest<T>(prompt, choices, defaultSelectionId);
+    try
+    {
+      var selectedId = await rpc.InvokeWithParameterObjectAsync<string?>("promptSelection", request, cts.Token);
+      return selectedId == null ? null : choices.FirstOrDefault(option => option.Id == selectedId);
+    }
+    catch (OperationCanceledException)
+    {
+      logger.LogInformation("Picker for: \"{prompt}\" timed out after 15 seconds", prompt);
+      return null;
+    }
   }
 
-  public async Task<SelectionOption[]?> RequestMultiSelection(string prompt, SelectionOption[] choices)
+  public async Task<SelectionOption<T>[]?> RequestMultiSelection<T>(string prompt, SelectionOption<T>[] choices)
   {
-    var request = new PromptMultiSelectionRequest(prompt, choices);
+    var request = new PromptMultiSelectionRequest<T>(prompt, choices);
     var selectedIds = await rpc.InvokeWithParameterObjectAsync<string[]?>("promptMultiSelection", request);
     return selectedIds == null ? null : [.. choices.Where(option => selectedIds.Contains(option.Id))];
   }
@@ -59,4 +78,20 @@ public class ClientService(JsonRpc rpc) : IClientService
     var request = new TerminateDebugSessionRequest(sessionId);
     return await rpc.InvokeWithParameterObjectAsync<bool>("terminateDebugSession", request);
   }
+
+  public async Task SendProgress(string token, string kind, string? title = null, string? message = null, int? percentage = null)
+  {
+    var progress = new ProgressParams(token, new ProgressValue(kind, title, message, percentage));
+    await rpc.NotifyWithParameterObjectAsync("$/progress", progress);
+  }
 }
+
+public sealed record ProgressParams(string Token, ProgressValue Value);
+
+public sealed record ProgressValue(
+    string Kind,
+    string? Title = null,
+    string? Message = null,
+    int? Percentage = null,
+    bool? Cancellable = null
+);

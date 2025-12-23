@@ -15,8 +15,9 @@ public interface IClientService
   Task<bool> RequestOpenBuffer(string path);
   Task<bool> RequestSetBreakpoint(string path, int lineNumber);
   Task<string?> RequestString(string prompt, string? defaultValue);
-  Task<SelectionOption?> RequestSelection(string prompt, SelectionOption[] choices, string? defaultSelectionId = null);
-  Task<SelectionOption[]?> RequestMultiSelection(string prompt, SelectionOption[] choices);
+  Task<SelectionOption<T>?> RequestSelection<T>(string prompt, SelectionOption<T>[] choices, string? defaultSelectionId = null);
+  Task<SelectionOption<T>[]?> RequestMultiSelection<T>(string prompt, SelectionOption<T>[] choices);
   Task<int> RequestStartDebugSession(string host, int port);
   Task<bool> RequestTerminateDebugSession(int sessionId);
+  Task SendProgress(string token, string kind, string? title = null, string? message = null, int? percentage = null);
 }

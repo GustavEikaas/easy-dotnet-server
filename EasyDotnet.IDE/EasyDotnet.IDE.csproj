@@ -44,6 +44,7 @@
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
     <PackageReference Include="StreamJsonRpc" Version="2.21.69" />
     <PackageReference Include="Spectre.Console.Cli" Version="0.53.1-preview.0.2" />
+    <PackageReference Include="ZiggyCreatures.FusionCache" Version="2.4.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\EasyDotnet.Infrastructure\EasyDotnet.Infrastructure.csproj" />
