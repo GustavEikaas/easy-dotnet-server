@@ -1,12 +1,36 @@
 using System;
 using System.IO;
 using EasyDotnet.Domain.Models.Client;
+using EasyDotnet.Domain.Models.Workspace;
 using EasyDotnet.MsBuild;
 
 namespace EasyDotnet.IDE.Extensions;
 
 public static class SelectionOptionExtensions
 {
+
+  public static SelectionOption ToSelectionOption(this ProjectEntry entry) =>
+          entry.Match(
+              loaded => loaded.Project.FromDotnetProject(),
+              unloaded => unloaded.FromUnloaded(),
+              errored => errored.FromErrored()
+          );
+
+  private static SelectionOption FromUnloaded(this ProjectEntry.Unloaded unloaded)
+  {
+    var baseOpt = unloaded.Path.FromProjectPath();
+    return baseOpt with { Display = $"󰔟 {baseOpt.Display} (loading...)" };
+  }
+
+  private static SelectionOption FromErrored(this ProjectEntry.Errored errored)
+  {
+    var fileName = Path.GetFileNameWithoutExtension(errored.Path);
+    return new SelectionOption(
+        errored.Path,
+        $"󰅙 {fileName} (load failed)"
+    );
+  }
+
   public static SelectionOption FromDotnetProject(this DotnetProject project)
   {
     var projectPath = project.MSBuildProjectFullPath
