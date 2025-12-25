@@ -59,4 +59,32 @@ public class ClientService(JsonRpc rpc) : IClientService
     var request = new TerminateDebugSessionRequest(sessionId);
     return await rpc.InvokeWithParameterObjectAsync<bool>("terminateDebugSession", request);
   }
+
+  public async Task SendProgressStart(string token, string title, string message, int? percentage = null)
+  {
+    var progress = new ProgressParams(token, new ProgressValue("begin", title, message, percentage));
+    await rpc.NotifyWithParameterObjectAsync("$/progress", progress);
+  }
+
+  public async Task SendProgressUpdate(string token, string? message, int? percentage = null)
+  {
+    var progress = new ProgressParams(token, new ProgressValue("report", Title: null, message, percentage));
+    await rpc.NotifyWithParameterObjectAsync("$/progress", progress);
+  }
+
+  public async Task SendProgressEnd(string token)
+  {
+    var progress = new ProgressParams(token, new ProgressValue("end", Title: null, Message: null, Percentage: null));
+    await rpc.NotifyWithParameterObjectAsync("$/progress", progress);
+  }
 }
+
+public sealed record ProgressParams(string Token, ProgressValue Value);
+
+public sealed record ProgressValue(
+    string Kind,
+    string? Title = null,
+    string? Message = null,
+    int? Percentage = null,
+    bool? Cancellable = null
+);
