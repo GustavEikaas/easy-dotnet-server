@@ -10,6 +10,7 @@ public record DotnetProject
     string? TargetName,
     bool IsTestProject,
     bool IsTestingPlatformApplication,
+    string? RunSettingsFilePath,
     string? AssemblyName,
     string? TargetFramework,
     string[]? TargetFrameworks,

@@ -11,6 +11,7 @@ public static class DotnetProjectDeserializer
         TargetName: bag.Get(MsBuildProperties.TargetName),
         IsTestProject: bag.Get(MsBuildProperties.IsTestProject),
         IsTestingPlatformApplication: bag.Get(MsBuildProperties.IsTestingPlatformApplication),
+        RunSettingsFilePath: bag.Get(MsBuildProperties.RunSettingsFilePath),
         AssemblyName: bag.Get(MsBuildProperties.AssemblyName),
         TargetFramework: bag.Get(MsBuildProperties.TargetFramework),
         TargetFrameworks: bag.Get(MsBuildProperties.TargetFrameworks),
