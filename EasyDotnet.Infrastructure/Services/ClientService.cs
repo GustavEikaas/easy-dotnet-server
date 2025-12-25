@@ -74,7 +74,6 @@ public class ClientService(JsonRpc rpc) : IClientService
 
   public async Task SendProgressEnd(string token)
   {
-
     var progress = new ProgressParams(token, new ProgressValue("end", Title: null, Message: null, Percentage: null));
     await rpc.NotifyWithParameterObjectAsync("$/progress", progress);
   }
