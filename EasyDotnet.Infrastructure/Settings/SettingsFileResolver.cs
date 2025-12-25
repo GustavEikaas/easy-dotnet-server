@@ -1,5 +1,6 @@
 using System.Text;
 using System.Security.Cryptography;
+using System.IO.Abstractions;
 
 namespace EasyDotnet.Infrastructure.Settings;
 
@@ -15,9 +16,11 @@ public enum SettingsScope
 public class SettingsFileResolver
 {
   private readonly string _settingsDirectory;
+  private readonly IFileSystem _fileSystem;
 
-  public SettingsFileResolver(string? settingsDirectory = null)
+  public SettingsFileResolver(IFileSystem fileSystem, string? settingsDirectory = null)
   {
+    _fileSystem = fileSystem ?? new FileSystem();
     _settingsDirectory = settingsDirectory ?? GetDefaultSettingsDirectory();
     EnsureDirectoryExists();
   }
@@ -27,10 +30,15 @@ public class SettingsFileResolver
   /// </summary>
   public string GetSettingsFilePath(string sourcePath, SettingsScope scope)
   {
+    if (!_fileSystem.File.Exists(sourcePath))
+    {
+      throw new FileNotFoundException("The provided path does not point to a valid file.", sourcePath);
+    }
+
     var hash = ComputeHash(sourcePath);
     var prefix = scope == SettingsScope.Solution ? "solution" : "project";
     var fileName = $"{prefix}_{hash}.json";
-    return Path.Combine(_settingsDirectory, fileName);
+    return _fileSystem.Path.Combine(_settingsDirectory, fileName);
   }
 
   /// <summary>
@@ -40,17 +48,17 @@ public class SettingsFileResolver
   {
     var prefix = scope == SettingsScope.Solution ? "solution" : "project";
     var pattern = $"{prefix}_*.json";
-    return Directory.Exists(_settingsDirectory)
-        ? Directory.GetFiles(_settingsDirectory, pattern)
-        : Enumerable.Empty<string>();
+    return _fileSystem.Directory.Exists(_settingsDirectory)
+        ? _fileSystem.Directory.GetFiles(_settingsDirectory, pattern)
+        : [];
   }
 
   /// <summary>
   /// Computes MD5 hash of the full path for deterministic file naming
   /// </summary>
-  private static string ComputeHash(string path)
+  private string ComputeHash(string path)
   {
-    var normalizedPath = Path.GetFullPath(path).ToLowerInvariant();
+    var normalizedPath = _fileSystem.Path.GetFullPath(path).ToLowerInvariant();
     var bytes = Encoding.UTF8.GetBytes(normalizedPath);
     var hash = MD5.HashData(bytes);
     return Convert.ToHexString(hash).ToLowerInvariant();
@@ -58,15 +66,15 @@ public class SettingsFileResolver
 
   private void EnsureDirectoryExists()
   {
-    if (!Directory.Exists(_settingsDirectory))
+    if (!_fileSystem.Directory.Exists(_settingsDirectory))
     {
-      Directory.CreateDirectory(_settingsDirectory);
+      _fileSystem.Directory.CreateDirectory(_settingsDirectory);
     }
   }
 
-  private static string GetDefaultSettingsDirectory()
+  private string GetDefaultSettingsDirectory()
   {
     var dataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-    return Path.Combine(dataPath, "easy-dotnet");
+    return _fileSystem.Path.Combine(dataPath, "easy-dotnet");
   }
 }
