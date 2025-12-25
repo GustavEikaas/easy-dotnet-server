@@ -48,6 +48,13 @@ public static class MsBuildProperties
           Deserialize: MsBuildValueParsers.AsPath
       );
 
+  public static readonly MsBuildProperty<string?> RunSettingsFilePath =
+      new(
+          Name: "RunSettingsFilePath",
+          Description: "Specifies the path to a .runsettings file to be used when running tests. e.g. $(MSBuildProjectDirectory)\\local.runsettings",
+          Deserialize: MsBuildValueParsers.AsPath
+      );
+
   public static readonly MsBuildProperty<string?> OutputType =
       new(
           Name: "OutputType",
