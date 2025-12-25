@@ -19,4 +19,7 @@ public interface IClientService
   Task<SelectionOption[]?> RequestMultiSelection(string prompt, SelectionOption[] choices);
   Task<int> RequestStartDebugSession(string host, int port);
   Task<bool> RequestTerminateDebugSession(int sessionId);
+  Task SendProgressStart(string token, string title, string message, int? percentage = null);
+  Task SendProgressUpdate(string token, string? message, int? percentage = null);
+  Task SendProgressEnd(string token);
 }
