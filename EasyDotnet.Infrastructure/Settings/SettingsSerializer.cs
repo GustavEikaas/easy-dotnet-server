@@ -1,3 +1,4 @@
+using System.IO.Abstractions;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
@@ -7,21 +8,16 @@ namespace EasyDotnet.Infrastructure.Settings;
 /// <summary>
 /// Handles serialization and deserialization of settings files
 /// </summary>
-public class SettingsSerializer
+public class SettingsSerializer(IFileSystem fileSystem, ILogger<SettingsSerializer> logger)
 {
-  private readonly ILogger<SettingsSerializer> _logger;
-  private readonly JsonSerializerOptions _jsonOptions;
-
-  public SettingsSerializer(ILogger<SettingsSerializer> logger)
+  private readonly JsonSerializerOptions _jsonOptions = new()
   {
-    _logger = logger;
-    _jsonOptions = new JsonSerializerOptions
-    {
-      WriteIndented = true,
-      PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-      DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-    };
-  }
+    WriteIndented = true,
+    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+  };
+
+
 
   /// <summary>
   /// Reads settings from file. Returns null if file doesn't exist or is corrupted.
@@ -29,19 +25,19 @@ public class SettingsSerializer
   /// </summary>
   public T? Read<T>(string filePath) where T : IVersionedSettings
   {
-    if (!File.Exists(filePath))
+    if (!fileSystem.File.Exists(filePath))
     {
       return default;
     }
 
     try
     {
-      var json = File.ReadAllText(filePath);
+      var json = fileSystem.File.ReadAllText(filePath);
       var settings = JsonSerializer.Deserialize<T>(json, _jsonOptions);
 
       if (settings == null)
       {
-        _logger.LogWarning("Settings file deserialized to null: {FilePath}", filePath);
+        logger.LogWarning("Settings file deserialized to null: {FilePath}", filePath);
         DeleteCorruptedFile(filePath);
         return default;
       }
@@ -54,13 +50,13 @@ public class SettingsSerializer
     }
     catch (JsonException ex)
     {
-      _logger.LogWarning(ex, "Corrupted settings file detected: {FilePath}", filePath);
+      logger.LogWarning(ex, "Corrupted settings file detected: {FilePath}", filePath);
       DeleteCorruptedFile(filePath);
       return default;
     }
     catch (Exception ex)
     {
-      _logger.LogError(ex, "Failed to read settings file: {FilePath}", filePath);
+      logger.LogError(ex, "Failed to read settings file: {FilePath}", filePath);
       return default;
     }
   }
@@ -73,11 +69,11 @@ public class SettingsSerializer
     try
     {
       var json = JsonSerializer.Serialize(settings, _jsonOptions);
-      File.WriteAllText(filePath, json);
+      fileSystem.File.WriteAllText(filePath, json);
     }
     catch (Exception ex)
     {
-      _logger.LogError(ex, "Failed to write settings file: {FilePath}", filePath);
+      logger.LogError(ex, "Failed to write settings file: {FilePath}", filePath);
       throw;
     }
   }
@@ -89,15 +85,15 @@ public class SettingsSerializer
   {
     try
     {
-      if (File.Exists(filePath))
+      if (fileSystem.File.Exists(filePath))
       {
-        File.Delete(filePath);
-        _logger.LogInformation("Deleted settings file: {FilePath}", filePath);
+        fileSystem.File.Delete(filePath);
+        logger.LogInformation("Deleted settings file: {FilePath}", filePath);
       }
     }
     catch (Exception ex)
     {
-      _logger.LogError(ex, "Failed to delete settings file: {FilePath}", filePath);
+      logger.LogError(ex, "Failed to delete settings file: {FilePath}", filePath);
     }
   }
 
@@ -105,12 +101,12 @@ public class SettingsSerializer
   {
     try
     {
-      File.Delete(filePath);
-      _logger.LogInformation("Deleted corrupted settings file: {FilePath}", filePath);
+      fileSystem.File.Delete(filePath);
+      logger.LogInformation("Deleted corrupted settings file: {FilePath}", filePath);
     }
     catch (Exception ex)
     {
-      _logger.LogError(ex, "Failed to delete corrupted file: {FilePath}", filePath);
+      logger.LogError(ex, "Failed to delete corrupted file: {FilePath}", filePath);
     }
   }
 }
