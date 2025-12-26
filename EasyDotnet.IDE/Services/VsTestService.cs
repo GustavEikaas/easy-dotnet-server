@@ -38,7 +38,7 @@ public class VsTestService(IMsBuildService msBuildService, ILogger<VsTestService
     }
   }
 
-  public async Task<List<TestRunResult>> RunTests(string dllPath, Guid[] testIds, CancellationToken cancellationToken)
+  public async Task<List<TestRunResult>> RunTests(string dllPath, Guid[] testIds, string? runSettings, CancellationToken cancellationToken)
   {
 
     await _vstestLock.WaitAsync(_queueTimeout, cancellationToken);
@@ -46,7 +46,7 @@ public class VsTestService(IMsBuildService msBuildService, ILogger<VsTestService
     {
       var vsTestPath = GetVsTestPath();
       logService.LogInformation("Using VSTest path: {vsTestPath}", vsTestPath);
-      return RunTests(vsTestPath, dllPath, testIds);
+      return RunTests(vsTestPath, dllPath, testIds, runSettings);
 
     }
     finally
@@ -77,7 +77,7 @@ public class VsTestService(IMsBuildService msBuildService, ILogger<VsTestService
     return discoveryHandler.TestCases.GroupBy(x => Path.GetFileName(x.Source)).ToDictionary(x => x.Key, y => y.Select(x => x.ToDiscoveredTest()).ToList());
   }
 
-  private List<TestRunResult> RunTests(string vsTestPath, string dllPath, Guid[] testIds)
+  private List<TestRunResult> RunTests(string vsTestPath, string dllPath, Guid[] testIds, string? runSettings)
   {
     var options = new TestPlatformOptions
     {
@@ -88,13 +88,13 @@ public class VsTestService(IMsBuildService msBuildService, ILogger<VsTestService
     var discoveryHandler = new PlaygroundTestDiscoveryHandler(logService);
     var testHost = new VsTestConsoleWrapper(vsTestPath);
     var sessionHandler = new TestSessionHandler();
-    var handler = new TestRunHandler();
+    var handler = new TestRunHandler(logService);
 
     //TODO: Caching mechanism to prevent rediscovery on each run request.
     //Alternative check for overloads of RunTests that support both dllPath and testIds
     testHost.DiscoverTests([dllPath], null, options, sessionHandler.TestSessionInfo, discoveryHandler);
     var runTests = discoveryHandler.TestCases.Where(x => testIds.Contains(x.Id));
-    testHost.RunTests(runTests, null, options, sessionHandler.TestSessionInfo, handler);
+    testHost.RunTests(runTests, runSettings, options, sessionHandler.TestSessionInfo, handler);
 
     return [.. handler.Results.Select(x => x.ToTestRunResult())];
   }
@@ -194,19 +194,23 @@ public class PlaygroundTestDiscoveryHandler(ILogger<VsTestService> logger) : ITe
 }
 
 
-internal sealed class TestRunHandler() : ITestRunEventsHandler
+internal sealed class TestRunHandler(ILogger<VsTestService> logger) : ITestRunEventsHandler
 {
   public List<TestResult> Results = [];
 
-  public void HandleLogMessage(TestMessageLevel level, string? message) { }
+  public void HandleLogMessage(TestMessageLevel level, string? message) => logger.LogInformation("[TestRunHandler.HandleLogMessage] {Level}: {Message}", level, message);
 
-  public void HandleRawMessage(string rawMessage) { }
+  public void HandleRawMessage(string rawMessage) => logger.LogInformation("[TestRunHandler.HandleRawMessage] {Message}", rawMessage);
 
-  public void HandleTestRunComplete(TestRunCompleteEventArgs testRunCompleteArgs, TestRunChangedEventArgs? lastChunkArgs, ICollection<AttachmentSet>? runContextAttachments, ICollection<string>? executorUris) { }
+  public void HandleTestRunComplete(TestRunCompleteEventArgs testRunCompleteArgs, TestRunChangedEventArgs? lastChunkArgs, ICollection<AttachmentSet>? runContextAttachments, ICollection<string>? executorUris) => logger.LogInformation("[TestRunHandler.HandleTestRunComplete] Called - Error: {error}", testRunCompleteArgs.Error?.Message ?? "none");
+
   public void HandleTestRunStatsChange(TestRunChangedEventArgs? testRunChangedArgs)
   {
+    logger.LogInformation("[TestRunHandler.HandleTestRunStatsChange] Called");
+
     if (testRunChangedArgs?.NewTestResults is not null)
     {
+      logger.LogInformation("[TestRunHandler.HandleTestRunStatsChange] Adding {count} results", testRunChangedArgs.NewTestResults.Count());
       Results.AddRange(testRunChangedArgs.NewTestResults);
     }
   }
