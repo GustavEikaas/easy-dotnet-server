@@ -52,7 +52,15 @@ public class ClientService(JsonRpc rpc, IEditorProcessManagerService editorProce
   public async Task<Guid> RequestRunCommand(RunCommand command)
   {
     var guid = editorProcessManagerService.RegisterJob();
-    await rpc.InvokeWithParameterObjectAsync<RunCommandResponse>("runCommand", new TrackedJob(guid, command));
+    try
+    {
+      _ = await rpc.InvokeWithParameterObjectAsync<RunCommandResponse>("runCommand", new TrackedJob(guid, command));
+    }
+    catch (RemoteInvocationException)
+    {
+      editorProcessManagerService.CompleteJob(guid, 1);
+
+    }
     return guid;
   }
 
