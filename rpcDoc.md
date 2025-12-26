@@ -247,3 +247,15 @@ _No parameters_
 
 ---
 
+## TerminalController
+
+### `processExited`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| jobId | Guid |   |
+| exitCode | int |   |
+
+**Returns:** `Task`
+
+---
+
