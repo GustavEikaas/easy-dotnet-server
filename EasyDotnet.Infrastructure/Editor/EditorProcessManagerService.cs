@@ -22,5 +22,13 @@ public class EditorProcessManagerService : IEditorProcessManagerService
     }
   }
 
+  public void SetFailedToStart(Guid jobId, string message)
+  {
+    if (_pendingJobs.TryRemove(jobId, out var tcs))
+    {
+      tcs.SetException(new Exception(message));
+    }
+  }
+
   public Task<int> WaitForExitAsync(Guid jobId) => _pendingJobs[jobId].Task;
 }

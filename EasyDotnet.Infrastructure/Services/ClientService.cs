@@ -56,11 +56,11 @@ public class ClientService(JsonRpc rpc, IEditorProcessManagerService editorProce
     {
       _ = await rpc.InvokeWithParameterObjectAsync<RunCommandResponse>("runCommand", new TrackedJob(guid, command));
     }
-    catch (RemoteInvocationException)
+    catch (RemoteInvocationException e)
     {
-      editorProcessManagerService.CompleteJob(guid, 1);
-
+      editorProcessManagerService.SetFailedToStart(guid, e.Message);
     }
+
     return guid;
   }
 
