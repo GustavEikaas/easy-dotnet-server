@@ -150,6 +150,11 @@ _No parameters_
 
 **Returns:** `Task<IAsyncEnumerable<TestRunResult>>`
 
+### `test/set-project-run-settings`
+_No parameters_
+
+**Returns:** `Task`
+
 ---
 
 ## NetCoreDbgController
