@@ -1,3 +1,4 @@
+using System.IO.Abstractions;
 using EasyDotnet.Application.Interfaces;
 using Microsoft.Extensions.Logging;
 
@@ -8,6 +9,7 @@ namespace EasyDotnet.Infrastructure.Settings;
 /// Main service for managing IDE settings
 /// </summary>
 public class SettingsService(
+    IFileSystem fileSystem,
     SettingsFileResolver fileResolver,
     SettingsSerializer serializer,
     IClientService clientService,
@@ -229,7 +231,7 @@ public class SettingsService(
 
   private bool ValidateProjectExists(string projectPath)
   {
-    if (File.Exists(projectPath))
+    if (fileSystem.File.Exists(projectPath))
       return true;
 
     logger.LogWarning("Project file not found, deleting settings: {ProjectPath}", projectPath);
