@@ -54,8 +54,6 @@ public class InitializeController(
     clientService.ClientOptions = request.Options ?? new ClientOptions();
     clientService.UseVisualStudio = clientService.ClientOptions.UseVisualStudio;
 
-    var x = await clientService.RequestRunCommand(new RunCommand("dotnet", new List<string>() { "build" }, clientService.ProjectInfo.RootDir, []));
-
     var debuggerOptions = clientService.ClientOptions.DebuggerOptions ?? new DebuggerOptions();
     var binaryPath = debuggerOptions.BinaryPath ?? TryGetNetcoreDbgPath();
 
