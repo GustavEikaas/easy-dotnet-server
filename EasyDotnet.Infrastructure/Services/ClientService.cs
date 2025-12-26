@@ -12,8 +12,9 @@ public sealed record PromptSelectionRequest(string Prompt, SelectionOption[] Cho
 public sealed record PromptMultiSelectionRequest(string Prompt, SelectionOption[] Choices);
 public sealed record StartDebugSessionRequest(string Host, int Port);
 public sealed record TerminateDebugSessionRequest(int SessionId);
+public sealed record TrackedJob(Guid JobId, RunCommand Command);
 
-public class ClientService(JsonRpc rpc) : IClientService
+public class ClientService(JsonRpc rpc, IEditorProcessManagerService editorProcessManagerService) : IClientService
 {
   public bool IsInitialized { get; set; }
   public bool UseVisualStudio { get; set; }
@@ -46,6 +47,13 @@ public class ClientService(JsonRpc rpc) : IClientService
     var request = new PromptMultiSelectionRequest(prompt, choices);
     var selectedIds = await rpc.InvokeWithParameterObjectAsync<string[]?>("promptMultiSelection", request);
     return selectedIds == null ? null : [.. choices.Where(option => selectedIds.Contains(option.Id))];
+  }
+
+  public async Task<Guid> RequestRunCommand(RunCommand command)
+  {
+    var guid = editorProcessManagerService.RegisterJob();
+    await rpc.InvokeWithParameterObjectAsync<RunCommandResponse>("runCommand", new TrackedJob(guid, command));
+    return guid;
   }
 
   public async Task<int> RequestStartDebugSession(string host, int port)
