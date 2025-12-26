@@ -98,7 +98,7 @@ public class SettingsFileResolverTests : IDisposable
     var files = _resolver.GetAllSettingsFiles(SettingsScope.Solution).ToList();
 
     await Assert.That(files).HasCount().EqualTo(1);
-    await Assert.That(files[0]).IsEqualTo(solutionFile);
+    await Assert.That(files[0]).IsEqualTo(_mockFileSystem.Path.GetFullPath(solutionFile));
   }
 
   [Test]
@@ -115,7 +115,7 @@ public class SettingsFileResolverTests : IDisposable
     var files = _resolver.GetAllSettingsFiles(SettingsScope.Project).ToList();
 
     await Assert.That(files).HasCount().EqualTo(1);
-    await Assert.That(files[0]).IsEqualTo(projectFile);
+    await Assert.That(files[0]).IsEqualTo(_mockFileSystem.Path.GetFullPath(projectFile));
   }
 
   [Test]
