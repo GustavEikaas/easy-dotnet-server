@@ -92,7 +92,7 @@ public class TestController(
     }
   }
 
-  [JsonRpcMethod("test/set-run-settings")]
+  [JsonRpcMethod("test/set-project-run-settings")]
   public async Task SetRunSettings()
   {
     clientService.ThrowIfNotInitialized();
