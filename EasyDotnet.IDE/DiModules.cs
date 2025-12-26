@@ -10,6 +10,7 @@ using EasyDotnet.Debugger;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.Utils;
 using EasyDotnet.Infrastructure.Aspire;
+using EasyDotnet.Infrastructure.Editor;
 using EasyDotnet.Infrastructure.Process;
 using EasyDotnet.Infrastructure.Services;
 using EasyDotnet.Infrastructure.Settings;
@@ -52,6 +53,7 @@ public static class DiModules
     services.AddSingleton<SettingsSerializer>();
     services.AddSingleton<SettingsService>();
     services.AddSingleton<SettingsGarbageCollector>();
+    services.AddSingleton<IEditorProcessManagerService, EditorProcessManagerService>();
 
     services.AddTransient<IMsBuildService, MsBuildService>();
     services.AddTransient<IAspireService, AspireService>();
