@@ -38,7 +38,7 @@ public class VsTestService(IMsBuildService msBuildService, ILogger<VsTestService
     }
   }
 
-  public async Task<List<TestRunResult>> RunTests(string dllPath, Guid[] testIds, CancellationToken cancellationToken)
+  public async Task<List<TestRunResult>> RunTests(string dllPath, Guid[] testIds, string? runSettings, CancellationToken cancellationToken)
   {
 
     await _vstestLock.WaitAsync(_queueTimeout, cancellationToken);
@@ -46,7 +46,7 @@ public class VsTestService(IMsBuildService msBuildService, ILogger<VsTestService
     {
       var vsTestPath = GetVsTestPath();
       logService.LogInformation("Using VSTest path: {vsTestPath}", vsTestPath);
-      return RunTests(vsTestPath, dllPath, testIds);
+      return RunTests(vsTestPath, dllPath, testIds, runSettings);
 
     }
     finally
@@ -77,7 +77,7 @@ public class VsTestService(IMsBuildService msBuildService, ILogger<VsTestService
     return discoveryHandler.TestCases.GroupBy(x => Path.GetFileName(x.Source)).ToDictionary(x => x.Key, y => y.Select(x => x.ToDiscoveredTest()).ToList());
   }
 
-  private List<TestRunResult> RunTests(string vsTestPath, string dllPath, Guid[] testIds)
+  private List<TestRunResult> RunTests(string vsTestPath, string dllPath, Guid[] testIds, string? runSettings)
   {
     var options = new TestPlatformOptions
     {
@@ -94,7 +94,7 @@ public class VsTestService(IMsBuildService msBuildService, ILogger<VsTestService
     //Alternative check for overloads of RunTests that support both dllPath and testIds
     testHost.DiscoverTests([dllPath], null, options, sessionHandler.TestSessionInfo, discoveryHandler);
     var runTests = discoveryHandler.TestCases.Where(x => testIds.Contains(x.Id));
-    testHost.RunTests(runTests, null, options, sessionHandler.TestSessionInfo, handler);
+    testHost.RunTests(runTests, runSettings, options, sessionHandler.TestSessionInfo, handler);
 
     return [.. handler.Results.Select(x => x.ToTestRunResult())];
   }
