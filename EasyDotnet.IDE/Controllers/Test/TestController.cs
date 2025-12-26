@@ -20,13 +20,14 @@ using StreamJsonRpc;
 namespace EasyDotnet.IDE.Controllers.Test;
 
 public class TestController(
+  ILogger<TestController> logger,
+  INotificationService notificationService,
   IClientService clientService,
   MtpService mtpService,
   VsTestService vsTestService,
   IMsBuildService msBuildService,
   IFileSystem fileSystem,
   SettingsService settingsService,
-  ILogger<TestController> logger,
   ISolutionService solutionService) : BaseController
 {
 
@@ -55,7 +56,6 @@ public class TestController(
     }
   }
 
-
   [JsonRpcMethod("test/run")]
   public async Task<IAsyncEnumerable<TestRunResult>> Run(
     string projectPath,
@@ -73,7 +73,7 @@ public class TestController(
 
     var runSettingsFile = settingsService.GetProjectRunSettings(projectPath!);
     var runSettings = runSettingsFile is not null ? fileSystem.File.ReadAllText(runSettingsFile) : null;
-    logger.LogInformation("Using runsettings {runSettings}", runSettings);
+    logger.LogInformation("Using runsettings {runSettings}", runSettingsFile);
 
     if (project.TestingPlatformDotnetTestSupport)
     {
@@ -95,16 +95,18 @@ public class TestController(
   [JsonRpcMethod("test/set-run-settings")]
   public async Task SetRunSettings()
   {
-    if (!clientService.IsInitialized || clientService.ProjectInfo?.RootDir is null)
-    {
-      throw new Exception("Client not initialized");
-    }
+    clientService.ThrowIfNotInitialized();
     if (clientService.ProjectInfo?.SolutionFile is null)
     {
       throw new Exception("No solution file found");
     }
 
     var projects = solutionService.GetProjectsFromSolutionFile(clientService.ProjectInfo.SolutionFile).Select(x => new SelectionOption(x.AbsolutePath, x.ProjectName)).ToArray();
+    if (projects.Length == 0)
+    {
+      await notificationService.DisplayMessage("No projects found");
+      return;
+    }
 
     var project = await clientService.RequestSelection("Select project", projects, null);
     if (project is null)
@@ -121,7 +123,7 @@ public class TestController(
 
     if (choices.Length == 0)
     {
-      //TODO: inform user
+      await notificationService.DisplayMessage("No runsettings files found");
       return;
     }
 

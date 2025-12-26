@@ -88,7 +88,7 @@ public class VsTestService(IMsBuildService msBuildService, ILogger<VsTestService
     var discoveryHandler = new PlaygroundTestDiscoveryHandler(logService);
     var testHost = new VsTestConsoleWrapper(vsTestPath);
     var sessionHandler = new TestSessionHandler();
-    var handler = new TestRunHandler(logService);
+    var handler = new TestRunHandler();
 
     //TODO: Caching mechanism to prevent rediscovery on each run request.
     //Alternative check for overloads of RunTests that support both dllPath and testIds
@@ -194,23 +194,19 @@ public class PlaygroundTestDiscoveryHandler(ILogger<VsTestService> logger) : ITe
 }
 
 
-internal sealed class TestRunHandler(ILogger<VsTestService> logger) : ITestRunEventsHandler
+internal sealed class TestRunHandler() : ITestRunEventsHandler
 {
   public List<TestResult> Results = [];
 
-  public void HandleLogMessage(TestMessageLevel level, string? message) => logger.LogInformation("[TestRunHandler.HandleLogMessage] {Level}: {Message}", level, message);
+  public void HandleLogMessage(TestMessageLevel level, string? message) { }
 
-  public void HandleRawMessage(string rawMessage) => logger.LogInformation("[TestRunHandler.HandleRawMessage] {Message}", rawMessage);
+  public void HandleRawMessage(string rawMessage) { }
 
-  public void HandleTestRunComplete(TestRunCompleteEventArgs testRunCompleteArgs, TestRunChangedEventArgs? lastChunkArgs, ICollection<AttachmentSet>? runContextAttachments, ICollection<string>? executorUris) => logger.LogInformation("[TestRunHandler.HandleTestRunComplete] Called - Error: {error}", testRunCompleteArgs.Error?.Message ?? "none");
-
+  public void HandleTestRunComplete(TestRunCompleteEventArgs testRunCompleteArgs, TestRunChangedEventArgs? lastChunkArgs, ICollection<AttachmentSet>? runContextAttachments, ICollection<string>? executorUris) { }
   public void HandleTestRunStatsChange(TestRunChangedEventArgs? testRunChangedArgs)
   {
-    logger.LogInformation("[TestRunHandler.HandleTestRunStatsChange] Called");
-
     if (testRunChangedArgs?.NewTestResults is not null)
     {
-      logger.LogInformation("[TestRunHandler.HandleTestRunStatsChange] Adding {count} results", testRunChangedArgs.NewTestResults.Count());
       Results.AddRange(testRunChangedArgs.NewTestResults);
     }
   }
