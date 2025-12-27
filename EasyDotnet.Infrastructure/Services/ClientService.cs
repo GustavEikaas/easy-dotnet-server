@@ -93,6 +93,10 @@ public class ClientService(JsonRpc rpc, IEditorProcessManagerService editorProce
     var progress = new ProgressParams(token, new ProgressValue("end", Title: null, Message: null, Percentage: null));
     await rpc.NotifyWithParameterObjectAsync("$/progress", progress);
   }
+
+  public async Task SetQuickFixList(QuickFixItem[] quickFixItems) => await rpc.NotifyWithParameterObjectAsync("quickfix/set", quickFixItems);
+
+  public async Task CloseQuickFixList() => await rpc.NotifyWithParameterObjectAsync("quickfix/close");
 }
 
 public sealed record ProgressParams(string Token, ProgressValue Value);

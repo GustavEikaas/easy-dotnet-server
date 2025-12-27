@@ -23,4 +23,6 @@ public interface IClientService
   Task SendProgressStart(string token, string title, string message, int? percentage = null);
   Task SendProgressUpdate(string token, string? message, int? percentage = null);
   Task SendProgressEnd(string token);
+  Task SetQuickFixList(QuickFixItem[] quickFixItems);
+  Task CloseQuickFixList();
 }
