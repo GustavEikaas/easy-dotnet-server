@@ -136,6 +136,7 @@ public class IdeRunSessionHandler(
       // Terminate the debug session if it exists
       if (runSession.DebugSessionId.HasValue)
       {
+        await debugOrchestrator.StopDebugSessionAsync(runSession.ProjectPath);
         await clientService.RequestTerminateDebugSession(runSession.DebugSessionId.Value);
         logger.LogInformation(
             "Debug session {DebugSessionId} terminated for run session {RunId}",
