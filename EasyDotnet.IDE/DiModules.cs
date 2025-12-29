@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using DotNetOutdated.Core.Services;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Debugger;
+using EasyDotnet.IDE;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.Utils;
 using EasyDotnet.Infrastructure.Aspire;
@@ -56,6 +57,7 @@ public static class DiModules
     services.AddSingleton<IEditorProcessManagerService, EditorProcessManagerService>();
     services.AddSingleton<IEditorService, EditorService>();
 
+    services.AddTransient<IProgressScopeFactory, ProgressScopeFactory>();
     services.AddTransient<IMsBuildService, MsBuildService>();
     services.AddTransient<IAspireService, AspireService>();
     services.AddTransient<IJsonCodeGenService, JsonCodeGenService>();

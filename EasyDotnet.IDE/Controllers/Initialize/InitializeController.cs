@@ -22,11 +22,13 @@ public class InitializeController(
   IVisualStudioLocator locator,
   IMsBuildService msBuildService,
   UpdateCheckerService updateCheckerService,
+  IProgressScopeFactory progressScopeFactory,
   ILogger<InitializeController> logger) : BaseController
 {
   [JsonRpcMethod("initialize")]
   public async Task<InitializeResponse> Initialize(InitializeRequest request)
   {
+    using var progress = progressScopeFactory.Create("Initializing", "Initializing...");
     var assembly = Assembly.GetExecutingAssembly();
     var serverVersion = assembly.GetName().Version ?? throw new NullReferenceException("Server version");
 
@@ -64,7 +66,7 @@ public class InitializeController(
 
     var supportsSingleFileExecution = msBuildService.QuerySdkInstallations().Any(x => x.Version.Major >= 10);
     _ = updateCheckerService.CheckForUpdates(CancellationToken.None);
-
+    progress.Report("Initialized", 100);
     return new InitializeResponse(
         new ServerInfo("EasyDotnet", serverVersion.ToString()),
         new ServerCapabilities(GetRpcPaths(), GetRpcNotifications(), supportsSingleFileExecution),
