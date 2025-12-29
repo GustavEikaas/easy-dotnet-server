@@ -21,7 +21,6 @@ namespace EasyDotnet.IDE.Controllers.Test;
 
 public class TestController(
   ILogger<TestController> logger,
-  INotificationService notificationService,
   IClientService clientService,
   MtpService mtpService,
   VsTestService vsTestService,
