@@ -28,6 +28,7 @@ public class TestController(
   IMsBuildService msBuildService,
   IFileSystem fileSystem,
   SettingsService settingsService,
+  IEditorService editorService,
   ISolutionService solutionService) : BaseController
 {
 
@@ -104,11 +105,11 @@ public class TestController(
     var projects = solutionService.GetProjectsFromSolutionFile(clientService.ProjectInfo.SolutionFile).Select(x => new SelectionOption(x.AbsolutePath, x.ProjectName)).ToArray();
     if (projects.Length == 0)
     {
-      await notificationService.DisplayMessage("No projects found");
+      await editorService.DisplayMessage("No projects found");
       return;
     }
 
-    var project = await clientService.RequestSelection("Select project", projects, null);
+    var project = await editorService.RequestSelection("Select project", projects, null);
     if (project is null)
     {
       return;
@@ -123,11 +124,11 @@ public class TestController(
 
     if (choices.Length == 0)
     {
-      await notificationService.DisplayMessage("No runsettings files found");
+      await editorService.DisplayMessage("No runsettings files found");
       return;
     }
 
-    var selection = await clientService.RequestSelection("Pick run settings file", choices, null);
+    var selection = await editorService.RequestSelection("Pick run settings file", choices, null);
     if (selection is null)
     {
       return;

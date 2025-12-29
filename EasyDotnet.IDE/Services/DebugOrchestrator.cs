@@ -40,7 +40,7 @@ public class DebugOrchestrator(
   IDebugSessionFactory debugSessionFactory,
   IMsBuildService msBuildService,
   ILaunchProfileService launchProfileService,
-  INotificationService notificationService,
+  IEditorService editorService,
   IClientService clientService,
   ILogger<DebugOrchestrator> logger) : IDebugOrchestrator
 {
@@ -193,7 +193,7 @@ public class DebugOrchestrator(
            binaryPath,
            (ex) =>
            {
-             notificationService.DisplayError(ex.Message);
+             editorService.DisplayError(ex.Message);
              logger.LogError(ex, "Failed to start debugger process for {project}.", projectName);
            },
            async () =>
