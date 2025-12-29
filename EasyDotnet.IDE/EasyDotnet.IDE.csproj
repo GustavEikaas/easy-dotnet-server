@@ -32,8 +32,8 @@
     <PackageReference Include="Microsoft.TemplateEngine.Edge" Version="9.0.304" />
     <PackageReference Include="Microsoft.TemplateEngine.IDE" Version="9.0.304" />
     <PackageReference Include="Microsoft.TemplateEngine.Utils" Version="9.0.304" />
-    <PackageReference Include="MSTest.TestAdapter" Version="4.0.2" />
-    <PackageReference Include="MSTest.TestFramework" Version="4.0.2" />
+    <!-- <PackageReference Include="MSTest.TestAdapter" Version="4.0.2" /> -->
+    <!-- <PackageReference Include="MSTest.TestFramework" Version="4.0.2" /> -->
     <PackageReference Include="Microsoft.TestPlatform" Version="18.0.1" />
     <PackageReference Include="Microsoft.TestPlatform.ObjectModel" Version="18.0.1" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
