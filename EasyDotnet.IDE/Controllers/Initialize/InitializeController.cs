@@ -8,10 +8,10 @@ using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
 using EasyDotnet.Domain.Models.Client;
+using EasyDotnet.IDE.Notifications;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.Utils;
 using EasyDotnet.Infrastructure.Services;
-using EasyDotnet.Notifications;
 using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
 

@@ -3,14 +3,15 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
-using EasyDotnet.IDE;
+using EasyDotnet.Controllers;
+using EasyDotnet.Controllers.Template;
 using EasyDotnet.IDE.Services;
 using Microsoft.TemplateEngine.Utils;
 using StreamJsonRpc;
 
-namespace EasyDotnet.Controllers.Template;
+namespace EasyDotnet.IDE.Controllers.Template;
 
-public class TemplateController(TemplateEngineService templateEngineService, IClientService clientService) : BaseController
+public class TemplateController(TemplateEngineService templateEngineService, IEditorService editorService) : BaseController
 {
   [JsonRpcMethod("template/list")]
   public async Task<IAsyncEnumerable<DotnetNewTemplateResponse>> GetTemplates()
@@ -56,7 +57,7 @@ public class TemplateController(TemplateEngineService templateEngineService, ICl
 
     if (programFile != null)
     {
-      await clientService.RequestOpenBuffer(Path.GetFullPath(programFile));
+      await editorService.RequestOpenBuffer(Path.GetFullPath(programFile));
     }
   }
 }

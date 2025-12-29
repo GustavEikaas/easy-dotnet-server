@@ -5,10 +5,10 @@ namespace EasyDotnet.IDE;
 
 public sealed class ProgressScope : IDisposable
 {
-  private readonly IClientService _client;
+  private readonly IEditorService _client;
   private readonly string _token;
 
-  public ProgressScope(IClientService client, string title, string message)
+  public ProgressScope(IEditorService client, string title, string message)
   {
     _client = client;
     _token = Guid.NewGuid().ToString();

@@ -54,6 +54,7 @@ public static class DiModules
     services.AddSingleton<SettingsService>();
     services.AddSingleton<SettingsGarbageCollector>();
     services.AddSingleton<IEditorProcessManagerService, EditorProcessManagerService>();
+    services.AddSingleton<IEditorService, EditorService>();
 
     services.AddTransient<IMsBuildService, MsBuildService>();
     services.AddTransient<IAspireService, AspireService>();

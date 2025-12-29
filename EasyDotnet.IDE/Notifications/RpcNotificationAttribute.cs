@@ -1,6 +1,6 @@
 using System;
 
-namespace EasyDotnet.Notifications;
+namespace EasyDotnet.IDE.Notifications;
 
 [AttributeUsage(AttributeTargets.Method)]
 public class RpcNotificationAttribute(string name) : Attribute
