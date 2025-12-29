@@ -3,24 +3,21 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
+using EasyDotnet.IDE.Extensions;
 
-using EasyDotnet.Extensions;
-
-
-namespace EasyDotnet.MTP;
+namespace EasyDotnet.IDE.MTP;
 
 public static class ProcessFactory
 {
   public static IProcessHandle Start(ProcessConfiguration config, bool cleanDefaultEnvironmentVariableIfCustomAreProvided = false)
   {
-    var fullPath = config.FileName; // Path.GetFullPath(startInfo.FileName);
-    var workingDirectory = config.WorkingDirectory
-        .OrDefault(Path.GetDirectoryName(config.FileName).OrDefault(Directory.GetCurrentDirectory()));
+    var fullPath = config.FileName;
+    var workingDirectory = config?.WorkingDirectory.OrDefault(Path.GetDirectoryName(config.FileName).OrDefault(Directory.GetCurrentDirectory()));
 
     ProcessStartInfo processStartInfo = new()
     {
       FileName = fullPath,
-      Arguments = config.Arguments,
+      Arguments = config?.Arguments,
       WorkingDirectory = workingDirectory,
       UseShellExecute = false,
       CreateNoWindow = true,
@@ -29,7 +26,7 @@ public static class ProcessFactory
       RedirectStandardInput = true,
     };
 
-    if (config.EnvironmentVariables is not null)
+    if (config?.EnvironmentVariables is not null)
     {
       if (cleanDefaultEnvironmentVariableIfCustomAreProvided)
       {
@@ -62,12 +59,12 @@ public static class ProcessFactory
     ProcessHandleInfo processHandleInfo = new();
     ProcessHandle processHandle = new(process, processHandleInfo);
 
-    if (config.OnExit != null)
+    if (config?.OnExit != null)
     {
       process.Exited += (_, _) => config.OnExit.Invoke(processHandle, process.ExitCode);
     }
 
-    if (config.OnStandardOutput != null)
+    if (config?.OnStandardOutput != null)
     {
       process.OutputDataReceived += (s, e) =>
       {
@@ -78,7 +75,7 @@ public static class ProcessFactory
       };
     }
 
-    if (config.OnErrorOutput != null)
+    if (config?.OnErrorOutput != null)
     {
       process.ErrorDataReceived += (s, e) =>
       {
@@ -106,12 +103,12 @@ public static class ProcessFactory
 
     processHandleInfo.Id = process.Id;
 
-    if (config.OnStandardOutput != null)
+    if (config?.OnStandardOutput != null)
     {
       process.BeginOutputReadLine();
     }
 
-    if (config.OnErrorOutput != null)
+    if (config?.OnErrorOutput != null)
     {
       process.BeginErrorReadLine();
     }
@@ -164,7 +161,7 @@ public interface IProcessHandle
 
 public sealed class ProcessHandleInfo
 {
-  public string ProcessName { get; internal set; }
+  public string? ProcessName { get; internal set; }
 
   public int Id { get; internal set; }
 }

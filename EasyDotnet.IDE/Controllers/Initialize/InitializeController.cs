@@ -99,13 +99,12 @@ public class InitializeController(
     return null;
   }
 
-  private static List<string> GetRpcPaths() =>
-      [.. AssemblyScanner.GetControllerTypes()
+  private static List<string> GetRpcPaths() => AssemblyScanner.GetControllerTypes()
           .SelectMany(rpcType =>
               rpcType.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public)
                   .Where(m => m.GetCustomAttribute<JsonRpcMethodAttribute>() is not null)
-                  .Select(m => m.GetCustomAttribute<JsonRpcMethodAttribute>()!.Name)
-          )];
+                  .Select(m => m.GetCustomAttribute<JsonRpcMethodAttribute>()!.Name)!
+          ).ToList()!;
 
   private static List<string> GetRpcNotifications() =>
       [.. AssemblyScanner.GetNotificationDispatchers()
