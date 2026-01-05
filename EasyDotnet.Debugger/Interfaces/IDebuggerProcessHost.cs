@@ -7,7 +7,7 @@ public interface IDebuggerProcessHost : IAsyncDisposable
   int? ProcessId { get; }
   event EventHandler? Exited;
 
-  void Start(string binaryPath, string arguments);
+  void Start(string binaryPath, string workingDirectory, string arguments);
   Task WaitForExitAsync(CancellationToken cancellationToken);
   void Kill();
 }
