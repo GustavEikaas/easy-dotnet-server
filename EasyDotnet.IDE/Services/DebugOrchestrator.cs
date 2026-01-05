@@ -191,6 +191,7 @@ public class DebugOrchestrator(
       {
         session.Start(
            binaryPath,
+           project.ProjectDir!,
            (ex) =>
            {
              editorService.DisplayError(ex.Message);
