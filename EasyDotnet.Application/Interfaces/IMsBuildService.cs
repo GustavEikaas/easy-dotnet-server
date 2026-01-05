@@ -15,6 +15,7 @@ public interface IMsBuildService
   /// <returns>The root path of the dotnet installation.</returns>
   string GetDotnetSdkBasePath();
   string GetVsTestPath();
+  string GetDotnetWatchTargets();
   SdkInstallation[] QuerySdkInstallations();
   bool HasMinimumSdk(Version version);
   Task<bool> AddProjectReferenceAsync(string projectPath, string targetPath, CancellationToken cancellationToken = default);

@@ -23,6 +23,15 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
     return [.. instances.Select(x => new SdkInstallation(x.Name, $"net{x.Version.Major}.0", x.Version, x.MSBuildPath, x.VisualStudioRootPath))];
   }
 
+  public string GetDotnetWatchTargets()
+  {
+    var sdk = QuerySdkInstallations()[0];
+    var version = sdk.Version;
+    var path = sdk.MSBuildPath;
+    var moniker = sdk.Moniker;
+    return Path.Join(path, "DotnetTools", "dotnet-watch", version.ToString(), "tools", moniker, "any", "DotnetWatch.targets");
+  }
+
   public string GetVsTestPath()
   {
     var sdk = QuerySdkInstallations();
