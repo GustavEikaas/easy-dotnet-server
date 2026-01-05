@@ -1,3 +1,4 @@
+using System.Net.Sockets;
 using EasyDotnet.Debugger.Interfaces;
 using Microsoft.Extensions.Logging;
 
@@ -43,10 +44,10 @@ public class DebugSessionCoordinator(
         {
           stream = await tcpServer.AcceptClientAsync(TimeSpan.FromSeconds(30), _cts.Token);
         }
-        catch (TimeoutException)
+        catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException or SocketException)
         {
-          logger.LogWarning("No client connected within 30 seconds");
-          _completionSource.SetCanceled();
+          logger.LogInformation("TCP Server stopped or client disconnected during setup.");
+          _completionSource.TrySetResult(true);
           return;
         }
 
@@ -118,6 +119,8 @@ public class DebugSessionCoordinator(
     await tcpServer.DisposeAsync();
     _cts?.Dispose();
 
+    _completionSource.TrySetResult(true);
+
     if (_onDispose != null)
     {
       try
@@ -148,6 +151,7 @@ public class DebugSessionCoordinator(
     _cts?.Cancel();
     processHost.Kill();
     tcpServer.Stop();
+    _completionSource.TrySetResult(true);
 
     if (_onDispose != null)
     {
