@@ -42,6 +42,17 @@ runs:
       shell: bash
       run: dotnet build -c Release --no-restore
 
+
+    - name: Build and Copy Custom Analyzer
+      shell: bash
+      run: |
+        OUTPUT_PATH="${{ inputs.roslynOutputPath }}/Roslyn/Analyzers"
+
+        mkdir -p "$OUTPUT_PATH"
+        cp EasyDotnet.RoslynLanguageServices/bin/Release/net8.0/EasyDotnet.RoslynLanguageServices.dll "$OUTPUT_PATH/"
+        
+        echo "✓ Custom analyzer copied to $OUTPUT_PATH"
+
     - name: Download and Extract Roslyn DLLs
       shell: bash
       run: |
