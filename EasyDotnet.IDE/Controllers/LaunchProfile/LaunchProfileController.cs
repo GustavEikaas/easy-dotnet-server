@@ -12,7 +12,6 @@ public class LaunchProfileController(ILaunchProfileService launchProfileService)
   public IAsyncEnumerable<LaunchProfileResponse> GetLaunchProfiles(string targetPath)
   {
     var profiles = launchProfileService.GetLaunchProfiles(targetPath);
-
-    return (profiles?.Select(x => new LaunchProfileResponse(x.Key, x.Value)) ?? []).OrderBy(x => x.Name).ToBatchedAsyncEnumerable(15);
+    return (profiles?.Where(x => string.Equals(x.Value.CommandName, "Project", System.StringComparison.OrdinalIgnoreCase)).Select(x => new LaunchProfileResponse(x.Key, x.Value)) ?? []).OrderBy(x => x.Name).ToBatchedAsyncEnumerable(15);
   }
 }
