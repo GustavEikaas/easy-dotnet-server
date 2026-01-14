@@ -9,58 +9,63 @@ using Microsoft.CodeAnalysis.Formatting;
 
 namespace EasyDotnet.RoslynLanguageServices.CodeActions;
 
+public static class MissingTypeDiagnostics 
+{
+    public const string CS0246 = nameof(CS0246); // The type or namespace name '{0}' could not be found (are you missing a using directive or an assembly reference?)
+    public const string CS0103 = nameof(CS0103); // The name '{0}' does not exist in the current context
+}
+
 [ExportCodeFixProvider(LanguageNames.CSharp, Name = nameof(ImportAllNamespacesCodeFixProvider)), Shared]
 public class ImportAllNamespacesCodeFixProvider : CodeFixProvider
 {
   private const string Title = "Import all missing namespaces";
 
-  public sealed override ImmutableArray<string> FixableDiagnosticIds =>
-      ["CS0246"]; // The type or namespace name could not be found
+  public sealed override ImmutableArray<string> FixableDiagnosticIds => [MissingTypeDiagnostics.CS0246, MissingTypeDiagnostics.CS0103];
 
-  public sealed override FixAllProvider GetFixAllProvider() => WellKnownFixAllProviders.BatchFixer;
+  public sealed override FixAllProvider GetFixAllProvider() => null!;
 
   public sealed override async Task RegisterCodeFixesAsync(CodeFixContext context)
   {
-    var root = await context.Document.GetSyntaxRootAsync(context.CancellationToken).ConfigureAwait(false);
     var diagnostic = context.Diagnostics[0];
 
-    // Check if there are multiple CS0246 errors in the document
     var semanticModel = await context.Document.GetSemanticModelAsync(context.CancellationToken);
     if (semanticModel == null)
       return;
 
     var allDiagnostics = semanticModel.GetDiagnostics();
-    var missingTypeDiagnostics = allDiagnostics.Where(d => d.Id == "CS0246").ToList();
+    var missingTypeDiagnostics = allDiagnostics.Where(d => FixableDiagnosticIds.Contains(d.Id)).ToList();
 
-    if (missingTypeDiagnostics.Count > 1)
+    if (missingTypeDiagnostics.Count <= 1)
+    {
+      return;
+    }
+
+    foreach (var diag in missingTypeDiagnostics)
     {
       context.RegisterCodeFix(
           CodeAction.Create(
               title: Title,
-              createChangedDocument: c => ImportAllMissingNamespacesAsync(context.Document, c),
+              createChangedDocument: c => ImportAllMissingNamespacesAsync(context.Document, missingTypeDiagnostics, c),
               equivalenceKey: Title),
-          diagnostic);
+          diag);
     }
   }
 
-  private async Task<Document> ImportAllMissingNamespacesAsync(Document document, CancellationToken cancellationToken)
+  private static async Task<Document> ImportAllMissingNamespacesAsync(Document document, List<Diagnostic> missingTypeDiagnostics, CancellationToken cancellationToken)
   {
-    var semanticModel = await document.GetSemanticModelAsync(cancellationToken);
-    if (semanticModel == null)
+    var compilation = await document.Project.GetCompilationAsync(cancellationToken);
+    if (compilation == null)
+    {
       return document;
+    }
 
     var root = await document.GetSyntaxRootAsync(cancellationToken);
     if (root == null)
+    {
       return document;
+    }
 
-    var compilation = await document.Project.GetCompilationAsync(cancellationToken);
-    if (compilation == null)
-      return document;
-
-    // Find all CS0246 diagnostics
-    var diagnostics = semanticModel.GetDiagnostics(cancellationToken: cancellationToken);
-    var missingTypes = diagnostics
-        .Where(d => d.Id == "CS0246")
+    var missingTypes = missingTypeDiagnostics
         .Select(d => GetIdentifierFromDiagnostic(root, d))
         .Where(id => id != null)
         .Distinct()
@@ -78,7 +83,9 @@ public class ImportAllNamespacesCodeFixProvider : CodeFixProvider
     }
 
     if (root is not CompilationUnitSyntax compilationUnit)
+    {
       return document;
+    }
 
     var newRoot = compilationUnit;
     foreach (var ns in namespacesToAdd.Order())
@@ -101,7 +108,9 @@ public class ImportAllNamespacesCodeFixProvider : CodeFixProvider
     var node = root.FindNode(span);
 
     if (node is IdentifierNameSyntax identifier)
+    {
       return identifier.Identifier.Text;
+    }
 
     return node is GenericNameSyntax genericName ? genericName.Identifier.Text : null;
   }
@@ -109,6 +118,8 @@ public class ImportAllNamespacesCodeFixProvider : CodeFixProvider
   private static List<string> FindNamespacesForType(Compilation compilation, string typeName)
   {
     var namespaces = new List<string>();
+
+    FindTypeInNamespace(compilation.Assembly.GlobalNamespace, typeName, namespaces);
 
     foreach (var reference in compilation.References)
     {
