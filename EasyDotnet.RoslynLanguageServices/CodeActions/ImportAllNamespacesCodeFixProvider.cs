@@ -76,10 +76,15 @@ public class ImportAllNamespacesCodeFixProvider : CodeFixProvider
     // For each missing type, find potential namespaces
     foreach (var typeName in missingTypes)
     {
-      foreach (var ns in FindNamespacesForType(compilation, typeName!))
+      var namespacesForType = FindNamespacesForType(compilation, typeName!);
+      var isAmbigiousType = namespacesForType.Count > 1;
+
+      if (isAmbigiousType || namespacesForType.Count == 0)
       {
-        namespacesToAdd.Add(ns);
+          continue;
       }
+
+      namespacesToAdd.Add(namespacesForType[0]);
     }
 
     if (root is not CompilationUnitSyntax compilationUnit)

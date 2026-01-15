@@ -13,18 +13,17 @@ public class ImportAllNamespacesCodeFixProviderTests
         context.ReferenceAssemblies = ReferenceAssemblies.Net.Net80;
 
         context.TestCode = """
-            namespace MyApp
+            namespace MyApp;
+
+            public class Program
             {
-                public class Program
+                public static void Main(string[] args)
                 {
-                    public static void Main(string[] args)
-                    {
-                        var list = new {|CS0246:List<string>|}();
-                        {|CS0103:Console|}.WriteLine("Hello!");
-                        var json = {|CS0103:JsonSerializer|}.Serialize(list);
-                        var another = new {|CS0246:ConcurrentDictionary<string, string>|}();
-                        var codeFixer = new {|CS0246:EasyDotnetCodeFixer|}();
-                    }
+                    var list = new {|CS0246:List<string>|}();
+                    {|CS0103:Console|}.WriteLine("Hello!");
+                    var json = {|CS0103:JsonSerializer|}.Serialize(list);
+                    var another = new {|CS0246:ConcurrentDictionary<string, string>|}();
+                    var codeFixer = new {|CS0246:EasyDotnetCodeFixer|}();
                 }
             }
             """;
@@ -35,21 +34,26 @@ public class ImportAllNamespacesCodeFixProviderTests
             using System.Collections.Generic;
             using System.Text.Json;
 
-            namespace MyApp
+            namespace MyApp;
+
+            public class Program
             {
-                public class Program
+                public static void Main(string[] args)
                 {
-                    public static void Main(string[] args)
-                    {
-                        var list = new List<string>();
-                        Console.WriteLine("Hello!");
-                        var json = JsonSerializer.Serialize(list);
-                        var another = new ConcurrentDictionary<string, string>();
-                        var codeFixer = new EasyDotnetCodeFixer();
-                    }
+                    var list = new List<string>();
+                    Console.WriteLine("Hello!");
+                    var json = JsonSerializer.Serialize(list);
+                    var another = new ConcurrentDictionary<string, string>();
+                    var codeFixer = new {|#0:EasyDotnetCodeFixer|}();
                 }
             }
             """;
+
+        context.FixedState
+            .ExpectedDiagnostics
+            .Add(new DiagnosticResult("CS0246", Microsoft.CodeAnalysis.DiagnosticSeverity.Error)
+            .WithLocation(0)
+            .WithArguments("EasyDotnetCodeFixer"));
 
         await context.RunAsync();
     }
@@ -61,21 +65,15 @@ public class ImportAllNamespacesCodeFixProviderTests
         context.ReferenceAssemblies = ReferenceAssemblies.Net.Net80;
         var additionalSources = new string[]
         {
-
             """
-            namespace EasyDotnet
-            {
-                public class EasyDotnetCodeFixer
-                {
+            namespace EasyDotnet;
 
-                }
-            }
+            public class EasyDotnetCodeFixer {}
             """,
             """
-            namespace EasyDotnet.Utilities
-            {
-                public class Helper {}
-            }
+            namespace EasyDotnet.Utilities;
+
+            public class Helper {}
             """
         };
         foreach (var source in additionalSources)
@@ -85,15 +83,14 @@ public class ImportAllNamespacesCodeFixProviderTests
         }
 
         context.TestCode = """
-            namespace MyApp
+            namespace MyApp;
+
+            public class Program
             {
-                public class Program
+                public static void Main(string[] args)
                 {
-                    public static void Main(string[] args)
-                    {
-                        var codeFixer = new {|CS0246:EasyDotnetCodeFixer|}();
-                        var helper = new {|CS0246:Helper|}();
-                    }
+                    var codeFixer = new {|CS0246:EasyDotnetCodeFixer|}();
+                    var helper = new {|CS0246:Helper|}();
                 }
             }
             """;
@@ -102,15 +99,14 @@ public class ImportAllNamespacesCodeFixProviderTests
             using EasyDotnet;
             using EasyDotnet.Utilities;
 
-            namespace MyApp
+            namespace MyApp;
+
+            public class Program
             {
-                public class Program
+                public static void Main(string[] args)
                 {
-                    public static void Main(string[] args)
-                    {
-                        var codeFixer = new EasyDotnetCodeFixer();
-                        var helper = new Helper();
-                    }
+                    var codeFixer = new EasyDotnetCodeFixer();
+                    var helper = new Helper();
                 }
             }
             """;
@@ -124,30 +120,98 @@ public class ImportAllNamespacesCodeFixProviderTests
         var context = new CSharpCodeFixTest<EmptyDiagnosticAnalyzer, ImportAllNamespacesCodeFixProvider, DefaultVerifier>();
         context.ReferenceAssemblies = ReferenceAssemblies.Net.Net80;
         context.TestCode = """
-            namespace MyApp
+            namespace MyApp;
+
+            public class Program
             {
-                public class Program
+                public static void Main(string[] args)
                 {
-                    public static void Main(string[] args)
-                    {
-                        {|CS0103:Console|}.WriteLine("No changes should be made.");
-                    }
+                    {|CS0103:Console|}.WriteLine("No changes should be made.");
                 }
             }
             """;
 
         context.FixedCode = """
-            namespace MyApp
+            namespace MyApp;
+
+            public class Program
             {
-                public class Program
+                public static void Main(string[] args)
                 {
-                    public static void Main(string[] args)
-                    {
-                        {|CS0103:Console}|.WriteLine("No changes should be made.");
-                    }
+                    {|CS0103:Console|}.WriteLine("No changes should be made.");
                 }
             }
             """;
+
+        await context.RunAsync();
+    }
+
+    [Test]
+    public async Task ShouldNotImportNamespaces_ForAmbigiousTypes()
+    {
+        var context = new CSharpCodeFixTest<EmptyDiagnosticAnalyzer, ImportAllNamespacesCodeFixProvider, DefaultVerifier>();
+        context.ReferenceAssemblies = ReferenceAssemblies.Net.Net80;
+        var additionalSources = new string[]
+        {
+            """
+            namespace EasyDotnet.A;
+
+            public static class A
+            {
+              public static void Hello()
+              {
+
+              }
+            }
+            """,
+            """
+            namespace EasyDotnet.B;
+
+            public static class A
+            {
+              public static void Hello()
+              {
+
+              }
+            }
+            """
+        };
+        foreach (var source in additionalSources)
+        {
+            context.TestState.Sources.Add(source);
+            context.FixedState.Sources.Add(source);
+        }
+
+        context.TestCode = """
+            namespace MyApp;
+
+            public class Program
+            {
+                public static void Main(string[] args)
+                {
+                    {|CS0103:Console|}.WriteLine("Hello");
+                    var helper = {|CS0103:A|}.Hello();
+                }
+            }
+            """;
+
+        context.FixedCode = """
+            using System;
+
+            namespace MyApp;
+
+            public class Program
+            {
+                public static void Main(string[] args)
+                {
+                    Console.WriteLine("Hello");
+                    var helper = {|#0:A|}.Hello();
+                }
+            }
+            """;
+
+        context.FixedState.ExpectedDiagnostics
+        .Add(new DiagnosticResult("CS0103", Microsoft.CodeAnalysis.DiagnosticSeverity.Error).WithLocation(0).WithArguments("A"));
 
         await context.RunAsync();
     }
