@@ -6,13 +6,13 @@ namespace EasyDotnet.RoslynLanguageServices.Tests;
 
 public class ImportAllNamespacesCodeFixProviderTests
 {
-    [Test]
-    public async Task ShouldAddMissingNamespaces_ForBuiltInTypes()
-    {
-        var context = new CSharpCodeFixTest<EmptyDiagnosticAnalyzer, ImportAllNamespacesCodeFixProvider, DefaultVerifier>();
-        context.ReferenceAssemblies = ReferenceAssemblies.Net.Net80;
+  [Test]
+  public async Task ShouldAddMissingNamespaces_ForBuiltInTypes()
+  {
+    var context = new CSharpCodeFixTest<EmptyDiagnosticAnalyzer, ImportAllNamespacesCodeFixProvider, DefaultVerifier>();
+    context.ReferenceAssemblies = ReferenceAssemblies.Net.Net80;
 
-        context.TestCode = """
+    context.TestCode = """
             namespace MyApp;
 
             public class Program
@@ -28,7 +28,7 @@ public class ImportAllNamespacesCodeFixProviderTests
             }
             """;
 
-        context.FixedCode = """
+    context.FixedCode = """
             using System;
             using System.Collections.Concurrent;
             using System.Collections.Generic;
@@ -49,22 +49,22 @@ public class ImportAllNamespacesCodeFixProviderTests
             }
             """;
 
-        context.FixedState
-            .ExpectedDiagnostics
-            .Add(new DiagnosticResult("CS0246", Microsoft.CodeAnalysis.DiagnosticSeverity.Error)
-            .WithLocation(0)
-            .WithArguments("EasyDotnetCodeFixer"));
+    context.FixedState
+        .ExpectedDiagnostics
+        .Add(new DiagnosticResult("CS0246", Microsoft.CodeAnalysis.DiagnosticSeverity.Error)
+        .WithLocation(0)
+        .WithArguments("EasyDotnetCodeFixer"));
 
-        await context.RunAsync();
-    }
+    await context.RunAsync();
+  }
 
-    [Test]
-    public async Task ShouldAddMissingNamespaces_ForCustomTypes()
+  [Test]
+  public async Task ShouldAddMissingNamespaces_ForCustomTypes()
+  {
+    var context = new CSharpCodeFixTest<EmptyDiagnosticAnalyzer, ImportAllNamespacesCodeFixProvider, DefaultVerifier>();
+    context.ReferenceAssemblies = ReferenceAssemblies.Net.Net80;
+    var additionalSources = new string[]
     {
-        var context = new CSharpCodeFixTest<EmptyDiagnosticAnalyzer, ImportAllNamespacesCodeFixProvider, DefaultVerifier>();
-        context.ReferenceAssemblies = ReferenceAssemblies.Net.Net80;
-        var additionalSources = new string[]
-        {
             """
             namespace EasyDotnet;
 
@@ -75,14 +75,14 @@ public class ImportAllNamespacesCodeFixProviderTests
 
             public class Helper {}
             """
-        };
-        foreach (var source in additionalSources)
-        {
-            context.TestState.Sources.Add(source);
-            context.FixedState.Sources.Add(source);
-        }
+    };
+    foreach (var source in additionalSources)
+    {
+      context.TestState.Sources.Add(source);
+      context.FixedState.Sources.Add(source);
+    }
 
-        context.TestCode = """
+    context.TestCode = """
             namespace MyApp;
 
             public class Program
@@ -95,7 +95,7 @@ public class ImportAllNamespacesCodeFixProviderTests
             }
             """;
 
-        context.FixedCode = """
+    context.FixedCode = """
             using EasyDotnet;
             using EasyDotnet.Utilities;
 
@@ -111,15 +111,15 @@ public class ImportAllNamespacesCodeFixProviderTests
             }
             """;
 
-        await context.RunAsync();
-    }
+    await context.RunAsync();
+  }
 
-    [Test]
-    public async Task ShouldNotApplyAnyFix_IfThereIsOnlyOneMissingType()
-    {
-        var context = new CSharpCodeFixTest<EmptyDiagnosticAnalyzer, ImportAllNamespacesCodeFixProvider, DefaultVerifier>();
-        context.ReferenceAssemblies = ReferenceAssemblies.Net.Net80;
-        context.TestCode = """
+  [Test]
+  public async Task ShouldNotApplyAnyFix_IfThereIsOnlyOneMissingType()
+  {
+    var context = new CSharpCodeFixTest<EmptyDiagnosticAnalyzer, ImportAllNamespacesCodeFixProvider, DefaultVerifier>();
+    context.ReferenceAssemblies = ReferenceAssemblies.Net.Net80;
+    context.TestCode = """
             namespace MyApp;
 
             public class Program
@@ -131,7 +131,7 @@ public class ImportAllNamespacesCodeFixProviderTests
             }
             """;
 
-        context.FixedCode = """
+    context.FixedCode = """
             namespace MyApp;
 
             public class Program
@@ -143,16 +143,16 @@ public class ImportAllNamespacesCodeFixProviderTests
             }
             """;
 
-        await context.RunAsync();
-    }
+    await context.RunAsync();
+  }
 
-    [Test]
-    public async Task ShouldNotImportNamespaces_ForAmbigiousTypes()
+  [Test]
+  public async Task ShouldNotImportNamespaces_ForAmbigiousTypes()
+  {
+    var context = new CSharpCodeFixTest<EmptyDiagnosticAnalyzer, ImportAllNamespacesCodeFixProvider, DefaultVerifier>();
+    context.ReferenceAssemblies = ReferenceAssemblies.Net.Net80;
+    var additionalSources = new string[]
     {
-        var context = new CSharpCodeFixTest<EmptyDiagnosticAnalyzer, ImportAllNamespacesCodeFixProvider, DefaultVerifier>();
-        context.ReferenceAssemblies = ReferenceAssemblies.Net.Net80;
-        var additionalSources = new string[]
-        {
             """
             namespace EasyDotnet.A;
 
@@ -175,14 +175,14 @@ public class ImportAllNamespacesCodeFixProviderTests
               }
             }
             """
-        };
-        foreach (var source in additionalSources)
-        {
-            context.TestState.Sources.Add(source);
-            context.FixedState.Sources.Add(source);
-        }
+    };
+    foreach (var source in additionalSources)
+    {
+      context.TestState.Sources.Add(source);
+      context.FixedState.Sources.Add(source);
+    }
 
-        context.TestCode = """
+    context.TestCode = """
             namespace MyApp;
 
             public class Program
@@ -195,7 +195,7 @@ public class ImportAllNamespacesCodeFixProviderTests
             }
             """;
 
-        context.FixedCode = """
+    context.FixedCode = """
             using System;
 
             namespace MyApp;
@@ -210,9 +210,9 @@ public class ImportAllNamespacesCodeFixProviderTests
             }
             """;
 
-        context.FixedState.ExpectedDiagnostics
-        .Add(new DiagnosticResult("CS0103", Microsoft.CodeAnalysis.DiagnosticSeverity.Error).WithLocation(0).WithArguments("A"));
+    context.FixedState.ExpectedDiagnostics
+    .Add(new DiagnosticResult("CS0103", Microsoft.CodeAnalysis.DiagnosticSeverity.Error).WithLocation(0).WithArguments("A"));
 
-        await context.RunAsync();
-    }
+    await context.RunAsync();
+  }
 }

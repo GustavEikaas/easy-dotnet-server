@@ -9,10 +9,10 @@ using Microsoft.CodeAnalysis.Formatting;
 
 namespace EasyDotnet.RoslynLanguageServices.CodeActions;
 
-public static class MissingTypeDiagnostics 
+public static class MissingTypeDiagnostics
 {
-    public const string CS0246 = nameof(CS0246); // The type or namespace name '{0}' could not be found (are you missing a using directive or an assembly reference?)
-    public const string CS0103 = nameof(CS0103); // The name '{0}' does not exist in the current context
+  public const string CS0246 = nameof(CS0246); // The type or namespace name '{0}' could not be found (are you missing a using directive or an assembly reference?)
+  public const string CS0103 = nameof(CS0103); // The name '{0}' does not exist in the current context
 }
 
 [ExportCodeFixProvider(LanguageNames.CSharp, Name = nameof(ImportAllNamespacesCodeFixProvider)), Shared]
@@ -81,7 +81,7 @@ public class ImportAllNamespacesCodeFixProvider : CodeFixProvider
 
       if (isAmbigiousType || namespacesForType.Count == 0)
       {
-          continue;
+        continue;
       }
 
       namespacesToAdd.Add(namespacesForType[0]);
