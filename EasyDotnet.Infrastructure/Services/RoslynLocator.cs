@@ -61,6 +61,26 @@ public static class RoslynLocator
   }
 
   /// <summary>
+  /// Returns the full paths of the Roslynator C# analyzer DLLs inside the .NET tool installation folder.
+  /// Only the DLLs containing analyzers are returned.
+  /// </summary>
+  public static string[] GetEasyDotnetAnalyzers()
+  {
+    var analyzersDir = Path.Combine(GetRoslynBaseDir(), "Analyzers");
+
+    if (!Directory.Exists(analyzersDir))
+    {
+      throw new DirectoryNotFoundException($"EasyDotnet Analyzer folder not found: {analyzersDir}");
+    }
+
+    var analyzerDlls = new[] { "EasyDotnet.RoslynLanguageServices.dll" };
+
+    return [.. analyzerDlls
+        .Select(dll => Path.Combine(analyzersDir, dll))
+        .Where(File.Exists)];
+  }
+
+  /// <summary>
   /// Returns the base Roslyn folder inside the .NET tool installation folder.
   /// </summary>
   private static string GetRoslynBaseDir()
