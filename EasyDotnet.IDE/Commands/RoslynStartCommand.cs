@@ -20,6 +20,10 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
     [CommandOption("--version")]
     public bool ShowVersion { get; init; }
 
+    [Description("Use EasyDotnet analyzers (optional).")]
+    [CommandOption("--easy-dotnet-analyzer")]
+    public bool UseEasyDotnetAnalyzer { get; init; }
+
     [Description("Enable Roslynator analyzers (optional).")]
     [CommandOption("--roslynator")]
     public bool UseRoslynator { get; init; }
@@ -77,6 +81,14 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
     if (settings.UseRoslynator)
     {
       foreach (var analyzer in RoslynLocator.GetRoslynatorAnalyzers())
+      {
+        startInfo.ArgumentList.Add("--extension");
+        startInfo.ArgumentList.Add(analyzer);
+      }
+    }
+    if (settings.UseEasyDotnetAnalyzer)
+    {
+      foreach (var analyzer in RoslynLocator.GetEasyDotnetAnalyzers())
       {
         startInfo.ArgumentList.Add("--extension");
         startInfo.ArgumentList.Add(analyzer);
