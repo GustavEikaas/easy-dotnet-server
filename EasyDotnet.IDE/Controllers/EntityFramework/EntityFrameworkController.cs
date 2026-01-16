@@ -30,31 +30,19 @@ public class EntityFrameworkController(
       []));
   }
 
-  [JsonRpcMethod("ef/database-update")]
-  public async Task UpdateDatabase()
+  [JsonRpcMethod("ef/migrations-remove")]
+  public async Task RemoveMigration()
   {
     var (efProject, startupProject, dbContext) = await PromptEfProjectInfoAsync();
 
     await editorService.RequestRunCommand(new RunCommand(
       "dotnet-ef",
-      ["database", "update", "--project", efProject, "--startup-project", startupProject, "--context", dbContext],
+      ["migrations", "remove", "--project", efProject, "--startup-project", startupProject, "--context", dbContext],
       ".",
       []));
   }
 
-  [JsonRpcMethod("ef/database-drop")]
-  public async Task DropDatabase()
-  {
-    var (efProject, startupProject, dbContext) = await PromptEfProjectInfoAsync();
-
-    await editorService.RequestRunCommand(new RunCommand(
-      "dotnet-ef",
-      ["database", "update", "--project", efProject, "--startup-project", startupProject, "--context", dbContext],
-      ".",
-      []));
-  }
-
-  [JsonRpcMethod("ef/migration-apply")]
+  [JsonRpcMethod("ef/migrations-apply")]
   public async Task ApplyMigration()
   {
     var (efProject, startupProject, dbContext) = await PromptEfProjectInfoAsync();
@@ -76,6 +64,30 @@ public class EntityFrameworkController(
     await editorService.RequestRunCommand(new RunCommand(
       "dotnet-ef",
       ["database", "update", selectedMigration.Id, "--project", efProject, "--startup-project", startupProject, "--context", dbContext],
+      ".",
+      []));
+  }
+
+  [JsonRpcMethod("ef/database-update")]
+  public async Task UpdateDatabase()
+  {
+    var (efProject, startupProject, dbContext) = await PromptEfProjectInfoAsync();
+
+    await editorService.RequestRunCommand(new RunCommand(
+      "dotnet-ef",
+      ["database", "update", "--project", efProject, "--startup-project", startupProject, "--context", dbContext],
+      ".",
+      []));
+  }
+
+  [JsonRpcMethod("ef/database-drop")]
+  public async Task DropDatabase()
+  {
+    var (efProject, startupProject, dbContext) = await PromptEfProjectInfoAsync();
+
+    await editorService.RequestRunCommand(new RunCommand(
+      "dotnet-ef",
+      ["database", "update", "--project", efProject, "--startup-project", startupProject, "--context", dbContext],
       ".",
       []));
   }
