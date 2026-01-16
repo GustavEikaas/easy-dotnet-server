@@ -252,6 +252,15 @@ _No parameters_
 
 ---
 
+## EntityFrameworkController
+
+### `ef/database-update`
+_No parameters_
+
+**Returns:** `Task`
+
+---
+
 ## TerminalController
 
 ### `processExited`

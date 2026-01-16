@@ -4,7 +4,6 @@ namespace EasyDotnet.Infrastructure.Tests.EntityFramework;
 
 public class EfToolOutputParserTests
 {
-
   [Test]
   public async Task Parse_WithSuccessfulJsonOutput_ReturnsCorrectParsedData()
   {
