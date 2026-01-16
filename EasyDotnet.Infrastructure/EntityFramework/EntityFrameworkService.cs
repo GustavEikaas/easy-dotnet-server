@@ -4,6 +4,7 @@ using System.Text.Json;
 
 namespace EasyDotnet.Infrastructure.EntityFramework;
 
+
 public class EntityFrameworkService
 {
   private readonly JsonSerializerOptions _jsonSerializerOptions = new()
@@ -43,6 +44,45 @@ public class EntityFrameworkService
           _jsonSerializerOptions);
 
       return contexts ?? [];
+    }
+    catch (JsonException)
+    {
+      throw new Exception($"Failed to deserialize {result.JsonData}");
+    }
+  }
+  public async Task<List<Migration>> ListMigrationsAsync(
+      string efProjectPath,
+      string startupProjectPath,
+      string dbContext,
+      string workingDirectory = ".",
+      CancellationToken cancellationToken = default)
+  {
+    var args = new List<string>
+    {
+      "migrations",
+      "list",
+      "--project", $"\"{efProjectPath}\"",
+      "--startup-project", $"\"{startupProjectPath}\"",
+      "--context", dbContext,
+      "--json",
+      "--prefix-output"
+    };
+
+    var result = await RunEfCommandAsync(args, workingDirectory, cancellationToken);
+
+    if (!result.Success)
+    {
+      throw new Exception(result.ErrorMessage);
+    }
+
+    if (string.IsNullOrWhiteSpace(result.JsonData)) return [];
+
+    try
+    {
+      var migrations = JsonSerializer.Deserialize<List<Migration>>(
+          result.JsonData,
+          _jsonSerializerOptions);
+      return migrations ?? [];
     }
     catch (JsonException)
     {
