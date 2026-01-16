@@ -254,7 +254,29 @@ _No parameters_
 
 ## EntityFrameworkController
 
+### `ef/database-drop`
+_No parameters_
+
+**Returns:** `Task`
+
 ### `ef/database-update`
+_No parameters_
+
+**Returns:** `Task`
+
+### `ef/migrations-add`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| migrationName | string | ✅  |
+
+**Returns:** `Task`
+
+### `ef/migrations-apply`
+_No parameters_
+
+**Returns:** `Task`
+
+### `ef/migrations-remove`
 _No parameters_
 
 **Returns:** `Task`
