@@ -11,4 +11,5 @@ public interface IClientService
   ClientOptions? ClientOptions { get; set; }
 
   void ThrowIfNotInitialized();
+  string RequireSolutionFile();
 }

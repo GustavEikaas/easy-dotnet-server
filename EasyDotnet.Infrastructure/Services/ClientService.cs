@@ -1,6 +1,5 @@
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Domain.Models.Client;
-using StreamJsonRpc;
 
 namespace EasyDotnet.Infrastructure.Services;
 
@@ -20,4 +19,5 @@ public class ClientService : IClientService
     }
   }
 
+  public string RequireSolutionFile() => ProjectInfo?.SolutionFile ?? throw new InvalidOperationException("Solution file is required for this feature");
 }
