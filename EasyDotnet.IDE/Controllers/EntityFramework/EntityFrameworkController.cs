@@ -47,7 +47,6 @@ public class EntityFrameworkController(
     }
     else
     {
-      //TODO: build with qf list and pass --no-build
       var selectedContext = await editorService.RequestSelection("Select db context", [.. dbContexts.Select(x => new SelectionOption(x.FullName, x.Name))]) ?? throw new InvalidOperationException("Nothing selected");
       await editorService.RequestRunCommand(new RunCommand("dotnet-ef", ["database", "update", "--project", efProject.Id, "--startup-project", startupProject.Id, "--context", selectedContext.Id], ".", []));
     }

@@ -11,6 +11,45 @@ public class EntityFrameworkService
     PropertyNameCaseInsensitive = true
   };
 
+  public async Task<List<DbContextInfo>> ListDbContextsAsync(
+    string efProjectPath,
+    string startupProjectPath,
+    string workingDirectory = ".",
+    CancellationToken cancellationToken = default)
+  {
+    var args = new List<string>
+    {
+      "dbcontext",
+      "list",
+      "--project", $"\"{efProjectPath}\"",
+      "--startup-project", $"\"{startupProjectPath}\"",
+      "--json",
+      "--prefix-output"
+    };
+
+    var result = await RunEfCommandAsync(args, workingDirectory, cancellationToken);
+
+    if (!result.Success)
+    {
+      throw new Exception(result.ErrorMessage);
+    }
+
+    if (string.IsNullOrWhiteSpace(result.JsonData)) return [];
+
+    try
+    {
+      var contexts = JsonSerializer.Deserialize<List<DbContextInfo>>(
+          result.JsonData,
+          _jsonSerializerOptions);
+
+      return contexts ?? [];
+    }
+    catch (JsonException)
+    {
+      throw new Exception($"Failed to deserialize {result.JsonData}");
+    }
+  }
+
   private static async Task<EfCommandResult> RunEfCommandAsync(
     List<string> arguments,
     string workingDirectory,
@@ -18,12 +57,11 @@ public class EntityFrameworkService
   {
     var startInfo = new ProcessStartInfo
     {
-      FileName = "dotnet-ef",
-      Arguments = string.Join(" ", arguments),
+      FileName = "dotnet",
+      Arguments = $"ef {string.Join(" ", arguments)}",
       WorkingDirectory = workingDirectory,
       RedirectStandardOutput = true,
       RedirectStandardError = true,
-      UseShellExecute = false,
       CreateNoWindow = true
     };
 
@@ -61,7 +99,7 @@ public class EntityFrameworkService
 
     return new EfCommandResult(
       ExitCode: process.ExitCode,
-      Success: process.ExitCode == 0 && parsed.Success,
+      Success: process.ExitCode == 0 && parsed.ErrorMessages.Length == 0,
       JsonData: parsed.JsonData,
       ErrorMessage: parsed.ErrorMessage,
       InfoMessages: parsed.InfoMessages,
@@ -71,44 +109,5 @@ public class EntityFrameworkService
     );
   }
 
-  public async Task<List<DbContextInfo>> ListDbContextsAsync(
-    string efProjectPath,
-    string startupProjectPath,
-    string workingDirectory = ".",
-    CancellationToken cancellationToken = default)
-  {
-    var args = new List<string>
-  {
-    "dbcontext",
-    "list",
-    "--project", $"\"{efProjectPath}\"",
-    "--startup-project", $"\"{startupProjectPath}\"",
-    "--json",
-    "--prefix-output"
-  };
-
-    var result = await RunEfCommandAsync(args, workingDirectory, cancellationToken);
-
-    if (!result.Success)
-    {
-      var message = string.Join('\n', result.ErrorMessages);
-      throw new Exception(message);
-    }
-
-    if (string.IsNullOrWhiteSpace(result.JsonData)) return [];
-
-    try
-    {
-      var contexts = JsonSerializer.Deserialize<List<DbContextInfo>>(
-          result.JsonData,
-          _jsonSerializerOptions);
-
-      return contexts ?? [];
-    }
-    catch (JsonException)
-    {
-      throw new Exception($"Failed to deserialize {result.JsonData}");
-    }
-  }
 
 }

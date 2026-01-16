@@ -1,8 +1,17 @@
 namespace EasyDotnet.Infrastructure.EntityFramework;
 
+public sealed record ParsedEfOutput(
+  string? JsonData,
+  string? ErrorMessage,
+  string[] InfoMessages,
+  string[] ErrorMessages,
+  string StandardOutput,
+  string StandardError);
+
+
 public static class EfToolOutputParser
 {
-  public static EfCommandResult Parse(string output)
+  public static ParsedEfOutput Parse(string output)
   {
     var lines = output.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
     var dataLines = new List<string>();
@@ -28,9 +37,7 @@ public static class EfToolOutputParser
     var jsonData = dataLines.Count > 0 ? ExtractJson(dataLines) : null;
     var errorMessage = errorLines.Count > 0 ? string.Join(" ", errorLines) : null;
 
-    return new EfCommandResult(
-      ExitCode: default,
-      Success: errorLines.Count == 0,
+    return new ParsedEfOutput(
       JsonData: jsonData,
       ErrorMessage: errorMessage,
       InfoMessages: [.. infoLines],
