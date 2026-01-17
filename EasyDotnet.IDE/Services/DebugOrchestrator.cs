@@ -156,7 +156,7 @@ public class DebugOrchestrator(
 
       var platform = project.GetPlatform();
 
-      if (platform != DotnetPlatform.None)
+      if (platform != DotnetPlatform.None && platform != DotnetPlatform.Windows)
       {
         throw new InvalidOperationException($"Debugging for {platform} is not supported yet");
       }
