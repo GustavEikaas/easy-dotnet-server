@@ -46,7 +46,7 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
          string targetPath,
          string? targetFrameworkMoniker,
          string? buildArgs,
-         string configuration = "Debug",
+         string? configuration,
          CancellationToken cancellationToken = default)
   {
     if (string.IsNullOrWhiteSpace(targetPath))
@@ -374,16 +374,18 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
       MSBuildProjectType type,
       string targetPath,
       string? targetFrameworkMoniker,
-      string configuration, string? args)
+      string? configuration, string? args)
   {
     var tfmArg = string.IsNullOrWhiteSpace(targetFrameworkMoniker)
         ? string.Empty
         : $" /p:TargetFramework={targetFrameworkMoniker}";
 
+    var config = string.IsNullOrEmpty(configuration) ? "" : $"/p:Configuration={configuration}";
+
     return type switch
     {
-      MSBuildProjectType.SDK => ("dotnet", $"msbuild \"{targetPath}\" /p:Configuration={configuration} {tfmArg} {args ?? ""}"),
-      MSBuildProjectType.VisualStudio => (await locator.GetVisualStudioMSBuildPath(), $"\"{targetPath}\" /p:Configuration={configuration} {tfmArg} {args ?? ""}"),
+      MSBuildProjectType.SDK => ("dotnet", $"msbuild \"{targetPath}\" {config} {tfmArg} {args ?? ""}"),
+      MSBuildProjectType.VisualStudio => (await locator.GetVisualStudioMSBuildPath(), $"\"{targetPath}\" {config} {tfmArg} {args ?? ""}"),
       _ => throw new InvalidOperationException("Unknown MSBuild type")
     };
   }
