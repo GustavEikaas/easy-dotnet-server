@@ -25,6 +25,7 @@ public static class DotnetProjectDeserializer
         PackageOutputPath: bag.Get(MsBuildProperties.PackageOutputPath),
         TargetFrameworkVersion: bag.Get(MsBuildProperties.TargetFrameworkVersion),
         UsingMicrosoftNETSdk: bag.Get(MsBuildProperties.UsingMicrosoftNETSdk),
+        UsingGodotNETSdk: bag.Get(MsBuildProperties.UsingGodotNETSdk),
         UsingMicrosoftNETSdkWorker: bag.Get(MsBuildProperties.UsingMicrosoftNETSdkWorker),
         UsingMicrosoftNETSdkWeb: bag.Get(MsBuildProperties.UsingMicrosoftNETSdkWeb),
         UsingMicrosoftNETSdkRazor: bag.Get(MsBuildProperties.UsingMicrosoftNETSdkRazor),

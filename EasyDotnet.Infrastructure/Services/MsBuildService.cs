@@ -283,6 +283,11 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
 
   public async Task<string> BuildRunCommand(DotnetProject project)
   {
+    if (project.UsingGodotNETSdk)
+    {
+      return $"godot --path {project?.ProjectDir ?? "."}";
+    }
+
     if (project.TargetFrameworks?.Length > 0)
     {
       return "";

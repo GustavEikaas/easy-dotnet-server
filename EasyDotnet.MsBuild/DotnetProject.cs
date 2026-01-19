@@ -24,6 +24,7 @@ public record DotnetProject
     string? PackageOutputPath,
     string? TargetFrameworkVersion,
     bool UsingMicrosoftNETSdk,
+    bool UsingGodotNETSdk,
     bool UsingMicrosoftNETSdkWorker,
     bool UsingMicrosoftNETSdkWeb,
     bool UsingMicrosoftNETSdkRazor,
