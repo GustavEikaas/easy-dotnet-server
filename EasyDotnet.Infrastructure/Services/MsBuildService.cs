@@ -380,7 +380,7 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
         ? string.Empty
         : $" /p:TargetFramework={targetFrameworkMoniker}";
 
-    var config = string.IsNullOrEmpty(configuration) ? "" : $"p:/Configuration={configuration}";
+    var config = string.IsNullOrEmpty(configuration) ? "" : $"/p:Configuration={configuration}";
 
     return type switch
     {
