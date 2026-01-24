@@ -18,16 +18,17 @@
     <PackageReference Include="NJsonSchema.CodeGeneration.CSharp" Version="11.3.2" />
     <PackageReference Include="StreamJsonRpc" Version="2.21.69" />
     <PackageReference Include="Spectre.Console" Version="0.53.1-preview.0.2" />
-
     <PackageReference Include="Microsoft.TestPlatform.TranslationLayer" Version="18.0.1" />
     <PackageReference Include="Microsoft.TestPlatform" Version="18.0.1" />
     <PackageReference Include="Microsoft.TestPlatform.ObjectModel" Version="18.0.1" />
+    <PackageReference Include="System.IO.Abstractions" Version="22.1.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\EasyDotnet.Domain\EasyDotnet.Domain.csproj" />
     <ProjectReference Include="..\EasyDotnet.Application\EasyDotnet.Application.csproj" />
     <ProjectReference Include="..\EasyDotnet.MsBuild\EasyDotnet.MsBuild.csproj" />
+    <ProjectReference Include="..\EasyDotnet.Debugger\EasyDotnet.Debugger.csproj" />
   </ItemGroup>
 
 </Project>

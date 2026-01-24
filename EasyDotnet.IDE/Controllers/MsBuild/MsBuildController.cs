@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
 using EasyDotnet.Controllers.MsBuild;
+using EasyDotnet.Domain.Models.MsBuild.Project;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Controllers.MsBuild;
@@ -15,7 +16,7 @@ public class MsBuildController(IClientService clientService, IMsBuildService msB
   public async Task<BuildResultResponse> Build(BuildRequest request)
   {
     clientService.ThrowIfNotInitialized();
-    var result = await msBuild.RequestBuildAsync(request.TargetPath, request.TargetFramework, request.BuildArgs, request.ConfigurationOrDefault);
+    var result = await msBuild.RequestBuildAsync(request.TargetPath, request.TargetFramework, request.BuildArgs, request.Configuration);
 
     return new(result.Success, result.Errors.AsAsyncEnumerable(), result.Warnings.AsAsyncEnumerable());
   }
@@ -34,6 +35,14 @@ public class MsBuildController(IClientService clientService, IMsBuildService msB
   {
     clientService.ThrowIfNotInitialized();
     return await msBuild.GetProjectReferencesAsync(Path.GetFullPath(projectPath));
+  }
+
+  [JsonRpcMethod("msbuild/list-package-reference")]
+  public async Task<IAsyncEnumerable<PackageReference>> GetPackageReferences(string projectPath, string targetFramework, CancellationToken cancellationToken)
+  {
+    clientService.ThrowIfNotInitialized();
+    var packages = await msBuild.GetPackageReferencesAsync(Path.GetFullPath(projectPath), targetFramework, cancellationToken);
+    return packages.ToBatchedAsyncEnumerable(50);
   }
 
   [JsonRpcMethod("msbuild/add-project-reference")]

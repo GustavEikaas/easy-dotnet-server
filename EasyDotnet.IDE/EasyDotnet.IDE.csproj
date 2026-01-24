@@ -6,10 +6,11 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>dotnet-easydotnet</ToolCommandName>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
-    <Version>2.3.30</Version>
+    <Version>2.3.63</Version>
     <Authors>Gustav Eikaas</Authors>
     <PackageId>EasyDotnet</PackageId>
     <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <IncludePackageReadmeFile>true</IncludePackageReadmeFile>
@@ -44,5 +45,6 @@
     <ProjectReference Include="..\EasyDotnet.Infrastructure\EasyDotnet.Infrastructure.csproj" />
     <ProjectReference Include="..\EasyDotnet.Application\EasyDotnet.Application.csproj" />
     <ProjectReference Include="..\EasyDotnet.TestRunner\EasyDotnet.TestRunner.csproj" />
+    <ProjectReference Include="..\EasyDotnet.ProjXLanguageServer\EasyDotnet.ProjXLanguageServer.csproj" />
   </ItemGroup>
 </Project>

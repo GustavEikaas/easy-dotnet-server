@@ -33,3 +33,40 @@ You can regenerate this file at any time by running the server with the `generat
 
 ```bash
 dotnet run generate-rpc-docs -- --format markdown
+```
+
+## Configuration
+
+### Custom Roslyn LSP Server
+
+For testing purposes or workarounds, you can override the bundled Roslyn language server using environment variables:
+
+#### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `EASY_DOTNET_ROSLYN_DLL_PATH` | Full path to `Microsoft.CodeAnalysis.LanguageServer.dll` |
+
+#### Examples
+```bash
+# Use a custom Roslyn LSP DLL (most common for testing)
+export EASY_DOTNET_ROSLYN_DLL_PATH="/path/to/custom/Microsoft.CodeAnalysis.LanguageServer.dll"
+```
+
+### Custom Debugger
+
+You can override the bundled `netcoredbg` debugger using environment variables:
+
+#### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `EASY_DOTNET_DEBUGGER_BIN_PATH` | Full path to a custom debugger executable (e.g., `netcoredbg`, `vsdbg`) |
+
+#### Examples
+```bash
+# Use a custom debugger executable (most common for testing)
+export EASY_DOTNET_DEBUGGER_BIN_PATH="/path/to/custom/netcoredbg"
+```
+
+> **Note:** These overrides are primarily intended for development, testing, and workarounds. The bundled versions are recommended for normal use.

@@ -5,9 +5,13 @@ public static class DotnetProjectDeserializer
   public static DotnetProject FromBag(MsBuildPropertyBag bag) => new(
         OutputPath: bag.Get(MsBuildProperties.OutputPath),
         OutputType: bag.Get(MsBuildProperties.OutputType),
+        OutDir: bag.Get(MsBuildProperties.OutDir),
         TargetExt: bag.Get(MsBuildProperties.TargetExt),
+        TargetDir: bag.Get(MsBuildProperties.TargetDir),
+        TargetName: bag.Get(MsBuildProperties.TargetName),
         IsTestProject: bag.Get(MsBuildProperties.IsTestProject),
         IsTestingPlatformApplication: bag.Get(MsBuildProperties.IsTestingPlatformApplication),
+        RunSettingsFilePath: bag.Get(MsBuildProperties.RunSettingsFilePath),
         AssemblyName: bag.Get(MsBuildProperties.AssemblyName),
         TargetFramework: bag.Get(MsBuildProperties.TargetFramework),
         TargetFrameworks: bag.Get(MsBuildProperties.TargetFrameworks),
@@ -21,6 +25,7 @@ public static class DotnetProjectDeserializer
         PackageOutputPath: bag.Get(MsBuildProperties.PackageOutputPath),
         TargetFrameworkVersion: bag.Get(MsBuildProperties.TargetFrameworkVersion),
         UsingMicrosoftNETSdk: bag.Get(MsBuildProperties.UsingMicrosoftNETSdk),
+        UsingGodotNETSdk: bag.Get(MsBuildProperties.UsingGodotNETSdk),
         UsingMicrosoftNETSdkWorker: bag.Get(MsBuildProperties.UsingMicrosoftNETSdkWorker),
         UsingMicrosoftNETSdkWeb: bag.Get(MsBuildProperties.UsingMicrosoftNETSdkWeb),
         UsingMicrosoftNETSdkRazor: bag.Get(MsBuildProperties.UsingMicrosoftNETSdkRazor),
@@ -82,6 +87,7 @@ public static class DotnetProjectDeserializer
         TargetFrameworkIdentifier: bag.Get(MsBuildProperties.TargetFrameworkIdentifier),
         MSBuildProjectName: bag.Get(MsBuildProperties.MSBuildProjectName),
         ProjectDir: bag.Get(MsBuildProperties.ProjectDir),
+        ProjectName: bag.Get(MsBuildProperties.ProjectName),
         MSBuildProjectFullPath: bag.Get(MsBuildProperties.MSBuildProjectFullPath),
         MicrosoftNETBuildTasksDirectoryRoot: bag.Get(MsBuildProperties.MicrosoftNETBuildTasksDirectoryRoot),
         MicrosoftNETBuildTasksDirectory: bag.Get(MsBuildProperties.MicrosoftNETBuildTasksDirectory),
@@ -143,5 +149,7 @@ public static class DotnetProjectDeserializer
         BaseIntermediateOutputPath: bag.Get(MsBuildProperties.BaseIntermediateOutputPath),
         MSBuildProjectExtensionsPath: bag.Get(MsBuildProperties.MSBuildProjectExtensionsPath),
         SelfContained: bag.Get(MsBuildProperties.SelfContained),
-        UserProfileRuntimeStorePath: bag.Get(MsBuildProperties.UserProfileRuntimeStorePath));
+        UserProfileRuntimeStorePath: bag.Get(MsBuildProperties.UserProfileRuntimeStorePath),
+        TargetPlatformIdentifier: bag.Get(MsBuildProperties.TargetPlatformIdentifier)
+      );
 }

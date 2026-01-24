@@ -6,7 +6,6 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
-using Microsoft.Extensions.Logging;
 using Microsoft.TemplateEngine.Abstractions;
 using Microsoft.TemplateEngine.Abstractions.Installer;
 using Microsoft.TemplateEngine.Edge.Settings;
@@ -16,7 +15,7 @@ using Microsoft.TemplateEngine.Utils;
 
 namespace EasyDotnet.IDE.Services;
 
-public class TemplateEngineService(IMsBuildService msBuildService, ILogger<TemplateEngineService> logger)
+public class TemplateEngineService(IMsBuildService msBuildService)
 {
   private readonly Microsoft.TemplateEngine.Edge.DefaultTemplateEngineHost _host = new(
         hostIdentifier: "easy-dotnet",
@@ -29,8 +28,8 @@ public class TemplateEngineService(IMsBuildService msBuildService, ILogger<Templ
   {
     using var bootstrapper = new Bootstrapper(
         _host,
-        loadDefaultComponents: true,
-        virtualizeConfiguration: false);
+        virtualizeConfiguration: false,
+        loadDefaultComponents: true);
 
     var templatesFolder = Path.Join(msBuildService.GetDotnetSdkBasePath(), "templates");
 

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Domain.Models.MsBuild.Build;
 using EasyDotnet.Domain.Models.MsBuild.Project;
@@ -11,11 +12,24 @@ namespace EasyDotnet.Infrastructure.Services;
 
 public class MsBuildService(IVisualStudioLocator locator, IClientService clientService, IProcessQueue processQueue, IMemoryCache memoryCache, INotificationService notificationService, ISolutionService solutionService) : IMsBuildService
 {
+
+  private static readonly JsonSerializerOptions JsonSerializerOptions = new() { PropertyNameCaseInsensitive = true };
+  private static string GetCacheKeyProperties(string projectPath, string? targetFrameworkMoniker, string configuration) => $"{projectPath}-{targetFrameworkMoniker ?? ""}-{configuration ?? ""}";
+
   public SdkInstallation[] QuerySdkInstallations()
   {
     MSBuildLocator.AllowQueryAllRuntimeVersions = true;
     var instances = MSBuildLocator.QueryVisualStudioInstances().Where(x => x.DiscoveryType == DiscoveryType.DotNetSdk).ToList();
     return [.. instances.Select(x => new SdkInstallation(x.Name, $"net{x.Version.Major}.0", x.Version, x.MSBuildPath, x.VisualStudioRootPath))];
+  }
+
+  public string GetDotnetWatchTargets()
+  {
+    var sdk = QuerySdkInstallations()[0];
+    var version = sdk.Version;
+    var path = sdk.MSBuildPath;
+    var moniker = sdk.Moniker;
+    return Path.Join(path, "DotnetTools", "dotnet-watch", version.ToString(), "tools", moniker, "any", "DotnetWatch.targets");
   }
 
   public string GetVsTestPath()
@@ -32,7 +46,7 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
          string targetPath,
          string? targetFrameworkMoniker,
          string? buildArgs,
-         string configuration = "Debug",
+         string? configuration,
          CancellationToken cancellationToken = default)
   {
     if (string.IsNullOrWhiteSpace(targetPath))
@@ -101,7 +115,6 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
     return (map(errors), map(warnings));
   }
 
-
   private static string? AssignProject(string filePath, string targetPath, Dictionary<string, string> projectMap)
   {
     var normalizedFilePath = NormalizePath(filePath);
@@ -122,7 +135,6 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
 
     return null;
   }
-
 
   private Dictionary<string, string> GetProjectMap(string targetPath)
   {
@@ -147,9 +159,6 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
     throw new InvalidOperationException("Target must be a .csproj or (.sln, .slnx) file");
   }
 
-
-
-
   public async Task InvalidateProjectProperties(string projectPath, string? targetFrameworkMoniker = null, string configuration = "Debug")
   {
     memoryCache.Remove(GetCacheKeyProperties(projectPath, targetFrameworkMoniker, configuration));
@@ -165,7 +174,6 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
         _ => GetProjectPropertiesAsync(projectPath, targetFrameworkMoniker, configuration, cancellationToken)
     ) ?? throw new Exception("Failed to get project properties");
 
-  private static string GetCacheKeyProperties(string projectPath, string? targetFrameworkMoniker, string configuration) => $"{projectPath}-{targetFrameworkMoniker ?? ""}-{configuration ?? ""}";
 
   public async Task<DotnetProject> GetProjectPropertiesAsync(
       string projectPath,
@@ -224,6 +232,33 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
   }
 
 
+  public async Task<List<PackageReference>> GetPackageReferencesAsync(string projectPath, string targetFramework, CancellationToken cancellationToken = default)
+  {
+    var (success, stdOut, stdErr) = await processQueue.RunProcessAsync(
+        "dotnet",
+        $"list \"{projectPath}\" package --format json",
+        new ProcessOptions(true),
+        cancellationToken);
+
+    if (!success)
+    {
+      throw new InvalidOperationException($"Failed to get package references: {stdErr}");
+    }
+
+    var output = JsonSerializer.Deserialize<DotnetListPackageOutput>(stdOut, JsonSerializerOptions)
+            ;
+
+    if (output?.Projects == null)
+    {
+      return [];
+    }
+
+    return [.. output.Projects
+        .SelectMany(p => p.Frameworks)
+        .Where(f => f.Framework.Equals(targetFramework, StringComparison.OrdinalIgnoreCase))
+        .SelectMany(f => f.TopLevelPackages ?? Enumerable.Empty<PackageReference>())];
+  }
+
   public async Task<bool> AddProjectReferenceAsync(string projectPath, string targetPath, CancellationToken cancellationToken = default)
   {
     var (success, _, _) = await processQueue.RunProcessAsync(
@@ -248,6 +283,11 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
 
   public async Task<string> BuildRunCommand(DotnetProject project)
   {
+    if (project.UsingGodotNETSdk)
+    {
+      return $"godot --path {project?.ProjectDir ?? "."}";
+    }
+
     if (project.TargetFrameworks?.Length > 0)
     {
       return "";
@@ -334,18 +374,19 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
       MSBuildProjectType type,
       string targetPath,
       string? targetFrameworkMoniker,
-      string configuration, string? args)
+      string? configuration, string? args)
   {
     var tfmArg = string.IsNullOrWhiteSpace(targetFrameworkMoniker)
         ? string.Empty
         : $" /p:TargetFramework={targetFrameworkMoniker}";
 
+    var config = string.IsNullOrEmpty(configuration) ? "" : $"/p:Configuration={configuration}";
+
     return type switch
     {
-      MSBuildProjectType.SDK => ("dotnet", $"msbuild \"{targetPath}\" /p:Configuration={configuration} {tfmArg} {args ?? ""}"),
-      MSBuildProjectType.VisualStudio => (await locator.GetVisualStudioMSBuildPath(), $"\"{targetPath}\" /p:Configuration={configuration} {tfmArg} {args ?? ""}"),
+      MSBuildProjectType.SDK => ("dotnet", $"msbuild \"{targetPath}\" {config} {tfmArg} {args ?? ""}"),
+      MSBuildProjectType.VisualStudio => (await locator.GetVisualStudioMSBuildPath(), $"\"{targetPath}\" {config} {tfmArg} {args ?? ""}"),
       _ => throw new InvalidOperationException("Unknown MSBuild type")
     };
   }
-
 }

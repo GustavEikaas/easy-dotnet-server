@@ -2,9 +2,11 @@ using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Infrastructure.Services;
+using Microsoft.Build.Locator;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
@@ -17,6 +19,10 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
     [Description("Show the Roslyn version and exit.")]
     [CommandOption("--version")]
     public bool ShowVersion { get; init; }
+
+    [Description("Use EasyDotnet analyzers (optional).")]
+    [CommandOption("--easy-dotnet-analyzer")]
+    public bool UseEasyDotnetAnalyzer { get; init; }
 
     [Description("Enable Roslynator analyzers (optional).")]
     [CommandOption("--roslynator")]
@@ -51,6 +57,11 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
       return await ShowRoslynVersion(roslynDllPath, cancellationToken);
     }
 
+    if (!CheckRequiredDotnetSdk())
+    {
+      return RoslynExitCodes.SDKOutdated;
+    }
+
     var roslynLogDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "EasyDotnet", "RoslynLogs");
@@ -70,6 +81,14 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
     if (settings.UseRoslynator)
     {
       foreach (var analyzer in RoslynLocator.GetRoslynatorAnalyzers())
+      {
+        startInfo.ArgumentList.Add("--extension");
+        startInfo.ArgumentList.Add(analyzer);
+      }
+    }
+    if (settings.UseEasyDotnetAnalyzer)
+    {
+      foreach (var analyzer in RoslynLocator.GetEasyDotnetAnalyzers())
       {
         startInfo.ArgumentList.Add("--extension");
         startInfo.ArgumentList.Add(analyzer);
@@ -143,5 +162,16 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
       AnsiConsole.WriteException(new Exception(stderr));
     }
     return proc.ExitCode;
+  }
+
+  private static bool CheckRequiredDotnetSdk()
+  {
+    MSBuildLocator.AllowQueryAllRuntimeVersions = true;
+    return MSBuildLocator.QueryVisualStudioInstances().Where(x => x.DiscoveryType == DiscoveryType.DotNetSdk).Any(x => x.Version >= new Version(10, 0));
+  }
+
+  private static class RoslynExitCodes
+  {
+    public const int SDKOutdated = 75;
   }
 }

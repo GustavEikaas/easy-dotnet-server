@@ -3,20 +3,32 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
+using EasyDotnet.Domain.Models.Client;
+using EasyDotnet.IDE.Notifications;
+using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.Utils;
-using EasyDotnet.Notifications;
+using EasyDotnet.Infrastructure.Services;
+using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Controllers.Initialize;
 
-public class InitializeController(IClientService clientService, IVisualStudioLocator locator, IMsBuildService msBuildService) : BaseController
+public class InitializeController(
+  IClientService clientService,
+  IVisualStudioLocator locator,
+  IMsBuildService msBuildService,
+  UpdateCheckerService updateCheckerService,
+  IProgressScopeFactory progressScopeFactory,
+  ILogger<InitializeController> logger) : BaseController
 {
   [JsonRpcMethod("initialize")]
   public async Task<InitializeResponse> Initialize(InitializeRequest request)
   {
+    using var progress = progressScopeFactory.Create("Initializing", "Initializing...");
     var assembly = Assembly.GetExecutingAssembly();
     var serverVersion = assembly.GetName().Version ?? throw new NullReferenceException("Server version");
 
@@ -41,14 +53,20 @@ public class InitializeController(IClientService clientService, IVisualStudioLoc
     clientService.ProjectInfo = request.ProjectInfo;
     clientService.ClientInfo = request.ClientInfo;
 
-    if (request.Options is not null)
+    clientService.ClientOptions = request.Options ?? new ClientOptions();
+    clientService.UseVisualStudio = clientService.ClientOptions.UseVisualStudio;
+
+    var debuggerOptions = clientService.ClientOptions.DebuggerOptions ?? new DebuggerOptions();
+    var binaryPath = debuggerOptions.BinaryPath ?? TryGetNetcoreDbgPath();
+
+    clientService.ClientOptions = clientService.ClientOptions with
     {
-      clientService.UseVisualStudio = request.Options.UseVisualStudio;
-      clientService.ClientOptions = request.Options;
-    }
+      DebuggerOptions = debuggerOptions with { BinaryPath = binaryPath }
+    };
 
     var supportsSingleFileExecution = msBuildService.QuerySdkInstallations().Any(x => x.Version.Major >= 10);
-
+    _ = updateCheckerService.CheckForUpdates(CancellationToken.None);
+    progress.Report("Initialized", 100);
     return new InitializeResponse(
         new ServerInfo("EasyDotnet", serverVersion.ToString()),
         new ServerCapabilities(GetRpcPaths(), GetRpcNotifications(), supportsSingleFileExecution),
@@ -68,13 +86,27 @@ public class InitializeController(IClientService clientService, IVisualStudioLoc
     }
   }
 
-  private static List<string> GetRpcPaths() =>
-      [.. AssemblyScanner.GetControllerTypes()
+  private string? TryGetNetcoreDbgPath()
+  {
+    try
+    {
+      var debuggerPath = NetCoreDbgLocator.GetNetCoreDbgPath();
+      logger.LogInformation("Using bundled netcoredg: {debuggerPath}", debuggerPath);
+      return debuggerPath;
+    }
+    catch (Exception e)
+    {
+      logger.LogError(e, "Failed to locate netcoredbg");
+    }
+    return null;
+  }
+
+  private static List<string> GetRpcPaths() => AssemblyScanner.GetControllerTypes()
           .SelectMany(rpcType =>
               rpcType.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public)
                   .Where(m => m.GetCustomAttribute<JsonRpcMethodAttribute>() is not null)
-                  .Select(m => m.GetCustomAttribute<JsonRpcMethodAttribute>()!.Name)
-          )];
+                  .Select(m => m.GetCustomAttribute<JsonRpcMethodAttribute>()!.Name)!
+          ).ToList()!;
 
   private static List<string> GetRpcNotifications() =>
       [.. AssemblyScanner.GetNotificationDispatchers()

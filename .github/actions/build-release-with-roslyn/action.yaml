@@ -9,11 +9,19 @@ inputs:
   roslynPackageVersion:
     description: 'NuGet package version for Roslyn LSP'
     required: true
-    default: '5.3.0-2.25560.18'
+    default: '5.3.0-2.25626.1'
   roslynOutputPath:
     description: 'Where to copy Roslyn DLLs inside project output'
     required: true
     default: './EasyDotnet.IDE/bin/Release/net8.0/Tools'
+  netcoredbgVersion:
+    description: 'netcoredbg release version'
+    required: true
+    default: '3.1.2-1054'
+  netcoredbgArmVersion:
+    description: '(Cliffback) netcoredbg ARM release version'
+    required: true
+    default: '3.1.2-1054'
 
 runs:
   using: "composite"
@@ -33,6 +41,17 @@ runs:
     - name: Build Release
       shell: bash
       run: dotnet build -c Release --no-restore
+
+
+    - name: Build and Copy Custom Analyzer
+      shell: bash
+      run: |
+        OUTPUT_PATH="${{ inputs.roslynOutputPath }}/Roslyn/Analyzers"
+
+        mkdir -p "$OUTPUT_PATH"
+        cp EasyDotnet.RoslynLanguageServices/bin/Release/net8.0/EasyDotnet.RoslynLanguageServices.dll "$OUTPUT_PATH/"
+        
+        echo "✓ Custom analyzer copied to $OUTPUT_PATH"
 
     - name: Download and Extract Roslyn DLLs
       shell: bash
@@ -58,3 +77,65 @@ runs:
 
         unzip -o artifacts/roslynator/roslynator.nupkg -d artifacts/roslynator/extracted
         cp artifacts/roslynator/extracted/analyzers/dotnet/roslyn4.7/cs/*.dll "$OUTPUT_PATH/Analyzers/"
+
+    - name: Download and Extract netcoredbg
+      shell: bash
+      run: |
+        NETCOREDBG_VERSION="${{ inputs.netcoredbgVersion }}"
+        NETCOREDBG_MACOS_ARM_VERSION="${{ inputs.netcoredbgArmVersion }}"
+
+        OUTPUT_PATH="${{ inputs.roslynOutputPath }}/netcoredbg"
+        ARTIFACTS_DIR="artifacts/netcoredbg"
+        
+        mkdir -p "$ARTIFACTS_DIR"
+        mkdir -p "$OUTPUT_PATH"
+        
+        declare -A platforms=(
+          ["linux-amd64"]="linux-x64"
+          ["linux-arm64"]="linux-arm64"
+          ["osx-amd64"]="osx-x64"
+          ["win64"]="win-x64"
+        )
+
+        # Download Samsung repo platforms
+        for platform in "${!platforms[@]}"; do
+          target_dir="${platforms[$platform]}"
+          echo "Downloading netcoredbg for $platform..."
+          
+          if [[ "$platform" == "win64" ]]; then
+            curl -L -o "$ARTIFACTS_DIR/netcoredbg-${platform}.zip" \
+              "https://github.com/Samsung/netcoredbg/releases/download/${NETCOREDBG_VERSION}/netcoredbg-${platform}.zip"
+            unzip -q "$ARTIFACTS_DIR/netcoredbg-${platform}.zip" -d "$ARTIFACTS_DIR/${platform}"
+          else
+            curl -L -o "$ARTIFACTS_DIR/netcoredbg-${platform}.tar.gz" \
+              "https://github.com/Samsung/netcoredbg/releases/download/${NETCOREDBG_VERSION}/netcoredbg-${platform}.tar.gz"
+            mkdir -p "$ARTIFACTS_DIR/${platform}"
+            tar -xzf "$ARTIFACTS_DIR/netcoredbg-${platform}.tar.gz" -C "$ARTIFACTS_DIR/${platform}"
+          fi
+          
+          mkdir -p "$OUTPUT_PATH/${target_dir}"
+          cp -r "$ARTIFACTS_DIR/${platform}/netcoredbg/"* "$OUTPUT_PATH/${target_dir}/"
+          echo "✓ Extracted netcoredbg to $OUTPUT_PATH/${target_dir}"
+        done
+
+        ARM_PLATFORM="osx-arm64"
+        ARM_TARGET_DIR="osx-arm64"
+        echo "Downloading netcoredbg (macOS ARM64) from Cliffback..."
+
+        DOWNLOAD_URL="https://github.com/Cliffback/netcoredbg-macOS-arm64.nvim/releases/download/${NETCOREDBG_MACOS_ARM_VERSION}/netcoredbg-osx-arm64.tar.gz"
+        DOWNLOAD_PATH="$ARTIFACTS_DIR/netcoredbg-${ARM_PLATFORM}.tar.gz"
+
+        curl -sSL -o "$DOWNLOAD_PATH" "$DOWNLOAD_URL"
+        mkdir -p "$ARTIFACTS_DIR/${ARM_PLATFORM}"
+
+        if file "$DOWNLOAD_PATH" | grep -qi 'gzip compressed'; then
+          tar -xzf "$DOWNLOAD_PATH" -C "$ARTIFACTS_DIR/${ARM_PLATFORM}"
+          mkdir -p "$OUTPUT_PATH/${ARM_TARGET_DIR}"
+          cp -r "$ARTIFACTS_DIR/${ARM_PLATFORM}/netcoredbg/"* "$OUTPUT_PATH/${ARM_TARGET_DIR}/"
+          echo "✓ Extracted netcoredbg (macOS ARM64) to $OUTPUT_PATH/${ARM_TARGET_DIR}"
+        else
+          echo "::error::Downloaded netcoredbg-osx-arm64.tar.gz is not a valid gzipped tarball!"
+          exit 1
+        fi
+
+        echo "All netcoredbg platforms bundled successfully!"

@@ -6,11 +6,16 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using DotNetOutdated.Core.Services;
 using EasyDotnet.Application.Interfaces;
+using EasyDotnet.Debugger;
+using EasyDotnet.IDE;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.Utils;
 using EasyDotnet.Infrastructure.Aspire;
+using EasyDotnet.Infrastructure.Editor;
+using EasyDotnet.Infrastructure.EntityFramework;
 using EasyDotnet.Infrastructure.Process;
 using EasyDotnet.Infrastructure.Services;
+using EasyDotnet.Infrastructure.Settings;
 using EasyDotnet.Services;
 using EasyDotnet.TestRunner.Extensions;
 using Microsoft.Extensions.DependencyInjection;
@@ -37,18 +42,29 @@ public static class DiModules
     services.AddMemoryCache();
     services.AddSingleton(jsonRpc);
     services.AddSingleton<IClientService, ClientService>();
-    services.AddSingleton<INetcoreDbgService, NetcoreDbgService>();
     services.AddSingleton<IVisualStudioLocator, VisualStudioLocator>();
     services.AddSingleton<IFileSystem, FileSystem>();
     services.AddSingleton<RoslynService>();
     services.AddSingleton<ISolutionService, SolutionService>();
     services.AddSingleton<IProcessQueue, ProcessQueue>();
     services.AddSingleton<TemplateEngineService>();
+    services.AddSingleton<IDebugSessionManager, DebugSessionManager>();
+    services.AddSingleton<IDebugOrchestrator, DebugOrchestrator>();
+    services.AddSingleton<IAppPathsService, AppPathsService>();
+    services.AddSingleton<UpdateCheckerService>();
+    services.AddSingleton<SettingsFileResolver>();
+    services.AddSingleton<SettingsSerializer>();
+    services.AddSingleton<SettingsService>();
+    services.AddSingleton<SettingsGarbageCollector>();
+    services.AddSingleton<IEditorProcessManagerService, EditorProcessManagerService>();
+    services.AddSingleton<IEditorService, EditorService>();
 
+    services.AddTransient<IProgressScopeFactory, ProgressScopeFactory>();
     services.AddTransient<IMsBuildService, MsBuildService>();
     services.AddTransient<IAspireService, AspireService>();
     services.AddTransient<IJsonCodeGenService, JsonCodeGenService>();
     services.AddTransient<UserSecretsService>();
+    services.AddTransient<EntityFrameworkService>();
     services.AddTransient<ILaunchProfileService, LaunchProfileService>();
     services.AddTransient<INotificationService, NotificationService>();
     services.AddTransient<NugetService>();
@@ -65,6 +81,7 @@ public static class DiModules
     services.AddSingleton<INuGetPackageResolutionService, NuGetPackageResolutionService>();
 
     services.AddTestRunner();
+    services.AddDebugger();
 
     AssemblyScanner.GetControllerTypes().ForEach(x => services.AddTransient(x));
 
