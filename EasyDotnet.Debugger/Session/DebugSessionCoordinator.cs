@@ -27,6 +27,7 @@ public class DebugSessionCoordinator(
 
   public void Start(
    string debuggerBinaryPath,
+   string args,
    Action<Exception> onProcessFailedToStart,
    Func<Task> onDispose,
    CancellationToken cancellationToken)
@@ -54,7 +55,7 @@ public class DebugSessionCoordinator(
 
         try
         {
-          processHost.Start(debuggerBinaryPath, "--interpreter=vscode");
+          processHost.Start(debuggerBinaryPath, args);
           _processStartedSource.SetResult(true);
           logger.LogInformation("Debugger process started successfully");
         }

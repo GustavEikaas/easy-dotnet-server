@@ -139,6 +139,21 @@ public class DebugOrchestrator(
     return service;
   }
 
+  private (string, string[]) ResolveBinaryPath(DotnetProject project)
+  {
+    if (project.UsingGodotNETSdk)
+    {
+      return ("godot", ["--path", project.ProjectDir ?? ".", "--dap-port", "5656"]);
+    }
+    var binaryPath = clientService.ClientOptions?.DebuggerOptions?.BinaryPath;
+    if (string.IsNullOrEmpty(binaryPath))
+    {
+      throw new InvalidOperationException("Failed to start debugger, no binary path provided");
+    }
+    return (binaryPath, ["--interpreter=vscode"]);
+
+  }
+
   private async Task<Debugger.DebugSession> StartDebugSessionInternalAsync(
     DebuggerStartRequest request,
     CancellationToken cancellationToken)
@@ -168,11 +183,7 @@ public class DebugOrchestrator(
                 : null)
           : null;
 
-      var binaryPath = clientService.ClientOptions?.DebuggerOptions?.BinaryPath;
-      if (string.IsNullOrEmpty(binaryPath))
-      {
-        throw new InvalidOperationException("Failed to start debugger, no binary path provided");
-      }
+      var (exe, args) = ResolveBinaryPath(project);
 
       var vsTestResult = StartVsTestIfApplicable(project, request.TargetPath);
 
@@ -190,7 +201,8 @@ public class DebugOrchestrator(
       try
       {
         session.Start(
-           binaryPath,
+           exe,
+           string.Join(' ', args),
            (ex) =>
            {
              editorService.DisplayError(ex.Message);

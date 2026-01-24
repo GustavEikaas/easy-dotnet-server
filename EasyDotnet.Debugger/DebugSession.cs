@@ -16,9 +16,10 @@ public class DebugSession : IAsyncDisposable
 
   public void Start(
     string binaryPath,
+    string args,
     Action<Exception> onProcessFailedToStart,
     Func<Task> onDispose,
-    CancellationToken cancellationToken) => _coordinator.Start(binaryPath, onProcessFailedToStart, onDispose, cancellationToken);
+    CancellationToken cancellationToken) => _coordinator.Start(binaryPath, args, onProcessFailedToStart, onDispose, cancellationToken);
 
   public async ValueTask DisposeAsync() => await _coordinator.DisposeAsync();
   public async ValueTask ForceDisposeAsync() => await _coordinator.ForceDisposeAsync();
