@@ -19,6 +19,10 @@ public static class JsonRpcExtensions
       return new NoOpResponse();
     });
 
+    rpcServer.AddLocalRpcMethod("testrunner/run", async (string nodeId, CancellationToken cancellationToken) => await runner.RunTestsAsync(new(nodeId), cancellationToken));
+
+    rpcServer.AddLocalRpcMethod("testrunner/debug", async (string nodeId, CancellationToken cancellationToken) => await runner.DebugTestsAsync(new(nodeId), cancellationToken));
+
     rpcServer.AddLocalRpcMethod("testrunner/go-to-test-source", async (string nodeId, CancellationToken ct) =>
     {
       var editor = serviceProvider.GetRequiredService<IEditorService>();
