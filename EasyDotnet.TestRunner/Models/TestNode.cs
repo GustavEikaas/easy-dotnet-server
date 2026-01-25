@@ -1,5 +1,3 @@
-using Newtonsoft.Json;
-
 namespace EasyDotnet.TestRunner.Models;
 
 public record TestNode(
@@ -8,7 +6,9 @@ public record TestNode(
     string? ParentId,
     string? FilePath,
     int? LineNumber,
-    NodeType Type);
+    NodeType Type,
+    string? ProjectId
+);
 
 public abstract record NodeType
 {
@@ -38,6 +38,7 @@ public static class ProjectTfmExtensions
         ParentId: solutionNodeId,
         FilePath: tfm.ProjectFilePath,
         LineNumber: null,
-        Type: new NodeType.Project()
+        Type: new NodeType.Project(),
+        ProjectId: null
     );
 }

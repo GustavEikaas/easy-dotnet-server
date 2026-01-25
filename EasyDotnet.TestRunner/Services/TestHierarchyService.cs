@@ -21,10 +21,10 @@ public class TestHierarchyService : ITestHierarchyService
     CollapseSingleChildNamespaces(projectNodeId, registry);
   }
 
-  private void ProcessMethodGroup(string rootId, IGrouping<string, DiscoveredTest> group, ITestSessionRegistry registry)
+  private void ProcessMethodGroup(string projectId, IGrouping<string, DiscoveredTest> group, ITestSessionRegistry registry)
   {
     var firstTest = group.First();
-    var parentId = rootId;
+    var parentId = projectId;
     var currentNamespace = "";
 
     foreach (var part in firstTest.NamespacePath)
@@ -40,7 +40,8 @@ public class TestHierarchyService : ITestHierarchyService
             ParentId: parentId,
             FilePath: null,
             LineNumber: null,
-            Type: new NodeType.Namespace()
+            Type: new NodeType.Namespace(),
+            ProjectId: projectId
         ));
       }
       parentId = nsNodeId;
@@ -62,7 +63,8 @@ public class TestHierarchyService : ITestHierarchyService
             ParentId: parentId,
             FilePath: firstTest.FilePath,
             LineNumber: null,
-            Type: new NodeType.TestGroup()
+            Type: new NodeType.TestGroup(),
+            ProjectId: projectId
         ));
       }
 
@@ -76,7 +78,8 @@ public class TestHierarchyService : ITestHierarchyService
             ParentId: groupUniqueId,
             FilePath: test.FilePath,
             LineNumber: test.LineNumber,
-            Type: new NodeType.Subcase()
+            Type: new NodeType.Subcase(),
+            ProjectId: projectId
         ));
       }
     }
@@ -89,7 +92,8 @@ public class TestHierarchyService : ITestHierarchyService
           ParentId: parentId,
           FilePath: firstTest.FilePath,
           LineNumber: firstTest.LineNumber,
-          Type: new NodeType.TestMethod()
+          Type: new NodeType.TestMethod(),
+          ProjectId: projectId
       ));
     }
   }

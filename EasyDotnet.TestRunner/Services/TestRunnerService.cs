@@ -105,7 +105,87 @@ public class TestRunnerService(
   public async Task RunTestsAsync(RunRequest request, CancellationToken ct)
   {
     using var _ = registry.AcquireLock();
-    throw new NotImplementedException();
+
+    var targetNode = registry.GetNode(request.NodeId);
+    if (targetNode is null) return;
+
+    if (targetNode.Type is NodeType.Solution)
+    {
+      foreach (var ctx in _projectContexts)
+      {
+        await RunProjectBatchAsync(ctx, null, ct);
+      }
+      return;
+    }
+
+    if (targetNode.Type is NodeType.Project)
+    {
+      var ctx = _projectContexts.FirstOrDefault(p => p.Id == targetNode.Id);
+      if (ctx != null)
+      {
+        await RunProjectBatchAsync(ctx, null, ct);
+      }
+      return;
+    }
+
+    if (targetNode.ProjectId is null) return;
+
+    var projectCtx = _projectContexts.FirstOrDefault(p => p.Id == targetNode.ProjectId);
+    if (projectCtx is null) return;
+
+    var testIds = new List<string>();
+
+    if (targetNode.Type is NodeType.TestMethod or NodeType.Subcase)
+    {
+      testIds.Add(targetNode.Id);
+    }
+    else
+    {
+      testIds = [.. registry.GetDescendants(targetNode.Id)
+          .Where(n => n.Type is NodeType.TestMethod or NodeType.Subcase)
+          .Select(n => n.Id)];
+    }
+
+    if (testIds.Count > 0)
+    {
+      await RunProjectBatchAsync(projectCtx, testIds, ct);
+    }
+  }
+
+  private async Task RunProjectBatchAsync(ProjectTfm context, List<string>? testIds, CancellationToken ct)
+  {
+    try
+    {
+      var props = await msBuildService.GetOrSetProjectPropertiesAsync(
+           context.ProjectFilePath, context.TargetFramework, cancellationToken: ct);
+
+      if (string.IsNullOrEmpty(props.TargetPath))
+      {
+        registry.UpdateStatus(context.Id, new TestNodeStatus.Failed("0ms", "Build failed"));
+        return;
+      }
+
+      IEnumerable<Guid>? guidIds = testIds?
+          .Select(id => Guid.TryParse(id, out var g) ? g : Guid.Empty)
+          .Where(g => g != Guid.Empty)
+          .ToList();
+
+      if (guidIds is null)
+      {
+        throw new InvalidOperationException("No Guids");
+      }
+
+      var results = vsTestService.RunTests(props.TargetPath, guidIds.ToArray());
+
+      foreach (var result in results)
+      {
+        registry.RegisterTestResult(result);
+      }
+    }
+    catch (Exception ex)
+    {
+      registry.UpdateStatus(context.Id, new TestNodeStatus.Failed("0ms", ex.Message));
+    }
   }
 
   public async Task DebugTestsAsync(DebugRequest request, CancellationToken ct)
@@ -120,6 +200,7 @@ public class TestRunnerService(
       ParentId: null,
       FilePath: solutionFilePath,
       LineNumber: null,
-      Type: new NodeType.Solution()
+      Type: new NodeType.Solution(),
+      ProjectId: null
   );
 }

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using EasyDotnet.Domain.Models.Test;
 using EasyDotnet.TestRunner.Abstractions;
 using EasyDotnet.TestRunner.Models;
 using EasyDotnet.TestRunner.Notifications;
@@ -10,6 +11,7 @@ public class TestSessionRegistry(JsonRpc jsonRpc) : ITestSessionRegistry
 {
   private readonly ConcurrentDictionary<string, TestNode> _nodes = new();
   private readonly ConcurrentDictionary<string, TestNodeStatus> _statuses = new();
+  private readonly ConcurrentDictionary<string, TestRunResult> _results = new();
   private readonly object _stateLock = new();
   private bool _isLoading;
 
@@ -43,12 +45,36 @@ public class TestSessionRegistry(JsonRpc jsonRpc) : ITestSessionRegistry
     }
   }
 
+  public IEnumerable<TestNode> GetChildren(string parentId) => _nodes.Values.Where(n => n.ParentId == parentId);
+
+  public IEnumerable<TestNode> GetDescendants(string parentId)
+  {
+    foreach (var child in GetChildren(parentId))
+    {
+      yield return child;
+
+      foreach (var descendant in GetDescendants(child.Id))
+      {
+        yield return descendant;
+      }
+    }
+  }
+
   public void RegisterNode(TestNode node)
   {
     _nodes[node.Id] = node;
     _statuses.TryAdd(node.Id, new TestNodeStatus.Idle());
     _ = jsonRpc.NotifyWithParameterObjectAsync("registerTest", node);
   }
+
+  public void RegisterTestResult(TestRunResult result)
+  {
+    _results[result.Id] = result;
+    var status = MapToStatus(result);
+    UpdateStatus(result.Id, status);
+  }
+
+  public TestRunResult? GetTestResult(string nodeId) => _results.TryGetValue(nodeId, out var result) ? result : null;
 
   public void UpdateStatus(string nodeId, TestNodeStatus newStatus)
   {
@@ -166,6 +192,20 @@ public class TestSessionRegistry(JsonRpc jsonRpc) : ITestSessionRegistry
     }
 
     return rawStatus with { Actions = actions };
+  }
+
+  private static TestNodeStatus MapToStatus(TestRunResult result)
+  {
+    var ms = result.Duration ?? 0;
+    var durationDisplay = ms < 1000 ? $"{ms}ms" : $"{ms / 1000d:0.##}s";
+
+    return result.Outcome?.ToLowerInvariant() switch
+    {
+      "passed" => new TestNodeStatus.Passed(durationDisplay),
+      "failed" => new TestNodeStatus.Failed(durationDisplay, string.Join("\n", result.ErrorMessage ?? [])),
+      "skipped" => new TestNodeStatus.Skipped("Skipped"),
+      _ => new TestNodeStatus.Skipped(result.Outcome ?? "Unknown")
+    };
   }
 
   private sealed class RunnerLock(TestSessionRegistry registry) : IDisposable
