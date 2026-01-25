@@ -1,3 +1,4 @@
+using EasyDotnet.Application.Interfaces;
 using EasyDotnet.TestRunner.Services;
 using Microsoft.Extensions.DependencyInjection;
 using StreamJsonRpc;
@@ -16,6 +17,19 @@ public static class JsonRpcExtensions
     {
       await runner.InitializeAsync(solutionFilePath, ct);
       return new NoOpResponse();
+    });
+
+    rpcServer.AddLocalRpcMethod("testrunner/go-to-test-source", async (string nodeId, CancellationToken ct) =>
+    {
+      var editor = serviceProvider.GetRequiredService<IEditorService>();
+      var node = runner.GetNode(nodeId);
+      if (node is null || node.FilePath is null)
+      {
+        await editor.DisplayMessage("TestNode has no filepath");
+        return;
+      }
+
+      await editor.RequestOpenBuffer(node.FilePath, node.LineNumber);
     });
 
     rpcServer.AddLocalRpcMethod("testrunner/discover", async (CancellationToken ct) =>

@@ -48,7 +48,7 @@ public class TestRunnerService(
         var context = new ProjectTfm(
             Id: Guid.NewGuid().ToString(),
             ProjectFilePath: projectPath,
-            DisplayName: projectName, // Or $"{projectName} ({tfm})"
+            DisplayName: projectName,
             TargetFramework: tfm!
         );
 
@@ -61,6 +61,8 @@ public class TestRunnerService(
     registry.UpdateStatus(_solutionNode.Id, new TestNodeStatus.Idle());
     _isInitialized = true;
   }
+
+  public TestNode? GetNode(string nodeId) => registry.GetNode(nodeId);
 
   public async Task StartDiscoveryAsync(CancellationToken ct)
   {

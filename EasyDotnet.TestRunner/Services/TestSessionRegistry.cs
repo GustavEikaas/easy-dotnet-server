@@ -56,10 +56,12 @@ public class TestSessionRegistry(JsonRpc jsonRpc) : ITestSessionRegistry
 
     _statuses[nodeId] = newStatus;
 
-    _ = jsonRpc.NotifyWithParameterObjectAsync("updateStatus", new TestNodeStatusUpdateNotification(nodeId, newStatus));
+    var withActions = CalculateStatusWithActions(nodeId, newStatus);
+    _ = jsonRpc.NotifyWithParameterObjectAsync("updateStatus", new TestNodeStatusUpdateNotification(nodeId, withActions));
 
     BroadcastGlobalStatus();
   }
+
   public bool Contains(string nodeId) => _nodes.ContainsKey(nodeId);
 
   public bool TryGetNode(string nodeId, out TestNode? node) => _nodes.TryGetValue(nodeId, out node);
@@ -131,6 +133,39 @@ public class TestSessionRegistry(JsonRpc jsonRpc) : ITestSessionRegistry
     );
 
     _ = jsonRpc.NotifyWithParameterObjectAsync("statusChanged", status);
+  }
+
+  private TestNodeStatus CalculateStatusWithActions(string nodeId, TestNodeStatus rawStatus)
+  {
+    var node = GetNode(nodeId);
+    if (node == null) return rawStatus;
+
+    var actions = new List<TestAction>
+    {
+      TestAction.Run
+    };
+
+    if (node.Type is NodeType.TestMethod or NodeType.Subcase)
+    {
+      actions.Add(TestAction.Debug);
+    }
+
+    if (!string.IsNullOrEmpty(node.FilePath))
+    {
+      actions.Add(TestAction.GoToSource);
+    }
+
+    if (rawStatus is TestNodeStatus.Failed or TestNodeStatus.Passed)
+    {
+      actions.Add(TestAction.PeekOutput);
+    }
+
+    if (node.Type is NodeType.Project or NodeType.Solution)
+    {
+      actions.Add(TestAction.Refresh);
+    }
+
+    return rawStatus with { Actions = actions };
   }
 
   private sealed class RunnerLock(TestSessionRegistry registry) : IDisposable

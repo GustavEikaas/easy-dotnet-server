@@ -10,9 +10,9 @@ public record TestNode(
     int? LineNumber,
     NodeType Type);
 
-[JsonConverter(typeof(UnionTypeNameConverter<NodeType>))]
 public abstract record NodeType
 {
+  public string Type => GetType().Name;
   public sealed record Solution : NodeType;
   public sealed record Project : NodeType;
   public sealed record Namespace : NodeType;

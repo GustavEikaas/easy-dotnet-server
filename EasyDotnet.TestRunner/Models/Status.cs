@@ -1,10 +1,23 @@
 using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 
 namespace EasyDotnet.TestRunner.Models;
 
-[JsonConverter(typeof(UnionTypeNameConverter<TestNodeStatus>))]
+[JsonConverter(typeof(StringEnumConverter))]
+public enum TestAction
+{
+  Run,
+  Debug,
+  PeekOutput,
+  GoToSource,
+  Refresh
+}
+
 public abstract record TestNodeStatus
 {
+  public List<TestAction> Actions { get; init; } = [];
+  public string Type => GetType().Name;
+
   public sealed record Idle : TestNodeStatus;
   public sealed record Queued : TestNodeStatus;
   public sealed record Building : TestNodeStatus;
