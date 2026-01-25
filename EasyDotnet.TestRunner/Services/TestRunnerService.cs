@@ -16,7 +16,6 @@ public class TestRunnerService(JsonRpc jsonRpc, IMsBuildService msBuildService, 
   private readonly Dictionary<string, NodeRegistry> _projectTfmRegistries = [];
   private bool _isInitialized;
 
-
   public async Task InitializeAsync(string solutionFilePath, CancellationToken cancellationToken)
   {
     if (_isInitialized) return;

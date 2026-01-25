@@ -7,9 +7,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
+using EasyDotnet.Domain.Models.Client;
+using EasyDotnet.Domain.Models.Test;
+using EasyDotnet.Infrastructure.Settings;
 using EasyDotnet.MsBuild;
 using EasyDotnet.MTP;
 using EasyDotnet.Services;
+using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Controllers.Test;
@@ -18,7 +22,7 @@ public class TestController(
   ILogger<TestController> logger,
   IClientService clientService,
   MtpService mtpService,
-  VsTestService vsTestService,
+  IVsTestService vsTestService,
   IMsBuildService msBuildService,
   IFileSystem fileSystem,
   SettingsService settingsService,
@@ -84,7 +88,7 @@ public class TestController(
     }
     else
     {
-      return (await vsTestService.RunTests(project.TargetPath!, [.. filter.Select(x => Guid.Parse(x.Uid))], runSettings, token)).ToBatchedAsyncEnumerable(30);
+      return vsTestService.RunTests(project.TargetPath!, [.. filter.Select(x => Guid.Parse(x.Uid))]).ToBatchedAsyncEnumerable(30);
     }
   }
 

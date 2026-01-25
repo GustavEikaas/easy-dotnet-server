@@ -1,5 +1,3 @@
-using EasyDotnet.TestRunner.Models;
-using EasyDotnet.TestRunner.Notifications;
 using EasyDotnet.TestRunner.Requests;
 
 namespace EasyDotnet.TestRunner.Services;

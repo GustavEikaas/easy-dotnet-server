@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using EasyDotnet.Application.Interfaces;
@@ -194,14 +190,14 @@ public static class TestCaseExtensions
   }
 
 
-  public static TestRunResult ToTestRunResult(this Microsoft.VisualStudio.TestPlatform.ObjectModel.TestResult x) => new()
+  public static TestRunResult ToTestRunResult(this TestResult x) => new()
   {
     Duration = (long?)x.Duration.TotalMilliseconds,
-    StackTrace = (x.ErrorStackTrace?.Split(Environment.NewLine) ?? []),
+    StackTrace = x.ErrorStackTrace?.Split(Environment.NewLine) ?? [],
     ErrorMessage = x.ErrorMessage?.Split(Environment.NewLine) ?? [],
     Id = x.TestCase.Id.ToString(),
     Outcome = GetTestOutcome(x.Outcome),
-    StdOut = (x.GetStandardOutput()?.Split(Environment.NewLine) ?? [])
+    StdOut = x.GetStandardOutput()?.Split(Environment.NewLine) ?? []
   };
 
   public static string GetTestOutcome(TestOutcome outcome) => outcome switch
@@ -214,6 +210,6 @@ public static class TestCaseExtensions
     _ => "",
   };
 
-  private static string? GetStandardOutput(this Microsoft.VisualStudio.TestPlatform.ObjectModel.TestResult testResult)
+  private static string? GetStandardOutput(this TestResult testResult)
     => testResult.Messages.FirstOrDefault(message => message.Category == TestResultMessage.StandardOutCategory)?.Text;
 }
