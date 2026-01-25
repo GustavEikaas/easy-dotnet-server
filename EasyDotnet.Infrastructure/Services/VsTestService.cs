@@ -175,17 +175,28 @@ internal class TestSessionHandler : ITestSessionEventsHandler
 
 public static class TestCaseExtensions
 {
-  public static DiscoveredTest ToDiscoveredTest(this TestCase x)
+  public static DiscoveredTest ToDiscoveredTest(this TestCase testCase)
   {
-    var name = x.DisplayName.Contains('.') ? x.DisplayName : x.FullyQualifiedName;
-    return new()
+    var displayName = testCase.DisplayName;
+
+    if (displayName == testCase.FullyQualifiedName && displayName.Contains('.'))
     {
-      Id = x.Id.ToString(),
-      Namespace = x.FullyQualifiedName,
-      Name = name,
-      FilePath = x.CodeFilePath?.Replace("\\", "/"),
-      LineNumber = x.LineNumber,
-      DisplayName = x.DisplayName
+      displayName = displayName.Split('.').Last();
+    }
+    var parts = testCase.FullyQualifiedName.Split('.', StringSplitOptions.RemoveEmptyEntries);
+    var namespacePath = parts.Length > 0 ? parts[..^1] : [];
+
+    var (_, arguments) = ParseArguments(testCase.FullyQualifiedName);
+
+    return new DiscoveredTest
+    {
+      Id = testCase.Id.ToString(),
+      FullyQualifiedName = testCase.FullyQualifiedName,
+      Arguments = arguments,
+      NamespacePath = namespacePath,
+      DisplayName = displayName,
+      FilePath = testCase.CodeFilePath?.Replace("\\", "/"),
+      LineNumber = testCase.LineNumber
     };
   }
 
@@ -212,4 +223,19 @@ public static class TestCaseExtensions
 
   private static string? GetStandardOutput(this TestResult testResult)
     => testResult.Messages.FirstOrDefault(message => message.Category == TestResultMessage.StandardOutCategory)?.Text;
+
+  private static (string Name, string? Args) ParseArguments(string rawName)
+  {
+    var start = rawName.IndexOf('(');
+    var end = rawName.LastIndexOf(')');
+
+    if (start >= 0 && end > start && end == rawName.Length - 1)
+    {
+      var args = rawName[start..(end + 1)];
+
+      return (rawName, args);
+    }
+
+    return (rawName, null);
+  }
 }

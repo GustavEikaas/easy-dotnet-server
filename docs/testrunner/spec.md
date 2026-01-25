@@ -720,70 +720,16 @@ Here's the full section ready for copy/paste into your RFC:
 
 ## **8. Duplicate Requests**
 
-A node may have **at most one active operation at a time**.
-If a client sends a second long-running request (`testrunner/run`, `testrunner/debug`, `testrunner/invalidate`) for the **same `id`** while an operation is already in progress for that node, the server MUST apply one of the following behaviors.
+Testrunner can only have one client-initiated "unit of work" performed at each time
 
-### **8.1 Default Behavior: Immediate Rejection**
+e.g discovery should lock UI.
 
-The server MUST reject the new request with an error:
+if  a user runs a testnode it should block the UI until completed
 
-```json
-{
-  "jsonrpc": "2.0",
-  "id": <new-request-id>,
-  "error": {
-    "code": -32001,
-    "message": "Operation already in progress for this node"
-  }
-}
+
+There should be a top level testrunner status defined as 
+
+
+```cs
+public record TestRunnerStatus(bool IsLoading, OverallStatusEnum OverallStatus, int TotalPassed, int TotalFailed, int TotalCancelled);
 ```
-
-The server MUST NOT alter the ongoing operation, and MUST NOT send any additional status updates.
-
-This behavior ensures that nodes cannot enter contradictory states.
-
----
-
-### **8.2 Optional Behavior: Automatic Cancellation of Previous Request**
-
-If the server supports “latest request wins” semantics, the following sequence applies:
-
-1. Server cancels the currently active request for that node by sending:
-
-```json
-updateStatus { id: "<node>", status: "cancelled" }
-```
-
-2. The server responds to the cancelled request with JSON-RPC error `-32800`.
-
-3. The server resets the node to idle state:
-
-```json
-updateStatus { id: "<node>", status: null }
-```
-
-4. The server begins executing the new request normally.
-
-This behavior is OPTIONAL and MUST be explicitly enabled by the server implementation.
-
----
-
-### **8.3 Duplicate Request Matching**
-
-Two requests are considered duplicates **only if**:
-
-```
-params.id === params.id
-```
-
-Requests for different nodes are never duplicates, even if they affect some of the same ancestors or descendants.
-
----
-
-### **8.4 Final States Do Not Block New Requests**
-
-If a node is in a final completed state (`"success"`, `"failed"`, `"cancelled"`) but has no active request, new requests MUST always be accepted.
-
----
-
-If you'd like, I can update the entire RFC document with this section fully integrated and the table of contents refreshed.

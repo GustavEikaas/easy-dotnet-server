@@ -1,4 +1,4 @@
-using EasyDotnet.MTP.RPC.Models;
+using EasyDotnet.Domain.Models.MTP;
 
 using Newtonsoft.Json;
 

@@ -2,7 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using EasyDotnet.MTP.RPC.Models;
+using EasyDotnet.Domain.Models.MTP;
 using Newtonsoft.Json;
 using StreamJsonRpc;
 
