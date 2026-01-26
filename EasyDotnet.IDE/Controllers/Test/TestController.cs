@@ -22,7 +22,6 @@ public class TestController(
   ILogger<TestController> logger,
   IClientService clientService,
   MtpService mtpService,
-  IVsTestService vsTestService,
   IMsBuildService msBuildService,
   IFileSystem fileSystem,
   SettingsService settingsService,
@@ -88,7 +87,8 @@ public class TestController(
     }
     else
     {
-      return vsTestService.RunTests(project.TargetPath!, [.. filter.Select(x => Guid.Parse(x.Uid))]).ToBatchedAsyncEnumerable(30);
+      throw new NotImplementedException();
+      // return (await vsTestService.RunTestsAsync(project.TargetPath!, [.. filter.Select(x => Guid.Parse(x.Uid))], CancellationToken.None)).ToBatchedAsyncEnumerable(30);
     }
   }
 

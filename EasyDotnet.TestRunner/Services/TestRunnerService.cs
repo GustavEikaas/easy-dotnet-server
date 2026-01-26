@@ -165,19 +165,9 @@ public class TestRunnerService(
         return;
       }
 
-      IEnumerable<Guid>? guidIds = testIds?
-          .Select(id => Guid.TryParse(id, out var g) ? g : Guid.Empty)
-          .Where(g => g != Guid.Empty)
-          .ToList();
+      var guidIds = testIds?.Select(Guid.Parse).ToList();
 
-      if (guidIds is null)
-      {
-        throw new InvalidOperationException("No Guids");
-      }
-
-      var results = vsTestService.RunTests(props.TargetPath, guidIds.ToArray());
-
-      foreach (var result in results)
+      await foreach (var result in vsTestService.RunTestsAsync(props.TargetPath, guidIds, ct))
       {
         registry.RegisterTestResult(result);
       }

@@ -49,8 +49,74 @@ public class VsTestService(IMsBuildService msBuildService, ILogger<VsTestService
   private readonly VsTestOperationQueue _queue = new();
 
   public IAsyncEnumerable<DiscoveredTest> DiscoverAsync(string[] dllPaths, CancellationToken ct)
-          => RunQueuedDiscovery(dllPaths, ct);
+        => RunQueuedDiscovery(dllPaths, ct);
 
+  public IAsyncEnumerable<TestRunResult> RunTestsAsync(string dllPath, IEnumerable<Guid>? testIds, CancellationToken ct)
+        => RunQueuedTestRun(dllPath, testIds, ct);
+
+  private async IAsyncEnumerable<TestRunResult> RunQueuedTestRun(
+          string dllPath,
+          IEnumerable<Guid>? testIds,
+          [EnumeratorCancellation] CancellationToken ct)
+  {
+    var channel = Channel.CreateUnbounded<TestRunResult>();
+
+    // 1. Start the Producer in the background (so we don't block the 'yield return' loop)
+    _ = Task.Run(async () =>
+    {
+      try
+      {
+        // Enqueue ensures we respect the lock (one VSTest op at a time)
+        await _queue.Enqueue(() =>
+            {
+              var vsTestPath = GetVsTestPath();
+              var wrapper = new VsTestConsoleWrapper(vsTestPath);
+              var session = new TestSessionHandler();
+
+              // Wire up our streaming handler
+              var handler = new StreamedTestRunHandler(channel);
+
+              var options = new TestPlatformOptions { TestCaseFilter = null };
+
+              // 2. Determine Selection Logic
+              // Note: Ideally we pass TestCase objects, but constructing a Filter string is easier 
+              // if we only have IDs. Most adapters support "Id=..." or "FullyQualifiedName=..."
+              // If testIds is null, we run everything.
+              if (testIds != null && testIds.Any())
+              {
+                // Create a filter: "Id=guid1|Id=guid2"
+                // Note: This relies on the Test Adapter supporting ID filtering. 
+                // If strict TestCase objects are required, we would need to store/retrieve FQN.
+                var filter = string.Join("|", testIds.Select(id => $"Id={id}"));
+                wrapper.RunTests(new[] { dllPath }, null, new TestPlatformOptions { TestCaseFilter = filter }, session.TestSessionInfo, handler);
+              }
+              else
+              {
+                // Run All
+                wrapper.RunTests(new[] { dllPath }, null, options, session.TestSessionInfo, handler);
+              }
+
+              return Task.CompletedTask;
+            });
+      }
+      catch (Exception ex)
+      {
+        // Propagate crash to the consumer
+        channel.Writer.TryComplete(ex);
+      }
+      finally
+      {
+        // Ensure we close the stream
+        channel.Writer.TryComplete();
+      }
+    }, ct);
+
+    // 3. Consume the stream immediately
+    await foreach (var item in channel.Reader.ReadAllAsync(ct))
+    {
+      yield return item;
+    }
+  }
 
   private async IAsyncEnumerable<DiscoveredTest> RunQueuedDiscovery(
       string[] dllPaths,
@@ -138,26 +204,47 @@ public sealed class StreamedDiscoveryHandler(Channel<DiscoveredTest> channel, IL
   public void HandleRawMessage(string rawMessage) { }
 }
 
-
-internal sealed class TestRunHandler() : ITestRunEventsHandler
+internal sealed class StreamedTestRunHandler(Channel<TestRunResult> channel) : ITestRunEventsHandler
 {
-  public List<TestResult> Results = [];
-
-
-  public void HandleLogMessage(TestMessageLevel level, string? message) { }
-
-  public void HandleRawMessage(string rawMessage) { }
-
-  public void HandleTestRunComplete(TestRunCompleteEventArgs testRunCompleteArgs, TestRunChangedEventArgs? lastChunkArgs, ICollection<AttachmentSet>? runContextAttachments, ICollection<string>? executorUris) { }
-  public void HandleTestRunStatsChange(TestRunChangedEventArgs? testRunChangedArgs)
+  public void HandleTestRunStatsChange(TestRunChangedEventArgs? args)
   {
-    if (testRunChangedArgs?.NewTestResults is not null)
+    // This event fires frequently as tests finish
+    if (args?.NewTestResults != null)
     {
-      Results.AddRange(testRunChangedArgs.NewTestResults);
+      foreach (var result in args.NewTestResults)
+      {
+        channel.Writer.TryWrite(result.ToTestRunResult());
+      }
     }
   }
 
-  public int LaunchProcessWithDebuggerAttached(TestProcessStartInfo testProcessStartInfo) => throw new NotImplementedException();
+  public void HandleTestRunComplete(
+      TestRunCompleteEventArgs args,
+      TestRunChangedEventArgs? lastChunkArgs,
+      ICollection<AttachmentSet>? runContextAttachments,
+      ICollection<string>? executorUris)
+  {
+    // Handle any stragglers in the last chunk
+    if (lastChunkArgs?.NewTestResults != null)
+    {
+      foreach (var result in lastChunkArgs.NewTestResults)
+      {
+        channel.Writer.TryWrite(result.ToTestRunResult());
+      }
+    }
+
+    // We do NOT complete the writer here strictly; the Service try/finally block does it for safety.
+    // But doing it here is also fine.
+  }
+
+  public void HandleLogMessage(TestMessageLevel level, string? message)
+  {
+    // Optional: Pipe logs to logger
+    // if (level == TestMessageLevel.Error) log.LogError(message);
+  }
+
+  public void HandleRawMessage(string rawMessage) { }
+  public int LaunchProcessWithDebuggerAttached(TestProcessStartInfo testProcessStartInfo) => -1;
 }
 
 
