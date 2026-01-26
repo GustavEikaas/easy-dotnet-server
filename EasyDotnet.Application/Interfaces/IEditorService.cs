@@ -10,7 +10,7 @@ public interface IEditorService
   Task DisplayWarning(string message);
   Task<bool> RequestConfirmation(string prompt, bool defaultValue);
   Task<SelectionOption[]?> RequestMultiSelection(string prompt, SelectionOption[] choices);
-  Task<bool> RequestOpenBuffer(string path);
+  Task<bool> RequestOpenBuffer(string path, int? line);
   Task<Guid> RequestRunCommand(RunCommand command);
   Task<SelectionOption?> RequestSelection(string prompt, SelectionOption[] choices, string? defaultSelectionId = null);
   Task<bool> RequestSetBreakpoint(string path, int lineNumber);

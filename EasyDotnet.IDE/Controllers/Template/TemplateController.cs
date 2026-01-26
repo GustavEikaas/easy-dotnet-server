@@ -57,7 +57,7 @@ public class TemplateController(TemplateEngineService templateEngineService, IEd
 
     if (programFile != null)
     {
-      await editorService.RequestOpenBuffer(Path.GetFullPath(programFile));
+      await editorService.RequestOpenBuffer(Path.GetFullPath(programFile), line: null);
     }
   }
 }

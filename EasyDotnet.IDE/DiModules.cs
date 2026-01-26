@@ -17,6 +17,7 @@ using EasyDotnet.Infrastructure.Process;
 using EasyDotnet.Infrastructure.Services;
 using EasyDotnet.Infrastructure.Settings;
 using EasyDotnet.Services;
+using EasyDotnet.TestRunner.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog;
@@ -67,7 +68,7 @@ public static class DiModules
     services.AddTransient<ILaunchProfileService, LaunchProfileService>();
     services.AddTransient<INotificationService, NotificationService>();
     services.AddTransient<NugetService>();
-    services.AddSingleton<VsTestService>();
+    services.AddTransient<IVsTestService, VsTestService>();
     services.AddTransient<MtpService>();
     services.AddTransient<OutdatedService>();
 
@@ -79,6 +80,7 @@ public static class DiModules
     services.AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>();
     services.AddSingleton<INuGetPackageResolutionService, NuGetPackageResolutionService>();
 
+    services.AddTestRunner();
     services.AddDebugger();
 
     AssemblyScanner.GetControllerTypes().ForEach(x => services.AddTransient(x));

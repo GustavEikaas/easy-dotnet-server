@@ -2,11 +2,12 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using EasyDotnet.IDE.Utils;
+using EasyDotnet.TestRunner.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using Newtonsoft.Json.Serialization;
 using StreamJsonRpc;
 
-namespace EasyDotnet;
+namespace EasyDotnet.IDE;
 
 public static class JsonRpcServerBuilder
 {
@@ -18,6 +19,7 @@ public static class JsonRpcServerBuilder
 
     var sp = buildServiceProvider is not null ? buildServiceProvider(jsonRpc, logLevel ?? SourceLevels.Off) : DiModules.BuildServiceProvider(jsonRpc, logLevel ?? SourceLevels.Off);
     RegisterControllers(jsonRpc, sp);
+    jsonRpc.MapTestRunnerEndpoints(sp);
 #if DEBUG
     jsonRpc.TraceSource.Switch.Level = SourceLevels.Verbose;
 #endif
@@ -26,10 +28,9 @@ public static class JsonRpcServerBuilder
 
   private static JsonMessageFormatter CreateJsonMessageFormatter() => new()
   {
-    JsonSerializer = { ContractResolver = new DefaultContractResolver
-            {
-                NamingStrategy = new CamelCaseNamingStrategy()
-            }}
+    JsonSerializer = {
+      ContractResolver = new DefaultContractResolver { NamingStrategy = new CamelCaseNamingStrategy() }
+    }
   };
 
   private static void RegisterControllers(JsonRpc jsonRpc, IServiceProvider provider) => AssemblyScanner.GetControllerTypes().ForEach(x => jsonRpc.AddLocalRpcTarget(provider.GetRequiredService(x)));
