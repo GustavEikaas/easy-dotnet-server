@@ -9,7 +9,9 @@ namespace EasyDotnet.Debugger.Session;
 public class DebuggerMessageInterceptor(
   ILogger<DebuggerMessageInterceptor> logger,
   ValueConverterService valueConverterService,
-  bool applyValueConverters) : IDapMessageInterceptor
+  bool applyValueConverters,
+  Action<int> onProcessStarted
+) : IDapMessageInterceptor
 {
   public async Task<ProtocolMessage?> InterceptAsync(
     ProtocolMessage message,
@@ -53,6 +55,16 @@ public class DebuggerMessageInterceptor(
 
   private Task<ProtocolMessage?> HandleEvent(Event evt)
   {
+
+
+    if (evt.EventName == "process" && evt.Body.HasValue &&
+          evt.Body.Value.ValueKind == JsonValueKind.Object &&
+          evt.Body.Value.TryGetProperty("systemProcessId", out var pidElement))
+    {
+      var systemProcessId = pidElement.GetInt32();
+      logger.LogInformation("[DEBUGGER] Process started with PID: {ProcessId}", systemProcessId);
+      onProcessStarted(systemProcessId);
+    }
 
     if (evt.EventName == "stopped")
     {

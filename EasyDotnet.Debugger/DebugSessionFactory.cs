@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using EasyDotnet.Debugger.Interfaces;
 using EasyDotnet.Debugger.Messages;
 using EasyDotnet.Debugger.Services;
@@ -27,18 +28,23 @@ public class DebugSessionFactory(ILoggerFactory loggerFactory) : IDebugSessionFa
       valueConverterService,
       attachRequestRewriter);
 
-    var debuggerInterceptor = new DebuggerMessageInterceptor(
-      loggerFactory.CreateLogger<DebuggerMessageInterceptor>(),
-      valueConverterService,
-      applyValueConverters);
+    DebugSessionCoordinator coordinator = null!;
 
-    var coordinator = new DebugSessionCoordinator(
+    var debuggerInterceptor = new DebuggerMessageInterceptor(
+       loggerFactory.CreateLogger<DebuggerMessageInterceptor>(),
+       valueConverterService,
+       applyValueConverters,
+       onProcessStarted: (pid) => coordinator.StartProcessMonitoring(pid));
+
+    coordinator = new DebugSessionCoordinator(
       loggerFactory.CreateLogger<DebugSessionCoordinator>(),
       tcpServer,
       processHost,
       clientInterceptor,
       debuggerInterceptor,
-      loggerFactory.CreateLogger<DebuggerProxy>());
+      loggerFactory.CreateLogger<DebuggerProxy>(),
+      loggerFactory.CreateLogger<ProcessMonitor>()
+    );
 
     return new DebugSession(coordinator);
   }
