@@ -85,53 +85,11 @@ public class TemplateEngineService(IMsBuildService msBuildService, IClientServic
     var monikers = msBuildService.QuerySdkInstallations().Select(x => x.Moniker).ToList();
 
     var parameters = template.ParameterDefinitions
-        .Where(p => p.Precedence.PrecedenceDefinition != PrecedenceDefinition.Implicit)
-        .Where(x => x.Name != TargetFrameworkOverrideParamKey)
-        .Select(p =>
-        {
-          if (p.Name != FrameworkParamKey) return p;
-
-          var rawChoices = p.Choices?.ToDictionary(k => k.Key, v => v.Value) ?? [];
-
-          foreach (var moniker in monikers)
-          {
-            if (!rawChoices.ContainsKey(moniker))
-            {
-              rawChoices[moniker] = new ParameterChoice(moniker, moniker);
-            }
-          }
-
-          var normalizedChoices = new Dictionary<string, ParameterChoice>();
-          foreach (var (key, choice) in rawChoices)
-          {
-            var digits = new string([.. key.Where(c => char.IsDigit(c) || c == '.')]);
-            digits = digits.Trim('.');
-            if (string.IsNullOrWhiteSpace(digits))
-            {
-              normalizedChoices[key] = new ParameterChoice(key, choice.DisplayName ?? key);
-              continue;
-            }
-
-            var uniformDisplay = $".NET {digits}";
-            normalizedChoices[key] = new ParameterChoice(key, uniformDisplay);
-          }
-
-          var sortedChoices = normalizedChoices
-                  .OrderByDescending(kvp =>
-                  {
-                    var vString = new string([.. kvp.Key.Where(c => char.IsDigit(c) || c == '.')]);
-                    return Version.TryParse(vString, out var v) ? v : new Version(0, 0);
-                  })
-                  .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
-
-          return new TemplateParameter(
-                  p.Name, p.Type, p.DataType, p.Precedence, p.IsName,
-                  p.DefaultValue, p.DefaultIfOptionWithoutValue, p.Description,
-                  p.DisplayName, p.AllowMultipleValues, sortedChoices
-              );
-        })
-        .OrderByDescending(x => x.Precedence.IsRequired)
-        .ToList();
+            .Where(p => p.Precedence.PrecedenceDefinition != PrecedenceDefinition.Implicit)
+            .Where(x => x.Name != TargetFrameworkOverrideParamKey)
+            .Select(p => NormalizeFrameworkParameter(p, monikers))
+            .OrderByDescending(x => x.Precedence.IsRequired)
+            .ToList();
 
     if (template.GetTemplateType() == "project" && !string.IsNullOrEmpty(clientService.ProjectInfo?.SolutionFile))
     {
@@ -187,7 +145,7 @@ public class TemplateEngineService(IMsBuildService msBuildService, IClientServic
     if (shouldAddToSolution && !string.IsNullOrEmpty(clientService.ProjectInfo?.SolutionFile))
     {
       var projectsToAdd = result.CreationResult?.PrimaryOutputs
-          .Select(x => x.Path)
+          .Select(x => Path.GetFullPath(Path.Combine(outputPath, x.Path)))
           .Where(FileTypes.IsAnyProjectFile)
           .ToList() ?? [];
 
@@ -201,8 +159,16 @@ public class TemplateEngineService(IMsBuildService msBuildService, IClientServic
 
       foreach (var projectPath in projectsToAdd)
       {
-        await solutionService.AddProjectToSolutionAsync(clientService.ProjectInfo.SolutionFile, projectPath, cancellationToken);
-        await editorService.DisplayMessage("projectname added to solution");
+        var linkedToSolution = await solutionService.AddProjectToSolutionAsync(clientService.ProjectInfo.SolutionFile, projectPath, cancellationToken);
+        var projectName = Path.GetFileNameWithoutExtension(projectPath);
+        if (linkedToSolution)
+        {
+          await editorService.DisplayMessage($"{projectName} added to solution.");
+        }
+        else
+        {
+          await editorService.DisplayError($"Failed to add project {projectName} to solution.");
+        }
       }
     }
 
@@ -248,5 +214,52 @@ public class TemplateEngineService(IMsBuildService msBuildService, IClientServic
       updatedParams[TargetFrameworkOverrideParamKey] = frameworkValue;
     }
     return updatedParams.AsReadOnly();
+  }
+
+  private static ITemplateParameter NormalizeFrameworkParameter(ITemplateParameter p, List<string> monikers)
+  {
+    if (p.Name != FrameworkParamKey) return p;
+
+    var rawChoices = p.Choices?.ToDictionary(k => k.Key, v => v.Value) ?? [];
+
+    foreach (var moniker in monikers)
+    {
+      if (!rawChoices.ContainsKey(moniker))
+      {
+        rawChoices[moniker] = new ParameterChoice(moniker, moniker);
+      }
+    }
+
+    var normalizedChoices = new Dictionary<string, ParameterChoice>();
+    foreach (var (key, choice) in rawChoices)
+    {
+      var digits = new string([.. key.Where(c => char.IsDigit(c) || c == '.')]);
+      digits = digits.Trim('.');
+
+      if (string.IsNullOrWhiteSpace(digits))
+      {
+        var existingDisplay = choice.DisplayName ?? key;
+        normalizedChoices[key] = new ParameterChoice(existingDisplay, existingDisplay);
+        continue;
+      }
+
+      var uniformDisplay = $".NET {digits}";
+
+      normalizedChoices[key] = new ParameterChoice(uniformDisplay, uniformDisplay);
+    }
+
+    var sortedChoices = normalizedChoices
+        .OrderByDescending(kvp =>
+        {
+          var vString = new string([.. kvp.Key.Where(c => char.IsDigit(c) || c == '.')]);
+          return Version.TryParse(vString, out var v) ? v : new Version(0, 0);
+        })
+        .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+
+    return new TemplateParameter(
+        p.Name, p.Type, p.DataType, p.Precedence, p.IsName,
+        p.DefaultValue, p.DefaultIfOptionWithoutValue, p.Description,
+        p.DisplayName, p.AllowMultipleValues, sortedChoices
+    );
   }
 }

@@ -15,7 +15,7 @@ public class SolutionService(IProcessQueue processQueue) : ISolutionService
 
   public async Task<bool> AddProjectToSolutionAsync(string solutionFilePath, string projectPath, CancellationToken cancellationToken)
   {
-    var (success, _, _) = await processQueue.RunProcessAsync(
+    var (success, stdout, stderr) = await processQueue.RunProcessAsync(
            "dotnet",
            $"solution \"{solutionFilePath}\" add \"{projectPath}\"",
            new ProcessOptions(true),
