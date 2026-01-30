@@ -133,7 +133,7 @@ _No parameters_
 
 ## TemplateController
 
-### `template/instantiate`
+### `template/instantiate/v2`
 | Parameter | Type | Optional |
 |-----------|------|----------|
 | identity | string |   |
