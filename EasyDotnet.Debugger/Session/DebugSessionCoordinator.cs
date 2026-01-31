@@ -16,10 +16,13 @@ public class DebugSessionCoordinator(
   private readonly TaskCompletionSource<bool> _completionSource = new();
   private readonly TaskCompletionSource<bool> _disposalStartedSource = new();
   private readonly TaskCompletionSource<bool> _processStartedSource = new();
+  private readonly TaskCompletionSource<bool> _debugeeProcessStartedSource = new();
   private int _isDisposing;
   private Func<Task>? _onDispose;
 
   public Task ProcessStarted => _processStartedSource.Task;
+  public Task DebugeeProcessStarted => _debugeeProcessStartedSource.Task;
+
   public Task Completion => _completionSource.Task;
   public Task DisposalStarted => _disposalStartedSource.Task;
   public int Port => tcpServer.Port;
@@ -92,6 +95,18 @@ public class DebugSessionCoordinator(
         _completionSource.SetException(ex);
       }
     }, cancellationToken);
+  }
+
+  public void NotifyDebugeeProcessStarted(int processId)
+  {
+    if (_debugeeProcessStartedSource.Task.IsCompleted)
+    {
+      logger.LogDebug("DebugeeProcessStarted already completed, ignoring processId: {processId}", processId);
+      return;
+    }
+
+    logger.LogInformation("Debugee process started: {processId}", processId);
+    _debugeeProcessStartedSource.SetResult(true);
   }
 
   private async Task TriggerCleanupAsync()

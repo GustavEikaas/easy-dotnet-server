@@ -18,6 +18,8 @@ public class StandardLaunchStrategy(
   private LaunchProfile? _activeProfile;
   private DotnetProject? _project;
 
+  public DebugSessionStrategyType Type => DebugSessionStrategyType.Launch;
+
   public Task PrepareAsync(DotnetProject project, CancellationToken ct)
   {
     _project = project;
@@ -60,6 +62,8 @@ public class StandardLaunchStrategy(
 
     return Task.CompletedTask;
   }
+
+  public Task<int>? GetProcessIdAsync() => null!;
 
   public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }

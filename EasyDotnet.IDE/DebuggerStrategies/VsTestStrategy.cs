@@ -15,6 +15,9 @@ public class VsTestStrategy(ILogger<VsTestStrategy> logger) : IDebugSessionStrat
   private Process? _vsTestWrapperProcess;
   private int _testHostPid;
   private DotnetProject? _project;
+  private readonly TaskCompletionSource<int> _processIdTcs = new();
+
+  public DebugSessionStrategyType Type => DebugSessionStrategyType.Attach;
 
   public Task PrepareAsync(DotnetProject project, CancellationToken ct)
   {
@@ -27,6 +30,17 @@ public class VsTestStrategy(ILogger<VsTestStrategy> logger) : IDebugSessionStrat
 
     _vsTestWrapperProcess = process;
     _testHostPid = pid;
+
+    if (_testHostPid > 0)
+    {
+      logger.LogInformation("VsTest host process started with PID: {pid}", _testHostPid);
+      _processIdTcs.TrySetResult(_testHostPid);
+    }
+    else
+    {
+      logger.LogError("VsTest host process started but PID is invalid: {pid}", _testHostPid);
+      _processIdTcs.TrySetException(new InvalidOperationException("Failed to start VsTest host process"));
+    }
 
     return Task.CompletedTask;
   }
@@ -47,6 +61,8 @@ public class VsTestStrategy(ILogger<VsTestStrategy> logger) : IDebugSessionStrat
 
     return Task.CompletedTask;
   }
+
+  public Task<int>? GetProcessIdAsync() => _processIdTcs.Task;
 
   public ValueTask DisposeAsync()
   {
@@ -102,4 +118,6 @@ public class VsTestStrategy(ILogger<VsTestStrategy> logger) : IDebugSessionStrat
       try { process.Dispose(); } catch { }
     }
   }
+
+
 }

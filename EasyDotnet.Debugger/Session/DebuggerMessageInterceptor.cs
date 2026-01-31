@@ -9,7 +9,9 @@ namespace EasyDotnet.Debugger.Session;
 public class DebuggerMessageInterceptor(
   ILogger<DebuggerMessageInterceptor> logger,
   ValueConverterService valueConverterService,
-  bool applyValueConverters) : IDapMessageInterceptor
+  bool applyValueConverters,
+  Action<int>? onDebugeeProcessStarted = null) : IDapMessageInterceptor
+
 {
   public async Task<ProtocolMessage?> InterceptAsync(
     ProtocolMessage message,
@@ -58,10 +60,13 @@ public class DebuggerMessageInterceptor(
     {
       valueConverterService.ClearVariablesReferenceMap();
     }
-
-    if (evt.EventName == "exited")
+    else if (evt.EventName == "exited")
     {
       LogExitedEvent(evt);
+    }
+    else if (evt.EventName == "process")
+    {
+      HandleProcessEvent(evt);
     }
     else if (evt.EventName == "terminated")
     {
@@ -70,6 +75,37 @@ public class DebuggerMessageInterceptor(
 
     logger.LogDebug("[DEBUGGER] Event: {event}", evt.EventName);
     return Task.FromResult<ProtocolMessage?>(evt);
+  }
+
+  private void HandleProcessEvent(Event evt)
+  {
+    if (evt.Body.HasValue && evt.Body.Value.ValueKind == JsonValueKind.Object)
+    {
+      int? processId = null;
+
+      if (evt.Body.Value.TryGetProperty("systemProcessId", out var pidElement))
+      {
+        processId = pidElement.GetInt32();
+      }
+      else if (evt.Body.Value.TryGetProperty("processId", out pidElement))
+      {
+        processId = pidElement.GetInt32();
+      }
+
+      if (processId.HasValue && processId.Value > 0)
+      {
+        logger.LogInformation("[DEBUGGER] Process event - debugee process started: {processId}", processId.Value);
+        onDebugeeProcessStarted?.Invoke(processId.Value);
+      }
+      else
+      {
+        logger.LogWarning("[DEBUGGER] Process event received but no valid processId found in body");
+      }
+    }
+    else
+    {
+      logger.LogWarning("[DEBUGGER] Process event received but body is missing or not an object");
+    }
   }
 
   private void LogTerminatedEvent() => logger.LogInformation("[DEBUGGER] Debug session terminated");

@@ -27,18 +27,21 @@ public class DebugSessionFactory(ILoggerFactory loggerFactory) : IDebugSessionFa
       valueConverterService,
       attachRequestRewriter);
 
+    DebugSessionCoordinator? coordinator = null;
+
     var debuggerInterceptor = new DebuggerMessageInterceptor(
       loggerFactory.CreateLogger<DebuggerMessageInterceptor>(),
       valueConverterService,
-      applyValueConverters);
+      applyValueConverters,
+      (int processId) => coordinator?.NotifyDebugeeProcessStarted(processId));
 
-    var coordinator = new DebugSessionCoordinator(
-      loggerFactory.CreateLogger<DebugSessionCoordinator>(),
-      tcpServer,
-      processHost,
-      clientInterceptor,
-      debuggerInterceptor,
-      loggerFactory.CreateLogger<DebuggerProxy>());
+    coordinator = new DebugSessionCoordinator(
+     loggerFactory.CreateLogger<DebugSessionCoordinator>(),
+     tcpServer,
+     processHost,
+     clientInterceptor,
+     debuggerInterceptor,
+     loggerFactory.CreateLogger<DebuggerProxy>());
 
     return new DebugSession(coordinator);
   }

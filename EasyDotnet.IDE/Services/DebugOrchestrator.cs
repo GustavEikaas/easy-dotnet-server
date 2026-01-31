@@ -167,18 +167,38 @@ public class DebugOrchestrator(
       if (platform != DotnetPlatform.None && platform != DotnetPlatform.Windows)
       {
         throw new InvalidOperationException($"Debugging for {platform} is not supported yet");
+
       }
+
+
+      var session = debugSessionFactory.Create(async (dapRequest) =>
+             {
+               await strategy.TransformRequestAsync(dapRequest);
+               return dapRequest;
+             },
+             clientService?.ClientOptions?.DebuggerOptions?.ApplyValueConverters ?? false
+         );
+
+      _sessionServices[projectPath] = session;
 
       await strategy.PrepareAsync(project, cancellationToken);
 
-      var session = debugSessionFactory.Create(async (dapRequest) =>
+      var strategyProcessIdTask = strategy.GetProcessIdAsync();
+      if (strategyProcessIdTask != null)
+      {
+        _ = Task.Run(async () =>
+        {
+          try
           {
-            await strategy.TransformRequestAsync(dapRequest);
-            return dapRequest;
-          },
-          clientService?.ClientOptions?.DebuggerOptions?.ApplyValueConverters ?? false
-      );
-      _sessionServices[projectPath] = session;
+            var processId = await strategyProcessIdTask;
+            logger.LogInformation("Strategy reported debugee processId: {processId} for {project}", processId, projectName);
+          }
+          catch (Exception ex)
+          {
+            logger.LogError(ex, "Strategy failed to provide processId for {project}", projectName);
+          }
+        }, cancellationToken);
+      }
 
       try
       {
