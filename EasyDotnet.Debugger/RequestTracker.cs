@@ -20,6 +20,7 @@ public interface IRequestTracker
 {
   int RegisterClientRequest(int clientSeq);
   int RegisterProxyRequest(TaskCompletionSource<Response> tcs, CancellationToken cancellationToken);
+  int GetNextSequenceNumber();
   RequestContext? GetAndRemoveContext(int proxySeq);
   void Clear();
 }
@@ -30,6 +31,7 @@ public class RequestTracker : IRequestTracker
   private int _proxySeq;
 
   private int GetNextProxySeq() => Interlocked.Increment(ref _proxySeq);
+  public int GetNextSequenceNumber() => GetNextProxySeq();
 
   public int RegisterClientRequest(int clientSeq)
   {
