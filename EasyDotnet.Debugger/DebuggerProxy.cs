@@ -14,6 +14,7 @@ public interface IDebuggerProxy
   Task<Response> RunInternalRequestAsync(Request request, CancellationToken cancellationToken);
   Task<VariablesResponse?> GetVariablesAsync(int variablesReference, CancellationToken cancellationToken);
   Task WriteProxyToClientAsync(ProtocolMessage response, CancellationToken cancellationToken);
+  Task EmitEventToClientAsync(Event evt, CancellationToken cancellationToken);
   RequestContext? GetAndRemoveContext(int proxySeq);
 }
 
@@ -124,6 +125,12 @@ public class DebuggerProxy : IDebuggerProxy
 
   public async Task WriteProxyToClientAsync(ProtocolMessage json, CancellationToken cancellationToken)
     => await _channels.ProxyToClientWriter.WriteAsync(json, cancellationToken);
+
+  public async Task EmitEventToClientAsync(Event evt, CancellationToken cancellationToken)
+  {
+    evt.Seq = _requestTracker.GetNextSequenceNumber();
+    await _channels.ProxyToClientWriter.WriteAsync(evt, cancellationToken);
+  }
 
   public RequestContext? GetAndRemoveContext(int proxySeq) => _requestTracker.GetAndRemoveContext(proxySeq);
 
