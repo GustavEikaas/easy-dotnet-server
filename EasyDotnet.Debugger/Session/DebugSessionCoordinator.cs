@@ -22,7 +22,6 @@ public class DebugSessionCoordinator(
 
   public Task ProcessStarted => _processStartedSource.Task;
   public Task DebugeeProcessStarted => _debugeeProcessStartedSource.Task;
-
   public Task Completion => _completionSource.Task;
   public Task DisposalStarted => _disposalStartedSource.Task;
   public int Port => tcpServer.Port;

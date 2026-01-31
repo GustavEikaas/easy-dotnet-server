@@ -17,8 +17,6 @@ public class VsTestStrategy(ILogger<VsTestStrategy> logger) : IDebugSessionStrat
   private DotnetProject? _project;
   private readonly TaskCompletionSource<int> _processIdTcs = new();
 
-  public DebugSessionStrategyType Type => DebugSessionStrategyType.Attach;
-
   public Task PrepareAsync(DotnetProject project, CancellationToken ct)
   {
     _project = project;

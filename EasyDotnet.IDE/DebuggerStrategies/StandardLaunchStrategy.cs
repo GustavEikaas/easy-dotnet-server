@@ -18,8 +18,6 @@ public class StandardLaunchStrategy(
   private LaunchProfile? _activeProfile;
   private DotnetProject? _project;
 
-  public DebugSessionStrategyType Type => DebugSessionStrategyType.Launch;
-
   public Task PrepareAsync(DotnetProject project, CancellationToken ct)
   {
     _project = project;
