@@ -76,14 +76,6 @@ public class TestController(
     {
       // TODO: add debugging support
       throw new NotImplementedException();
-      // var path = GetExecutablePath(project);
-      //
-      // var res = await WithTimeout(
-      //   (token) => mtpService.RunTestsAsync(path, filter, token),
-      //   TimeSpan.FromMinutes(3),
-      //   token
-      // );
-      // return res.AsAsyncEnumerable();
     }
     else
     {
