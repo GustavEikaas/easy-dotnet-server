@@ -23,7 +23,7 @@ public class VsTestService(
   IMsBuildService msBuildService,
   ILogger<VsTestService> logService,
   IEditorService editorService,
-  ILoggerFactory loggerFactory,
+  IDebugStrategyFactory debugStrategyFactory,
   IDebugOrchestrator debugOrchestrator)
 {
   private readonly TimeSpan _queueTimeout = TimeSpan.FromMinutes(5);
@@ -55,7 +55,23 @@ public class VsTestService(
     {
       var vsTestPath = GetVsTestPath();
       logService.LogInformation("Using VSTest path: {vsTestPath}", vsTestPath);
-      return RunTests(vsTestPath, project, testIds, runSettings);
+      return RunTests(vsTestPath, project, testIds, runSettings, false);
+
+    }
+    finally
+    {
+      _vstestLock.Release();
+    }
+  }
+
+  public async Task<List<TestRunResult>> DebugTests(DotnetProject project, Guid[] testIds, string? runSettings, CancellationToken cancellationToken)
+  {
+    await _vstestLock.WaitAsync(_queueTimeout, cancellationToken);
+    try
+    {
+      var vsTestPath = GetVsTestPath();
+      logService.LogInformation("Using VSTest path: {vsTestPath}", vsTestPath);
+      return RunTests(vsTestPath, project, testIds, runSettings, true);
 
     }
     finally
@@ -86,7 +102,7 @@ public class VsTestService(
     return discoveryHandler.TestCases.GroupBy(x => Path.GetFileName(x.Source)).ToDictionary(x => x.Key, y => y.Select(x => x.ToDiscoveredTest()).ToList());
   }
 
-  private List<TestRunResult> RunTests(string vsTestPath, DotnetProject project, Guid[] testIds, string? runSettings)
+  private List<TestRunResult> RunTests(string vsTestPath, DotnetProject project, Guid[] testIds, string? runSettings, bool attachDebugger)
   {
     var options = new TestPlatformOptions
     {
@@ -103,13 +119,21 @@ public class VsTestService(
     //Alternative check for overloads of RunTests that support both dllPath and testIds
     testHost.DiscoverTests([project.TargetPath!], null, options, sessionHandler.TestSessionInfo, discoveryHandler);
     var runTests = discoveryHandler.TestCases.Where(x => testIds.Contains(x.Id));
-    testHost.RunTestsWithCustomTestHost(runTests, runSettings, options, sessionHandler.TestSessionInfo, handler, new DebuggerTestHostLauncher(async (pid, cancellationToken) =>
+    if (attachDebugger)
     {
-      var session = await debugOrchestrator.StartClientDebugSessionAsync(project.MSBuildProjectFullPath!, new(project.MSBuildProjectFullPath!, null, null, null), new PidVsTestStrategy(loggerFactory.CreateLogger<VsTestStrategy>(), pid), cancellationToken);
-      await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
-      return true;
+      testHost.RunTestsWithCustomTestHost(runTests, runSettings, options, sessionHandler.TestSessionInfo, handler, new DebuggerTestHostLauncher(async (pid, cancellationToken) =>
+      {
+        var session = await debugOrchestrator.StartClientDebugSessionAsync(project.MSBuildProjectFullPath!, new(project.MSBuildProjectFullPath!, null, null, null), debugStrategyFactory.CreatePidVsTestStrategy(pid), cancellationToken);
+        await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
+        await session.ProcessStarted;
+        return true;
 
-    }));
+      }));
+    }
+    else
+    {
+      testHost.RunTests(runTests, runSettings, options, sessionHandler.TestSessionInfo, handler);
+    }
 
     return [.. handler.Results.Select(x => x.ToTestRunResult())];
   }
