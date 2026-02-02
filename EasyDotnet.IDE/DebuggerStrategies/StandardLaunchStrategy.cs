@@ -23,7 +23,7 @@ public class StandardLaunchStrategy(
     _project = project;
 
     if (!string.IsNullOrEmpty(launchProfileName) &&
-        launchProfileService.GetLaunchProfiles(project.TargetPath!) is { } profiles &&
+        launchProfileService.GetLaunchProfiles(project.MSBuildProjectFullPath!) is { } profiles &&
         profiles.TryGetValue(launchProfileName, out var profile))
     {
       _activeProfile = profile;
