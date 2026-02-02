@@ -119,3 +119,37 @@ public class VsTestStrategy(ILogger<VsTestStrategy> logger) : IDebugSessionStrat
 
 
 }
+
+
+public class PidVsTestStrategy(ILogger<VsTestStrategy> logger, int pid) : IDebugSessionStrategy
+{
+  private DotnetProject? _project;
+  private readonly TaskCompletionSource<int> _processIdTcs = new();
+
+  public Task PrepareAsync(DotnetProject project, CancellationToken ct)
+  {
+    _project = project;
+
+
+    logger.LogInformation("Starting VsTest host for {Project}", project.ProjectName);
+
+    return Task.CompletedTask;
+  }
+
+  public Task TransformRequestAsync(InterceptableAttachRequest request)
+  {
+
+    request.Type = "request";
+    request.Command = "attach";
+    request.Arguments.Request = "attach";
+    request.Arguments.ProcessId = pid;
+
+    request.Arguments.Cwd = _project!.ProjectDir;
+
+    return Task.CompletedTask;
+  }
+
+  public Task<int>? GetProcessIdAsync() => _processIdTcs.Task;
+
+  public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}

@@ -5,18 +5,26 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
+using EasyDotnet.IDE.DebuggerStrategies;
 using EasyDotnet.IDE.VSTest;
+using EasyDotnet.MsBuild;
 using EasyDotnet.Types;
 using EasyDotnet.VSTest;
 using Microsoft.Extensions.Logging;
 using Microsoft.TestPlatform.VsTestConsole.TranslationLayer;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Client;
+using Microsoft.VisualStudio.TestPlatform.ObjectModel.Client.Interfaces;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Logging;
 
 namespace EasyDotnet.IDE.Services;
 
-public class VsTestService(IMsBuildService msBuildService, ILogger<VsTestService> logService)
+public class VsTestService(
+  IMsBuildService msBuildService,
+  ILogger<VsTestService> logService,
+  IEditorService editorService,
+  ILoggerFactory loggerFactory,
+  IDebugOrchestrator debugOrchestrator)
 {
   private readonly TimeSpan _queueTimeout = TimeSpan.FromMinutes(5);
   private readonly SemaphoreSlim _vstestLock = new(1, 1);
@@ -39,7 +47,7 @@ public class VsTestService(IMsBuildService msBuildService, ILogger<VsTestService
     }
   }
 
-  public async Task<List<TestRunResult>> RunTests(string dllPath, Guid[] testIds, string? runSettings, CancellationToken cancellationToken)
+  public async Task<List<TestRunResult>> RunTests(DotnetProject project, Guid[] testIds, string? runSettings, CancellationToken cancellationToken)
   {
 
     await _vstestLock.WaitAsync(_queueTimeout, cancellationToken);
@@ -47,7 +55,7 @@ public class VsTestService(IMsBuildService msBuildService, ILogger<VsTestService
     {
       var vsTestPath = GetVsTestPath();
       logService.LogInformation("Using VSTest path: {vsTestPath}", vsTestPath);
-      return RunTests(vsTestPath, dllPath, testIds, runSettings);
+      return RunTests(vsTestPath, project, testIds, runSettings);
 
     }
     finally
@@ -78,7 +86,7 @@ public class VsTestService(IMsBuildService msBuildService, ILogger<VsTestService
     return discoveryHandler.TestCases.GroupBy(x => Path.GetFileName(x.Source)).ToDictionary(x => x.Key, y => y.Select(x => x.ToDiscoveredTest()).ToList());
   }
 
-  private List<TestRunResult> RunTests(string vsTestPath, string dllPath, Guid[] testIds, string? runSettings)
+  private List<TestRunResult> RunTests(string vsTestPath, DotnetProject project, Guid[] testIds, string? runSettings)
   {
     var options = new TestPlatformOptions
     {
@@ -93,9 +101,15 @@ public class VsTestService(IMsBuildService msBuildService, ILogger<VsTestService
 
     //TODO: Caching mechanism to prevent rediscovery on each run request.
     //Alternative check for overloads of RunTests that support both dllPath and testIds
-    testHost.DiscoverTests([dllPath], null, options, sessionHandler.TestSessionInfo, discoveryHandler);
+    testHost.DiscoverTests([project.TargetPath!], null, options, sessionHandler.TestSessionInfo, discoveryHandler);
     var runTests = discoveryHandler.TestCases.Where(x => testIds.Contains(x.Id));
-    testHost.RunTests(runTests, runSettings, options, sessionHandler.TestSessionInfo, handler);
+    testHost.RunTestsWithCustomTestHost(runTests, runSettings, options, sessionHandler.TestSessionInfo, handler, new DebuggerTestHostLauncher(async (pid, cancellationToken) =>
+    {
+      var session = await debugOrchestrator.StartClientDebugSessionAsync(project.MSBuildProjectFullPath!, new(project.MSBuildProjectFullPath!, null, null, null), new PidVsTestStrategy(loggerFactory.CreateLogger<VsTestStrategy>(), pid), cancellationToken);
+      await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
+      return true;
+
+    }));
 
     return [.. handler.Results.Select(x => x.ToTestRunResult())];
   }
@@ -192,6 +206,36 @@ public class PlaygroundTestDiscoveryHandler(ILogger<VsTestService> logger) : ITe
 
   public void HandleRawMessage(string rawMessage) =>
     logger.LogDebug("[VSTest:Raw] {RawMessage}", rawMessage);
+}
+
+internal class DebuggerTestHostLauncher(Func<int, CancellationToken, Task<bool>> attach) : ITestHostLauncher2
+{
+  public bool IsDebug => true;
+
+  public bool AttachDebuggerToProcess(int pid)
+  {
+    Console.WriteLine("Attaching debugger to process");
+    return attach(pid, CancellationToken.None).GetAwaiter().GetResult();
+  }
+
+  public bool AttachDebuggerToProcess(int pid, CancellationToken cancellationToken)
+  {
+    Console.WriteLine("Attaching debugger to process [async]");
+    return attach(pid, cancellationToken).GetAwaiter().GetResult();
+  }
+
+  public int LaunchTestHost(TestProcessStartInfo defaultTestHostStartInfo)
+  {
+
+    Console.WriteLine("Launching testhost");
+    return 1;
+  }
+
+  public int LaunchTestHost(TestProcessStartInfo defaultTestHostStartInfo, CancellationToken cancellationToken)
+  {
+    Console.WriteLine("Launching testhost [async]");
+    return 1;
+  }
 }
 
 
