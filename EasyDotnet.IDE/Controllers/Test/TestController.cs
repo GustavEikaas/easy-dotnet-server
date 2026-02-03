@@ -56,6 +56,36 @@ public class TestController(
     }
   }
 
+  [JsonRpcMethod("test/debug")]
+  public async Task<IAsyncEnumerable<TestRunResult>> Debug(
+    string projectPath,
+    string configuration,
+    RunRequestNode[] filter,
+    string? targetFrameworkMoniker = null,
+    CancellationToken token = default
+  )
+  {
+    if (!clientService.IsInitialized)
+    {
+      throw new Exception("Client has not initialized yet");
+    }
+    var project = await GetProject(projectPath, targetFrameworkMoniker, configuration, token);
+
+
+    if (project.TestingPlatformDotnetTestSupport)
+    {
+      // TODO: add debugging support
+      throw new NotImplementedException();
+    }
+    else
+    {
+      var runSettingsFile = settingsService.GetProjectRunSettings(projectPath!);
+      var runSettings = runSettingsFile is not null ? fileSystem.File.ReadAllText(runSettingsFile) : null;
+      logger.LogInformation("Using runsettings {runSettings}", runSettingsFile);
+      return (await vsTestService.DebugTests(project, [.. filter.Select(x => Guid.Parse(x.Uid))], runSettings, token)).ToBatchedAsyncEnumerable(30);
+    }
+  }
+
   [JsonRpcMethod("test/run")]
   public async Task<IAsyncEnumerable<TestRunResult>> Run(
     string projectPath,
@@ -88,7 +118,7 @@ public class TestController(
     }
     else
     {
-      return (await vsTestService.RunTests(project.TargetPath!, [.. filter.Select(x => Guid.Parse(x.Uid))], runSettings, token)).ToBatchedAsyncEnumerable(30);
+      return (await vsTestService.RunTests(project, [.. filter.Select(x => Guid.Parse(x.Uid))], runSettings, token)).ToBatchedAsyncEnumerable(30);
     }
   }
 
