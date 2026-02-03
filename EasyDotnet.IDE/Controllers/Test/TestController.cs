@@ -74,8 +74,14 @@ public class TestController(
 
     if (project.TestingPlatformDotnetTestSupport)
     {
-      // TODO: add debugging support
-      throw new NotImplementedException();
+      var path = GetExecutablePath(project);
+
+      var res = await WithTimeout(
+        (token) => mtpService.DebugTestsAsync(project, path, filter, token),
+        TimeSpan.FromMinutes(3),
+        token
+      );
+      return res.AsAsyncEnumerable();
     }
     else
     {
