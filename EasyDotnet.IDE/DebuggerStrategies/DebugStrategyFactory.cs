@@ -5,21 +5,22 @@ namespace EasyDotnet.IDE.DebuggerStrategies;
 
 public interface IDebugStrategyFactory
 {
+  StandardLaunchStrategy CreateStandardLaunchStrategy(string? launchProfileName);
   StandardAttachStrategy CreateStandardAttachStrategy(int pid);
   VsTestStrategy CreateVsTestStrategy();
-  StandardLaunchStrategy CreateStandardLaunchStrategy(string? launchProfileName);
 }
 
 public class DebugStrategyFactory(ILoggerFactory loggerFactory, ILaunchProfileService launchProfileService) : IDebugStrategyFactory
 {
+
+  public StandardLaunchStrategy CreateStandardLaunchStrategy(string? launchProfileName) => new(
+    launchProfileName,
+    launchProfileService);
+
   public StandardAttachStrategy CreateStandardAttachStrategy(int pid) => new(
     loggerFactory.CreateLogger<StandardAttachStrategy>(),
     pid);
 
   public VsTestStrategy CreateVsTestStrategy() => new(
     loggerFactory.CreateLogger<VsTestStrategy>());
-
-  public StandardLaunchStrategy CreateStandardLaunchStrategy(string? launchProfileName) => new(
-    launchProfileName,
-    launchProfileService);
 }

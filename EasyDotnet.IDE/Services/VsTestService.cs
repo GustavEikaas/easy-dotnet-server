@@ -236,30 +236,13 @@ internal class DebuggerTestHostLauncher(Func<int, CancellationToken, Task<bool>>
 {
   public bool IsDebug => true;
 
-  public bool AttachDebuggerToProcess(int pid)
-  {
-    Console.WriteLine("Attaching debugger to process");
-    return attach(pid, CancellationToken.None).GetAwaiter().GetResult();
-  }
+  public bool AttachDebuggerToProcess(int pid) => attach(pid, CancellationToken.None).GetAwaiter().GetResult();
 
-  public bool AttachDebuggerToProcess(int pid, CancellationToken cancellationToken)
-  {
-    Console.WriteLine("Attaching debugger to process [async]");
-    return attach(pid, cancellationToken).GetAwaiter().GetResult();
-  }
+  public bool AttachDebuggerToProcess(int pid, CancellationToken cancellationToken) => attach(pid, cancellationToken).GetAwaiter().GetResult();
 
-  public int LaunchTestHost(TestProcessStartInfo defaultTestHostStartInfo)
-  {
+  public int LaunchTestHost(TestProcessStartInfo defaultTestHostStartInfo) => throw new NotImplementedException("LaunchTestHost not implemented yet");
 
-    Console.WriteLine("Launching testhost");
-    return 1;
-  }
-
-  public int LaunchTestHost(TestProcessStartInfo defaultTestHostStartInfo, CancellationToken cancellationToken)
-  {
-    Console.WriteLine("Launching testhost [async]");
-    return 1;
-  }
+  public int LaunchTestHost(TestProcessStartInfo defaultTestHostStartInfo, CancellationToken cancellationToken) => throw new NotImplementedException("LaunchTestHost not implemented yet");
 }
 
 
