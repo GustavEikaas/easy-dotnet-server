@@ -123,7 +123,7 @@ public class VsTestService(
     {
       testHost.RunTestsWithCustomTestHost(runTests, runSettings, options, sessionHandler.TestSessionInfo, handler, new DebuggerTestHostLauncher(async (pid, cancellationToken) =>
       {
-        var session = await debugOrchestrator.StartClientDebugSessionAsync(project.MSBuildProjectFullPath!, new(project.MSBuildProjectFullPath!, null, null, null), debugStrategyFactory.CreatePidVsTestStrategy(pid), cancellationToken);
+        var session = await debugOrchestrator.StartClientDebugSessionAsync(project.MSBuildProjectFullPath!, new(project.MSBuildProjectFullPath!, null, null, null), debugStrategyFactory.CreateStandardAttachStrategy(pid), cancellationToken);
         await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
         await session.ProcessStarted;
         return true;
