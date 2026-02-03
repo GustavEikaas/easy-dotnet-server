@@ -116,6 +116,4 @@ public class VsTestStrategy(ILogger<VsTestStrategy> logger) : IDebugSessionStrat
       try { process.Dispose(); } catch { }
     }
   }
-
-
 }
