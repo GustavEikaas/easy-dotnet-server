@@ -2,7 +2,7 @@ using System.Diagnostics;
 
 namespace EasyDotnet.Infrastructure.Dap;
 
-public class VsTestHelper
+public static class VsTestHelper
 {
   public static (System.Diagnostics.Process, int) StartTestProcess(string projectPath)
   {

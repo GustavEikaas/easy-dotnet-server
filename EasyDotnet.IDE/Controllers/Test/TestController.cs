@@ -22,6 +22,7 @@ public class TestController(
   ILogger<TestController> logger,
   IClientService clientService,
   MtpService mtpService,
+  IVsTestService vsTestService,
   IMsBuildService msBuildService,
   IFileSystem fileSystem,
   SettingsService settingsService,
@@ -52,6 +53,42 @@ public class TestController(
     {
       throw new NotImplementedException();
       // return (await vsTestService.RunDiscover(project.TargetPath!, token)).ToBatchedAsyncEnumerable(30);
+    }
+  }
+
+  [JsonRpcMethod("test/debug")]
+  public async Task<IAsyncEnumerable<TestRunResult>> Debug(
+    string projectPath,
+    string configuration,
+    RunRequestNode[] filter,
+    string? targetFrameworkMoniker = null,
+    CancellationToken token = default
+  )
+  {
+    if (!clientService.IsInitialized)
+    {
+      throw new Exception("Client has not initialized yet");
+    }
+    var project = await GetProject(projectPath, targetFrameworkMoniker, configuration, token);
+
+
+    if (project.TestingPlatformDotnetTestSupport)
+    {
+      var path = GetExecutablePath(project);
+
+      var res = await WithTimeout(
+        (token) => mtpService.DebugTestsAsync(project, path, filter, token),
+        TimeSpan.FromMinutes(3),
+        token
+      );
+      return res.AsAsyncEnumerable();
+    }
+    else
+    {
+      var runSettingsFile = settingsService.GetProjectRunSettings(projectPath!);
+      var runSettings = runSettingsFile is not null ? fileSystem.File.ReadAllText(runSettingsFile) : null;
+      logger.LogInformation("Using runsettings {runSettings}", runSettingsFile);
+      return (await vsTestService.DebugTests(project, [.. filter.Select(x => Guid.Parse(x.Uid))], runSettings, token)).ToBatchedAsyncEnumerable(30);
     }
   }
 
@@ -88,7 +125,7 @@ public class TestController(
     else
     {
       throw new NotImplementedException();
-      // return (await vsTestService.RunTestsAsync(project.TargetPath!, [.. filter.Select(x => Guid.Parse(x.Uid))], CancellationToken.None)).ToBatchedAsyncEnumerable(30);
+      // return (await vsTestService.RunTests(project, [.. filter.Select(x => Guid.Parse(x.Uid))], runSettings, token)).ToBatchedAsyncEnumerable(30);
     }
   }
 

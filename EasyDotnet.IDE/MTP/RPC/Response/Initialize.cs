@@ -21,5 +21,7 @@ public sealed record ServerInfo(
     [property:JsonProperty("version")]
   string Version = "1.0.0");
 public sealed record InitializeResponse(
+    [property:JsonProperty("processId")]
+    int? ProcessId,
     ServerInfo ServerInfo,
     ServerCapabilities Capabilities);

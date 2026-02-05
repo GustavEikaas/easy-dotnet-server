@@ -105,6 +105,16 @@ _No parameters_
 
 ## TestController
 
+### `test/debug`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+| configuration | string |   |
+| filter | RunRequestNode[] |   |
+| targetFrameworkMoniker | string | ✅  |
+
+**Returns:** `Task<IAsyncEnumerable<TestRunResult>>`
+
 ### `test/discover`
 | Parameter | Type | Optional |
 |-----------|------|----------|
@@ -133,7 +143,7 @@ _No parameters_
 
 ## TemplateController
 
-### `template/instantiate`
+### `template/instantiate/v2`
 | Parameter | Type | Optional |
 |-----------|------|----------|
 | identity | string |   |

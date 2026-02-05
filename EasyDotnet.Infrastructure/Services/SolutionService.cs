@@ -5,12 +5,23 @@ using Microsoft.Build.Construction;
 
 namespace EasyDotnet.Infrastructure.Services;
 
-public class SolutionService : ISolutionService
+public class SolutionService(IProcessQueue processQueue) : ISolutionService
 {
   public List<SolutionFileProject> GetProjectsFromSolutionFile(string solutionFilePath)
   {
     var fullSolutionPath = Path.GetFullPath(solutionFilePath);
     return Path.GetExtension(fullSolutionPath) == ".slnx" ? GetProjectsFromSlnx(fullSolutionPath) : GetProjectsFromSln(fullSolutionPath) ?? throw new Exception($"Failed to resolve {fullSolutionPath}");
+  }
+
+  public async Task<bool> AddProjectToSolutionAsync(string solutionFilePath, string projectPath, CancellationToken cancellationToken)
+  {
+    var (success, stdout, stderr) = await processQueue.RunProcessAsync(
+           "dotnet",
+           $"solution \"{solutionFilePath}\" add \"{projectPath}\"",
+           new ProcessOptions(true),
+           cancellationToken);
+
+    return success;
   }
 
   private static List<SolutionFileProject> GetProjectsFromSln(string slnPath) => [.. SolutionFile.Parse(slnPath).ProjectsInOrder

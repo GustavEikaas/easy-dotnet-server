@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
@@ -40,11 +41,11 @@ public class TemplateController(TemplateEngineService templateEngineService, IEd
       .ToBatchedAsyncEnumerable(5);
   }
 
-  [JsonRpcMethod("template/instantiate")]
-  public async Task InvokeTemplate(string identity, string name, string outputPath, Dictionary<string, string?>? parameters)
+  [JsonRpcMethod("template/instantiate/v2")]
+  public async Task InvokeTemplate(string identity, string name, string outputPath, Dictionary<string, string?>? parameters, CancellationToken cancellationToken)
   {
     await templateEngineService.EnsureInstalled();
-    await templateEngineService.InstantiateTemplateAsync(identity, name, outputPath, parameters);
+    await templateEngineService.InstantiateTemplateAsync(identity, name, outputPath, parameters, cancellationToken);
 
     await OpenEntryPointIfApplicable(outputPath);
   }

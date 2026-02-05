@@ -8,6 +8,7 @@ using DotNetOutdated.Core.Services;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Debugger;
 using EasyDotnet.IDE;
+using EasyDotnet.IDE.DebuggerStrategies;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.Utils;
 using EasyDotnet.Infrastructure.Aspire;
@@ -58,6 +59,7 @@ public static class DiModules
     services.AddSingleton<SettingsGarbageCollector>();
     services.AddSingleton<IEditorProcessManagerService, EditorProcessManagerService>();
     services.AddSingleton<IEditorService, EditorService>();
+    services.AddSingleton<IDebugStrategyFactory, DebugStrategyFactory>();
 
     services.AddTransient<IProgressScopeFactory, ProgressScopeFactory>();
     services.AddTransient<IMsBuildService, MsBuildService>();
