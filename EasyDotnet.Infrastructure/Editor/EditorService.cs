@@ -15,7 +15,7 @@ public class EditorService(IEditorProcessManagerService editorProcessManagerServ
   public async Task DisplayMessage(string message) =>
     await jsonRpc.NotifyWithParameterObjectAsync("displayMessage", new DisplayMessage(message));
 
-  public async Task<bool> RequestOpenBuffer(string path, int? line) => await jsonRpc.InvokeWithParameterObjectAsync<bool>("openBuffer", new OpenBufferRequest(path, line));
+  public async Task<bool> RequestOpenBuffer(string path, int? line = null) => await jsonRpc.InvokeWithParameterObjectAsync<bool>("openBuffer", new OpenBufferRequest(path, line));
   public async Task<bool> RequestSetBreakpoint(string path, int lineNumber) => await jsonRpc.InvokeWithParameterObjectAsync<bool>("setBreakpoint", new SetBreakpointRequest(path, lineNumber));
   public async Task<bool> RequestConfirmation(string prompt, bool defaultValue) => await jsonRpc.InvokeWithParameterObjectAsync<bool>("promptConfirm", new PromptConfirmRequest(prompt, defaultValue));
   public async Task<string?> RequestString(string prompt, string? defaultValue) => await jsonRpc.InvokeWithParameterObjectAsync<string?>("promptString", new PromptString(prompt, defaultValue));
