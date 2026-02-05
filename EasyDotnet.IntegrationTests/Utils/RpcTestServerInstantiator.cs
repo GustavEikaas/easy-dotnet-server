@@ -1,3 +1,4 @@
+using EasyDotnet.IDE;
 using EasyDotnet.IntegrationTests.Initialize;
 using Nerdbank.Streams;
 using StreamJsonRpc;

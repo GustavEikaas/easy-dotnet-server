@@ -4,13 +4,13 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
+using EasyDotnet.Domain.Models.Test;
 using EasyDotnet.Extensions;
 using EasyDotnet.IDE.DebuggerStrategies;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.MsBuild;
 using EasyDotnet.MTP;
 using EasyDotnet.MTP.RPC;
-using EasyDotnet.Types;
 
 namespace EasyDotnet.Services;
 
@@ -28,7 +28,7 @@ public class MtpService(
 
     await using var client = await Client.CreateAsync(testExecutablePath);
     var discovered = await client.DiscoverTestsAsync(token);
-    var tests = discovered.Where(x => x != null && x.Node != null).Select(x => x.ToDiscoveredTest()).ToList();
+    var tests = discovered.Where(x => x != null && x.Node != null).Select(Domain.Models.MTP.TestNodeExtensions.ToDiscoveredTest).ToList();
     return tests;
   }
 
