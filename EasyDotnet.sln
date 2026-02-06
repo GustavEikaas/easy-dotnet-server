@@ -29,6 +29,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EasyDotnet.RoslynLanguageSe
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EasyDotnet.RoslynLanguageServices.Tests", "EasyDotnet.RoslynLanguageServices.Tests\EasyDotnet.RoslynLanguageServices.Tests.csproj", "{C4357AF8-C5AC-48F6-AEB9-8D13BE47121D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EasyDotnet.BuildServer", "EasyDotnet.BuildServer\EasyDotnet.BuildServer.csproj", "{F3529527-56B9-4084-975D-4A34331ED841}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -195,6 +197,18 @@ Global
 		{C4357AF8-C5AC-48F6-AEB9-8D13BE47121D}.Release|x64.Build.0 = Release|Any CPU
 		{C4357AF8-C5AC-48F6-AEB9-8D13BE47121D}.Release|x86.ActiveCfg = Release|Any CPU
 		{C4357AF8-C5AC-48F6-AEB9-8D13BE47121D}.Release|x86.Build.0 = Release|Any CPU
+		{F3529527-56B9-4084-975D-4A34331ED841}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F3529527-56B9-4084-975D-4A34331ED841}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F3529527-56B9-4084-975D-4A34331ED841}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{F3529527-56B9-4084-975D-4A34331ED841}.Debug|x64.Build.0 = Debug|Any CPU
+		{F3529527-56B9-4084-975D-4A34331ED841}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{F3529527-56B9-4084-975D-4A34331ED841}.Debug|x86.Build.0 = Debug|Any CPU
+		{F3529527-56B9-4084-975D-4A34331ED841}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F3529527-56B9-4084-975D-4A34331ED841}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F3529527-56B9-4084-975D-4A34331ED841}.Release|x64.ActiveCfg = Release|Any CPU
+		{F3529527-56B9-4084-975D-4A34331ED841}.Release|x64.Build.0 = Release|Any CPU
+		{F3529527-56B9-4084-975D-4A34331ED841}.Release|x86.ActiveCfg = Release|Any CPU
+		{F3529527-56B9-4084-975D-4A34331ED841}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
