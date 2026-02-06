@@ -30,6 +30,13 @@ public class BuildService(IIdeLogger ideLogger)
     return ExecuteTarget(request.ProjectFile, ["Clean"], props);
   }
 
+  [JsonRpcMethod("publish", UseSingleObjectParameterDeserialization = true)]
+  public BuildRpcResult Publish(PublishRequest request)
+  {
+    var props = MergeProperties(request.Properties, request.Configuration);
+    return ExecuteTarget(request.ProjectFile, ["Publish"], props);
+  }
+
   private BuildRpcResult ExecuteTarget(string projectFile, string[] targets, Dictionary<string, string> globalProperties)
   {
     // 1. Log INPUTS (Debug Level)

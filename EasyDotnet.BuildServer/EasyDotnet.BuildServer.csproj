@@ -13,7 +13,9 @@
     <PackageReference Include="Microsoft.Build.Locator" Version="1.9.1" />
     <PackageReference Include="Microsoft.Build" Version="17.11.48" ExcludeAssets="runtime" />
     <PackageReference Include="Microsoft.NET.StringTools" Version="17.11.48" ExcludeAssets="runtime" />
-    <!-- <PackageReference Include="System.Collections.Immutable" Version="8.0.0" ExcludeAssets="runtime" /> -->
-    <!-- <PackageReference Include="System.Reflection.Metadata" Version="8.0.0" ExcludeAssets="runtime" /> -->
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\EasyDotnet.MsBuild\EasyDotnet.MsBuild.csproj" />
   </ItemGroup>
 </Project>

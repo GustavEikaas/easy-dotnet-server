@@ -1,4 +1,4 @@
-namespace EasyDotnet.BuildServer.Models;
+namespace EasyDotnet.MsBuild.Contracts.Build;
 
 public sealed record BuildRequest(
     string ProjectFile,
