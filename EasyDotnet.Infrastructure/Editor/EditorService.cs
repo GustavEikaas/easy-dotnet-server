@@ -4,7 +4,10 @@ using StreamJsonRpc;
 
 namespace EasyDotnet.Infrastructure.Editor;
 
-public class EditorService(IEditorProcessManagerService editorProcessManagerService, JsonRpc jsonRpc) : IEditorService
+public class EditorService(
+  IEditorProcessManagerService editorProcessManagerService,
+  IMsBuildService buildService,
+  JsonRpc jsonRpc) : IEditorService
 {
   public async Task DisplayError(string message) =>
       await jsonRpc.NotifyWithParameterObjectAsync("displayError", new DisplayMessage(message));
@@ -82,4 +85,18 @@ public class EditorService(IEditorProcessManagerService editorProcessManagerServ
   public async Task SetQuickFixList(QuickFixItem[] quickFixItems) => await jsonRpc.NotifyWithParameterObjectAsync("quickfix/set", quickFixItems);
 
   public async Task CloseQuickFixList() => await jsonRpc.NotifyWithParameterObjectAsync("quickfix/close");
+
+  public async Task<bool> BuildProject(string projectPath, CancellationToken cancellationToken)
+  {
+    using var progress = new ProgressScope(this, "Building", $"Building {Path.GetFileNameWithoutExtension(projectPath)}");
+    var res = await buildService.RequestBuildAsync(projectPath, null, null, null, cancellationToken);
+    if (res.Success)
+    {
+      return true;
+    }
+    progress.Report("Build failed", 100);
+    var errors = res.Errors.Select(x => new QuickFixItem(x.FilePath, x.LineNumber, x.ColumnNumber, x.Message ?? "ERR", QuickFixItemType.Error));
+    await SetQuickFixList([.. errors]);
+    return false;
+  }
 }
