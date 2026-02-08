@@ -121,3 +121,12 @@ public class InterceptableVariablesArguments
   [JsonExtensionData]
   public Dictionary<string, JsonElement>? ExtraProperties { get; set; }
 }
+
+public class TelemetryEvent : Event;
+
+public class Metrics
+{
+  public required double CpuPercent { get; init; }
+  public required double MemoryBytes { get; init; }
+  public required long Timestamp { get; init; }
+}
