@@ -115,12 +115,6 @@ public class DebugSessionCoordinator(
     logger.LogInformation("Debugee process started: {processId}", processId);
     _debugeeProcessStartedSource.SetResult(processId);
 
-
-    if (_proxy is null)
-    {
-      return;
-    }
-
     StartTelemetryMonitoring(processId);
   }
 
