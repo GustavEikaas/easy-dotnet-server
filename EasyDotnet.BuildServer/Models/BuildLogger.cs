@@ -1,3 +1,4 @@
+using EasyDotnet.BuildServer.Contracts;
 using Microsoft.Build.Framework;
 
 namespace EasyDotnet.BuildServer.Models;

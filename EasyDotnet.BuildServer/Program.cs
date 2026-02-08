@@ -1,84 +1,115 @@
-﻿using EasyDotnet.BuildServer.Handlers;
+﻿using System.Diagnostics;
 using Microsoft.Build.Locator;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Serilog;
 using StreamJsonRpc;
 
 namespace EasyDotnet.BuildServer;
 
 static class Program
 {
-  static async Task Main(string[] args)
+  static async Task<int> Main(string[] args)
   {
-    // ---------------------------------------------------------
-    // PHASE 1: BOOTSTRAP
-    // We cannot touch ANY "Microsoft.Build.*" types here yet.
-    // ---------------------------------------------------------
+    var logLevel = ParseLogLevel(args);
 
-    // 1. Debugging Helper (Optional)
-    // If you need to attach a debugger from VS, uncomment this:
-    // if (args.Contains("--debug")) { Debugger.Launch(); }
-
-    // 2. Find the SDK that matches the CURRENT Runtime.
-    // If this process was launched via "dotnet exec", Environment.Version 
-    // tells us which runtime is actually active.
-    var currentRuntimeVersion = Environment.Version;
-
-    // Query all SDKs installed on the machine
-    var instances = MSBuildLocator.QueryVisualStudioInstances().ToList();
-
-    // Filter: Find the SDK that matches our major version (e.g. 8.x or 10.x)
-    // We sort by descending to get the newest feature band (e.g. 8.0.400 over 8.0.100)
-    var matchingInstance = instances
-        .Where(i => i.Version.Major == currentRuntimeVersion.Major)
-        .OrderByDescending(i => i.Version)
-        .FirstOrDefault();
-
-    if (matchingInstance == null)
+    if (!RegisterMSBuild())
     {
-      // Log to Stderr (StreamJsonRpc uses Stdout, so we can't pollute it)
-      Console.Error.WriteLine($"[Error] Could not find an MSBuild SDK for Runtime {currentRuntimeVersion}");
-      Environment.Exit(1);
-      return;
+      return 1;
     }
 
-    // 3. Register the SDK.
-    // This unlocks the ability to load "Microsoft.Build.*" assemblies.
-    MSBuildLocator.RegisterInstance(matchingInstance);
-
-    // Log success to Stderr
-    Console.Error.WriteLine($"[Info] BuildServer running on {currentRuntimeVersion}");
-    Console.Error.WriteLine($"[Info] Registered MSBuild: {matchingInstance.MSBuildPath}");
-
-    // ---------------------------------------------------------
-    // PHASE 2: HANDOFF
-    // Now call a separate method that uses MSBuild types.
-    // ---------------------------------------------------------
-    await RunRpcServer();
+    return await RunServerAsync(logLevel);
   }
 
-  // This attribute prevents the JIT from loading this method (and crashing)
-  // before MSBuildLocator has finished its job.
-  [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-  static async Task RunRpcServer()
+  private static bool RegisterMSBuild()
   {
-    // Setup JSON-RPC over Standard Input/Output
-    var stream = new HeaderDelimitedMessageHandler(
+    try
+    {
+      var currentRuntimeVersion = Environment.Version;
+      var instances = MSBuildLocator.QueryVisualStudioInstances().ToList();
+
+      Console.Error.WriteLine($"[Info] Found {instances.Count} MSBuild instance(s)");
+
+      var matchingInstance = instances
+          .Where(i => i.Version.Major == currentRuntimeVersion.Major)
+          .OrderByDescending(i => i.Version)
+          .FirstOrDefault();
+
+      if (matchingInstance == null)
+      {
+        Console.Error.WriteLine($"[Error] Could not find an MSBuild SDK for Runtime {currentRuntimeVersion}");
+        Console.Error.WriteLine($"[Error] Available instances:");
+        foreach (var instance in instances)
+        {
+          Console.Error.WriteLine($"  - {instance.Name} (v{instance.Version}) at {instance.MSBuildPath}");
+        }
+        return false;
+      }
+
+      MSBuildLocator.RegisterInstance(matchingInstance);
+
+      Console.Error.WriteLine($"[Info] BuildServer running on .NET {currentRuntimeVersion}");
+      Console.Error.WriteLine($"[Info] Registered MSBuild: {matchingInstance.Name} (v{matchingInstance.Version})");
+      Console.Error.WriteLine($"[Info] MSBuild Path: {matchingInstance.MSBuildPath}");
+
+      return true;
+    }
+    catch (Exception ex)
+    {
+      Console.Error.WriteLine($"[Error] Failed to register MSBuild: {ex.Message}");
+      Console.Error.WriteLine($"[Error] Stack Trace: {ex.StackTrace}");
+      return false;
+    }
+  }
+
+  [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+  private static async Task<int> RunServerAsync(SourceLevels logLevel)
+  {
+    var messageHandler = new HeaderDelimitedMessageHandler(
         Console.OpenStandardOutput(),
         Console.OpenStandardInput()
     );
 
-    var rpc = new JsonRpc(stream);
-    var ideLogger = rpc.Attach<IIdeLogger>();
+    var jsonRpc = new JsonRpc(messageHandler);
 
-    // Register your service class (this is where your logic lives)
-    var buildService = new BuildService(ideLogger);
+    var serviceProvider = DiModule.BuildServiceProvider(jsonRpc, logLevel);
+    var logger = serviceProvider.GetRequiredService<ILogger<JsonRpc>>();
 
-    // 4. Register the Service (So IDE can call us)
-    rpc.AddLocalRpcTarget(buildService);
+    logger.LogInformation("Build server initialized successfully");
+    logger.LogInformation("Listening for JSON RPC requests on stdin/stdout");
 
-    // Start listening
-    rpc.StartListening();
+    jsonRpc.StartListening();
 
-    // Wait until the connection closes (or the IDE kills us)
-    await rpc.Completion;
+    logger.LogInformation("Build server is now listening");
+
+    await jsonRpc.Completion;
+
+    return 0;
+  }
+
+  private static SourceLevels ParseLogLevel(string[] args)
+  {
+    foreach (var arg in args)
+    {
+      if (arg.StartsWith("--log-level=", StringComparison.OrdinalIgnoreCase))
+      {
+        var level = arg.Substring("--log-level=".Length);
+        return level.ToLowerInvariant() switch
+        {
+          "verbose" => SourceLevels.Verbose,
+          "information" => SourceLevels.Information,
+          "warning" => SourceLevels.Warning,
+          "error" => SourceLevels.Error,
+          "critical" => SourceLevels.Critical,
+          _ => SourceLevels.Information
+        };
+      }
+    }
+
+#if DEBUG
+    return SourceLevels.Verbose;
+#else
+        return SourceLevels.Information;
+#endif
   }
 }

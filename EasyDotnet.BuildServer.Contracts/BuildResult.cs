@@ -1,4 +1,4 @@
-namespace EasyDotnet.MsBuild.Contracts.Build;
+namespace EasyDotnet.BuildServer.Contracts;
 
 public sealed record BuildRpcResult(
     bool Success,

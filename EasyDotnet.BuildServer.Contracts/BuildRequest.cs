@@ -1,6 +1,6 @@
-namespace EasyDotnet.BuildServer.Models;
+namespace EasyDotnet.BuildServer.Contracts;
 
-public sealed record CleanRequest(
+public sealed record BuildRequest(
     string ProjectFile,
     string? Configuration,
     Dictionary<string, string>? Properties = null
