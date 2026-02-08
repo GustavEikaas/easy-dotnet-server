@@ -27,8 +27,8 @@ public static class TestNodeExtensions
     Id = test.Node.Uid,
     Outcome = test.Node.ExecutionState,
     Duration = (long?)test.Node.Duration,
-    ErrorMessage = test.Node.Message?.Split(Environment.NewLine) ?? [],
-    StackTrace = (test.Node.StackTrace?.Split(Environment.NewLine) ?? []).AsAsyncEnumerable(),
-    StdOut = (test.Node.StandardOutput?.Split(Environment.NewLine) ?? []).AsAsyncEnumerable()
+    ErrorMessage = test.Node.Message?.Split([Environment.NewLine, "\n"], StringSplitOptions.RemoveEmptyEntries) ?? [],
+    StackTrace = (test.Node.StackTrace?.Split([Environment.NewLine, "\n"], StringSplitOptions.RemoveEmptyEntries) ?? []).AsAsyncEnumerable(),
+    StdOut = (test.Node.StandardOutput?.Split([Environment.NewLine, "\n"], StringSplitOptions.RemoveEmptyEntries) ?? []).AsAsyncEnumerable()
   };
 }
