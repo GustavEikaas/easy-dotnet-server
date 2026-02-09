@@ -1,7 +1,6 @@
-using System;
 using EasyDotnet.Application.Interfaces;
 
-namespace EasyDotnet.IDE;
+namespace EasyDotnet.Infrastructure.Editor;
 
 public sealed class ProgressScope : IDisposable
 {

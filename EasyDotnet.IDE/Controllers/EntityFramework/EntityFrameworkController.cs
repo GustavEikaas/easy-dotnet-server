@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
 using EasyDotnet.Domain.Models.Client;
+using EasyDotnet.Infrastructure.Editor;
 using EasyDotnet.Infrastructure.EntityFramework;
 using StreamJsonRpc;
 
