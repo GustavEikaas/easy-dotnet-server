@@ -1,8 +1,10 @@
 ﻿using System.Diagnostics;
 using System.IO.Pipes;
+using System.Text.Json;
 using Microsoft.Build.Locator;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json.Serialization;
 using StreamJsonRpc;
 
 namespace EasyDotnet.BuildServer;
@@ -25,37 +27,77 @@ static class Program
       return 1;
     }
 
-    return await RunClient(logLevel, pipe);
+    return await RunServer(logLevel, pipe);
   }
 
   private static bool RegisterMSBuild()
   {
+#pragma warning disable IDE0022 // Use expression body for method
+#if NET472
+    return RegisterMSBuildFramework();
+#else
+    return RegisterMSBuildCore();
+#pragma warning restore IDE0022 // Use expression body for method
+#endif
+  }
+
+  private static bool RegisterMSBuildFramework()
+  {
+    try
+    {
+      var instances = MSBuildLocator.QueryVisualStudioInstances().ToList();
+
+      var bestInstance = instances
+          .OrderByDescending(i => i.Version)
+          .FirstOrDefault();
+
+      if (bestInstance == null)
+      {
+        Console.Error.WriteLine("[Error] No Visual Studio instances found.");
+        return false;
+      }
+
+      MSBuildLocator.RegisterInstance(bestInstance);
+
+      Console.Error.WriteLine($"[Info] BuildServer running on .NET Framework {Environment.Version}");
+      Console.Error.WriteLine($"[Info] Registered MSBuild: {bestInstance.Name} (v{bestInstance.Version})");
+      Console.Error.WriteLine($"[Info] MSBuild Path: {bestInstance.MSBuildPath}");
+
+      return true;
+    }
+    catch (Exception ex)
+    {
+      Console.Error.WriteLine($"[Error] Failed to register MSBuild (Framework): {ex.Message}");
+      return false;
+    }
+  }
+
+  private static bool RegisterMSBuildCore()
+  {
     try
     {
       var currentRuntimeVersion = Environment.Version;
-      var instances = MSBuildLocator.QueryVisualStudioInstances().ToList();
 
-      Console.Error.WriteLine($"[Info] Found {instances.Count} MSBuild instance(s)");
+      var instances = MSBuildLocator.QueryVisualStudioInstances()
+          .Where(i => i.Version.Major == currentRuntimeVersion.Major)
+          .ToList();
+
+      Console.Error.WriteLine($"[Info] Found {instances.Count} compatible MSBuild instance(s)");
 
       var matchingInstance = instances
-          .Where(i => i.Version.Major == currentRuntimeVersion.Major)
           .OrderByDescending(i => i.Version)
           .FirstOrDefault();
 
       if (matchingInstance == null)
       {
         Console.Error.WriteLine($"[Error] Could not find an MSBuild SDK for Runtime {currentRuntimeVersion}");
-        Console.Error.WriteLine($"[Error] Available instances:");
-        foreach (var instance in instances)
-        {
-          Console.Error.WriteLine($"  - {instance.Name} (v{instance.Version}) at {instance.MSBuildPath}");
-        }
+        Console.Error.WriteLine($"[Error] Ensure you have the .NET SDK installed for this major version.");
         return false;
       }
 
       MSBuildLocator.RegisterInstance(matchingInstance);
 
-      Console.Error.WriteLine($"[Info] BuildServer running on .NET {currentRuntimeVersion}");
+      Console.Error.WriteLine($"[Info] BuildServer running on .NET Core {currentRuntimeVersion}");
       Console.Error.WriteLine($"[Info] Registered MSBuild: {matchingInstance.Name} (v{matchingInstance.Version})");
       Console.Error.WriteLine($"[Info] MSBuild Path: {matchingInstance.MSBuildPath}");
 
@@ -63,58 +105,63 @@ static class Program
     }
     catch (Exception ex)
     {
-      Console.Error.WriteLine($"[Error] Failed to register MSBuild: {ex.Message}");
-      Console.Error.WriteLine($"[Error] Stack Trace: {ex.StackTrace}");
+      Console.Error.WriteLine($"[Error] Failed to register MSBuild (Core): {ex.Message}");
       return false;
     }
   }
 
-  private static async Task<HeaderDelimitedMessageHandler> CreateClientMessageHandlerAsync(
-    string pipeName)
+  private static async Task<HeaderDelimitedMessageHandler> CreateServerMessageHandlerAsync(
+      string pipeName)
   {
-    var pipe = new NamedPipeClientStream(
-      serverName: ".",
-      pipeName: pipeName,
-      direction: PipeDirection.InOut,
+    var pipeServer = new NamedPipeServerStream(
+      pipeName,
+      PipeDirection.InOut,
+      maxNumberOfServerInstances: 1,
+      transmissionMode: PipeTransmissionMode.Byte,
       options: PipeOptions.Asynchronous
     );
 
-    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    Console.Error.WriteLine($"[Info] Waiting for connection on pipe: {pipeName}...");
 
-    try
-    {
-      await pipe.ConnectAsync(cts.Token);
-    }
-    catch (OperationCanceledException)
-    {
-      throw new TimeoutException($"Timed out after 5 seconds waiting for pipe '{pipeName}'.");
-    }
+    await pipeServer.WaitForConnectionAsync();
 
-    return new HeaderDelimitedMessageHandler(pipe, pipe);
+    Console.Error.WriteLine("[Info] Client connected.");
+
+    return new HeaderDelimitedMessageHandler(pipeServer, pipeServer, CreateJsonMessageFormatter());
   }
 
-  [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-  private static async Task<int> RunClient(
-  SourceLevels logLevel,
-  string pipeName)
+  private static JsonMessageFormatter CreateJsonMessageFormatter() => new()
   {
-    var messageHandler = await CreateClientMessageHandlerAsync(pipeName);
+    JsonSerializer = { ContractResolver = new DefaultContractResolver
+            {
+                NamingStrategy = new CamelCaseNamingStrategy()
+            }}
+  };
+
+  [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+  private static async Task<int> RunServer(
+    SourceLevels logLevel,
+    string pipeName)
+  {
+    var messageHandler = await CreateServerMessageHandlerAsync(pipeName);
 
     var jsonRpc = new JsonRpc(messageHandler);
 
     var serviceProvider = DiModule.BuildServiceProvider(jsonRpc, logLevel);
+
     var logger = serviceProvider.GetRequiredService<ILogger<JsonRpc>>();
 
-    logger.LogInformation("JSON-RPC client initialized");
-    logger.LogInformation("Connected via named pipe {PipeName}", pipeName);
+    logger.LogInformation("JSON-RPC Server initialized");
+    logger.LogInformation("Listening on named pipe {PipeName}", pipeName);
 
     jsonRpc.StartListening();
 
     await jsonRpc.Completion;
 
+    logger.LogInformation("Client disconnected. Shutting down.");
+
     return 0;
   }
-
 
   private static string? ParsePipe(string[] args)
   {

@@ -1,0 +1,127 @@
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.IO.Pipes;
+using System.Threading;
+using System.Threading.Tasks;
+using EasyDotnet.Application.Interfaces;
+using EasyDotnet.IDE.Utils;
+using Microsoft.Extensions.Logging;
+using Newtonsoft.Json.Serialization;
+using StreamJsonRpc;
+
+namespace EasyDotnet.IDE.BuildHost;
+
+public enum BuildServerRuntime
+{
+  Net472,
+  Net80
+}
+
+public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService clientService)
+{
+  private const string PathNet472 = @"C:/Users/gusta/repo/easy-dotnet-server/EasyDotnet.BuildServer/bin/Debug/net472/EasyDotnet.BuildServer.exe";
+  private const string PathNet80 = @"C:/Users/gusta/repo/easy-dotnet-server/EasyDotnet.BuildServer/bin/Debug/net8.0/EasyDotnet.BuildServer.dll";
+
+  public async Task<(Process, JsonRpc)> StartServerAsync()
+  {
+    clientService.ThrowIfNotInitialized();
+
+    var runtime = BuildServerRuntime.Net80;
+
+    if (clientService.UseVisualStudio && OperatingSystem.IsWindows())
+    {
+      runtime = BuildServerRuntime.Net472;
+    }
+
+    logger.LogInformation("Spawning BuildServer using runtime: {Runtime}", runtime);
+
+    var pipeName = PipeUtils.GeneratePipeName();
+    var process = SpawnProcess(runtime, pipeName);
+
+    try
+    {
+      var clientStream = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+      logger.LogInformation("Connecting to pipe: {PipeName}...", pipeName);
+
+      using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+      await ConnectWithRetryAsync(clientStream, cts.Token);
+
+      logger.LogInformation("Connected to BuildServer.");
+
+      var rpc = new JsonRpc(new HeaderDelimitedMessageHandler(clientStream, clientStream, CreateJsonMessageFormatter()));
+      rpc.StartListening();
+
+      return (process, rpc);
+    }
+    catch (Exception ex)
+    {
+      logger.LogError(ex, "Failed to connect to BuildServer. Killing process.");
+      try { process.Kill(); } catch { }
+      throw;
+    }
+  }
+
+  private static JsonMessageFormatter CreateJsonMessageFormatter() => new()
+  {
+    JsonSerializer = { ContractResolver = new DefaultContractResolver
+            {
+                NamingStrategy = new CamelCaseNamingStrategy()
+            }}
+  };
+
+  private Process SpawnProcess(BuildServerRuntime runtime, string pipeName)
+  {
+    var startInfo = new ProcessStartInfo
+    {
+      UseShellExecute = false,
+      CreateNoWindow = true,
+      RedirectStandardError = true,
+      RedirectStandardOutput = false,
+      WorkingDirectory = Path.GetDirectoryName(PathNet80)
+    };
+
+    if (runtime == BuildServerRuntime.Net472)
+    {
+      startInfo.FileName = PathNet472;
+      startInfo.Arguments = $"--pipe \"{pipeName}\" --log-level=verbose";
+    }
+    else
+    {
+      startInfo.FileName = "dotnet";
+      startInfo.Arguments = $"exec \"{PathNet80}\" --pipe \"{pipeName}\" --log-level=verbose";
+    }
+
+    var process = new Process { StartInfo = startInfo };
+
+    process.ErrorDataReceived += (s, e) =>
+    {
+      if (!string.IsNullOrEmpty(e.Data))
+        logger.LogDebug("[BuildServer-STDERR] {Msg}", e.Data);
+    };
+
+    process.Start();
+    process.BeginErrorReadLine();
+
+    return process;
+  }
+
+  private static async Task ConnectWithRetryAsync(NamedPipeClientStream stream, CancellationToken token)
+  {
+    var retryDelayMs = 50;
+    while (!token.IsCancellationRequested)
+    {
+      try
+      {
+        await stream.ConnectAsync(500, token);
+        return;
+      }
+      catch (TimeoutException) { }
+      catch (IOException) { }
+
+      await Task.Delay(retryDelayMs, token);
+      retryDelayMs = Math.Min(retryDelayMs * 2, 500);
+    }
+    throw new TimeoutException("Timed out waiting for BuildServer pipe.");
+  }
+}

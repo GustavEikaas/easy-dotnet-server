@@ -1,0 +1,99 @@
+using System;
+using System.Diagnostics;
+using System.Threading;
+using System.Threading.Tasks;
+using EasyDotnet.BuildServer.Contracts;
+using Microsoft.Extensions.Logging;
+using StreamJsonRpc;
+
+namespace EasyDotnet.IDE.BuildHost;
+
+public sealed class BuildHostManager(ILogger<BuildHostManager> logger, BuildHostFactory factory) : IDisposable, IAsyncDisposable
+{
+  private Process? _serverProcess;
+  private JsonRpc? _rpc;
+  private bool _isDisposed;
+
+  private readonly SemaphoreSlim _connectionLock = new(1, 1);
+
+  public async Task<GetSolutionProjectsResponse> GetSolutionFileProjectsAsync(GetSolutionProjectsRequest request, CancellationToken cancellationToken)
+  {
+    EnsureNotDisposed();
+    var rpc = await GetRpcClientAsync();
+    try
+    {
+      return await rpc.InvokeWithParameterObjectAsync<GetSolutionProjectsResponse>("solution/get-projects", request, cancellationToken);
+    }
+    catch (ConnectionLostException)
+    {
+      await InvalidateConnectionAsync();
+      throw new Exception("BuildServer connection was lost. Please try again.");
+    }
+  }
+
+  private async Task<JsonRpc> GetRpcClientAsync()
+  {
+    if (_rpc != null && !_rpc.IsDisposed && _serverProcess != null && !_serverProcess.HasExited)
+    {
+      return _rpc;
+    }
+
+    await _connectionLock.WaitAsync();
+    try
+    {
+      if (_rpc != null && !_rpc.IsDisposed && _serverProcess != null && !_serverProcess.HasExited)
+      {
+        return _rpc;
+      }
+
+      await InvalidateConnectionAsync();
+
+      logger.LogInformation("Spawning new BuildServer instance...");
+      var (process, rpc) = await factory.StartServerAsync();
+
+      _serverProcess = process;
+      _rpc = rpc;
+
+      _rpc.Disconnected += (s, e) => logger.LogInformation("BuildHost disconnected: {Reason}", e.Reason);
+
+      return _rpc;
+    }
+    finally
+    {
+      _connectionLock.Release();
+    }
+  }
+
+  private async Task InvalidateConnectionAsync()
+  {
+    try { _rpc?.Dispose(); } catch { }
+    try
+    {
+      if (_serverProcess != null && !_serverProcess.HasExited)
+        _serverProcess.Kill();
+    }
+    catch { }
+
+    _serverProcess = null;
+    _rpc = null;
+    await Task.CompletedTask;
+  }
+
+  private void EnsureNotDisposed() => ObjectDisposedException.ThrowIf(_isDisposed, this);
+
+  public void Dispose()
+  {
+    if (_isDisposed) return;
+    _isDisposed = true;
+    _connectionLock.Dispose();
+    InvalidateConnectionAsync().GetAwaiter().GetResult();
+  }
+
+  public async ValueTask DisposeAsync()
+  {
+    if (_isDisposed) return;
+    _isDisposed = true;
+    _connectionLock.Dispose();
+    await InvalidateConnectionAsync();
+  }
+}

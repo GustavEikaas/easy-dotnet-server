@@ -25,7 +25,7 @@ public static class DiModule
 
     services.AddSingleton(jsonRpc);
 
-    services.AddTransient<BuildHandler>();
+    services.AddTransient<SolutionHandler>();
 
     var serviceProvider = services.BuildServiceProvider();
 
@@ -79,7 +79,7 @@ public static class DiModule
 
     var handlers = new object[]
     {
-      serviceProvider.GetRequiredService<BuildHandler>(),
+      serviceProvider.GetRequiredService<SolutionHandler>(),
     };
 
     foreach (var handler in handlers)
