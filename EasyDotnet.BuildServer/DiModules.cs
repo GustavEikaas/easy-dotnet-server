@@ -1,7 +1,9 @@
 using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.BuildServer.Handlers;
+using Microsoft.Build.Locator;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog;
@@ -11,7 +13,7 @@ namespace EasyDotnet.BuildServer;
 
 public static class DiModule
 {
-  public static ServiceProvider BuildServiceProvider(JsonRpc jsonRpc, SourceLevels logLevel)
+  public static ServiceProvider BuildServiceProvider(JsonRpc jsonRpc, VisualStudioInstance instance, SourceLevels logLevel)
   {
     var services = new ServiceCollection();
 
@@ -26,6 +28,9 @@ public static class DiModule
     services.AddSingleton(jsonRpc);
 
     services.AddTransient<SolutionHandler>();
+    services.AddTransient<WatchHandler>();
+
+    services.AddSingleton(new SdkInstallation(instance.Name, $"net{instance.Version.Major}.0", instance.Version, instance.MSBuildPath, instance.VisualStudioRootPath));
 
     var serviceProvider = services.BuildServiceProvider();
 
@@ -80,6 +85,7 @@ public static class DiModule
     var handlers = new object[]
     {
       serviceProvider.GetRequiredService<SolutionHandler>(),
+      serviceProvider.GetRequiredService<WatchHandler>(),
     };
 
     foreach (var handler in handlers)

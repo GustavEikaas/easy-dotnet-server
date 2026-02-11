@@ -31,6 +31,21 @@ public sealed class BuildHostManager(ILogger<BuildHostManager> logger, BuildHost
     }
   }
 
+  public async Task<GetWatchListResponse> GetProjectWatchListAsync(GetWatchListRequest request, CancellationToken cancellationToken)
+  {
+    EnsureNotDisposed();
+    var rpc = await GetRpcClientAsync();
+    try
+    {
+      return await rpc.InvokeWithParameterObjectAsync<GetWatchListResponse>("project/get-watchlist", request, cancellationToken);
+    }
+    catch (ConnectionLostException)
+    {
+      await InvalidateConnectionAsync();
+      throw new Exception("BuildServer connection was lost. Please try again.");
+    }
+  }
+
   private async Task<JsonRpc> GetRpcClientAsync()
   {
     if (_rpc != null && !_rpc.IsDisposed && _serverProcess != null && !_serverProcess.HasExited)

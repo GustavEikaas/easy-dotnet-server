@@ -22,15 +22,12 @@ static class Program
       return 1;
     }
 
-    if (!RegisterMSBuild())
-    {
-      return 1;
-    }
+    var instance = RegisterMSBuild();
 
-    return await RunServer(logLevel, pipe);
+    return await RunServer(logLevel, pipe, instance);
   }
 
-  private static bool RegisterMSBuild()
+  private static VisualStudioInstance RegisterMSBuild()
   {
 #pragma warning disable IDE0022 // Use expression body for method
 #if NET472
@@ -41,7 +38,7 @@ static class Program
 #endif
   }
 
-  private static bool RegisterMSBuildFramework()
+  private static VisualStudioInstance RegisterMSBuildFramework()
   {
     try
     {
@@ -53,8 +50,7 @@ static class Program
 
       if (bestInstance == null)
       {
-        Console.Error.WriteLine("[Error] No Visual Studio instances found.");
-        return false;
+        throw new Exception("[Error] No Visual Studio instances found.");
       }
 
       MSBuildLocator.RegisterInstance(bestInstance);
@@ -63,16 +59,15 @@ static class Program
       Console.Error.WriteLine($"[Info] Registered MSBuild: {bestInstance.Name} (v{bestInstance.Version})");
       Console.Error.WriteLine($"[Info] MSBuild Path: {bestInstance.MSBuildPath}");
 
-      return true;
+      return bestInstance;
     }
     catch (Exception ex)
     {
-      Console.Error.WriteLine($"[Error] Failed to register MSBuild (Framework): {ex.Message}");
-      return false;
+      throw new Exception($"[Error] Failed to register MSBuild (Framework): {ex.Message}");
     }
   }
 
-  private static bool RegisterMSBuildCore()
+  private static VisualStudioInstance RegisterMSBuildCore()
   {
     try
     {
@@ -92,7 +87,7 @@ static class Program
       {
         Console.Error.WriteLine($"[Error] Could not find an MSBuild SDK for Runtime {currentRuntimeVersion}");
         Console.Error.WriteLine($"[Error] Ensure you have the .NET SDK installed for this major version.");
-        return false;
+        throw new Exception();
       }
 
       MSBuildLocator.RegisterInstance(matchingInstance);
@@ -101,12 +96,11 @@ static class Program
       Console.Error.WriteLine($"[Info] Registered MSBuild: {matchingInstance.Name} (v{matchingInstance.Version})");
       Console.Error.WriteLine($"[Info] MSBuild Path: {matchingInstance.MSBuildPath}");
 
-      return true;
+      return matchingInstance;
     }
     catch (Exception ex)
     {
-      Console.Error.WriteLine($"[Error] Failed to register MSBuild (Core): {ex.Message}");
-      return false;
+      throw new Exception($"[Error] Failed to register MSBuild (Core): {ex.Message}");
     }
   }
 
@@ -141,13 +135,14 @@ static class Program
   [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
   private static async Task<int> RunServer(
     SourceLevels logLevel,
-    string pipeName)
+    string pipeName,
+    VisualStudioInstance instance)
   {
     var messageHandler = await CreateServerMessageHandlerAsync(pipeName);
 
     var jsonRpc = new JsonRpc(messageHandler);
 
-    var serviceProvider = DiModule.BuildServiceProvider(jsonRpc, logLevel);
+    var serviceProvider = DiModule.BuildServiceProvider(jsonRpc, instance, logLevel);
 
     var logger = serviceProvider.GetRequiredService<ILogger<JsonRpc>>();
 
