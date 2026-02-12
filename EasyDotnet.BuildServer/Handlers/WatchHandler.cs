@@ -6,7 +6,7 @@ using StreamJsonRpc;
 
 namespace EasyDotnet.BuildServer.Handlers;
 
-public class WatchHandler(SdkInstallation instance)
+public class WatchHandler(MsBuildInstance instance)
 {
   private static readonly JsonSerializerOptions JsonSerializerOptions = new() { PropertyNameCaseInsensitive = true };
 
@@ -75,9 +75,17 @@ public class WatchHandler(SdkInstallation instance)
 
   private string GetDotnetWatchTargets()
   {
+    if (instance.MsBuildInstanceOrigin == MsBuildInstanceOrigin.VisualStudio)
+    {
+      return GetDotnetWatchTargetsVisualStudio();
+    }
     var version = instance.Version;
     var path = instance.MSBuildPath;
     var moniker = instance.Moniker;
     return Path.Combine(path, "DotnetTools", "dotnet-watch", version.ToString(), "tools", moniker, "any", "DotnetWatch.targets");
   }
+
+  //TODO: need to resolve any sdk living inside visual studio and find dotnet-watch or get sdk path from host app?
+  private string GetDotnetWatchTargetsVisualStudio() => throw new NotImplementedException("dotnet-watch is not supported yet using visual studio");
+
 }

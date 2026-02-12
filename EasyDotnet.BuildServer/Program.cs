@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using System.IO.Pipes;
+using EasyDotnet.BuildServer.Contracts;
 using Microsoft.Build.Locator;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -27,7 +28,7 @@ static class Program
     return await RunServer(logLevel, logDirectory, pipe, instance);
   }
 
-  private static VisualStudioInstance RegisterMSBuild()
+  private static MsBuildInstance RegisterMSBuild()
   {
 #pragma warning disable IDE0022 // Use expression body for method
 #if NET472
@@ -38,7 +39,7 @@ static class Program
 #endif
   }
 
-  private static VisualStudioInstance RegisterMSBuildFramework()
+  private static MsBuildInstance RegisterMSBuildFramework()
   {
     try
     {
@@ -58,8 +59,7 @@ static class Program
       Console.Error.WriteLine($"[Info] BuildServer running on .NET Framework {Environment.Version}");
       Console.Error.WriteLine($"[Info] Registered MSBuild: {bestInstance.Name} (v{bestInstance.Version})");
       Console.Error.WriteLine($"[Info] MSBuild Path: {bestInstance.MSBuildPath}");
-
-      return bestInstance;
+      return new MsBuildInstance(bestInstance.Name, $"net{bestInstance.Version.Major}.0", bestInstance.Version, bestInstance.MSBuildPath, bestInstance.VisualStudioRootPath, MsBuildInstanceOrigin.VisualStudio);
     }
     catch (Exception ex)
     {
@@ -67,7 +67,7 @@ static class Program
     }
   }
 
-  private static VisualStudioInstance RegisterMSBuildCore()
+  private static MsBuildInstance RegisterMSBuildCore()
   {
     try
     {
@@ -96,7 +96,7 @@ static class Program
       Console.Error.WriteLine($"[Info] Registered MSBuild: {matchingInstance.Name} (v{matchingInstance.Version})");
       Console.Error.WriteLine($"[Info] MSBuild Path: {matchingInstance.MSBuildPath}");
 
-      return matchingInstance;
+      return new MsBuildInstance(matchingInstance.Name, $"net{matchingInstance.Version.Major}.0", matchingInstance.Version, matchingInstance.MSBuildPath, matchingInstance.VisualStudioRootPath, MsBuildInstanceOrigin.SDK);
     }
     catch (Exception ex)
     {
@@ -137,7 +137,7 @@ static class Program
     SourceLevels logLevel,
     string logDirectory,
     string pipeName,
-    VisualStudioInstance instance)
+    MsBuildInstance instance)
   {
     var messageHandler = await CreateServerMessageHandlerAsync(pipeName);
 
