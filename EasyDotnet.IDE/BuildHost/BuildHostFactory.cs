@@ -19,7 +19,7 @@ public enum BuildServerRuntime
   Net80
 }
 
-public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService clientService)
+public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService clientService, CurrentLogLevel currentLogLevel)
 {
   public async Task<(Process, JsonRpc)> StartServerAsync()
   {
@@ -79,17 +79,18 @@ public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService c
       RedirectStandardOutput = false,
       WorkingDirectory = coreFolder
     };
-    var logDirectory = Path.Combine(Directory.GetCurrentDirectory(), "logs");
+    var logDirectory = currentLogLevel.LogDir;
+    var logLevel = currentLogLevel.Loglevel.ToString();
 
     if (runtime == BuildServerRuntime.Net472)
     {
       startInfo.FileName = BuildHostLocator.GetBuildServerFramework();
-      startInfo.Arguments = $"--pipe \"{pipeName}\" --log-level=verbose --logDirectory \"{logDirectory}\"";
+      startInfo.Arguments = $"--pipe \"{pipeName}\" --log-level={logLevel} --logDirectory \"{logDirectory}\"";
     }
     else
     {
       startInfo.FileName = "dotnet";
-      startInfo.Arguments = $"exec \"{BuildHostLocator.GetBuildServerCore()}\" --pipe \"{pipeName}\" --log-level=verbose --logDirectory \"{logDirectory}\"";
+      startInfo.Arguments = $"exec \"{BuildHostLocator.GetBuildServerCore()}\" --pipe \"{pipeName}\" --log-level={logLevel} --logDirectory \"{logDirectory}\"";
     }
 
     var process = new Process { StartInfo = startInfo };
