@@ -16,21 +16,6 @@ public sealed class BuildHostManager(ILogger<BuildHostManager> logger, BuildHost
 
   private readonly SemaphoreSlim _connectionLock = new(1, 1);
 
-  public async Task<GetSolutionProjectsResponse> GetSolutionFileProjectsAsync(GetSolutionProjectsRequest request, CancellationToken cancellationToken)
-  {
-    EnsureNotDisposed();
-    var rpc = await GetRpcClientAsync();
-    try
-    {
-      return await rpc.InvokeWithParameterObjectAsync<GetSolutionProjectsResponse>("solution/get-projects", request, cancellationToken);
-    }
-    catch (ConnectionLostException)
-    {
-      await InvalidateConnectionAsync();
-      throw new Exception("BuildServer connection was lost. Please try again.");
-    }
-  }
-
   public async Task<GetWatchListResponse> GetProjectWatchListAsync(GetWatchListRequest request, CancellationToken cancellationToken)
   {
     EnsureNotDisposed();

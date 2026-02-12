@@ -27,7 +27,6 @@ public static class DiModule
 
     services.AddSingleton(jsonRpc);
 
-    services.AddTransient<SolutionHandler>();
     services.AddTransient<WatchHandler>();
 
     services.AddSingleton(new SdkInstallation(instance.Name, $"net{instance.Version.Major}.0", instance.Version, instance.MSBuildPath, instance.VisualStudioRootPath));
@@ -83,7 +82,6 @@ public static class DiModule
 
     var handlers = new object[]
     {
-      serviceProvider.GetRequiredService<SolutionHandler>(),
       serviceProvider.GetRequiredService<WatchHandler>(),
     };
 
