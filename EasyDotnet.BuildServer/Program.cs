@@ -203,6 +203,8 @@ static class Program
           "warning" => SourceLevels.Warning,
           "error" => SourceLevels.Error,
           "critical" => SourceLevels.Critical,
+          "all" => SourceLevels.All,
+          "off" => SourceLevels.Off,
           _ => SourceLevels.Information
         };
       }

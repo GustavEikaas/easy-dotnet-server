@@ -93,6 +93,8 @@ public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService c
       startInfo.Arguments = $"exec \"{BuildHostLocator.GetBuildServerCore()}\" --pipe \"{pipeName}\" --log-level={logLevel} --logDirectory \"{logDirectory}\"";
     }
 
+    logger.LogInformation("Starting buildserver with command {command}", $"{startInfo.FileName} {startInfo.Arguments}");
+
     var process = new Process { StartInfo = startInfo };
 
     process.ErrorDataReceived += (s, e) =>
