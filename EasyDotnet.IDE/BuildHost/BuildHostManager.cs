@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
@@ -23,6 +24,27 @@ public sealed class BuildHostManager(ILogger<BuildHostManager> logger, BuildHost
     try
     {
       return await rpc.InvokeWithParameterObjectAsync<GetWatchListResponse>("project/get-watchlist", request, cancellationToken);
+    }
+    catch (ConnectionLostException)
+    {
+      await InvalidateConnectionAsync();
+      throw new Exception("BuildServer connection was lost. Please try again.");
+    }
+  }
+
+  public async Task<IAsyncEnumerable<ProjectEvaluationResult>> GetProjectPropertiesBatchAsync(
+      GetProjectPropertiesBatchRequest request,
+      CancellationToken cancellationToken)
+  {
+    EnsureNotDisposed();
+    var rpc = await GetRpcClientAsync();
+
+    try
+    {
+      return await rpc.InvokeWithParameterObjectAsync<IAsyncEnumerable<ProjectEvaluationResult>>(
+          "project/get-properties-batch",
+          request,
+          cancellationToken);
     }
     catch (ConnectionLostException)
     {

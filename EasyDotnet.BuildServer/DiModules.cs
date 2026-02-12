@@ -26,6 +26,7 @@ public static class DiModule
     services.AddSingleton(jsonRpc);
 
     services.AddTransient<WatchHandler>();
+    services.AddTransient<ProjectPropertiesBatchHandler>();
 
     services.AddSingleton(instance);
 
@@ -81,6 +82,7 @@ public static class DiModule
     var handlers = new object[]
     {
       serviceProvider.GetRequiredService<WatchHandler>(),
+      serviceProvider.GetRequiredService<ProjectPropertiesBatchHandler>(),
     };
 
     foreach (var handler in handlers)
