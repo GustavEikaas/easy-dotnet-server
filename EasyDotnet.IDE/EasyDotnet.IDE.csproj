@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>$(LowestNetCoreTfm)</TargetFramework>
     <RollForward>LatestMajor</RollForward>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>dotnet-easydotnet</ToolCommandName>
@@ -9,8 +9,6 @@
     <Version>2.7.0</Version>
     <Authors>Gustav Eikaas</Authors>
     <PackageId>EasyDotnet</PackageId>
-    <Nullable>enable</Nullable>
-    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <IncludePackageReadmeFile>true</IncludePackageReadmeFile>
@@ -75,7 +73,7 @@
   <Target Name="IncludeBuildServerInPack" DependsOnTargets="PublishBuildServers">
     <ItemGroup>
       <TfmSpecificPackageFile Include="$(OutputPath)Tools\BuildServer\**\*">
-        <PackagePath>tools/net8.0/any/BuildServer/%(RecursiveDir)%(Filename)%(Extension)</PackagePath>
+        <PackagePath>tools/$(LowestNetCoreTfm)/any/BuildServer/%(RecursiveDir)%(Filename)%(Extension)</PackagePath>
       </TfmSpecificPackageFile>
     </ItemGroup>
     <Message Text="Added @(TfmSpecificPackageFile->Count()) BuildServer files to pack" Importance="high" />
