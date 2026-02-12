@@ -1,6 +1,5 @@
 ﻿using System.Diagnostics;
 using System.IO.Pipes;
-using System.Text.Json;
 using Microsoft.Build.Locator;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -15,16 +14,17 @@ static class Program
   {
     var logLevel = ParseLogLevel(args);
     var pipe = ParsePipe(args);
+    var logDirectory = ParseLogDirectory(args);
 
-    if (pipe is null)
+    if (pipe is null || logDirectory is null)
     {
-      Console.Error.WriteLine("No pipe passed");
+      Console.Error.WriteLine("No --pipe passed or --logDirectory not passed");
       return 1;
     }
 
     var instance = RegisterMSBuild();
 
-    return await RunServer(logLevel, pipe, instance);
+    return await RunServer(logLevel, logDirectory, pipe, instance);
   }
 
   private static VisualStudioInstance RegisterMSBuild()
@@ -135,6 +135,7 @@ static class Program
   [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
   private static async Task<int> RunServer(
     SourceLevels logLevel,
+    string logDirectory,
     string pipeName,
     VisualStudioInstance instance)
   {
@@ -142,7 +143,7 @@ static class Program
 
     var jsonRpc = new JsonRpc(messageHandler);
 
-    var serviceProvider = DiModule.BuildServiceProvider(jsonRpc, instance, logLevel);
+    var serviceProvider = DiModule.BuildServiceProvider(jsonRpc, instance, logLevel, logDirectory);
 
     var logger = serviceProvider.GetRequiredService<ILogger<JsonRpc>>();
 
@@ -165,6 +166,21 @@ static class Program
       var arg = args[i];
 
       if (arg.Equals("--pipe", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length && !args[i + 1].StartsWith("--"))
+      {
+        return args[i + 1];
+      }
+    }
+
+    return null;
+  }
+
+  private static string? ParseLogDirectory(string[] args)
+  {
+    for (var i = 0; i < args.Length; i++)
+    {
+      var arg = args[i];
+
+      if (arg.Equals("--logDirectory", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length && !args[i + 1].StartsWith("--"))
       {
         return args[i + 1];
       }

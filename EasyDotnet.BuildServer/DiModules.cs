@@ -13,11 +13,11 @@ namespace EasyDotnet.BuildServer;
 
 public static class DiModule
 {
-  public static ServiceProvider BuildServiceProvider(JsonRpc jsonRpc, VisualStudioInstance instance, SourceLevels logLevel)
+  public static ServiceProvider BuildServiceProvider(JsonRpc jsonRpc, VisualStudioInstance instance, SourceLevels logLevel, string logDirectory)
   {
     var services = new ServiceCollection();
 
-    ConfigureLogging(logLevel);
+    ConfigureLogging(logLevel, logDirectory);
 
     services.AddLogging(builder =>
     {
@@ -39,15 +39,14 @@ public static class DiModule
     return serviceProvider;
   }
 
-  private static void ConfigureLogging(SourceLevels logLevel)
+  private static void ConfigureLogging(SourceLevels logLevel, string logDirectory)
   {
     string? logFile = null;
 
     if (logLevel.HasFlag(SourceLevels.Verbose) || logLevel.HasFlag(SourceLevels.Information))
     {
-      var logDir = Path.Combine(Directory.GetCurrentDirectory(), "logs", "buildserver");
-      Directory.CreateDirectory(logDir);
-      logFile = Path.Combine(logDir,
+      Directory.CreateDirectory(logDirectory);
+      logFile = Path.Combine(logDirectory,
           $"buildserver-{DateTime.UtcNow:yyyyMMdd_HHmmss}.log");
     }
 

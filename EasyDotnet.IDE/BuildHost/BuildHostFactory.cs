@@ -21,9 +21,6 @@ public enum BuildServerRuntime
 
 public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService clientService)
 {
-  private const string PathNet472 = @"C:/Users/gusta/repo/easy-dotnet-server/EasyDotnet.BuildServer/bin/Debug/net472/EasyDotnet.BuildServer.exe";
-  private const string PathNet80 = @"C:/Users/gusta/repo/easy-dotnet-server/EasyDotnet.BuildServer/bin/Debug/net8.0/EasyDotnet.BuildServer.dll";
-
   public async Task<(Process, JsonRpc)> StartServerAsync()
   {
     clientService.ThrowIfNotInitialized();
@@ -35,7 +32,7 @@ public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService c
       runtime = BuildServerRuntime.Net472;
     }
 
-    logger.LogInformation("Spawning BuildServer using runtime: {Runtime}", runtime);
+    logger.LogInformation("Spawning BuildServer using runtime: {Runtime}", runtime == BuildServerRuntime.Net472 ? "Visual Studio" : "SDK");
 
     var pipeName = PipeUtils.GeneratePipeName();
     var process = SpawnProcess(runtime, pipeName);
@@ -73,24 +70,26 @@ public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService c
 
   private Process SpawnProcess(BuildServerRuntime runtime, string pipeName)
   {
+    var coreFolder = Path.GetDirectoryName(BuildHostLocator.GetBuildServerCore());
     var startInfo = new ProcessStartInfo
     {
       UseShellExecute = false,
       CreateNoWindow = true,
       RedirectStandardError = true,
       RedirectStandardOutput = false,
-      WorkingDirectory = Path.GetDirectoryName(PathNet80)
+      WorkingDirectory = coreFolder
     };
+    var logDirectory = Path.Combine(Directory.GetCurrentDirectory(), "logs");
 
     if (runtime == BuildServerRuntime.Net472)
     {
       startInfo.FileName = BuildHostLocator.GetBuildServerFramework();
-      startInfo.Arguments = $"--pipe \"{pipeName}\" --log-level=verbose";
+      startInfo.Arguments = $"--pipe \"{pipeName}\" --log-level=verbose --logDirectory \"{logDirectory}\"";
     }
     else
     {
       startInfo.FileName = "dotnet";
-      startInfo.Arguments = $"exec \"{BuildHostLocator.GetBuildServerCore()}\" --pipe \"{pipeName}\" --log-level=verbose";
+      startInfo.Arguments = $"exec \"{BuildHostLocator.GetBuildServerCore()}\" --pipe \"{pipeName}\" --log-level=verbose --logDirectory \"{logDirectory}\"";
     }
 
     var process = new Process { StartInfo = startInfo };
