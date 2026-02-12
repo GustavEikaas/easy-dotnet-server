@@ -1,13 +1,12 @@
 using System;
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Debugger.Interfaces;
 using EasyDotnet.IDE.Controllers.NetCoreDbg;
-using EasyDotnet.Infrastructure.Dap;
+using EasyDotnet.IDE.Types;
 using EasyDotnet.MsBuild;
 using Microsoft.Extensions.Logging;
 
@@ -16,15 +15,17 @@ namespace EasyDotnet.IDE.Services;
 public interface IDebugOrchestrator
 {
   Task<Debugger.DebugSession> StartServerDebugSessionAsync(
-    string projectPath,
-    string sessionId,
-    DebuggerStartRequest request,
-    CancellationToken cancellationToken);
+      string projectPath,
+      string sessionId,
+      DebuggerStartRequest startRequest,
+      IDebugSessionStrategy strategy,
+      CancellationToken cancellationToken);
 
   Task<Debugger.DebugSession> StartClientDebugSessionAsync(
-    string projectPath,
-    DebuggerStartRequest request,
-    CancellationToken cancellationToken);
+      string projectPath,
+      DebuggerStartRequest startRequest,
+      IDebugSessionStrategy strategy,
+      CancellationToken cancellationToken);
 
   Debugger.DebugSession? GetSessionService(string projectPath);
 
@@ -36,20 +37,20 @@ public interface IDebugOrchestrator
 }
 
 public class DebugOrchestrator(
-  IDebugSessionManager debugSessionManager,
-  IDebugSessionFactory debugSessionFactory,
-  IMsBuildService msBuildService,
-  ILaunchProfileService launchProfileService,
-  IEditorService editorService,
-  IClientService clientService,
-  ILogger<DebugOrchestrator> logger) : IDebugOrchestrator
+    IDebugSessionManager debugSessionManager,
+    IDebugSessionFactory debugSessionFactory,
+    IMsBuildService msBuildService,
+    IEditorService editorService,
+    IClientService clientService,
+    ILogger<DebugOrchestrator> logger) : IDebugOrchestrator
 {
   private readonly ConcurrentDictionary<string, Debugger.DebugSession> _sessionServices = new();
 
   public async Task<Debugger.DebugSession> StartClientDebugSessionAsync(
-    string projectPath,
-    DebuggerStartRequest request,
-    CancellationToken cancellationToken)
+      string projectPath,
+      DebuggerStartRequest startRequest,
+      IDebugSessionStrategy strategy,
+      CancellationToken cancellationToken)
   {
     var projectName = Path.GetFileNameWithoutExtension(projectPath);
     logger.LogInformation("Starting debug session for {project}.", projectName);
@@ -68,15 +69,16 @@ public class DebugOrchestrator(
 
     return await debugSessionManager.StartClientSessionAsync(
         projectPath,
-        () => StartDebugSessionInternalAsync(request, cancellationToken),
+        () => StartDebugSessionInternalAsync(startRequest, strategy, cancellationToken),
         cancellationToken);
   }
 
   public async Task<Debugger.DebugSession> StartServerDebugSessionAsync(
-    string projectPath,
-    string sessionId,
-    DebuggerStartRequest request,
-    CancellationToken cancellationToken)
+      string projectPath,
+      string sessionId,
+      DebuggerStartRequest startRequest,
+      IDebugSessionStrategy strategy,
+      CancellationToken cancellationToken)
   {
     logger.LogInformation("Starting server debug session for {projectPath} (SessionId: {sessionId})", projectPath, sessionId);
 
@@ -93,10 +95,10 @@ public class DebugOrchestrator(
     }
 
     return await debugSessionManager.StartServerSessionAsync(
-      projectPath,
-      sessionId,
-      () => StartDebugSessionInternalAsync(request, cancellationToken),
-      cancellationToken);
+        projectPath,
+        sessionId,
+        () => StartDebugSessionInternalAsync(startRequest, strategy, cancellationToken),
+        cancellationToken);
   }
 
   public async Task StopDebugSessionAsync(string projectPath)
@@ -128,10 +130,10 @@ public class DebugOrchestrator(
   }
 
   public DebugSession? GetSession(string projectPath) =>
-    debugSessionManager.GetSession(projectPath);
+      debugSessionManager.GetSession(projectPath);
 
   public bool HasActiveSession(string projectPath) =>
-    debugSessionManager.HasActiveSession(projectPath);
+      debugSessionManager.HasActiveSession(projectPath);
 
   public Debugger.DebugSession? GetSessionService(string projectPath)
   {
@@ -140,8 +142,9 @@ public class DebugOrchestrator(
   }
 
   private async Task<Debugger.DebugSession> StartDebugSessionInternalAsync(
-    DebuggerStartRequest request,
-    CancellationToken cancellationToken)
+      DebuggerStartRequest request,
+      IDebugSessionStrategy strategy,
+      CancellationToken cancellationToken)
   {
     var projectPath = request.TargetPath;
     var projectName = Path.GetFileNameWithoutExtension(projectPath);
@@ -154,64 +157,75 @@ public class DebugOrchestrator(
           request.Configuration ?? "Debug",
           cancellationToken);
 
-      var platform = project.GetPlatform();
-
-      if (platform != DotnetPlatform.None)
-      {
-        throw new InvalidOperationException($"Debugging for {platform} is not supported yet");
-      }
-
-      var launchProfile = !string.IsNullOrEmpty(request.LaunchProfileName)
-          ? (launchProfileService.GetLaunchProfiles(request.TargetPath)
-             is { } profiles && profiles.TryGetValue(request.LaunchProfileName, out var profile)
-                ? profile
-                : null)
-          : null;
-
       var binaryPath = clientService.ClientOptions?.DebuggerOptions?.BinaryPath;
       if (string.IsNullOrEmpty(binaryPath))
       {
         throw new InvalidOperationException("Failed to start debugger, no binary path provided");
       }
 
-      var vsTestResult = StartVsTestIfApplicable(project, request.TargetPath);
+      var platform = project.GetPlatform();
+      if (platform != DotnetPlatform.None && platform != DotnetPlatform.Windows)
+      {
+        throw new InvalidOperationException($"Debugging for {platform} is not supported yet");
 
-      var session = debugSessionFactory.Create(async (attachRequest) =>
-                await InitializeRequestRewriter.CreateInitRequestBasedOnProjectType(
-                    project,
-                    launchProfile,
-                    attachRequest,
-                    project.ProjectDir!,
-                    vsTestResult?.Item2),
-            clientService?.ClientOptions?.DebuggerOptions?.ApplyValueConverters ?? false
-      );
+      }
+
+
+      var session = debugSessionFactory.Create(async (dapRequest) =>
+             {
+               await strategy.TransformRequestAsync(dapRequest);
+               return dapRequest;
+             },
+             clientService?.ClientOptions?.DebuggerOptions?.ApplyValueConverters ?? false
+         );
+
       _sessionServices[projectPath] = session;
+
+      await strategy.PrepareAsync(project, cancellationToken);
+
+      var strategyProcessIdTask = strategy.GetProcessIdAsync();
+      if (strategyProcessIdTask != null)
+      {
+        _ = Task.Run(async () =>
+        {
+          try
+          {
+            var processId = await strategyProcessIdTask;
+            logger.LogInformation("Strategy reported debugee processId: {processId} for {project}", processId, projectName);
+          }
+          catch (Exception ex)
+          {
+            logger.LogError(ex, "Strategy failed to provide processId for {project}", projectName);
+          }
+        }, cancellationToken);
+      }
 
       try
       {
         session.Start(
-           binaryPath,
-           (ex) =>
-           {
-             editorService.DisplayError(ex.Message);
-             logger.LogError(ex, "Failed to start debugger process for {project}.", projectName);
-           },
-           async () =>
-           {
-             try
-             {
-               logger.LogDebug("Session cleanup callback invoked for {project}.", projectName);
-               await StopDebugSessionAsync(projectPath);
-             }
-             catch (Exception ex)
-             {
-               logger.LogError(ex, "Error during session cleanup for {project}.", projectName);
-             }
-             finally
-             {
-               CleanupVsTest(vsTestResult);
-             }
-           }, cancellationToken);
+            binaryPath,
+            (ex) =>
+            {
+              editorService.DisplayError(ex.Message);
+              logger.LogError(ex, "Failed to start debugger process for {project}.", projectName);
+            },
+            async () =>
+            {
+              try
+              {
+                logger.LogDebug("Session cleanup callback invoked for {project}.", projectName);
+                await StopDebugSessionAsync(projectPath);
+              }
+              catch (Exception ex)
+              {
+                logger.LogError(ex, "Error during session cleanup for {project}.", projectName);
+              }
+              finally
+              {
+                await strategy.DisposeAsync();
+              }
+            },
+            cancellationToken);
 
         logger.LogInformation("Debug session ready for {project} on port {port}.", projectName, session.Port);
 
@@ -221,6 +235,7 @@ public class DebugOrchestrator(
       {
         logger.LogError(ex, "Failed to start debug session for {project}.", projectName);
 
+        await strategy.DisposeAsync();
         if (_sessionServices.TryRemove(projectPath, out var service))
         {
           try
@@ -232,84 +247,14 @@ public class DebugOrchestrator(
             logger.LogWarning(disposeEx, "Error disposing service after failure.");
           }
         }
-
-        CleanupVsTest(vsTestResult);
         throw;
       }
     }
     catch (Exception ex)
     {
       logger.LogError(ex, "Error initializing debug session for {project}.", projectName);
+      await strategy.DisposeAsync();
       throw;
     }
   }
-
-  private static (Process, int)? StartVsTestIfApplicable(DotnetProject project, string projectPath) => project.IsTestProject && !project.TestingPlatformDotnetTestSupport
-      ? VsTestHelper.StartTestProcess(projectPath)
-      : null;
-
-  private void CleanupVsTest((Process, int)? vsTestResult)
-  {
-    if (vsTestResult is { } value)
-    {
-      var (process, pid) = value;
-      SafeDisposeProcess(process, "VsTest");
-      SafeDisposeProcessById(pid, "VsTestHost");
-    }
-  }
-
-  private void SafeDisposeProcessById(int pid, string processName)
-  {
-    try
-    {
-      var process = Process.GetProcessById(pid);
-      SafeDisposeProcess(process, $"{processName} (PID: {pid})");
-    }
-    catch (ArgumentException)
-    {
-      logger.LogInformation("{processName} (PID: {pid}) not found", processName, pid);
-    }
-    catch (Exception ex)
-    {
-      logger.LogWarning(ex, "Failed to get {processName} process by PID: {pid}", processName, pid);
-    }
-  }
-
-  private void SafeDisposeProcess(Process? process, string processName)
-  {
-    if (process == null) return;
-
-    try
-    {
-      if (!process.HasExited)
-      {
-        process.Kill();
-        logger.LogInformation("Killed {processName} process", processName);
-      }
-      else
-      {
-        logger.LogDebug("{processName} process already exited", processName);
-      }
-    }
-    catch (InvalidOperationException)
-    {
-      logger.LogDebug("{processName} process already exited", processName);
-    }
-    catch (Exception ex)
-    {
-      logger.LogWarning(ex, "Failed to kill {processName} process", processName);
-    }
-    finally
-    {
-      try
-      {
-        process.Dispose();
-      }
-      catch (Exception ex)
-      {
-        logger.LogWarning(ex, "Failed to dispose {processName} process", processName);
-      }
-    }
-  }
-
 }

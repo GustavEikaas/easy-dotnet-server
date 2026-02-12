@@ -9,7 +9,7 @@ inputs:
   roslynPackageVersion:
     description: 'NuGet package version for Roslyn LSP'
     required: true
-    default: '5.3.0-2.25626.1'
+    default: '5.4.0-2.26080.13'
   roslynOutputPath:
     description: 'Where to copy Roslyn DLLs inside project output'
     required: true
@@ -41,6 +41,17 @@ runs:
     - name: Build Release
       shell: bash
       run: dotnet build -c Release --no-restore
+
+
+    - name: Build and Copy Custom Analyzer
+      shell: bash
+      run: |
+        OUTPUT_PATH="${{ inputs.roslynOutputPath }}/Roslyn/Analyzers"
+
+        mkdir -p "$OUTPUT_PATH"
+        cp EasyDotnet.RoslynLanguageServices/bin/Release/net8.0/EasyDotnet.RoslynLanguageServices.dll "$OUTPUT_PATH/"
+        
+        echo "✓ Custom analyzer copied to $OUTPUT_PATH"
 
     - name: Download and Extract Roslyn DLLs
       shell: bash

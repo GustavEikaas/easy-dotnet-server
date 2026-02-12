@@ -24,6 +24,7 @@ public record DotnetProject
     string? PackageOutputPath,
     string? TargetFrameworkVersion,
     bool UsingMicrosoftNETSdk,
+    bool UsingGodotNETSdk,
     bool UsingMicrosoftNETSdkWorker,
     bool UsingMicrosoftNETSdkWeb,
     bool UsingMicrosoftNETSdkRazor,
@@ -154,6 +155,18 @@ public record DotnetProject
 public static class DotnetProjectExtensions
 {
   public static bool IsRunnable(this DotnetProject project) => project.OutputType?.Equals("Exe", StringComparison.OrdinalIgnoreCase) == true || project.OutputType?.Equals("WinExe", StringComparison.OrdinalIgnoreCase) == true || project.UseIISExpress;
+  public static string? GetLaunchSettingsPath(this DotnetProject project)
+  {
+    var targetPath = project.MSBuildProjectFullPath;
+    if (targetPath is null)
+    {
+      return null;
+    }
+
+    var baseDir = File.Exists(targetPath) ? Path.GetDirectoryName(targetPath)! : targetPath;
+    return Path.Combine(baseDir, "Properties", "launchSettings.json");
+
+  }
 }
 
 public static class DotnetProjectTfmExtensions

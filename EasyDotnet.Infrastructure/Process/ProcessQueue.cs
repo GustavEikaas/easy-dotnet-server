@@ -49,6 +49,8 @@ public class ProcessQueue(int maxConcurrent = 35, ILogger<ProcessQueue>? logger 
         CreateNoWindow = true
       };
 
+      logger?.LogInformation("[Command]: {Command} {Arguments}", command, arguments);
+
       using var process = System.Diagnostics.Process.Start(startInfo)
           ?? throw new InvalidOperationException($"Failed to start {command} process.");
 

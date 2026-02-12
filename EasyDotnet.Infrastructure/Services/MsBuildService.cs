@@ -46,7 +46,7 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
          string targetPath,
          string? targetFrameworkMoniker,
          string? buildArgs,
-         string configuration = "Debug",
+         string? configuration,
          CancellationToken cancellationToken = default)
   {
     if (string.IsNullOrWhiteSpace(targetPath))
@@ -54,7 +54,7 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
       throw new ArgumentException("Target path must be provided", nameof(targetPath));
     }
 
-    var (command, args) = await GetCommandAndArguments(clientService.UseVisualStudio ? MSBuildProjectType.VisualStudio : MSBuildProjectType.SDK, targetPath, targetFrameworkMoniker, configuration, buildArgs);
+    var (command, args) = await GetBuildAndRestoreCommandAndArguments(clientService.UseVisualStudio ? MSBuildProjectType.VisualStudio : MSBuildProjectType.SDK, targetPath, targetFrameworkMoniker, configuration, buildArgs);
 
     var (success, stdout, stderr) = await processQueue.RunProcessAsync(command, args, new ProcessOptions(true), cancellationToken);
 
@@ -283,6 +283,11 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
 
   public async Task<string> BuildRunCommand(DotnetProject project)
   {
+    if (project.UsingGodotNETSdk)
+    {
+      return $"godot --path {project?.ProjectDir ?? "."}";
+    }
+
     if (project.TargetFrameworks?.Length > 0)
     {
       return "";
@@ -369,16 +374,38 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
       MSBuildProjectType type,
       string targetPath,
       string? targetFrameworkMoniker,
-      string configuration, string? args)
+      string? configuration, string? args)
   {
     var tfmArg = string.IsNullOrWhiteSpace(targetFrameworkMoniker)
         ? string.Empty
         : $" /p:TargetFramework={targetFrameworkMoniker}";
 
+    var config = string.IsNullOrEmpty(configuration) ? "" : $"/p:Configuration={configuration}";
+
     return type switch
     {
-      MSBuildProjectType.SDK => ("dotnet", $"msbuild \"{targetPath}\" /p:Configuration={configuration} {tfmArg} {args ?? ""}"),
-      MSBuildProjectType.VisualStudio => (await locator.GetVisualStudioMSBuildPath(), $"\"{targetPath}\" /p:Configuration={configuration} {tfmArg} {args ?? ""}"),
+      MSBuildProjectType.SDK => ("dotnet", $"msbuild \"{targetPath}\" {config} {tfmArg} {args ?? ""}"),
+      MSBuildProjectType.VisualStudio => (await locator.GetVisualStudioMSBuildPath(), $"\"{targetPath}\" {config} {tfmArg} {args ?? ""}"),
+      _ => throw new InvalidOperationException("Unknown MSBuild type")
+    };
+  }
+
+  private async Task<(string Command, string Arguments)> GetBuildAndRestoreCommandAndArguments(
+      MSBuildProjectType type,
+      string targetPath,
+      string? targetFrameworkMoniker,
+      string? configuration, string? args)
+  {
+    var tfmArg = string.IsNullOrWhiteSpace(targetFrameworkMoniker)
+        ? string.Empty
+        : $" /p:TargetFramework={targetFrameworkMoniker}";
+
+    var config = string.IsNullOrEmpty(configuration) ? "" : $"/p:Configuration={configuration}";
+
+    return type switch
+    {
+      MSBuildProjectType.SDK => ("dotnet", $"msbuild \"{targetPath}\" {config} {tfmArg} /t:restore /t:build {args ?? ""}"),
+      MSBuildProjectType.VisualStudio => (await locator.GetVisualStudioMSBuildPath(), $"\"{targetPath}\" {config} {tfmArg} /t:restore /t:build {args ?? ""}"),
       _ => throw new InvalidOperationException("Unknown MSBuild type")
     };
   }

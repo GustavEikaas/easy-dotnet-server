@@ -5,11 +5,24 @@ namespace EasyDotnet.Infrastructure.Services;
 
 public static class NetCoreDbgLocator
 {
+  public const string DEBUGGER_PATH_ENV = "EASY_DOTNET_DEBUGGER_BIN_PATH";
   /// <summary>
   /// Returns the full path to the netcoredbg executable for the current platform.
   /// </summary>
   public static string GetNetCoreDbgPath()
   {
+    var customPath = Environment.GetEnvironmentVariable(DEBUGGER_PATH_ENV);
+    if (!string.IsNullOrWhiteSpace(customPath))
+    {
+      if (File.Exists(customPath))
+      {
+        return customPath;
+      }
+      throw new FileNotFoundException(
+        $"Custom netcoredbg executable specified in {DEBUGGER_PATH_ENV} not found",
+        customPath);
+    }
+
     var netcoredbgDir = GetNetCoreDbgBaseDir();
     var platform = GetRuntimePlatform();
     var platformDir = Path.Combine(netcoredbgDir, platform);

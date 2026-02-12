@@ -19,13 +19,15 @@ public class Client : IAsyncDisposable
   private readonly TcpClient _tcpClient;
   private readonly IProcessHandle _processHandle;
   private readonly MtpServer _server;
+  public readonly int DebugeeProcessId;
 
-  private Client(JsonRpc jsonRpc, TcpClient tcpClient, IProcessHandle processHandle, MtpServer server)
+  private Client(JsonRpc jsonRpc, TcpClient tcpClient, IProcessHandle processHandle, MtpServer server, int debugeeProcessId)
   {
     _jsonRpc = jsonRpc;
     _tcpClient = tcpClient;
     _processHandle = processHandle;
     _server = server;
+    DebugeeProcessId = debugeeProcessId;
   }
 
   public static async Task<Client> CreateAsync(string testExePath, bool debug = false)
@@ -80,12 +82,12 @@ public class Client : IAsyncDisposable
     jsonRpc.AddLocalRpcTarget(server, new JsonRpcTargetOptions { MethodNameTransform = CommonMethodNameTransforms.CamelCase });
     jsonRpc.StartListening();
 
-    await jsonRpc.InvokeWithParameterObjectAsync<InitializeResponse>(
+    var res = await jsonRpc.InvokeWithParameterObjectAsync<InitializeResponse>(
       "initialize",
-      new InitializeRequest(Environment.ProcessId, new("easy-dotnet"), new(new(DebuggerProvider: false)))
+      new InitializeRequest(Environment.ProcessId, new("easy-dotnet"), new(new(DebuggerProvider: true)))
     );
 
-    return new Client(jsonRpc, tcpClient, processHandle, server);
+    return new Client(jsonRpc, tcpClient, processHandle, server, res.ProcessId ?? processHandle.Id);
   }
 
   public async Task<TestNodeUpdate[]> DiscoverTestsAsync(CancellationToken cancellationToken = default)

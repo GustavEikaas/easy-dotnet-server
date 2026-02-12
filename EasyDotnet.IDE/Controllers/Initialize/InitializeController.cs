@@ -11,6 +11,7 @@ using EasyDotnet.Domain.Models.Client;
 using EasyDotnet.IDE.Notifications;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.Utils;
+using EasyDotnet.Infrastructure.Editor;
 using EasyDotnet.Infrastructure.Services;
 using Microsoft.Extensions.Logging;
 using StreamJsonRpc;

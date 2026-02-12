@@ -181,6 +181,13 @@ public static class MsBuildProperties
           Deserialize: MsBuildValueParsers.AsString
       );
 
+  public static readonly MsBuildProperty<bool> UsingGodotNETSdk =
+      new(
+          Name: "UsingGodotNETSdk",
+          Description: "Is this a Godot game project",
+          Deserialize: MsBuildValueParsers.AsBool
+      );
+
   public static readonly MsBuildProperty<bool> UsingMicrosoftNETSdk =
       new(
           Name: "UsingMicrosoftNETSdk",

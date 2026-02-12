@@ -1,5 +1,8 @@
+using System.Diagnostics;
 using System.Net.Sockets;
+using System.Text.Json;
 using EasyDotnet.Debugger.Interfaces;
+using EasyDotnet.Debugger.Messages;
 using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Debugger.Session;
@@ -17,14 +20,21 @@ public class DebugSessionCoordinator(
   private readonly TaskCompletionSource<bool> _completionSource = new();
   private readonly TaskCompletionSource<bool> _disposalStartedSource = new();
   private readonly TaskCompletionSource<bool> _processStartedSource = new();
+  private readonly TaskCompletionSource<int?> _debugeeProcessStartedSource = new();
   private int _isDisposing;
   private Func<Task>? _onDispose;
 
   public Task ProcessStarted => _processStartedSource.Task;
+  public Task DebugeeProcessStarted => _debugeeProcessStartedSource.Task;
   public Task Completion => _completionSource.Task;
   public Task DisposalStarted => _disposalStartedSource.Task;
   public int Port => tcpServer.Port;
   public int? ProcessId => processHost?.ProcessId;
+
+  private static readonly JsonSerializerOptions SerializerOptions = new()
+  {
+    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+  };
 
   public void Start(
    string debuggerBinaryPath,
@@ -93,6 +103,97 @@ public class DebugSessionCoordinator(
         _completionSource.SetException(ex);
       }
     }, cancellationToken);
+  }
+
+  public void NotifyDebugeeProcessStarted(int processId)
+  {
+    if (_debugeeProcessStartedSource.Task.IsCompleted)
+    {
+      logger.LogDebug("DebugeeProcessStarted already completed, ignoring processId: {processId}", processId);
+      return;
+    }
+
+    logger.LogInformation("Debugee process started: {processId}", processId);
+    _debugeeProcessStartedSource.SetResult(processId);
+
+    StartTelemetryMonitoring(processId);
+  }
+
+  private void StartTelemetryMonitoring(int processId)
+  {
+    if (_cts is null)
+    {
+      return;
+    }
+    var token = _cts.Token;
+
+    _ = Task.Run(async () =>
+    {
+      try
+      {
+        using var process = Process.GetProcessById(processId);
+        var lastCpuTime = process.TotalProcessorTime;
+        var lastCheckTime = DateTime.UtcNow;
+
+        while (!token.IsCancellationRequested && !process.HasExited)
+        {
+          await Task.Delay(100, token);
+
+          if (_proxy is null)
+          {
+            logger.LogDebug("Proxy is null, stopping telemetry");
+            break;
+          }
+
+          try
+          {
+            process.Refresh();
+
+            var currentTime = DateTime.UtcNow;
+            var currentCpuTime = process.TotalProcessorTime;
+
+            var cpuElapsed = (currentCpuTime - lastCpuTime).TotalMilliseconds;
+            var timeElapsed = (currentTime - lastCheckTime).TotalMilliseconds;
+            var cpuUsage = Math.Min(100, (int)(cpuElapsed / (timeElapsed * Environment.ProcessorCount) * 100));
+
+            var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+            lastCpuTime = currentCpuTime;
+            lastCheckTime = currentTime;
+
+            await _proxy.EmitEventToClientAsync(new TelemetryEvent
+            {
+              Seq = 0,
+              Type = "event",
+              EventName = "telemetry/metrics",
+              Body = JsonSerializer.SerializeToElement(new Metrics()
+              {
+                CpuPercent = cpuUsage,
+                MemoryBytes = process.WorkingSet64,
+                Timestamp = timestamp,
+              }, SerializerOptions)
+            }, token);
+          }
+          catch (InvalidOperationException)
+          {
+            logger.LogInformation("Debugee process exited, stopping telemetry");
+            break;
+          }
+        }
+      }
+      catch (OperationCanceledException)
+      {
+        logger.LogDebug("Telemetry monitoring canceled");
+      }
+      catch (ArgumentException)
+      {
+        logger.LogWarning("Could not find process {processId} for telemetry", processId);
+      }
+      catch (Exception ex)
+      {
+        logger.LogError(ex, "Error in telemetry monitoring");
+      }
+    }, token);
   }
 
   private async Task TriggerCleanupAsync()

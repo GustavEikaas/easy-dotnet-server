@@ -105,6 +105,16 @@ _No parameters_
 
 ## TestController
 
+### `test/debug`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+| configuration | string |   |
+| filter | RunRequestNode[] |   |
+| targetFrameworkMoniker | string | ✅  |
+
+**Returns:** `Task<IAsyncEnumerable<TestRunResult>>`
+
 ### `test/discover`
 | Parameter | Type | Optional |
 |-----------|------|----------|
@@ -133,7 +143,7 @@ _No parameters_
 
 ## TemplateController
 
-### `template/instantiate`
+### `template/instantiate/v2`
 | Parameter | Type | Optional |
 |-----------|------|----------|
 | identity | string |   |
@@ -249,6 +259,37 @@ _No parameters_
 | request | InitializeRequest |   |
 
 **Returns:** `Task<InitializeResponse>`
+
+---
+
+## EntityFrameworkController
+
+### `ef/database-drop`
+_No parameters_
+
+**Returns:** `Task`
+
+### `ef/database-update`
+_No parameters_
+
+**Returns:** `Task`
+
+### `ef/migrations-add`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| migrationName | string | ✅  |
+
+**Returns:** `Task`
+
+### `ef/migrations-apply`
+_No parameters_
+
+**Returns:** `Task`
+
+### `ef/migrations-remove`
+_No parameters_
+
+**Returns:** `Task`
 
 ---
 
