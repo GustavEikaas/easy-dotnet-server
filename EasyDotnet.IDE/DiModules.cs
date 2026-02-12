@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using DotNetOutdated.Core.Services;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Debugger;
+using EasyDotnet.IDE.BuildHost;
 using EasyDotnet.IDE.DebuggerStrategies;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.Utils;
@@ -24,13 +25,16 @@ using StreamJsonRpc;
 
 namespace EasyDotnet;
 
+public record CurrentLogLevel(SourceLevels Loglevel, string LogDir);
+
 public static class DiModules
 {
   public static ServiceProvider BuildServiceProvider(JsonRpc jsonRpc, SourceLevels levels)
   {
     var services = new ServiceCollection();
 
-    ConfigureLogging(levels);
+    var logDir = Path.Combine(Directory.GetCurrentDirectory(), "logs");
+    ConfigureLogging(levels, logDir);
 
     services.AddLogging(builder =>
         {
@@ -40,6 +44,7 @@ public static class DiModules
 
     services.AddMemoryCache();
     services.AddSingleton(jsonRpc);
+    services.AddSingleton(new CurrentLogLevel(levels, logDir));
     services.AddSingleton<IClientService, ClientService>();
     services.AddSingleton<IVisualStudioLocator, VisualStudioLocator>();
     services.AddSingleton<IFileSystem, FileSystem>();
@@ -58,6 +63,8 @@ public static class DiModules
     services.AddSingleton<IEditorProcessManagerService, EditorProcessManagerService>();
     services.AddSingleton<IEditorService, EditorService>();
     services.AddSingleton<IDebugStrategyFactory, DebugStrategyFactory>();
+    services.AddSingleton<BuildHostFactory>();
+    services.AddSingleton<BuildHostManager>();
 
     services.AddTransient<IProgressScopeFactory, ProgressScopeFactory>();
     services.AddTransient<IMsBuildService, MsBuildService>();
@@ -94,12 +101,11 @@ public static class DiModules
     return serviceProvider;
   }
 
-  private static void ConfigureLogging(SourceLevels levels)
+  private static void ConfigureLogging(SourceLevels levels, string logDir)
   {
     string? logFile = null;
     if (levels.HasFlag(SourceLevels.Verbose))
     {
-      var logDir = Path.Combine(Directory.GetCurrentDirectory(), "logs");
       Directory.CreateDirectory(logDir);
       logFile = Path.Combine(logDir,
           $"easy-dotnet-{DateTime.UtcNow:yyyyMMdd_HHmmss}-{Environment.ProcessId}.log");
