@@ -1,4 +1,4 @@
-namespace EasyDotnet.BuildServer.Contracts;
+namespace EasyDotnet.BuildServer;
 
 public enum MsBuildInstanceOrigin
 {

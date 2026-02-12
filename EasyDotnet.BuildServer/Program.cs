@@ -1,6 +1,5 @@
 ﻿using System.Diagnostics;
 using System.IO.Pipes;
-using EasyDotnet.BuildServer.Contracts;
 using Microsoft.Build.Locator;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
