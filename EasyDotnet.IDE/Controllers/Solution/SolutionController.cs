@@ -1,22 +1,12 @@
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using EasyDotnet.Controllers;
-using EasyDotnet.Controllers.Solution;
-using EasyDotnet.IDE.BuildHost;
+using EasyDotnet.Application.Interfaces;
 using StreamJsonRpc;
 
-namespace EasyDotnet.IDE.Controllers.Solution;
+namespace EasyDotnet.Controllers.Solution;
 
-public class SolutionController(BuildHostManager buildHostManager) : BaseController
+public class SolutionController(ISolutionService solutionService) : BaseController
 {
   [JsonRpcMethod("solution/list-projects")]
-  public async Task<List<SolutionFileProjectResponse>> ListProjects(string solutionFilePath, CancellationToken cancellationToken)
-  {
-    var projects = await buildHostManager.GetSolutionFileProjectsAsync(new(Path.GetFullPath(solutionFilePath)), cancellationToken);
-
-    return [.. projects.Projects.Select(x => new SolutionFileProjectResponse(x.ProjectName, x.AbsolutePath))];
-  }
+  public List<SolutionFileProjectResponse> ListProjects(string solutionFilePath) => [.. solutionService.GetProjectsFromSolutionFile(solutionFilePath).Select(x => new SolutionFileProjectResponse(x.ProjectName, x.AbsolutePath))];
 }

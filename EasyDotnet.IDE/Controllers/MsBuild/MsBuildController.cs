@@ -6,12 +6,11 @@ using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
 using EasyDotnet.Controllers.MsBuild;
 using EasyDotnet.Domain.Models.MsBuild.Project;
-using EasyDotnet.IDE.BuildHost;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Controllers.MsBuild;
 
-public class MsBuildController(IClientService clientService, IMsBuildService msBuild, BuildHostManager buildHost) : BaseController
+public class MsBuildController(IClientService clientService, IMsBuildService msBuild) : BaseController
 {
   [JsonRpcMethod("msbuild/build")]
   public async Task<BuildResultResponse> Build(BuildRequest request)
@@ -26,9 +25,6 @@ public class MsBuildController(IClientService clientService, IMsBuildService msB
   public async Task<DotnetProjectV1> QueryProjectProperties(ProjectPropertiesRequest request)
   {
     clientService.ThrowIfNotInitialized();
-
-    var res = await buildHost.GetProjectWatchListAsync(new(request.TargetPath, request.ConfigurationOrDefault), CancellationToken.None);
-
     var project = await msBuild.GetOrSetProjectPropertiesAsync(request.TargetPath, request.TargetFramework, request.ConfigurationOrDefault);
 
     return project.ToResponse(await msBuild.BuildRunCommand(project), await msBuild.BuildBuildCommand(project), await msBuild.BuildTestCommand(project));
