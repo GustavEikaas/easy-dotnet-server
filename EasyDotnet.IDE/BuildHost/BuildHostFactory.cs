@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
@@ -83,13 +84,13 @@ public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService c
 
     if (runtime == BuildServerRuntime.Net472)
     {
-      startInfo.FileName = PathNet472;
+      startInfo.FileName = BuildHostLocator.GetBuildServerFramework();
       startInfo.Arguments = $"--pipe \"{pipeName}\" --log-level=verbose";
     }
     else
     {
       startInfo.FileName = "dotnet";
-      startInfo.Arguments = $"exec \"{PathNet80}\" --pipe \"{pipeName}\" --log-level=verbose";
+      startInfo.Arguments = $"exec \"{BuildHostLocator.GetBuildServerCore()}\" --pipe \"{pipeName}\" --log-level=verbose";
     }
 
     var process = new Process { StartInfo = startInfo };
@@ -123,5 +124,27 @@ public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService c
       retryDelayMs = Math.Min(retryDelayMs * 2, 500);
     }
     throw new TimeoutException("Timed out waiting for BuildServer pipe.");
+  }
+
+  private static class BuildHostLocator
+  {
+    public static string GetBuildServerFramework()
+    {
+      var basedir = GetBaseDir();
+      return Path.Combine(basedir, "net472", "EasyDotnet.BuildServer.exe");
+    }
+
+    public static string GetBuildServerCore()
+    {
+      var basedir = GetBaseDir();
+      return Path.Combine(basedir, "net8.0", "EasyDotnet.BuildServer.dll");
+    }
+
+    private static string GetBaseDir()
+    {
+      var assemblyLocation = Assembly.GetExecutingAssembly().Location;
+      var toolExeDir = Path.GetDirectoryName(assemblyLocation) ?? throw new InvalidOperationException("Unable to determine assembly directory");
+      return Path.Combine(toolExeDir, "BuildServer");
+    }
   }
 }
