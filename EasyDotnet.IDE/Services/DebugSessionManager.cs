@@ -118,7 +118,7 @@ public class DebugSessionManager(ILogger<DebugSessionManager> logger) : IDebugSe
         session.Port = debuggerSession.Port;
         session.State = DebugSessionState.Active;
 
-        logger.LogInformation("Debug session started for {projectName} on port {port}", projectName, debuggerSession);
+        logger.LogInformation("Debug session started for {projectName} on port {port}", projectName, debuggerSession.Port);
         return debuggerSession;
       }
       catch (Exception ex)
