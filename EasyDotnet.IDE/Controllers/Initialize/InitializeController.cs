@@ -22,6 +22,7 @@ public class InitializeController(
   IClientService clientService,
   IVisualStudioLocator locator,
   IMsBuildService msBuildService,
+  IEditorService editorService,
   UpdateCheckerService updateCheckerService,
   IProgressScopeFactory progressScopeFactory,
   ILogger<InitializeController> logger) : BaseController
@@ -59,6 +60,8 @@ public class InitializeController(
 
     var debuggerOptions = clientService.ClientOptions.DebuggerOptions ?? new DebuggerOptions();
     var binaryPath = debuggerOptions.BinaryPath ?? TryGetNetcoreDbgPath();
+
+    await editorService.RequestSelection("Would you like to list", [new("1", "Yes"), new("2", "No")], null);
 
     clientService.ClientOptions = clientService.ClientOptions with
     {
