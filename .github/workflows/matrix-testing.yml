@@ -23,4 +23,11 @@ jobs:
         run: dotnet build
 
       - name: Test
-        run: dotnet test --no-build
+        run: dotnet test --no-build  ./EasyDotnet.IntegrationTests/EasyDotnet.IntegrationTests.csproj
+
+      - name: Test MTP
+        run: |
+          dotnet run --no-build --project ./EasyDotnet.Debugger.Tests
+          dotnet run --no-build --project ./EasyDotnet.Infrastructure.Tests/EasyDotnet.Infrastructure.Tests.csproj
+          dotnet run --no-build --project ./EasyDotnet.MsBuild.Tests/EasyDotnet.MsBuild.Tests.csproj
+          dotnet run --no-build --project ./EasyDotnet.RoslynLanguageServices.Tests/EasyDotnet.RoslynLanguageServices.Tests.csproj
