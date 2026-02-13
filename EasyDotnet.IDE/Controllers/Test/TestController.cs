@@ -170,7 +170,7 @@ public class TestController(
 
   private async Task<DotnetProject> GetProject(string projectPath, string? targetFrameworkMoniker, string? configuration, CancellationToken cancellationToken)
   {
-    var project = await msBuildService.GetProjectPropertiesAsync(projectPath, targetFrameworkMoniker, configuration ?? "Debug", cancellationToken);
+    var project = await msBuildService.GetOrSetProjectPropertiesAsync(projectPath, targetFrameworkMoniker, configuration ?? "Debug", cancellationToken);
     return string.IsNullOrEmpty(project.TargetPath) ? throw new Exception("TargetPath is null or empty") : project;
   }
 
