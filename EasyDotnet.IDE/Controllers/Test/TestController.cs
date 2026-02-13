@@ -1,10 +1,4 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
 using System.IO.Abstractions;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
 using EasyDotnet.Domain.Models.Client;
@@ -44,7 +38,7 @@ public class TestController(
       throw new Exception("Client has not initialized yet");
     }
     var project = await GetProject(projectPath, targetFrameworkMoniker, configuration, token);
-    if (project.TestingPlatformDotnetTestSupport)
+    if (project.IsMTP())
     {
       var path = GetExecutablePath(project);
       var res = await mtpService.RunDiscoverAsync(path, token);
@@ -72,7 +66,7 @@ public class TestController(
     var project = await GetProject(projectPath, targetFrameworkMoniker, configuration, token);
 
 
-    if (project.TestingPlatformDotnetTestSupport)
+    if (project.IsMTP())
     {
       var path = GetExecutablePath(project);
 
@@ -111,7 +105,7 @@ public class TestController(
     var runSettings = runSettingsFile is not null ? fileSystem.File.ReadAllText(runSettingsFile) : null;
     logger.LogInformation("Using runsettings {runSettings}", runSettingsFile);
 
-    if (project.TestingPlatformDotnetTestSupport)
+    if (project.IsMTP())
     {
       var path = GetExecutablePath(project);
 
