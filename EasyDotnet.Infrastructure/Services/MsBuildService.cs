@@ -327,21 +327,32 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
 
   public async Task<string> BuildTestCommand(DotnetProject project)
   {
+    var isTestProject = project.IsMTP() || project.IsVsTest();
 
-    //Automatically makes IsNETCoreOrNETStandard false
-    if (project.TargetFrameworks?.Length > 0)
+    if (project.TargetFrameworks?.Length > 0 || !isTestProject)
     {
       return "";
     }
 
-    if (project.IsNETCoreOrNETStandard)
+    if (string.IsNullOrWhiteSpace(project.MSBuildProjectFullPath))
     {
-      return string.IsNullOrWhiteSpace(project.MSBuildProjectFullPath)
-        ? throw new InvalidOperationException("[compat] Missing project path for test command.")
-        : $"dotnet test \"{project.MSBuildProjectFullPath}\"";
+      throw new InvalidOperationException("[compat] Missing project path for test command.");
     }
 
-    var projectPath = project.MSBuildProjectFullPath ?? throw new InvalidOperationException("[compat] Missing project path");
+
+    if (project.IsNETCoreOrNETStandard)
+    {
+      if (project.IsMTP())
+      {
+        return $"dotnet run --project \"{project.MSBuildProjectFullPath}\"";
+      }
+      else
+      {
+        return $"dotnet test \"{project.MSBuildProjectFullPath}\"";
+      }
+    }
+
+    var projectPath = project.MSBuildProjectFullPath;
     var targetPath = project.TargetPath ?? throw new InvalidOperationException("[compat] Missing target path");
     var msbuildPath = await locator.GetVisualStudioMSBuildPath();
 

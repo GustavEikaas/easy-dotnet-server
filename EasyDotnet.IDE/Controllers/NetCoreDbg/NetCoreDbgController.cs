@@ -45,7 +45,7 @@ public class NetCoreDbgController(
   }
 
   private IDebugSessionStrategy ResolveStrategy(DotnetProject project, string? launchProfileName) =>
-    project.IsTestProject && !project.TestingPlatformDotnetTestSupport
+    project.IsVsTest()
       ? debugStrategyFactory.CreateVsTestStrategy()
       : debugStrategyFactory.CreateStandardLaunchStrategy(launchProfileName);
 }
