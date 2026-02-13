@@ -32,7 +32,7 @@ public class EfToolOutputParserTests
     await Assert.That(result.JsonData).Contains("AppDbContext");
     await Assert.That(result.JsonData).Contains("LoggingDbContext");
     await Assert.That(result.ErrorMessage).IsNull();
-    await Assert.That(result.InfoMessages).HasCount().EqualTo(2);
+    await Assert.That(result.InfoMessages).Count().IsEqualTo(2);
     await Assert.That(result.InfoMessages[0]).IsEqualTo("Build started...");
     await Assert.That(result.InfoMessages[1]).IsEqualTo("Build succeeded.");
     await Assert.That(result.ErrorMessages).IsEmpty();
@@ -50,9 +50,9 @@ public class EfToolOutputParserTests
 
     await Assert.That(result.JsonData).IsNull();
     await Assert.That(result.ErrorMessage).IsEqualTo("Build failed. Use dotnet build to see the errors.");
-    await Assert.That(result.InfoMessages).HasCount().EqualTo(1);
+    await Assert.That(result.InfoMessages).Count().IsEqualTo(1);
     await Assert.That(result.InfoMessages[0]).IsEqualTo("Build started...");
-    await Assert.That(result.ErrorMessages).HasCount().EqualTo(1);
+    await Assert.That(result.ErrorMessages).Count().IsEqualTo(1);
     await Assert.That(result.ErrorMessages[0]).IsEqualTo("Build failed. Use dotnet build to see the errors.");
   }
 
