@@ -8,7 +8,8 @@ public class LaunchProfileService : ILaunchProfileService
 {
   private static readonly JsonSerializerOptions DeserializerOptions = new()
   {
-    PropertyNameCaseInsensitive = true
+    PropertyNameCaseInsensitive = true,
+    ReadCommentHandling = JsonCommentHandling.Skip
   };
 
   public Dictionary<string, LaunchProfile>? GetLaunchProfiles(string targetPath)
