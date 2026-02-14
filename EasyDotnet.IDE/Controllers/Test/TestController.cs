@@ -3,6 +3,7 @@ using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
 using EasyDotnet.Domain.Models.Client;
 using EasyDotnet.IDE.Services;
+using EasyDotnet.IDE.Utils;
 using EasyDotnet.Infrastructure.Settings;
 using EasyDotnet.MsBuild;
 using EasyDotnet.MTP;
@@ -14,6 +15,7 @@ using StreamJsonRpc;
 namespace EasyDotnet.IDE.Controllers.Test;
 
 public class TestController(
+  GlobalJsonService globalJsonService,
   ILogger<TestController> logger,
   IClientService clientService,
   MtpService mtpService,
@@ -189,5 +191,20 @@ public class TestController(
     return await func(linkedCts.Token);
   }
 
+  [JsonRpcMethod("test/solution-command")]
+  public RunCommand GetTestCommandForSolution()
+  {
+    var solutionFile = clientService.RequireSolutionFile();
+    var globalJson = globalJsonService.GetGlobalJson();
+    var isMicrosoftTestingPlatformRunner = globalJson.IsMicrosoftTestingPlatformRunner();
 
+    if (isMicrosoftTestingPlatformRunner)
+    {
+      return new("dotnet", ["test", "--solution", solutionFile], ".", []);
+    }
+    else
+    {
+      return new("dotnet", ["test", solutionFile], ".", []);
+    }
+  }
 }

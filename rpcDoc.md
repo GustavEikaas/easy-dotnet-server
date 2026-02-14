@@ -139,6 +139,11 @@ _No parameters_
 
 **Returns:** `Task`
 
+### `test/solution-command`
+_No parameters_
+
+**Returns:** `RunCommand`
+
 ---
 
 ## TemplateController
