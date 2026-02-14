@@ -142,6 +142,12 @@ public class TemplateEngineService(IMsBuildService msBuildService, IClientServic
       throw new Exception($"Failed to instantiate template, STATUS:{result?.Status}, err:{result?.ErrorMessage ?? ""}");
     }
 
+    result.CreationEffects.CreationResult.PostActions.ForEach(x =>
+    {
+      IPostAction
+    x.
+    })
+
     if (shouldAddToSolution && !string.IsNullOrEmpty(clientService.ProjectInfo?.SolutionFile))
     {
       var projectsToAdd = result.CreationResult?.PrimaryOutputs
@@ -262,4 +268,50 @@ public class TemplateEngineService(IMsBuildService msBuildService, IClientServic
         p.DisplayName, p.AllowMultipleValues, sortedChoices
     );
   }
+}
+
+
+public enum PostAction
+{
+  OpenFile = 0,
+  RunScript = 1,
+  RestoreNugetPackages = 2,
+  AddReferenceToProjectFile = 3,
+  AddProjectsToSolutionFile = 4,
+  ChangeFilePermissions = 5,
+  DisplayManualInstructions = 6,
+  AddAPropertyToExistingJsonFile = 7
+}
+
+
+public class PostActionHandler
+{
+  public PostAction? ParseActionId(Guid id) => id switch
+  {
+    var g when g == new Guid("210D431B-A78B-4D2F-B762-4ED3E3EA9025")
+        => PostAction.RestoreNugetPackages,
+
+    var g when g == new Guid("3A7C4B45-1F5D-4A30-959A-51B88E82B5D2")
+        => PostAction.RunScript,
+
+    var g when g == new Guid("84C0DA21-51C8-4541-9940-6CA19AF04EE6")
+        => PostAction.OpenFile,
+
+    var g when g == new Guid("B17581D1-C5C9-4489-8F0A-004BE667B814")
+        => PostAction.AddReferenceToProjectFile,
+
+    var g when g == new Guid("D396686C-DE0E-4DE6-906D-291CD29FC5DE")
+        => PostAction.AddProjectsToSolutionFile,
+
+    var g when g == new Guid("CB9A6CF3-4F5C-4860-B9D2-03A574959774")
+        => PostAction.ChangeFilePermissions,
+
+    var g when g == new Guid("AC1156F7-BB77-4DB8-B28F-24EEBCCA1E5C")
+        => PostAction.DisplayManualInstructions,
+
+    var g when g == new Guid("695A3659-EB40-4FF5-A6A6-C9C4E629FCB0")
+        => PostAction.AddAPropertyToExistingJsonFile,
+
+    _ => null
+  };
 }
