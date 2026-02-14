@@ -20,4 +20,5 @@ public class ClientService : IClientService
   }
 
   public string RequireSolutionFile() => ProjectInfo?.SolutionFile ?? throw new InvalidOperationException("Solution file is required for this feature");
+  public string RequireRootDir() => ProjectInfo?.RootDir ?? throw new InvalidOperationException("Root directory is required for this feature");
 }
