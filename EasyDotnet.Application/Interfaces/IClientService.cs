@@ -12,4 +12,5 @@ public interface IClientService
 
   void ThrowIfNotInitialized();
   string RequireSolutionFile();
+  string RequireRootDir();
 }

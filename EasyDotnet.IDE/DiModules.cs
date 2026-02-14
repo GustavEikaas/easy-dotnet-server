@@ -78,6 +78,7 @@ public static class DiModules
     services.AddSingleton<VsTestService>();
     services.AddTransient<MtpService>();
     services.AddTransient<OutdatedService>();
+    services.AddTransient<GlobalJsonService>();
 
     //Dotnet oudated
     services.AddSingleton<IProjectAnalysisService, ProjectAnalysisService>();
