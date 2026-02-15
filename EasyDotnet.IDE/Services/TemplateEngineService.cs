@@ -14,6 +14,7 @@ using NuGet.Versioning;
 namespace EasyDotnet.IDE.Services;
 
 public class TemplateEngineService(
+  Bootstrapper bootstrapper,
   IMsBuildService msBuildService,
   ILogger<TemplateEngineService> logger,
   PostActionProcessor postActionProcessor)
@@ -31,9 +32,6 @@ public class TemplateEngineService(
     ["Microsoft.Standard.QuickStarts.ToolManifestFile"] = "dotnet-tools.json"
   };
 
-  private readonly Microsoft.TemplateEngine.Edge.DefaultTemplateEngineHost _host = new(
-        hostIdentifier: "easy-dotnet",
-        version: "1.0.0");
 
   private const string FrameworkParamKey = "Framework";
   private const string TargetFrameworkOverrideParamKey = "TargetFrameworkOverride";
@@ -42,8 +40,6 @@ public class TemplateEngineService(
 
   public async Task EnsureInstalled()
   {
-    using var bootstrapper = new Bootstrapper(_host, virtualizeConfiguration: false, loadDefaultComponents: true);
-
     var templatesFolder = Path.Join(msBuildService.GetDotnetSdkBasePath(), "templates");
     if (!Directory.Exists(templatesFolder)) return;
 
@@ -56,18 +52,11 @@ public class TemplateEngineService(
     if (highestVersionDir == null) return;
     var searchPath = Path.Combine(templatesFolder, highestVersionDir);
 
-    var localFiles = Directory.GetFiles(searchPath, "*.nupkg");
-    var localPackages = new List<PackageInfo>();
-
-    foreach (var file in localFiles)
-    {
-      var meta = GetPackageMetadata(file);
-      if (meta != null) localPackages.Add(meta);
-    }
-
-    var targetPackages = localPackages
-        .GroupBy(p => p.Id, StringComparer.OrdinalIgnoreCase)
-        .Select(g => g.OrderByDescending(p => p.Version).First())
+    var localPackages = Directory.GetFiles(searchPath, "*.nupkg")
+        .Select(GetPackageMetadata)
+        .Where(m => m != null)
+        .GroupBy(p => p!.Id, StringComparer.OrdinalIgnoreCase)
+        .Select(g => g.OrderByDescending(p => p!.Version).First())
         .ToList();
 
     var installedPackages = await bootstrapper.GetManagedTemplatePackagesAsync(CancellationToken.None);
@@ -75,10 +64,10 @@ public class TemplateEngineService(
     var installRequests = new List<InstallRequest>();
     var uninstallRequests = new List<IManagedTemplatePackage>();
 
-    foreach (var target in targetPackages)
+    foreach (var target in localPackages)
     {
       var installedInstances = installedPackages
-          .Where(p => string.Equals(p.Identifier, target.Id, StringComparison.OrdinalIgnoreCase))
+          .Where(p => string.Equals(p.Identifier, target!.Id, StringComparison.OrdinalIgnoreCase))
           .ToList();
 
       var isTargetVersionInstalled = false;
@@ -91,16 +80,10 @@ public class TemplateEngineService(
           continue;
         }
 
-        if (installedVer == target.Version)
+        if (installedVer == target!.Version)
         {
-          if (isTargetVersionInstalled)
-          {
-            uninstallRequests.Add(installed);
-          }
-          else
-          {
-            isTargetVersionInstalled = true;
-          }
+          if (isTargetVersionInstalled) uninstallRequests.Add(installed); // Duplicate
+          else isTargetVersionInstalled = true;
         }
         else
         {
@@ -110,7 +93,7 @@ public class TemplateEngineService(
 
       if (!isTargetVersionInstalled)
       {
-        installRequests.Add(new InstallRequest(target.FullPath));
+        installRequests.Add(new InstallRequest(target!.FullPath));
       }
     }
 
@@ -129,7 +112,6 @@ public class TemplateEngineService(
 
   public async Task<List<ITemplateParameter>> GetTemplateOptions(string identity)
   {
-    using var bootstrapper = new Bootstrapper(_host, virtualizeConfiguration: false, loadDefaultComponents: true);
     var templates = await GetTemplatesAsync();
     var template = templates.FirstOrDefault(x => x.Identity == identity)
                        ?? throw new Exception($"Failed to find template with id {identity}");
@@ -147,8 +129,6 @@ public class TemplateEngineService(
   {
     var templates = await GetTemplatesAsync();
     var template = templates.FirstOrDefault(x => x.Identity == identity) ?? throw new Exception($"Failed to find template with id {identity}");
-
-    using var bootstrapper = new Bootstrapper(_host, virtualizeConfiguration: false, loadDefaultComponents: true);
 
     if (string.IsNullOrWhiteSpace(name) && NoNameTemplates.TryGetValue(identity, out var defaultName))
     {
@@ -174,8 +154,8 @@ public class TemplateEngineService(
 
   public async Task<IReadOnlyList<ITemplateInfo>> GetTemplatesAsync()
   {
-    using var bootstrapper = new Bootstrapper(_host, virtualizeConfiguration: false, loadDefaultComponents: true);
-    return await bootstrapper.GetTemplatesAsync(CancellationToken.None);
+    var allTemplates = await bootstrapper.GetTemplatesAsync(CancellationToken.None);
+    return [.. allTemplates.Where(t => t.MountPointUri.Contains(".templateengine", StringComparison.OrdinalIgnoreCase))];
   }
 
   public static string? GetBestEntryPoint(ITemplateCreationResult result, string outputPath)

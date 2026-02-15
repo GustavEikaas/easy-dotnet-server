@@ -21,6 +21,9 @@ using EasyDotnet.Infrastructure.Settings;
 using EasyDotnet.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.TemplateEngine.Abstractions;
+using Microsoft.TemplateEngine.Edge;
+using Microsoft.TemplateEngine.IDE;
 using Serilog;
 using StreamJsonRpc;
 
@@ -53,6 +56,13 @@ public static class DiModules
     services.AddSingleton<ISolutionService, SolutionService>();
     services.AddSingleton<IProcessQueue, ProcessQueue>();
     services.AddSingleton<TemplateEngineService>();
+    services.AddSingleton<ITemplateEngineHost>(_ => new DefaultTemplateEngineHost(hostIdentifier: "easy-dotnet", version: "1.0.0"));
+    services.AddSingleton(sp =>
+    {
+      var host = sp.GetRequiredService<ITemplateEngineHost>();
+      return new Bootstrapper(host, virtualizeConfiguration: false, loadDefaultComponents: true);
+    });
+
     services.AddSingleton<IDebugSessionManager, DebugSessionManager>();
     services.AddSingleton<IDebugOrchestrator, DebugOrchestrator>();
     services.AddSingleton<IAppPathsService, AppPathsService>();
