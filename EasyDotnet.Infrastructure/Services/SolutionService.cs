@@ -1,54 +1,47 @@
-using System.Xml.Linq;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Domain.Models.Solution;
-using Microsoft.Build.Construction;
+using Microsoft.VisualStudio.SolutionPersistence.Serializer;
 
 namespace EasyDotnet.Infrastructure.Services;
 
-public class SolutionService(IProcessQueue processQueue) : ISolutionService
+public class SolutionService : ISolutionService
 {
-  public List<SolutionFileProject> GetProjectsFromSolutionFile(string solutionFilePath)
+  public async Task<List<SolutionFileProject>> GetProjectsFromSolutionFile(string solutionFilePath, CancellationToken cancellationToken)
   {
     var fullSolutionPath = Path.GetFullPath(solutionFilePath);
-    return Path.GetExtension(fullSolutionPath) == ".slnx" ? GetProjectsFromSlnx(fullSolutionPath) : GetProjectsFromSln(fullSolutionPath) ?? throw new Exception($"Failed to resolve {fullSolutionPath}");
+    var solutionDirectory = Path.GetDirectoryName(solutionFilePath) ?? throw new Exception("Solution dir cannot be null");
+
+    var serializer = SolutionSerializers.GetSerializerByMoniker(fullSolutionPath) ?? throw new InvalidOperationException($"No serializer found for solution file: {fullSolutionPath}");
+    var solutionModel = await serializer.OpenAsync(fullSolutionPath, cancellationToken);
+    var solutionFolderType = Guid.Parse("2150E333-8FDC-42A3-9474-1A3956D46DE8");
+
+    return [.. solutionModel.SolutionProjects
+        .Where(p => p.TypeId != solutionFolderType)
+        .Select(p =>
+        {
+          var absolutePath = Path.GetFullPath(Path.Combine(solutionDirectory, p.FilePath));
+
+          return new SolutionFileProject(
+                ProjectName: p.ActualDisplayName,
+                AbsolutePath: absolutePath
+            );
+        })];
   }
 
   public async Task<bool> AddProjectToSolutionAsync(string solutionFilePath, string projectPath, CancellationToken cancellationToken)
   {
-    var (success, stdout, stderr) = await processQueue.RunProcessAsync(
-           "dotnet",
-           $"solution \"{solutionFilePath}\" add \"{projectPath}\"",
-           new ProcessOptions(true),
-           cancellationToken);
+    var serializer = SolutionSerializers.GetSerializerByMoniker(solutionFilePath);
+    if (serializer == null) return false;
 
-    return success;
+    var solutionModel = await serializer.OpenAsync(solutionFilePath, cancellationToken);
+
+    var solutionDirectory = Path.GetDirectoryName(solutionFilePath) ?? throw new Exception("Solution dir cannot be null");
+    var relativePath = Path.GetRelativePath(solutionDirectory, projectPath);
+
+    solutionModel.AddProject(relativePath);
+
+    await serializer.SaveAsync(solutionFilePath, solutionModel, cancellationToken);
+
+    return true;
   }
-
-  private static List<SolutionFileProject> GetProjectsFromSln(string slnPath) => [.. SolutionFile.Parse(slnPath).ProjectsInOrder
-        .Where(p => p.ProjectType == SolutionProjectType.KnownToBeMSBuildFormat).Select(x => new SolutionFileProject(x.ProjectName, x.AbsolutePath))];
-
-  private static List<SolutionFileProject> GetProjectsFromSlnx(string slnxPath)
-  {
-    var doc = XDocument.Load(slnxPath);
-    var solutionDir = Path.GetDirectoryName(slnxPath) ?? Directory.GetCurrentDirectory();
-
-    return [.. GetProjectsRecursive(doc.Root, solutionDir)];
-  }
-
-  private static IEnumerable<SolutionFileProject> GetProjectsRecursive(XElement? element, string solutionDir) =>
-      element == null
-          ? []
-          : element.Elements("Project")
-              .Select(p => p.Attribute("Path")?.Value)
-              .Where(path => !string.IsNullOrWhiteSpace(path) && path.EndsWith("proj", StringComparison.OrdinalIgnoreCase))
-              .Select(relativePath =>
-              {
-                var absolutePath = Path.GetFullPath(Path.Combine(solutionDir, relativePath!));
-                var projectName = Path.GetFileNameWithoutExtension(relativePath);
-                return new SolutionFileProject(projectName ?? "", absolutePath);
-              })
-              .Concat(
-                  element.Elements("Folder")
-                      .SelectMany(f => GetProjectsRecursive(f, solutionDir))
-              );
 }
