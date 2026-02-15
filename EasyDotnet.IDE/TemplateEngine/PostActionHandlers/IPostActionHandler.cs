@@ -6,5 +6,5 @@ public interface IPostActionHandler
 {
   Guid ActionId { get; }
 
-  Task Handle(IPostAction postAction, CancellationToken cancellationToken = default);
+  Task<bool> Handle(IPostAction postAction, IReadOnlyList<ICreationPath> primaryOutputs, string workingDirectory, CancellationToken cancellationToken);
 }

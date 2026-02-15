@@ -1,21 +1,18 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
-using EasyDotnet.MsBuild;
+using EasyDotnet.IDE.TemplateEngine.PostActionHandlers;
 using Microsoft.TemplateEngine.Abstractions;
 using Microsoft.TemplateEngine.Abstractions.Installer;
 using Microsoft.TemplateEngine.Edge.Settings;
 using Microsoft.TemplateEngine.Edge.Template;
 using Microsoft.TemplateEngine.IDE;
 using Microsoft.TemplateEngine.Utils;
+using Microsoft.VisualStudio.Threading;
 
 namespace EasyDotnet.IDE.Services;
 
-public class TemplateEngineService(IMsBuildService msBuildService, IClientService clientService, ISolutionService solutionService, IEditorService editorService)
+public class TemplateEngineService(
+  IMsBuildService msBuildService,
+  PostActionProcessor postActionProcessor)
 {
   private static readonly Dictionary<string, string> NoNameTemplates = new(StringComparer.OrdinalIgnoreCase)
   {
@@ -36,7 +33,6 @@ public class TemplateEngineService(IMsBuildService msBuildService, IClientServic
 
   private const string FrameworkParamKey = "Framework";
   private const string TargetFrameworkOverrideParamKey = "TargetFrameworkOverride";
-  private const string AddToSolutionParamKey = "AddProjectToSolution";
 
   public static bool IsNameRequired(string identity) => !NoNameTemplates.ContainsKey(identity);
 
@@ -84,31 +80,11 @@ public class TemplateEngineService(IMsBuildService msBuildService, IClientServic
 
     var monikers = msBuildService.QuerySdkInstallations().Select(x => x.Moniker).ToList();
 
-    var parameters = template.ParameterDefinitions
+    return [.. template.ParameterDefinitions
             .Where(p => p.Precedence.PrecedenceDefinition != PrecedenceDefinition.Implicit)
             .Where(x => x.Name != TargetFrameworkOverrideParamKey)
             .Select(p => NormalizeFrameworkParameter(p, monikers))
-            .OrderByDescending(x => x.Precedence.IsRequired)
-            .ToList();
-
-    if (template.GetTemplateType() == "project" && !string.IsNullOrEmpty(clientService.ProjectInfo?.SolutionFile))
-    {
-      parameters.Insert(0, new TemplateParameter(
-          AddToSolutionParamKey,
-          type: "parameter",
-          datatype: "bool",
-          precedence: TemplateParameterPrecedence.Default,
-          isName: false,
-          defaultValue: "true",
-          defaultIfOptionWithoutValue: "true",
-          description: "Add the generated project to the current active solution.",
-          displayName: "Add to Current Solution",
-          allowMultipleValues: false,
-          choices: null
-      ));
-    }
-
-    return parameters;
+            .OrderByDescending(x => x.Precedence.IsRequired)];
   }
 
   public async Task<ITemplateCreationResult> InstantiateTemplateAsync(string identity, string name, string outputPath, IReadOnlyDictionary<string, string?>? parameters, CancellationToken cancellationToken)
@@ -124,16 +100,6 @@ public class TemplateEngineService(IMsBuildService msBuildService, IClientServic
     }
 
     var mutableParams = OverwriteTargetFrameworkIfSet(parameters);
-    var shouldAddToSolution = false;
-
-    if (mutableParams.ContainsKey(AddToSolutionParamKey))
-    {
-      if (bool.TryParse(mutableParams[AddToSolutionParamKey], out var val)) shouldAddToSolution = val;
-
-      var clean = new Dictionary<string, string?>(mutableParams);
-      clean.Remove(AddToSolutionParamKey);
-      mutableParams = clean.AsReadOnly();
-    }
 
     var result = await bootstrapper.CreateAsync(template, name, outputPath, mutableParams, cancellationToken: cancellationToken);
 
@@ -142,40 +108,9 @@ public class TemplateEngineService(IMsBuildService msBuildService, IClientServic
       throw new Exception($"Failed to instantiate template, STATUS:{result?.Status}, err:{result?.ErrorMessage ?? ""}");
     }
 
-    result.CreationEffects.CreationResult.PostActions.ForEach(x =>
+    if (result.CreationResult?.PostActions is not null)
     {
-      IPostAction
-    x.
-    })
-
-    if (shouldAddToSolution && !string.IsNullOrEmpty(clientService.ProjectInfo?.SolutionFile))
-    {
-      var projectsToAdd = result.CreationResult?.PrimaryOutputs
-          .Select(x => Path.GetFullPath(Path.Combine(outputPath, x.Path)))
-          .Where(FileTypes.IsAnyProjectFile)
-          .ToList() ?? [];
-
-      if (projectsToAdd.Count == 0)
-      {
-        projectsToAdd = result.CreationEffects?.FileChanges
-            .Select(x => Path.GetFullPath(Path.Combine(outputPath, x.TargetRelativePath)))
-            .Where(FileTypes.IsAnyProjectFile)
-            .ToList() ?? [];
-      }
-
-      foreach (var projectPath in projectsToAdd)
-      {
-        var linkedToSolution = await solutionService.AddProjectToSolutionAsync(clientService.ProjectInfo.SolutionFile, projectPath, cancellationToken);
-        var projectName = Path.GetFileNameWithoutExtension(projectPath);
-        if (linkedToSolution)
-        {
-          await editorService.DisplayMessage($"{projectName} added to solution.");
-        }
-        else
-        {
-          await editorService.DisplayError($"Failed to add project {projectName} to solution.");
-        }
-      }
+      await postActionProcessor.ProcessAsync(result.CreationResult.PostActions, result.CreationResult.PrimaryOutputs, outputPath, cancellationToken);
     }
 
     return result;
@@ -268,50 +203,4 @@ public class TemplateEngineService(IMsBuildService msBuildService, IClientServic
         p.DisplayName, p.AllowMultipleValues, sortedChoices
     );
   }
-}
-
-
-public enum PostAction
-{
-  OpenFile = 0,
-  RunScript = 1,
-  RestoreNugetPackages = 2,
-  AddReferenceToProjectFile = 3,
-  AddProjectsToSolutionFile = 4,
-  ChangeFilePermissions = 5,
-  DisplayManualInstructions = 6,
-  AddAPropertyToExistingJsonFile = 7
-}
-
-
-public class PostActionHandler
-{
-  public PostAction? ParseActionId(Guid id) => id switch
-  {
-    var g when g == new Guid("210D431B-A78B-4D2F-B762-4ED3E3EA9025")
-        => PostAction.RestoreNugetPackages,
-
-    var g when g == new Guid("3A7C4B45-1F5D-4A30-959A-51B88E82B5D2")
-        => PostAction.RunScript,
-
-    var g when g == new Guid("84C0DA21-51C8-4541-9940-6CA19AF04EE6")
-        => PostAction.OpenFile,
-
-    var g when g == new Guid("B17581D1-C5C9-4489-8F0A-004BE667B814")
-        => PostAction.AddReferenceToProjectFile,
-
-    var g when g == new Guid("D396686C-DE0E-4DE6-906D-291CD29FC5DE")
-        => PostAction.AddProjectsToSolutionFile,
-
-    var g when g == new Guid("CB9A6CF3-4F5C-4860-B9D2-03A574959774")
-        => PostAction.ChangeFilePermissions,
-
-    var g when g == new Guid("AC1156F7-BB77-4DB8-B28F-24EEBCCA1E5C")
-        => PostAction.DisplayManualInstructions,
-
-    var g when g == new Guid("695A3659-EB40-4FF5-A6A6-C9C4E629FCB0")
-        => PostAction.AddAPropertyToExistingJsonFile,
-
-    _ => null
-  };
 }
