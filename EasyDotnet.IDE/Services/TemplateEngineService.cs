@@ -1,17 +1,21 @@
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.IDE.TemplateEngine.PostActionHandlers;
+using Microsoft.Extensions.Logging;
 using Microsoft.TemplateEngine.Abstractions;
 using Microsoft.TemplateEngine.Abstractions.Installer;
+using Microsoft.TemplateEngine.Abstractions.TemplatePackage;
 using Microsoft.TemplateEngine.Edge.Settings;
 using Microsoft.TemplateEngine.Edge.Template;
 using Microsoft.TemplateEngine.IDE;
 using Microsoft.TemplateEngine.Utils;
-using Microsoft.VisualStudio.Threading;
+using NuGet.Packaging;
+using NuGet.Versioning;
 
 namespace EasyDotnet.IDE.Services;
 
 public class TemplateEngineService(
   IMsBuildService msBuildService,
+  ILogger<TemplateEngineService> logger,
   PostActionProcessor postActionProcessor)
 {
   private static readonly Dictionary<string, string> NoNameTemplates = new(StringComparer.OrdinalIgnoreCase)
@@ -43,31 +47,83 @@ public class TemplateEngineService(
     var templatesFolder = Path.Join(msBuildService.GetDotnetSdkBasePath(), "templates");
     if (!Directory.Exists(templatesFolder)) return;
 
-    var highestVersionDir = Directory.GetDirectories(templatesFolder).ToList()
+    var highestVersionDir = Directory.GetDirectories(templatesFolder)
         .Select(Path.GetFileName)
-        .Where(name => Version.TryParse(name, out _))
-        .OrderByDescending(name => Version.Parse(name ?? ""))
+        .Where(n => Version.TryParse(n, out _))
+        .OrderByDescending(n => Version.Parse(n!))
         .FirstOrDefault();
 
     if (highestVersionDir == null) return;
+    var searchPath = Path.Combine(templatesFolder, highestVersionDir);
 
-    var fullPath = Path.Combine(templatesFolder, highestVersionDir);
-    var nupkgs = Directory.GetFiles(fullPath, "*.nupkg");
+    var localFiles = Directory.GetFiles(searchPath, "*.nupkg");
+    var localPackages = new List<PackageInfo>();
 
-    var existingPackageNames = new HashSet<string>(
-        (await bootstrapper.GetManagedTemplatePackagesAsync(CancellationToken.None))
-            .Select(x => Path.GetFileName(new Uri(x.MountPointUri).LocalPath)),
-        StringComparer.OrdinalIgnoreCase
-    );
+    foreach (var file in localFiles)
+    {
+      var meta = GetPackageMetadata(file);
+      if (meta != null) localPackages.Add(meta);
+    }
 
-    var missing = nupkgs
-        .Where(x => !existingPackageNames.Contains(Path.GetFileName(x)))
-        .Select(path => new InstallRequest(path))
+    var targetPackages = localPackages
+        .GroupBy(p => p.Id, StringComparer.OrdinalIgnoreCase)
+        .Select(g => g.OrderByDescending(p => p.Version).First())
         .ToList();
 
-    if (missing.Count != 0)
+    var installedPackages = await bootstrapper.GetManagedTemplatePackagesAsync(CancellationToken.None);
+
+    var installRequests = new List<InstallRequest>();
+    var uninstallRequests = new List<IManagedTemplatePackage>();
+
+    foreach (var target in targetPackages)
     {
-      await bootstrapper.InstallTemplatePackagesAsync(missing, InstallationScope.Global, CancellationToken.None);
+      var installedInstances = installedPackages
+          .Where(p => string.Equals(p.Identifier, target.Id, StringComparison.OrdinalIgnoreCase))
+          .ToList();
+
+      var isTargetVersionInstalled = false;
+
+      foreach (var installed in installedInstances)
+      {
+        if (!NuGetVersion.TryParse(installed.Version, out var installedVer))
+        {
+          uninstallRequests.Add(installed);
+          continue;
+        }
+
+        if (installedVer == target.Version)
+        {
+          if (isTargetVersionInstalled)
+          {
+            uninstallRequests.Add(installed);
+          }
+          else
+          {
+            isTargetVersionInstalled = true;
+          }
+        }
+        else
+        {
+          uninstallRequests.Add(installed);
+        }
+      }
+
+      if (!isTargetVersionInstalled)
+      {
+        installRequests.Add(new InstallRequest(target.FullPath));
+      }
+    }
+
+    if (uninstallRequests.Count != 0)
+    {
+      await bootstrapper.UninstallTemplatePackagesAsync(uninstallRequests, CancellationToken.None);
+      logger.LogInformation("Uninstalled {count} outdated packages.", uninstallRequests.Count);
+    }
+
+    if (installRequests.Count != 0)
+    {
+      await bootstrapper.InstallTemplatePackagesAsync(installRequests, InstallationScope.Global, CancellationToken.None);
+      logger.LogInformation("Installed {count} new packages.", installRequests.Count);
     }
   }
 
@@ -203,4 +259,21 @@ public class TemplateEngineService(
         p.DisplayName, p.AllowMultipleValues, sortedChoices
     );
   }
+
+  private record PackageInfo(string Id, NuGetVersion Version, string FullPath);
+
+  private static PackageInfo? GetPackageMetadata(string nupkgPath)
+  {
+    try
+    {
+      using var reader = new PackageArchiveReader(nupkgPath);
+      var nuspec = reader.NuspecReader;
+      return new PackageInfo(nuspec.GetId(), nuspec.GetVersion(), nupkgPath);
+    }
+    catch
+    {
+      return null;
+    }
+  }
+
 }
