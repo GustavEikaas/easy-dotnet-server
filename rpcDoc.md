@@ -1,14 +1,3 @@
-## SolutionController
-
-### `solution/list-projects`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| solutionFilePath | string |   |
-
-**Returns:** `List<SolutionFileProjectResponse>`
-
----
-
 ## RoslynController
 
 ### `roslyn/bootstrap-file`
@@ -135,7 +124,8 @@ _No parameters_
 **Returns:** `Task<IAsyncEnumerable<TestRunResult>>`
 
 ### `test/set-project-run-settings`
-_No parameters_
+| Parameter | Type | Optional |
+|-----------|------|----------|
 
 **Returns:** `Task`
 
@@ -169,6 +159,17 @@ _No parameters_
 | identity | string |   |
 
 **Returns:** `Task<IAsyncEnumerable<DotnetNewParameterResponse>>`
+
+---
+
+## SolutionController
+
+### `solution/list-projects`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| solutionFilePath | string |   |
+
+**Returns:** `Task<List<SolutionFileProjectResponse>>`
 
 ---
 
@@ -270,12 +271,14 @@ _No parameters_
 ## EntityFrameworkController
 
 ### `ef/database-drop`
-_No parameters_
+| Parameter | Type | Optional |
+|-----------|------|----------|
 
 **Returns:** `Task`
 
 ### `ef/database-update`
-_No parameters_
+| Parameter | Type | Optional |
+|-----------|------|----------|
 
 **Returns:** `Task`
 
@@ -287,12 +290,14 @@ _No parameters_
 **Returns:** `Task`
 
 ### `ef/migrations-apply`
-_No parameters_
+| Parameter | Type | Optional |
+|-----------|------|----------|
 
 **Returns:** `Task`
 
 ### `ef/migrations-remove`
-_No parameters_
+| Parameter | Type | Optional |
+|-----------|------|----------|
 
 **Returns:** `Task`
 
