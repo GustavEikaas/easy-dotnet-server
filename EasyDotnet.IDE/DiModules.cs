@@ -10,6 +10,7 @@ using EasyDotnet.Debugger;
 using EasyDotnet.IDE.BuildHost;
 using EasyDotnet.IDE.DebuggerStrategies;
 using EasyDotnet.IDE.Services;
+using EasyDotnet.IDE.TemplateEngine.PostActionHandlers;
 using EasyDotnet.IDE.Utils;
 using EasyDotnet.Infrastructure.Aspire;
 using EasyDotnet.Infrastructure.Editor;
@@ -79,6 +80,16 @@ public static class DiModules
     services.AddTransient<MtpService>();
     services.AddTransient<OutdatedService>();
     services.AddTransient<GlobalJsonService>();
+
+    services.AddTransient<PostActionProcessor>();
+    services.AddTransient<IPostActionHandler, RunScriptPostActionHandler>();
+    services.AddTransient<IPostActionHandler, OpenFilePostActionHandler>();
+    services.AddTransient<IPostActionHandler, ChangeFilePermissionsPostActionHandler>();
+    services.AddTransient<IPostActionHandler, DisplayManualInstructionsPostActionHandler>();
+    services.AddTransient<IPostActionHandler, RestoreNugetPackagesPostActionHandler>();
+    services.AddTransient<IPostActionHandler, AddProjectsToSolutionFilePostActionHandler>();
+    services.AddTransient<IPostActionHandler, AddPropertyToExistingJsonFilePostActionHandler>();
+    services.AddTransient<IPostActionHandler, AddReferenceToProjectFilePostActionHandler>();
 
     //Dotnet oudated
     services.AddSingleton<IProjectAnalysisService, ProjectAnalysisService>();

@@ -1,21 +1,18 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
-using EasyDotnet.MsBuild;
+using EasyDotnet.IDE.TemplateEngine.PostActionHandlers;
 using Microsoft.TemplateEngine.Abstractions;
 using Microsoft.TemplateEngine.Abstractions.Installer;
 using Microsoft.TemplateEngine.Edge.Settings;
 using Microsoft.TemplateEngine.Edge.Template;
 using Microsoft.TemplateEngine.IDE;
 using Microsoft.TemplateEngine.Utils;
+using Microsoft.VisualStudio.Threading;
 
 namespace EasyDotnet.IDE.Services;
 
-public class TemplateEngineService(IMsBuildService msBuildService, IClientService clientService, ISolutionService solutionService, IEditorService editorService)
+public class TemplateEngineService(
+  IMsBuildService msBuildService,
+  PostActionProcessor postActionProcessor)
 {
   private static readonly Dictionary<string, string> NoNameTemplates = new(StringComparer.OrdinalIgnoreCase)
   {
@@ -36,7 +33,6 @@ public class TemplateEngineService(IMsBuildService msBuildService, IClientServic
 
   private const string FrameworkParamKey = "Framework";
   private const string TargetFrameworkOverrideParamKey = "TargetFrameworkOverride";
-  private const string AddToSolutionParamKey = "AddProjectToSolution";
 
   public static bool IsNameRequired(string identity) => !NoNameTemplates.ContainsKey(identity);
 
@@ -84,31 +80,11 @@ public class TemplateEngineService(IMsBuildService msBuildService, IClientServic
 
     var monikers = msBuildService.QuerySdkInstallations().Select(x => x.Moniker).ToList();
 
-    var parameters = template.ParameterDefinitions
+    return [.. template.ParameterDefinitions
             .Where(p => p.Precedence.PrecedenceDefinition != PrecedenceDefinition.Implicit)
             .Where(x => x.Name != TargetFrameworkOverrideParamKey)
             .Select(p => NormalizeFrameworkParameter(p, monikers))
-            .OrderByDescending(x => x.Precedence.IsRequired)
-            .ToList();
-
-    if (template.GetTemplateType() == "project" && !string.IsNullOrEmpty(clientService.ProjectInfo?.SolutionFile))
-    {
-      parameters.Insert(0, new TemplateParameter(
-          AddToSolutionParamKey,
-          type: "parameter",
-          datatype: "bool",
-          precedence: TemplateParameterPrecedence.Default,
-          isName: false,
-          defaultValue: "true",
-          defaultIfOptionWithoutValue: "true",
-          description: "Add the generated project to the current active solution.",
-          displayName: "Add to Current Solution",
-          allowMultipleValues: false,
-          choices: null
-      ));
-    }
-
-    return parameters;
+            .OrderByDescending(x => x.Precedence.IsRequired)];
   }
 
   public async Task<ITemplateCreationResult> InstantiateTemplateAsync(string identity, string name, string outputPath, IReadOnlyDictionary<string, string?>? parameters, CancellationToken cancellationToken)
@@ -124,16 +100,6 @@ public class TemplateEngineService(IMsBuildService msBuildService, IClientServic
     }
 
     var mutableParams = OverwriteTargetFrameworkIfSet(parameters);
-    var shouldAddToSolution = false;
-
-    if (mutableParams.ContainsKey(AddToSolutionParamKey))
-    {
-      if (bool.TryParse(mutableParams[AddToSolutionParamKey], out var val)) shouldAddToSolution = val;
-
-      var clean = new Dictionary<string, string?>(mutableParams);
-      clean.Remove(AddToSolutionParamKey);
-      mutableParams = clean.AsReadOnly();
-    }
 
     var result = await bootstrapper.CreateAsync(template, name, outputPath, mutableParams, cancellationToken: cancellationToken);
 
@@ -142,34 +108,9 @@ public class TemplateEngineService(IMsBuildService msBuildService, IClientServic
       throw new Exception($"Failed to instantiate template, STATUS:{result?.Status}, err:{result?.ErrorMessage ?? ""}");
     }
 
-    if (shouldAddToSolution && !string.IsNullOrEmpty(clientService.ProjectInfo?.SolutionFile))
+    if (result.CreationResult?.PostActions is not null)
     {
-      var projectsToAdd = result.CreationResult?.PrimaryOutputs
-          .Select(x => Path.GetFullPath(Path.Combine(outputPath, x.Path)))
-          .Where(FileTypes.IsAnyProjectFile)
-          .ToList() ?? [];
-
-      if (projectsToAdd.Count == 0)
-      {
-        projectsToAdd = result.CreationEffects?.FileChanges
-            .Select(x => Path.GetFullPath(Path.Combine(outputPath, x.TargetRelativePath)))
-            .Where(FileTypes.IsAnyProjectFile)
-            .ToList() ?? [];
-      }
-
-      foreach (var projectPath in projectsToAdd)
-      {
-        var linkedToSolution = await solutionService.AddProjectToSolutionAsync(clientService.ProjectInfo.SolutionFile, projectPath, cancellationToken);
-        var projectName = Path.GetFileNameWithoutExtension(projectPath);
-        if (linkedToSolution)
-        {
-          await editorService.DisplayMessage($"{projectName} added to solution.");
-        }
-        else
-        {
-          await editorService.DisplayError($"Failed to add project {projectName} to solution.");
-        }
-      }
+      await postActionProcessor.ProcessAsync(result.CreationResult.PostActions, result.CreationResult.PrimaryOutputs, outputPath, cancellationToken);
     }
 
     return result;
