@@ -1,9 +1,3 @@
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
 using EasyDotnet.Controllers.Template;
 using EasyDotnet.IDE.Services;
@@ -12,7 +6,7 @@ using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Controllers.Template;
 
-public class TemplateController(TemplateEngineService templateEngineService, IEditorService editorService) : BaseController
+public class TemplateController(TemplateEngineService templateEngineService) : BaseController
 {
   [JsonRpcMethod("template/list")]
   public async Task<IAsyncEnumerable<DotnetNewTemplateResponse>> GetTemplates()
@@ -20,7 +14,7 @@ public class TemplateController(TemplateEngineService templateEngineService, IEd
     await templateEngineService.EnsureInstalled();
     var templates = await templateEngineService.GetTemplatesAsync();
 
-    return templates.Where(x => x.GetLanguage() != "VB").Select(x => new DotnetNewTemplateResponse(string.IsNullOrWhiteSpace(x.GetLanguage()) ? x.Name : $"{x.Name} ({x.GetLanguage()})", x.Name, x.Identity, x.GetTemplateType())).ToBatchedAsyncEnumerable(5);
+    return templates.Where(x => x.GetLanguage() != "VB").Select(x => new DotnetNewTemplateResponse(string.IsNullOrWhiteSpace(x.GetLanguage()) ? x.Name : $"{x.Name} ({x.GetLanguage()})", x.Name, x.Identity, x.GetTemplateType(), TemplateEngineService.IsNameRequired(x.Identity))).ToBatchedAsyncEnumerable(5);
   }
 
   [JsonRpcMethod("template/parameters")]
@@ -46,19 +40,5 @@ public class TemplateController(TemplateEngineService templateEngineService, IEd
   {
     await templateEngineService.EnsureInstalled();
     await templateEngineService.InstantiateTemplateAsync(identity, name, outputPath, parameters, cancellationToken);
-
-    await OpenEntryPointIfApplicable(outputPath);
-  }
-
-  private async Task OpenEntryPointIfApplicable(string outputPath)
-  {
-    var programFile = Directory
-        .EnumerateFiles(outputPath, "Program.cs", SearchOption.TopDirectoryOnly)
-        .FirstOrDefault();
-
-    if (programFile != null)
-    {
-      await editorService.RequestOpenBuffer(Path.GetFullPath(programFile));
-    }
   }
 }
