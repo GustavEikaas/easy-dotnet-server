@@ -125,7 +125,7 @@ public class TestController(
   }
 
   [JsonRpcMethod("test/set-project-run-settings")]
-  public async Task SetRunSettings()
+  public async Task SetRunSettings(CancellationToken cancellationToken)
   {
     clientService.ThrowIfNotInitialized();
     if (clientService.ProjectInfo?.SolutionFile is null)
@@ -133,7 +133,7 @@ public class TestController(
       throw new Exception("No solution file found");
     }
 
-    var projects = solutionService.GetProjectsFromSolutionFile(clientService.ProjectInfo.SolutionFile).Select(x => new SelectionOption(x.AbsolutePath, x.ProjectName)).ToArray();
+    var projects = (await solutionService.GetProjectsFromSolutionFile(clientService.ProjectInfo.SolutionFile, cancellationToken)).Select(x => new SelectionOption(x.AbsolutePath, x.ProjectName)).ToArray();
     if (projects.Length == 0)
     {
       await editorService.DisplayMessage("No projects found");

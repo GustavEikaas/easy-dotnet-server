@@ -59,7 +59,7 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
     var (success, stdout, stderr) = await processQueue.RunProcessAsync(command, args, new ProcessOptions(true), cancellationToken);
 
     var (errors, warnings) = MsBuildBuildStdoutParser.ParseBuildOutput(stdout, stderr);
-    var (errorsWithProject, warningsWithProject) = AddProjectToBuildMessages(targetPath, errors, warnings);
+    var (errorsWithProject, warningsWithProject) = await AddProjectToBuildMessages(targetPath, errors, warnings, cancellationToken);
 
     var orderedErrors = errorsWithProject
         .OrderBy(e => e.Project)
@@ -88,17 +88,18 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
     return fullPath.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
   }
 
-  private (List<BuildMessageWithProject>, List<BuildMessageWithProject>) AddProjectToBuildMessages(
+  private async Task<(List<BuildMessageWithProject>, List<BuildMessageWithProject>)> AddProjectToBuildMessages(
     string targetPath,
     IEnumerable<MsBuildStdoutMessage> errors,
-    IEnumerable<MsBuildStdoutMessage> warnings)
+    IEnumerable<MsBuildStdoutMessage> warnings,
+    CancellationToken cancellationToken)
   {
     if (!errors.Any() && !warnings.Any())
     {
       return ([], []);
     }
 
-    var projectMap = GetProjectMap(targetPath);
+    var projectMap = await GetProjectMap(targetPath, cancellationToken);
 
     var map = new Func<IEnumerable<MsBuildStdoutMessage>, List<BuildMessageWithProject>>(messages =>
         messages.Select(m => new BuildMessageWithProject(
@@ -136,7 +137,7 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
     return null;
   }
 
-  private Dictionary<string, string> GetProjectMap(string targetPath)
+  private async Task<Dictionary<string, string>> GetProjectMap(string targetPath, CancellationToken cancellationToken)
   {
     if (FileTypes.IsAnyProjectFile(targetPath))
     {
@@ -149,7 +150,7 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
 
     if (FileTypes.IsAnySolutionFile(targetPath))
     {
-      return solutionService.GetProjectsFromSolutionFile(targetPath)
+      return (await solutionService.GetProjectsFromSolutionFile(targetPath, cancellationToken))
           .ToDictionary(
               p => Path.GetFileNameWithoutExtension(p.AbsolutePath),
               p => NormalizePath(Path.GetDirectoryName(p.AbsolutePath) ?? string.Empty)
