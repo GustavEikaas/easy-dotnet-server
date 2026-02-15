@@ -95,7 +95,6 @@ public sealed class RunScriptPostActionHandler(IEditorService editorService, IEd
       bool RedirectStandardError);
 }
 
-
 // # Run script
 //
 // Used to run a script after create.
