@@ -15,7 +15,6 @@ public class SettingsService(
     IClientService clientService,
     ILogger<SettingsService> logger)
 {
-
   #region Solution Settings
 
   public string? GetDefaultBuildProject(string solutionPath)
