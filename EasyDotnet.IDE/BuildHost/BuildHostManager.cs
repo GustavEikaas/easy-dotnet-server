@@ -1,8 +1,4 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Threading;
-using System.Threading.Tasks;
 using EasyDotnet.BuildServer.Contracts;
 using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
@@ -53,9 +49,29 @@ public sealed class BuildHostManager(ILogger<BuildHostManager> logger, BuildHost
     }
   }
 
+  public async Task<IAsyncEnumerable<RestoreResult>> RestoreNugetPackagesAsync(
+      RestoreRequest request,
+      CancellationToken cancellationToken)
+  {
+    EnsureNotDisposed();
+    var rpc = await GetRpcClientAsync();
+    try
+    {
+      return await rpc.InvokeWithParameterObjectAsync<IAsyncEnumerable<RestoreResult>>(
+          "projects/restore",
+          request,
+          cancellationToken);
+    }
+    catch (ConnectionLostException)
+    {
+      await InvalidateConnectionAsync();
+      throw new Exception("BuildServer connection was lost. Please try again.");
+    }
+  }
+
   private async Task<JsonRpc> GetRpcClientAsync()
   {
-    if (_rpc != null && !_rpc.IsDisposed && _serverProcess != null && !_serverProcess.HasExited)
+    if (_rpc?.IsDisposed == false && _serverProcess?.HasExited == false)
     {
       return _rpc;
     }
@@ -63,7 +79,7 @@ public sealed class BuildHostManager(ILogger<BuildHostManager> logger, BuildHost
     await _connectionLock.WaitAsync();
     try
     {
-      if (_rpc != null && !_rpc.IsDisposed && _serverProcess != null && !_serverProcess.HasExited)
+      if (_rpc?.IsDisposed == false && _serverProcess?.HasExited == false)
       {
         return _rpc;
       }
@@ -91,7 +107,7 @@ public sealed class BuildHostManager(ILogger<BuildHostManager> logger, BuildHost
     try { _rpc?.Dispose(); } catch { }
     try
     {
-      if (_serverProcess != null && !_serverProcess.HasExited)
+      if (_serverProcess?.HasExited == false)
         _serverProcess.Kill();
     }
     catch { }

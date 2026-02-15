@@ -1,10 +1,6 @@
-using System;
 using System.Diagnostics;
-using System.IO;
 using System.IO.Pipes;
 using System.Reflection;
-using System.Threading;
-using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.IDE.Utils;
 using Microsoft.Extensions.Logging;
@@ -90,7 +86,11 @@ public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService c
     else
     {
       startInfo.FileName = "dotnet";
+#if DEBUG
+      startInfo.Arguments = $"exec \"{BuildHostLocator.GetBuildServerCore()}\" --pipe \"{pipeName}\" --log-level=Verbose --logDirectory \"{logDirectory}\"";
+#else
       startInfo.Arguments = $"exec \"{BuildHostLocator.GetBuildServerCore()}\" --pipe \"{pipeName}\" --log-level={logLevel} --logDirectory \"{logDirectory}\"";
+#endif
     }
 
     logger.LogInformation("Starting buildserver with command {command}", $"{startInfo.FileName} {startInfo.Arguments}");
