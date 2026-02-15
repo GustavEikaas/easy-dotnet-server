@@ -84,6 +84,7 @@ public class AddProjectsToSolutionFilePostActionHandler(ISolutionService solutio
   }
 }
 
+
 // # Add project(s) to a solution file
 //
 //  - **Action ID** : `D396686C-DE0E-4DE6-906D-291CD29FC5DE`
