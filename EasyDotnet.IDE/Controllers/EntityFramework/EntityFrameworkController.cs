@@ -1,6 +1,3 @@
-using System;
-using System.Linq;
-using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
 using EasyDotnet.Domain.Models.Client;
@@ -18,9 +15,9 @@ public class EntityFrameworkController(
   IProgressScopeFactory progressScopeFactory) : BaseController
 {
   [JsonRpcMethod("ef/migrations-add")]
-  public async Task AddMigration(string? migrationName = null)
+  public async Task AddMigration(string? migrationName = null, CancellationToken cancellationToken = default)
   {
-    var (efProject, startupProject, dbContext) = await PromptEfProjectInfoAsync();
+    var (efProject, startupProject, dbContext) = await PromptEfProjectInfoAsync(cancellationToken);
     migrationName ??= await editorService.RequestString("Enter migration name", null);
     if (migrationName is null) return;
 
@@ -32,9 +29,9 @@ public class EntityFrameworkController(
   }
 
   [JsonRpcMethod("ef/migrations-remove")]
-  public async Task RemoveMigration()
+  public async Task RemoveMigration(CancellationToken cancellationToken)
   {
-    var (efProject, startupProject, dbContext) = await PromptEfProjectInfoAsync();
+    var (efProject, startupProject, dbContext) = await PromptEfProjectInfoAsync(cancellationToken);
 
     await editorService.RequestRunCommand(new RunCommand(
       "dotnet-ef",
@@ -44,12 +41,12 @@ public class EntityFrameworkController(
   }
 
   [JsonRpcMethod("ef/migrations-apply")]
-  public async Task ApplyMigration()
+  public async Task ApplyMigration(CancellationToken cancellationToken)
   {
-    var (efProject, startupProject, dbContext) = await PromptEfProjectInfoAsync();
+    var (efProject, startupProject, dbContext) = await PromptEfProjectInfoAsync(cancellationToken);
 
     using var migrationScope = progressScopeFactory.Create("Listing migrations", "Resolving migrations");
-    var migrations = await entityFrameworkService.ListMigrationsAsync(efProject, startupProject, dbContext);
+    var migrations = await entityFrameworkService.ListMigrationsAsync(efProject, startupProject, dbContext, cancellationToken: cancellationToken);
     migrationScope.Dispose();
 
     if (migrations.Count == 0)
@@ -70,9 +67,9 @@ public class EntityFrameworkController(
   }
 
   [JsonRpcMethod("ef/database-update")]
-  public async Task UpdateDatabase()
+  public async Task UpdateDatabase(CancellationToken cancellationToken)
   {
-    var (efProject, startupProject, dbContext) = await PromptEfProjectInfoAsync();
+    var (efProject, startupProject, dbContext) = await PromptEfProjectInfoAsync(cancellationToken);
 
     await editorService.RequestRunCommand(new RunCommand(
       "dotnet-ef",
@@ -82,9 +79,9 @@ public class EntityFrameworkController(
   }
 
   [JsonRpcMethod("ef/database-drop")]
-  public async Task DropDatabase()
+  public async Task DropDatabase(CancellationToken cancellationToken)
   {
-    var (efProject, startupProject, dbContext) = await PromptEfProjectInfoAsync();
+    var (efProject, startupProject, dbContext) = await PromptEfProjectInfoAsync(cancellationToken);
 
     await editorService.RequestRunCommand(new RunCommand(
       "dotnet-ef",
@@ -93,10 +90,10 @@ public class EntityFrameworkController(
       []));
   }
 
-  private async Task<(string EfProject, string StartupProject, string DbContext)> PromptEfProjectInfoAsync()
+  private async Task<(string EfProject, string StartupProject, string DbContext)> PromptEfProjectInfoAsync(CancellationToken cancellationToken)
   {
     var solutionFile = clientService.RequireSolutionFile();
-    var projects = solutionService.GetProjectsFromSolutionFile(solutionFile);
+    var projects = await solutionService.GetProjectsFromSolutionFile(solutionFile, cancellationToken);
 
     var efProject = await editorService.RequestSelection(
       "Pick project",
