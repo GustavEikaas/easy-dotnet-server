@@ -58,10 +58,16 @@
     </PropertyGroup>
     
     <Message Text="Publishing BuildServer for net8.0..." Importance="high" />
-    <MSBuild Projects="..\EasyDotnet.BuildServer\EasyDotnet.BuildServer.csproj" Targets="Publish" Properties="TargetFramework=net8.0;Configuration=$(Configuration);PublishDir=$(MSBuildProjectDirectory)\$(BuildServerOutputPath)net8.0\;SelfContained=false" />
+    <MSBuild 
+      Projects="..\EasyDotnet.BuildServer\EasyDotnet.BuildServer.csproj" 
+      Targets="Publish" 
+      Properties="TargetFramework=net8.0;Configuration=$(Configuration);PublishDir=$(MSBuildProjectDirectory)\$(BuildServerOutputPath)net8.0\;SelfContained=false" />
     
     <Message Text="Publishing BuildServer for net472..." Importance="high" />
-    <MSBuild Projects="..\EasyDotnet.BuildServer\EasyDotnet.BuildServer.csproj" Targets="Publish" Properties="TargetFramework=net472;Configuration=$(Configuration);PublishDir=$(MSBuildProjectDirectory)\$(BuildServerOutputPath)net472\;SelfContained=false" />
+    <MSBuild 
+      Projects="..\EasyDotnet.BuildServer\EasyDotnet.BuildServer.csproj" 
+      Targets="Publish" 
+      Properties="TargetFramework=net472;Configuration=$(Configuration);PublishDir=$(MSBuildProjectDirectory)\$(BuildServerOutputPath)net472\;SelfContained=false" />
     
     <Message Text="BuildServer publish complete at $(BuildServerOutputPath)" Importance="high" />
   </Target>
@@ -72,6 +78,6 @@
         <PackagePath>tools/$(LowestNetCoreTfm)/any/BuildServer/%(RecursiveDir)%(Filename)%(Extension)</PackagePath>
       </TfmSpecificPackageFile>
     </ItemGroup>
-    <Message Text="Added @(TfmSpecificPackageFile-&gt;Count()) BuildServer files to pack" Importance="high" />
+    <Message Text="Added @(TfmSpecificPackageFile->Count()) BuildServer files to pack" Importance="high" />
   </Target>
 </Project>
