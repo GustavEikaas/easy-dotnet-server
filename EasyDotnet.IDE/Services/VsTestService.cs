@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
@@ -126,8 +127,14 @@ public class VsTestService(
         var session = await debugOrchestrator.StartClientDebugSessionAsync(project.MSBuildProjectFullPath!, new(project.MSBuildProjectFullPath!, null, null, null), debugStrategyFactory.CreateStandardAttachStrategy(pid), cancellationToken);
         await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
         await session.ProcessStarted;
-        return true;
 
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+          //We add a delay only on non-windows platforms to ensure the client is ready
+          //#gh785
+          await Task.Delay(1000, cancellationToken);
+        }
+        return true;
       }));
     }
     else
