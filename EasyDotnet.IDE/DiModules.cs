@@ -45,6 +45,7 @@ public static class DiModules
 
     services.AddMemoryCache();
     services.AddSingleton(jsonRpc);
+    services.AddSingleton<DbContextCache>();
     services.AddSingleton(new CurrentLogLevel(levels, logDir));
     services.AddSingleton<IClientService, ClientService>();
     services.AddSingleton<IVisualStudioLocator, VisualStudioLocator>();
