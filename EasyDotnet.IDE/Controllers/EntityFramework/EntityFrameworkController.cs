@@ -1,6 +1,7 @@
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
 using EasyDotnet.Domain.Models.Client;
+using EasyDotnet.IDE.Services;
 using EasyDotnet.Infrastructure.Editor;
 using EasyDotnet.Infrastructure.EntityFramework;
 using StreamJsonRpc;
@@ -11,6 +12,7 @@ public class EntityFrameworkController(
   ISolutionService solutionService,
   IClientService clientService,
   EntityFrameworkService entityFrameworkService,
+  DbContextCache dbContextCache,
   IEditorService editorService,
   IProgressScopeFactory progressScopeFactory) : BaseController
 {
@@ -113,9 +115,20 @@ public class EntityFrameworkController(
       throw new InvalidOperationException("No startup project selected");
     }
 
-    using var scope = progressScopeFactory.Create("Listing db contexts", "Resolving db contexts");
-    var dbContexts = await entityFrameworkService.ListDbContextsAsync(efProject.Id, startupProject.Id, ".");
-    scope.Dispose();
+    var cached = await dbContextCache.TryGetAsync(efProj: efProject.Id, startupProj: startupProject.Id);
+
+    if (cached is not null && cached.Count != 0)
+    {
+      var scanOption = new SelectionOption("SCAN", "🔄️ Scan for more dbcontexts");
+      var options = cached.Select(x => new SelectionOption(x.FullName, x.Name)).Concat([scanOption]);
+      var selection = await editorService.RequestSelection("Select db context", [.. options]) ?? throw new InvalidOperationException("No db context selected");
+      if (selection.Id != scanOption.Id)
+      {
+        return (efProject.Id, startupProject.Id, selection.Id);
+      }
+    }
+
+    var dbContexts = await ScanForContextsAsync(efProject: efProject.Id, startupProject: startupProject.Id, cancellationToken);
 
     if (dbContexts.Count == 0)
     {
@@ -133,5 +146,19 @@ public class EntityFrameworkController(
       ?? throw new InvalidOperationException("No db context selected");
 
     return (efProject.Id, startupProject.Id, selectedContext.Id);
+  }
+
+  private async Task<List<DbContextInfo>> ScanForContextsAsync(string efProject, string startupProject, CancellationToken ct)
+  {
+    using var scope = progressScopeFactory.Create("Listing db contexts", "Resolving db contexts");
+
+    var contexts = await entityFrameworkService.ListDbContextsAsync(efProject, startupProject, ".", ct);
+
+    if (contexts.Count != 0)
+    {
+      await dbContextCache.SetAsync(efProject, startupProject, contexts);
+    }
+
+    return contexts;
   }
 }
