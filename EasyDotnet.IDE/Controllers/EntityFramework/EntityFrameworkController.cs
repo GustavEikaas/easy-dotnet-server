@@ -20,12 +20,14 @@ public class EntityFrameworkController(
   public async Task AddMigration(string? migrationName = null, CancellationToken cancellationToken = default)
   {
     var (efProject, startupProject, dbContext) = await PromptEfProjectInfoAsync(cancellationToken);
+    var success = await editorService.BuildProject(startupProject, cancellationToken);
+    if (!success) return;
     migrationName ??= await editorService.RequestString("Enter migration name", null);
     if (migrationName is null) return;
 
     await editorService.RequestRunCommand(new RunCommand(
       "dotnet-ef",
-      ["migrations", "add", migrationName, "--project", efProject, "--startup-project", startupProject, "--context", dbContext],
+      ["migrations", "add", migrationName, "--project", efProject, "--startup-project", startupProject, "--context", dbContext, "--no-build"],
       ".",
       []));
   }
@@ -34,10 +36,12 @@ public class EntityFrameworkController(
   public async Task RemoveMigration(CancellationToken cancellationToken)
   {
     var (efProject, startupProject, dbContext) = await PromptEfProjectInfoAsync(cancellationToken);
+    var success = await editorService.BuildProject(startupProject, cancellationToken);
+    if (!success) return;
 
     await editorService.RequestRunCommand(new RunCommand(
       "dotnet-ef",
-      ["migrations", "remove", "--project", efProject, "--startup-project", startupProject, "--context", dbContext],
+      ["migrations", "remove", "--project", efProject, "--startup-project", startupProject, "--context", dbContext, "--no-build"],
       ".",
       []));
   }
@@ -46,9 +50,11 @@ public class EntityFrameworkController(
   public async Task ApplyMigration(CancellationToken cancellationToken)
   {
     var (efProject, startupProject, dbContext) = await PromptEfProjectInfoAsync(cancellationToken);
+    var success = await editorService.BuildProject(startupProject, cancellationToken);
+    if (!success) return;
 
     using var migrationScope = progressScopeFactory.Create("Listing migrations", "Resolving migrations");
-    var migrations = await entityFrameworkService.ListMigrationsAsync(efProject, startupProject, dbContext, cancellationToken: cancellationToken);
+    var migrations = await entityFrameworkService.ListMigrationsAsync(efProject, startupProject, dbContext, noBuild: true, cancellationToken: cancellationToken);
     migrationScope.Dispose();
 
     if (migrations.Count == 0)
@@ -63,7 +69,7 @@ public class EntityFrameworkController(
 
     await editorService.RequestRunCommand(new RunCommand(
       "dotnet-ef",
-      ["database", "update", selectedMigration.Id, "--project", efProject, "--startup-project", startupProject, "--context", dbContext],
+      ["database", "update", selectedMigration.Id, "--project", efProject, "--startup-project", startupProject, "--context", dbContext, "--no-build"],
       ".",
       []));
   }
@@ -72,10 +78,12 @@ public class EntityFrameworkController(
   public async Task UpdateDatabase(CancellationToken cancellationToken)
   {
     var (efProject, startupProject, dbContext) = await PromptEfProjectInfoAsync(cancellationToken);
+    var success = await editorService.BuildProject(startupProject, cancellationToken);
+    if (!success) return;
 
     await editorService.RequestRunCommand(new RunCommand(
       "dotnet-ef",
-      ["database", "update", "--project", efProject, "--startup-project", startupProject, "--context", dbContext],
+      ["database", "update", "--project", efProject, "--startup-project", startupProject, "--context", dbContext, "--no-build"],
       ".",
       []));
   }
@@ -84,10 +92,12 @@ public class EntityFrameworkController(
   public async Task DropDatabase(CancellationToken cancellationToken)
   {
     var (efProject, startupProject, dbContext) = await PromptEfProjectInfoAsync(cancellationToken);
+    var success = await editorService.BuildProject(startupProject, cancellationToken);
+    if (!success) return;
 
     await editorService.RequestRunCommand(new RunCommand(
       "dotnet-ef",
-      ["database", "update", "--project", efProject, "--startup-project", startupProject, "--context", dbContext],
+      ["database", "drop", "--project", efProject, "--startup-project", startupProject, "--context", dbContext, "--no-build"],
       ".",
       []));
   }
@@ -99,21 +109,11 @@ public class EntityFrameworkController(
 
     var efProject = await editorService.RequestSelection(
       "Pick project",
-      [.. projects.Select(x => new SelectionOption(x.AbsolutePath, x.ProjectName))]);
-
-    if (efProject is null)
-    {
-      throw new InvalidOperationException("No EF project selected");
-    }
+      [.. projects.Select(x => new SelectionOption(x.AbsolutePath, x.ProjectName))]) ?? throw new InvalidOperationException("No EF project selected");
 
     var startupProject = await editorService.RequestSelection(
       "Pick startup project",
-      [.. projects.Select(x => new SelectionOption(x.AbsolutePath, x.ProjectName))]);
-
-    if (startupProject is null)
-    {
-      throw new InvalidOperationException("No startup project selected");
-    }
+      [.. projects.Select(x => new SelectionOption(x.AbsolutePath, x.ProjectName))]) ?? throw new InvalidOperationException("No startup project selected");
 
     var cached = await dbContextCache.TryGetAsync(efProj: efProject.Id, startupProj: startupProject.Id);
 
@@ -152,7 +152,7 @@ public class EntityFrameworkController(
   {
     using var scope = progressScopeFactory.Create("Listing db contexts", "Resolving db contexts");
 
-    var contexts = await entityFrameworkService.ListDbContextsAsync(efProject, startupProject, ".", ct);
+    var contexts = await entityFrameworkService.ListDbContextsAsync(efProject, startupProject, noBuild: true, ".", ct);
 
     if (contexts.Count != 0)
     {
