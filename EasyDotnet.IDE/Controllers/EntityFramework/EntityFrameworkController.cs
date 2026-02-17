@@ -148,11 +148,17 @@ public class EntityFrameworkController(
     return (efProject.Id, startupProject.Id, selectedContext.Id);
   }
 
-  private async Task<List<DbContextInfo>> ScanForContextsAsync(string efProject, string startupProject, CancellationToken ct)
+  private async Task<List<DbContextInfo>> ScanForContextsAsync(string efProject, string startupProject, CancellationToken cancellationToken)
   {
     using var scope = progressScopeFactory.Create("Listing db contexts", "Resolving db contexts");
 
-    var contexts = await entityFrameworkService.ListDbContextsAsync(efProject, startupProject, noBuild: true, ".", ct);
+    var success = await editorService.BuildProject(startupProject, cancellationToken);
+    if (!success)
+    {
+      throw new Exception("Build failed");
+    }
+
+    var contexts = await entityFrameworkService.ListDbContextsAsync(efProject, startupProject, noBuild: true, ".", cancellationToken);
 
     if (contexts.Count != 0)
     {
