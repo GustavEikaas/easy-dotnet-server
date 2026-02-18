@@ -128,12 +128,9 @@ public class VsTestService(
         await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
         await session.ProcessStarted;
 
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        {
-          //We add a delay only on non-windows platforms to ensure the client is ready
-          //#gh785
-          await Task.Delay(1000, cancellationToken);
-        }
+        //We add a delay only on non-windows platforms to ensure the client is ready
+        //#gh785
+        await Task.Delay(1000, cancellationToken);
         return true;
       }));
     }
