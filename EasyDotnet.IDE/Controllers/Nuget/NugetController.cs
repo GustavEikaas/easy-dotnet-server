@@ -1,17 +1,13 @@
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
-using EasyDotnet.IDE;
+using EasyDotnet.Controllers;
+using EasyDotnet.Controllers.Nuget;
 using EasyDotnet.Services;
 using StreamJsonRpc;
 
-namespace EasyDotnet.Controllers.Nuget;
+namespace EasyDotnet.IDE.Controllers.Nuget;
 
 public class NugetController(IClientService clientService, NugetService nugetService) : BaseController
 {
-
   [JsonRpcMethod("nuget/restore")]
   public async Task<RestoreResult> RestorePackages(string targetPath)
   {

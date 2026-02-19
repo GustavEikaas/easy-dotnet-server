@@ -1,9 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Domain.Models.MsBuild.Project;
 using Microsoft.Extensions.Logging;
@@ -49,14 +43,15 @@ public class NugetService(IClientService clientService, ILogger<NugetService> lo
     return new RestoreResult(success && errors.Count == 0, errors.AsAsyncEnumerable(), warnings);
   }
 
-  public List<PackageSource> GetSources()
-  {
-    var settings = Settings.LoadDefaultSettings(
+  public ISettings GetSettings() => Settings.LoadDefaultSettings(
         root: (clientService.ProjectInfo?.SolutionFile != null
                 ? Path.GetDirectoryName(Path.GetFullPath(clientService.ProjectInfo.SolutionFile))
                 : clientService.ProjectInfo?.RootDir)
               ?? Directory.GetCurrentDirectory());
-    var sourceProvider = new PackageSourceProvider(settings);
+
+  public List<PackageSource> GetSources()
+  {
+    var sourceProvider = new PackageSourceProvider(GetSettings());
     var sources = sourceProvider.LoadPackageSources();
     return [.. sources];
   }
@@ -100,7 +95,7 @@ public class NugetService(IClientService clientService, ILogger<NugetService> lo
   }
 
 
-  public static async Task<Dictionary<string, IEnumerable<IPackageSearchMetadata>>> SearchAllSourcesByNameAsync(
+  public async Task<Dictionary<string, IEnumerable<IPackageSearchMetadata>>> SearchAllSourcesByNameAsync(
         string searchTerm,
         CancellationToken cancellationToken,
         int take = 10,
@@ -109,7 +104,7 @@ public class NugetService(IClientService clientService, ILogger<NugetService> lo
   {
     var provider = Repository.Provider.GetCoreV3();
 
-    var sourceProvider = new PackageSourceProvider(Settings.LoadDefaultSettings(null));
+    var sourceProvider = new PackageSourceProvider(GetSettings());
     var allSources = sourceProvider.LoadPackageSources().Where(s => s.IsEnabled);
 
     var selectedSources = sourceNames == null ? allSources : allSources.Where(s => sourceNames.Contains(s.Name, StringComparer.OrdinalIgnoreCase));
