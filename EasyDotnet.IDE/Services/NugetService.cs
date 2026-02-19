@@ -3,6 +3,7 @@ using EasyDotnet.Domain.Models.MsBuild.Project;
 using Microsoft.Extensions.Logging;
 using NuGet.Common;
 using NuGet.Configuration;
+using NuGet.Credentials;
 using NuGet.Protocol;
 using NuGet.Protocol.Core.Types;
 using NuGet.Versioning;
@@ -63,8 +64,10 @@ public class NugetService(IClientService clientService, ILogger<NugetService> lo
       bool includePrerelease = false,
       List<string>? sourceNames = null)
   {
+    DefaultCredentialServiceUtility.SetupDefaultCredentialService(NullLogger.Instance, nonInteractive: true);
     var nugetLogger = NullLogger.Instance;
-    var cache = new SourceCacheContext();
+
+    using var cache = new SourceCacheContext();
 
     var sources = (sourceNames is { Count: > 0 }
         ? GetSources().Where(s => sourceNames.Contains(s.Name))
@@ -103,6 +106,7 @@ public class NugetService(IClientService clientService, ILogger<NugetService> lo
         bool includePrerelease = false,
         List<string>? sourceNames = null)
   {
+    DefaultCredentialServiceUtility.SetupDefaultCredentialService(NullLogger.Instance, nonInteractive: true);
     var provider = Repository.Provider.GetCoreV3();
 
     var sourceProvider = new PackageSourceProvider(GetSettings());
@@ -143,6 +147,7 @@ public class NugetService(IClientService clientService, ILogger<NugetService> lo
 
   public async Task<bool> PushPackageAsync(List<string> packages, string sourceUrl, string? apiKey)
   {
+    DefaultCredentialServiceUtility.SetupDefaultCredentialService(NullLogger.Instance, nonInteractive: true);
     var notFound = packages.FirstOrDefault(x => !File.Exists(x));
     if (notFound is not null)
     {
