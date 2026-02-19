@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using EasyDotnet.Application.Interfaces;
 using EasyDotnet.BuildServer.Contracts;
 using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
