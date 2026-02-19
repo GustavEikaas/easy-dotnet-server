@@ -44,10 +44,11 @@ public class NugetService(IClientService clientService, ILogger<NugetService> lo
   }
 
   public ISettings GetSettings() => Settings.LoadDefaultSettings(
-        root: (clientService.ProjectInfo?.SolutionFile != null
-                ? Path.GetDirectoryName(Path.GetFullPath(clientService.ProjectInfo.SolutionFile))
-                : clientService.ProjectInfo?.RootDir)
-              ?? Directory.GetCurrentDirectory());
+        root:
+          clientService.ProjectInfo?.RootDir ??
+            (clientService.ProjectInfo?.SolutionFile != null ?
+              Path.GetDirectoryName(Path.GetFullPath(clientService.ProjectInfo.SolutionFile)) :
+                Directory.GetCurrentDirectory()));
 
   public List<PackageSource> GetSources()
   {
