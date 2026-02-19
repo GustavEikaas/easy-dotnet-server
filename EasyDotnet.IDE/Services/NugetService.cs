@@ -62,7 +62,7 @@ public class NugetService(IClientService clientService, ILogger<NugetService> lo
       bool includePrerelease = false,
       List<string>? sourceNames = null)
   {
-    var logger = NullLogger.Instance;
+    var nugetLogger = NullLogger.Instance;
     var cache = new SourceCacheContext();
 
     var sources = (sourceNames is { Count: > 0 }
@@ -76,12 +76,13 @@ public class NugetService(IClientService clientService, ILogger<NugetService> lo
       {
         var repo = Repository.Factory.GetCoreV3(source.Source);
         var resource = await repo.GetResourceAsync<FindPackageByIdResource>(cancellationToken);
-        var versions = await resource.GetAllVersionsAsync(packageId, cache, logger, cancellationToken);
+        var versions = await resource.GetAllVersionsAsync(packageId, cache, nugetLogger, cancellationToken);
 
         return [.. versions.Where(v => includePrerelease || !v.IsPrerelease)];
       }
-      catch
+      catch (Exception e)
       {
+        logger.LogError("Failed to get package versions in source {name}: {ex}", source.Name, e);
         return Enumerable.Empty<NuGetVersion>();
       }
     });
@@ -93,7 +94,6 @@ public class NugetService(IClientService clientService, ILogger<NugetService> lo
         .Distinct()
         .OrderByDescending(v => v);
   }
-
 
   public async Task<Dictionary<string, IEnumerable<IPackageSearchMetadata>>> SearchAllSourcesByNameAsync(
         string searchTerm,
@@ -126,8 +126,9 @@ public class NugetService(IClientService clientService, ILogger<NugetService> lo
                     log: NullLogger.Instance,
                     cancellationToken: cancellationToken);
           }
-          catch
+          catch (Exception e)
           {
+            logger.LogError("Failed to search packages in source {name}: {ex}", source.Name, e);
             return [];
           }
         });
