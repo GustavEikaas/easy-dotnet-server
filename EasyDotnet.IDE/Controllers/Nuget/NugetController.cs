@@ -54,7 +54,7 @@ public class NugetController(IClientService clientService, NugetService nugetSer
   {
     clientService.ThrowIfNotInitialized();
 
-    var packages = await NugetService.SearchAllSourcesByNameAsync(searchTerm, new CancellationToken(), take: 10, includePrerelease: false, sources);
+    var packages = await nugetService.SearchAllSourcesByNameAsync(searchTerm, new CancellationToken(), take: 10, includePrerelease: false, sources);
 
     var list = packages
         .SelectMany(kvp => kvp.Value.Select(x => NugetPackageMetadata.From(x, kvp.Key)))
