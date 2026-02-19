@@ -1,14 +1,9 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Domain.Models.MsBuild.Project;
 using Microsoft.Extensions.Logging;
 using NuGet.Common;
 using NuGet.Configuration;
+using NuGet.Credentials;
 using NuGet.Protocol;
 using NuGet.Protocol.Core.Types;
 using NuGet.Versioning;
@@ -49,14 +44,16 @@ public class NugetService(IClientService clientService, ILogger<NugetService> lo
     return new RestoreResult(success && errors.Count == 0, errors.AsAsyncEnumerable(), warnings);
   }
 
+  public ISettings GetSettings() => Settings.LoadDefaultSettings(
+        root:
+          clientService.ProjectInfo?.RootDir ??
+            (clientService.ProjectInfo?.SolutionFile != null ?
+              Path.GetDirectoryName(Path.GetFullPath(clientService.ProjectInfo.SolutionFile)) :
+                Directory.GetCurrentDirectory()));
+
   public List<PackageSource> GetSources()
   {
-    var settings = Settings.LoadDefaultSettings(
-        root: (clientService.ProjectInfo?.SolutionFile != null
-                ? Path.GetDirectoryName(Path.GetFullPath(clientService.ProjectInfo.SolutionFile))
-                : clientService.ProjectInfo?.RootDir)
-              ?? Directory.GetCurrentDirectory());
-    var sourceProvider = new PackageSourceProvider(settings);
+    var sourceProvider = new PackageSourceProvider(GetSettings());
     var sources = sourceProvider.LoadPackageSources();
     return [.. sources];
   }
@@ -67,8 +64,10 @@ public class NugetService(IClientService clientService, ILogger<NugetService> lo
       bool includePrerelease = false,
       List<string>? sourceNames = null)
   {
-    var logger = NullLogger.Instance;
-    var cache = new SourceCacheContext();
+    DefaultCredentialServiceUtility.SetupDefaultCredentialService(NullLogger.Instance, nonInteractive: true);
+    var nugetLogger = NullLogger.Instance;
+
+    using var cache = new SourceCacheContext();
 
     var sources = (sourceNames is { Count: > 0 }
         ? GetSources().Where(s => sourceNames.Contains(s.Name))
@@ -81,12 +80,13 @@ public class NugetService(IClientService clientService, ILogger<NugetService> lo
       {
         var repo = Repository.Factory.GetCoreV3(source.Source);
         var resource = await repo.GetResourceAsync<FindPackageByIdResource>(cancellationToken);
-        var versions = await resource.GetAllVersionsAsync(packageId, cache, logger, cancellationToken);
+        var versions = await resource.GetAllVersionsAsync(packageId, cache, nugetLogger, cancellationToken);
 
         return [.. versions.Where(v => includePrerelease || !v.IsPrerelease)];
       }
-      catch
+      catch (Exception e)
       {
+        logger.LogError("Failed to get package versions in source {name}: {ex}", source.Name, e);
         return Enumerable.Empty<NuGetVersion>();
       }
     });
@@ -99,17 +99,17 @@ public class NugetService(IClientService clientService, ILogger<NugetService> lo
         .OrderByDescending(v => v);
   }
 
-
-  public static async Task<Dictionary<string, IEnumerable<IPackageSearchMetadata>>> SearchAllSourcesByNameAsync(
+  public async Task<Dictionary<string, IEnumerable<IPackageSearchMetadata>>> SearchAllSourcesByNameAsync(
         string searchTerm,
         CancellationToken cancellationToken,
         int take = 10,
         bool includePrerelease = false,
         List<string>? sourceNames = null)
   {
+    DefaultCredentialServiceUtility.SetupDefaultCredentialService(NullLogger.Instance, nonInteractive: true);
     var provider = Repository.Provider.GetCoreV3();
 
-    var sourceProvider = new PackageSourceProvider(Settings.LoadDefaultSettings(null));
+    var sourceProvider = new PackageSourceProvider(GetSettings());
     var allSources = sourceProvider.LoadPackageSources().Where(s => s.IsEnabled);
 
     var selectedSources = sourceNames == null ? allSources : allSources.Where(s => sourceNames.Contains(s.Name, StringComparer.OrdinalIgnoreCase));
@@ -131,8 +131,9 @@ public class NugetService(IClientService clientService, ILogger<NugetService> lo
                     log: NullLogger.Instance,
                     cancellationToken: cancellationToken);
           }
-          catch
+          catch (Exception e)
           {
+            logger.LogError("Failed to search packages in source {name}: {ex}", source.Name, e);
             return [];
           }
         });
@@ -146,6 +147,7 @@ public class NugetService(IClientService clientService, ILogger<NugetService> lo
 
   public async Task<bool> PushPackageAsync(List<string> packages, string sourceUrl, string? apiKey)
   {
+    DefaultCredentialServiceUtility.SetupDefaultCredentialService(NullLogger.Instance, nonInteractive: true);
     var notFound = packages.FirstOrDefault(x => !File.Exists(x));
     if (notFound is not null)
     {
