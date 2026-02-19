@@ -303,6 +303,46 @@ _No parameters_
 
 ---
 
+## DefaultController
+
+### `set-default-build-project`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+
+**Returns:** `Void`
+
+### `set-default-launch-profile`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+| launchProfile | string |   |
+
+**Returns:** `Void`
+
+### `set-default-startup-project`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+
+**Returns:** `Void`
+
+### `set-default-test-project`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+
+**Returns:** `Void`
+
+### `set-default-view-project`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+
+**Returns:** `Void`
+
+---
+
 ## TerminalController
 
 ### `processExited`
