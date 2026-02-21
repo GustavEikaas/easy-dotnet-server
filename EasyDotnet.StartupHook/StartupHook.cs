@@ -1,6 +1,7 @@
 ﻿using System.IO.Pipes;
 
 #pragma warning disable RCS1110 // Declare type inside namespace
+//We cannot use namespace here
 internal static class StartupHook
 #pragma warning restore RCS1110 // Declare type inside namespace
 {
