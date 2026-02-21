@@ -97,7 +97,7 @@
     <MSBuild 
       Projects="..\EasyDotnet.StartupHook\EasyDotnet.StartupHook.csproj" 
       Targets="Publish" 
-      Properties="Configuration=$(Configuration);PublishDir=$(MSBuildProjectDirectory)\$(PayloadsOutputPath)StartupHook\;SelfContained=false" />
+      Properties="TargetFramework=net6.0;Configuration=$(Configuration);PublishDir=$(MSBuildProjectDirectory)\$(PayloadsOutputPath)StartupHook\;SelfContained=false" />
   </Target>
 
   <Target Name="IncludePayloadsInPack" DependsOnTargets="PublishDebuggerPayloads" BeforeTargets="GenerateNuspec">
