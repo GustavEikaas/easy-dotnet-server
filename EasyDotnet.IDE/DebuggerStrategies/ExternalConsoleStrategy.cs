@@ -29,12 +29,13 @@ public class ExternalConsoleStrategy(ILogger<ExternalConsoleStrategy> logger) : 
     var hookPath = DebuggerPayloadLocator.GetStartupHookPath();
 
     var terminalArgs = new[] { "dotnet", "exec", extWindowPath, "--pipe", pipeName, "--hook", hookPath };
-    var runInTerminalReq = RunInTerminalRequest.Create(terminalArgs);
+    var terminalKind = ExtractTerminalKind(request.Arguments.Console);
+    var runInTerminalReq = RunInTerminalRequest.Create(terminalKind, terminalArgs);
     runInTerminalReq.Arguments.Cwd = _project!.ProjectDir;
+    runInTerminalReq.Arguments.Env = request.Arguments.Env ?? [];
 
     logger.LogInformation("Sending runInTerminal request to Neovim");
     var termResponse = await proxy.RunClientRequestAsync(runInTerminalReq, CancellationToken.None);
-    //TODO: deserialize termResponse and capture pid and termPid for dispose? (or is that entirely client responsibility?)
 
     if (!termResponse.Success)
     {
@@ -56,7 +57,6 @@ public class ExternalConsoleStrategy(ILogger<ExternalConsoleStrategy> logger) : 
     logger.LogInformation("Sending initialize to external console");
     var res = await _rpc.InvokeWithParameterObjectAsync<InitializeResponse>(
         "initialize",
-        //TODO: env vars and cwd?
         new { Program = "dotnet", Args = new List<string>() { _project.TargetPath! } },
         CancellationToken.None);
 
@@ -67,7 +67,6 @@ public class ExternalConsoleStrategy(ILogger<ExternalConsoleStrategy> logger) : 
     request.Command = "attach";
     request.Arguments.Request = "attach";
     request.Arguments.ProcessId = _pid;
-    //TODO: Does cwd do anything in attach?
     if (_project?.ProjectDir is not null)
     {
       request.Arguments.Cwd = _project.ProjectDir;
@@ -105,6 +104,21 @@ public class ExternalConsoleStrategy(ILogger<ExternalConsoleStrategy> logger) : 
         logger.LogWarning("RPC connection is null, cannot resume the target process.");
       }
     });
+  }
+
+  private RunInTerminalKind ExtractTerminalKind(string? consoleConfig)
+  {
+    if (string.IsNullOrWhiteSpace(consoleConfig))
+    {
+      return RunInTerminalKind.Internal;
+    }
+
+    return consoleConfig.Trim().ToLowerInvariant() switch
+    {
+      "externalterminal" => RunInTerminalKind.External,
+      "integratedterminal" => RunInTerminalKind.Internal,
+      _ => RunInTerminalKind.Internal
+    };
   }
 }
 

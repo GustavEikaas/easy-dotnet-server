@@ -55,6 +55,7 @@ public class InterceptableAttachArguments
   public string? Program { get; set; }
   public int? ProcessId { get; set; }
   public string? Cwd { get; set; }
+  public string? Console { get; set; }
   public string[]? Args { get; set; }
   public Dictionary<string, string>? Env { get; set; }
 
@@ -131,19 +132,24 @@ public class Metrics
   public required long Timestamp { get; init; }
 }
 
+public enum RunInTerminalKind
+{
+  Internal = 0,
+  External = 1
+}
+
 public class RunInTerminalRequest : Request
 {
   public new RunInTerminalRequestArguments Arguments { get; set; } = new();
 
-  public static RunInTerminalRequest Create(string[] args) => new()
+  public static RunInTerminalRequest Create(RunInTerminalKind kind, string[] args) => new()
   {
     Type = "request",
     Seq = 0,
     Command = "runInTerminal",
     Arguments = new RunInTerminalRequestArguments()
     {
-      // Kind = "integrated",
-      Kind = "external",
+      Kind = kind == RunInTerminalKind.External ? "external" : "integrated",
       Title = "EasyDotnet",
       Args = args,
       Cwd = ".",
