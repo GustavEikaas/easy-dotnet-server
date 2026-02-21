@@ -13,9 +13,23 @@ public sealed class DebugRpcTarget(string hook) : IAsyncDisposable
   public async Task<InitializeResponse> InitializeAsync(InitializeRequest request, CancellationToken ct)
   {
     var psi = new ProcessStartInfo { FileName = request.Program };
+
     foreach (var arg in request.Args)
     {
       psi.ArgumentList.Add(arg);
+    }
+
+    if (!string.IsNullOrWhiteSpace(request.Cwd))
+    {
+      psi.WorkingDirectory = request.Cwd;
+    }
+
+    if (request.Env != null)
+    {
+      foreach (var kvp in request.Env)
+      {
+        psi.Environment[kvp.Key] = kvp.Value;
+      }
     }
 
     var hookPipeName = PipeUtils.GeneratePipeName();

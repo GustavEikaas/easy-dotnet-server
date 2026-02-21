@@ -1,8 +1,10 @@
 using System.Diagnostics;
 using System.IO.Pipes;
 using System.Reflection;
+using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Debugger;
 using EasyDotnet.Debugger.Messages;
+using EasyDotnet.Domain.Models.LaunchProfile;
 using EasyDotnet.IDE.Types;
 using EasyDotnet.IDE.Utils;
 using EasyDotnet.MsBuild;
@@ -11,17 +13,32 @@ using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.DebuggerStrategies;
 
-public class ExternalConsoleStrategy(ILogger<ExternalConsoleStrategy> logger) : IDebugSessionStrategy
+public class RunInTerminalStrategy(
+  string? launchProfileName,
+  ILogger<RunInTerminalStrategy> logger,
+  ILaunchProfileService launchProfileService) : IDebugSessionStrategy
 {
   private DotnetProject? _project;
   private int _pid;
   private JsonRpc? _rpc;
   private NamedPipeServerStream? _pipeServer;
+  private LaunchProfile? _activeProfile;
 
-  public async Task PrepareAsync(DotnetProject project, CancellationToken ct) => _project = project;
+  public async Task PrepareAsync(DotnetProject project, CancellationToken ct)
+  {
+    if (!string.IsNullOrEmpty(launchProfileName) &&
+        launchProfileService.GetLaunchProfiles(project.MSBuildProjectFullPath!) is { } profiles &&
+        profiles.TryGetValue(launchProfileName, out var profile))
+    {
+      _activeProfile = profile;
+    }
+    _project = project;
+  }
 
   public async Task TransformRequestAsync(InterceptableAttachRequest request, IDebuggerProxy proxy)
   {
+    if (_project == null) throw new InvalidOperationException("Strategy has not been prepared.");
+
     var pipeName = PipeUtils.GeneratePipeName();
     _pipeServer = new NamedPipeServerStream(pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
 
@@ -31,8 +48,14 @@ public class ExternalConsoleStrategy(ILogger<ExternalConsoleStrategy> logger) : 
     var terminalArgs = new[] { "dotnet", "exec", extWindowPath, "--pipe", pipeName, "--hook", hookPath };
     var terminalKind = ExtractTerminalKind(request.Arguments.Console);
     var runInTerminalReq = RunInTerminalRequest.Create(terminalKind, terminalArgs);
-    runInTerminalReq.Arguments.Cwd = _project!.ProjectDir;
-    runInTerminalReq.Arguments.Env = request.Arguments.Env ?? [];
+
+    var cwd = !string.IsNullOrWhiteSpace(_activeProfile?.WorkingDirectory)
+        ? DebugStrategyUtils.NormalizePath(DebugStrategyUtils.InterpolateVariables(_activeProfile.WorkingDirectory, _project))
+        : _project.ProjectDir;
+
+    runInTerminalReq.Arguments.Cwd = cwd;
+
+    var env = DebugStrategyUtils.GetEnvironmentVariables(_activeProfile);
 
     logger.LogInformation("Sending runInTerminal request to Neovim");
     var termResponse = await proxy.RunClientRequestAsync(runInTerminalReq, CancellationToken.None);
@@ -57,7 +80,13 @@ public class ExternalConsoleStrategy(ILogger<ExternalConsoleStrategy> logger) : 
     logger.LogInformation("Sending initialize to external console");
     var res = await _rpc.InvokeWithParameterObjectAsync<InitializeResponse>(
         "initialize",
-        new { Program = "dotnet", Args = new List<string>() { _project.TargetPath! } },
+        new
+        {
+          Program = "dotnet",
+          Args = new List<string>() { _project.TargetPath! },
+          Cwd = cwd,
+          Env = (request.Arguments.Env ?? []).Concat(env).ToDictionary(kvp => kvp.Key, kvp => kvp.Value)
+        },
         CancellationToken.None);
 
     _pid = res.Pid;
@@ -69,7 +98,7 @@ public class ExternalConsoleStrategy(ILogger<ExternalConsoleStrategy> logger) : 
     request.Arguments.ProcessId = _pid;
     if (_project?.ProjectDir is not null)
     {
-      request.Arguments.Cwd = _project.ProjectDir;
+      request.Arguments.Cwd = cwd;
     }
   }
 
@@ -88,25 +117,19 @@ public class ExternalConsoleStrategy(ILogger<ExternalConsoleStrategy> logger) : 
 
   public void OnDebugSessionReady(DebugSession debugSession, IDebuggerProxy proxy)
   {
-    logger.LogInformation("ConfigurationDone received. Giving netcoredbg a moment to bind breakpoints...");
-    _ = Task.Run(async () =>
+    logger.LogInformation("Resuming runtime via Startup Hook RPC.");
+
+    if (_rpc is not null)
     {
-      await Task.Delay(500);
-
-      logger.LogInformation("Resuming runtime via Startup Hook RPC.");
-
-      if (_rpc is not null)
-      {
-        await _rpc.InvokeAsync("resume");
-      }
-      else
-      {
-        logger.LogWarning("RPC connection is null, cannot resume the target process.");
-      }
-    });
+      _ = _rpc.InvokeAsync("resume");
+    }
+    else
+    {
+      logger.LogWarning("RPC connection is null, cannot resume the target process.");
+    }
   }
 
-  private RunInTerminalKind ExtractTerminalKind(string? consoleConfig)
+  private static RunInTerminalKind ExtractTerminalKind(string? consoleConfig)
   {
     if (string.IsNullOrWhiteSpace(consoleConfig))
     {

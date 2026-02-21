@@ -5,7 +5,7 @@ namespace EasyDotnet.IDE.DebuggerStrategies;
 
 public interface IDebugStrategyFactory
 {
-  ExternalConsoleStrategy CreateExternalConsoleStrategy();
+  RunInTerminalStrategy CreateRunInTerminalStrategy(string? launchProfileName);
   StandardLaunchStrategy CreateStandardLaunchStrategy(string? launchProfileName);
   StandardAttachStrategy CreateStandardAttachStrategy(int pid);
   VsTestStrategy CreateVsTestStrategy();
@@ -13,9 +13,10 @@ public interface IDebugStrategyFactory
 
 public class DebugStrategyFactory(ILoggerFactory loggerFactory, ILaunchProfileService launchProfileService) : IDebugStrategyFactory
 {
-  //TODO: support launch profiles
-  public ExternalConsoleStrategy CreateExternalConsoleStrategy() => new(
-    loggerFactory.CreateLogger<ExternalConsoleStrategy>());
+  public RunInTerminalStrategy CreateRunInTerminalStrategy(string? launchProfileName) => new(
+    launchProfileName,
+    loggerFactory.CreateLogger<RunInTerminalStrategy>(),
+    launchProfileService);
 
   public StandardLaunchStrategy CreateStandardLaunchStrategy(string? launchProfileName) => new(
     launchProfileName,

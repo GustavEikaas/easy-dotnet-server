@@ -187,7 +187,8 @@ public class DebugOrchestrator(
         try
         {
           var proxy = await session.WaitForConfigurationDoneAsync();
-          //TODO: here is where the delay of 500ms should be
+          //TODO: giving the debugger 500ms of delay because this caused a race condition
+          await Task.Delay(500, cancellationToken);
           strategy.OnDebugSessionReady(session, proxy);
         }
         catch (OperationCanceledException)
