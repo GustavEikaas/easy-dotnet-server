@@ -21,19 +21,13 @@ public sealed class DebugRpcTarget : IAsyncDisposable
     var hookPipeName = PipeUtils.GeneratePipeName();
     _hookPipeServer = new NamedPipeServerStream(hookPipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
 
-    var file = "C:/Users/gusta/repo/easy-dotnet-server/EasyDotnet.StartupHook/bin/Debug/net6.0/EasyDotnet.StartupHook.dll";
-
-    psi.EnvironmentVariables["DOTNET_STARTUP_HOOKS"] = file;
+    psi.EnvironmentVariables["DOTNET_STARTUP_HOOKS"] = GetStartupHookDllPath();
     psi.EnvironmentVariables["EASY_DOTNET_HOOK_PIPE"] = hookPipeName;
 
-    // 2. Start the process
     var process = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start process");
 
-    // 3. Wait for the hook to connect. Once it connects, we know 100% 
-    // that the target app is frozen securely inside StartupHook.Initialize()
     await _hookPipeServer.WaitForConnectionAsync(ct);
 
-    // 4. Return the PID back to the IDE so it can attach netcoredbg
     return new InitializeResponse(process.Id);
   }
 
@@ -42,8 +36,6 @@ public sealed class DebugRpcTarget : IAsyncDisposable
   {
     if (_hookPipeServer?.IsConnected == true)
     {
-      // Write a single byte to the pipe. 
-      // The Hook's `client.ReadByte()` will unblock, and the app will start!
       _hookPipeServer.WriteByte(1);
       _hookPipeServer.Flush();
     }
@@ -57,16 +49,27 @@ public sealed class DebugRpcTarget : IAsyncDisposable
       await _hookPipeServer.DisposeAsync();
     }
   }
-}
 
+#pragma warning disable IDE0022 // Use expression body for method
+  private string GetStartupHookDllPath()
+  {
+#if DEBUG
+    const string file = "C:/Users/gusta/repo/easy-dotnet-server/EasyDotnet.StartupHook/bin/Debug/net6.0/EasyDotnet.StartupHook.dll";
+    return !File.Exists(file) ? throw new Exception($"Fatal, StartupHook dll not found in path: {file}") : file;
+#else
+    return "C:/Users/gusta/repo/easy-dotnet-server/EasyDotnet.StartupHook/bin/Debug/net6.0/EasyDotnet.StartupHook.dll";
+#endif
+  }
+#pragma warning restore IDE0022 // Use expression body for method
+}
 
 public static partial class PipeUtils
 {
   private const int MaxPipeNameLength = 104;
   public static string GeneratePipeName()
   {
-    var pipePrefix = "CoreFxPipe_";
-    var pipeName = "EasyDotnet_" + Base64SanitizerRegex().Replace(Convert.ToBase64String(Guid.NewGuid().ToByteArray()), "");
+    const string pipePrefix = "CoreFxPipe_";
+    var pipeName = "EasyDotnet_Ext_Window" + Base64SanitizerRegex().Replace(Convert.ToBase64String(Guid.NewGuid().ToByteArray()), "");
     var maxNameLength = MaxPipeNameLength - Path.GetTempPath().Length - pipePrefix.Length - 1;
     return pipeName[..Math.Min(pipeName.Length, maxNameLength)];
   }

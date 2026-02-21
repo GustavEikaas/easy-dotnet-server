@@ -12,6 +12,5 @@
     <PackageReference Include="StreamJsonRpc" Version="2.21.69" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.9" />
     <PackageReference Include="Spectre.Console.Cli" Version="0.53.1-preview.0.2" />
-    <PackageReference Include="Microsoft.Diagnostics.NETCore.Client" Version="0.2.661903" />
   </ItemGroup>
 </Project>

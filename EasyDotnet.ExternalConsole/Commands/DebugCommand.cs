@@ -22,8 +22,10 @@ public sealed class DebugCommand : AsyncCommand<DebugCommand.Settings>
 
     using var rpc = new JsonRpc(pipeClient);
 
+#if DEBUG
     rpc.TraceSource.Listeners.Add(new ConsoleTraceListener());
     rpc.TraceSource.Switch.Level = SourceLevels.Verbose;
+#endif
 
     rpc.AddLocalRpcTarget(new DebugRpcTarget());
     rpc.StartListening();

@@ -5,7 +5,6 @@ using EasyDotnet.Debugger.Messages;
 using EasyDotnet.IDE.Types;
 using EasyDotnet.IDE.Utils;
 using EasyDotnet.MsBuild;
-using Microsoft.Diagnostics.NETCore.Client;
 using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
 
