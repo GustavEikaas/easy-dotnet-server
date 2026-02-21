@@ -13,6 +13,7 @@ public interface IDebugStrategyFactory
 
 public class DebugStrategyFactory(ILoggerFactory loggerFactory, ILaunchProfileService launchProfileService) : IDebugStrategyFactory
 {
+  //TODO: support launch profiles
   public ExternalConsoleStrategy CreateExternalConsoleStrategy() => new(
     loggerFactory.CreateLogger<ExternalConsoleStrategy>());
 

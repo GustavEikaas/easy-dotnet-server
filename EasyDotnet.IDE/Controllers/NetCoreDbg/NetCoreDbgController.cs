@@ -45,5 +45,6 @@ public class NetCoreDbgController(
   private IDebugSessionStrategy ResolveStrategy(DotnetProject project, string? launchProfileName) =>
     project.IsVsTest()
       ? debugStrategyFactory.CreateVsTestStrategy()
+      //TODO: not MTP
       : debugStrategyFactory.CreateExternalConsoleStrategy();
 }

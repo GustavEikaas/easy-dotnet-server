@@ -187,6 +187,7 @@ public class DebugOrchestrator(
         try
         {
           var proxy = await session.WaitForConfigurationDoneAsync();
+          //TODO: here is where the delay of 500ms should be
           strategy.OnDebugSessionReady(session, proxy);
         }
         catch (OperationCanceledException)

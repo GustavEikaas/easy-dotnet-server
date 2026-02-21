@@ -22,8 +22,6 @@ public class ExternalConsoleStrategy(ILogger<ExternalConsoleStrategy> logger) : 
 
   public async Task TransformRequestAsync(InterceptableAttachRequest request, IDebuggerProxy proxy)
   {
-    logger.LogInformation("Intercepted {Command} request. Initiating external console launch sequence...", request.Command);
-
     var pipeName = PipeUtils.GeneratePipeName();
     _pipeServer = new NamedPipeServerStream(pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
 
@@ -36,6 +34,7 @@ public class ExternalConsoleStrategy(ILogger<ExternalConsoleStrategy> logger) : 
 
     logger.LogInformation("Sending runInTerminal request to Neovim");
     var termResponse = await proxy.RunClientRequestAsync(runInTerminalReq, CancellationToken.None);
+    //TODO: deserialize termResponse and capture pid and termPid for dispose? (or is that entirely client responsibility?)
 
     if (!termResponse.Success)
     {
@@ -48,13 +47,16 @@ public class ExternalConsoleStrategy(ILogger<ExternalConsoleStrategy> logger) : 
     await _pipeServer.WaitForConnectionAsync(CancellationToken.None);
 
     _rpc = new JsonRpc(_pipeServer);
+#if DEBUG
     _rpc.TraceSource.Listeners.Add(new ConsoleTraceListener());
     _rpc.TraceSource.Switch.Level = SourceLevels.Verbose;
+#endif
     _rpc.StartListening();
 
     logger.LogInformation("Sending initialize to external console");
     var res = await _rpc.InvokeWithParameterObjectAsync<InitializeResponse>(
         "initialize",
+        //TODO: env vars and cwd?
         new { Program = "dotnet", Args = new List<string>() { _project.TargetPath! } },
         CancellationToken.None);
 
@@ -64,8 +66,8 @@ public class ExternalConsoleStrategy(ILogger<ExternalConsoleStrategy> logger) : 
     request.Type = "request";
     request.Command = "attach";
     request.Arguments.Request = "attach";
-    request.Arguments.StopAtEntry = true;
     request.Arguments.ProcessId = _pid;
+    //TODO: Does cwd do anything in attach?
     if (_project?.ProjectDir is not null)
     {
       request.Arguments.Cwd = _project.ProjectDir;

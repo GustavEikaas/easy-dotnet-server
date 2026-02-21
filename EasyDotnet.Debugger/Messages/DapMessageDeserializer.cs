@@ -71,7 +71,7 @@ public static class DapMessageDeserializer
       return cmd switch
       {
         "variables" => JsonSerializer.Deserialize<VariablesResponse>(root.GetRawText(), options)!,
-        "runInTerminal" => JsonSerializer.Deserialize<RunInTerminalResponse>(root.GetRawText(), options)!,
+        // "runInTerminal" => JsonSerializer.Deserialize<RunInTerminalResponse>(root.GetRawText(), options)!,
         _ => JsonSerializer.Deserialize<Response>(root.GetRawText(), options)!,
       };
     }
@@ -85,8 +85,8 @@ public static class DapMessageDeserializer
         {
           case "attach":
             return JsonSerializer.Deserialize<InterceptableAttachRequest>(root.GetRawText(), options)!;
-          case "runInTerminal":
-            return JsonSerializer.Deserialize<RunInTerminalRequest>(root.GetRawText(), options)!;
+          // case "runInTerminal":
+          //   return JsonSerializer.Deserialize<RunInTerminalRequest>(root.GetRawText(), options)!;
           case "variables":
             return JsonSerializer.Deserialize<InterceptableVariablesRequest>(root.GetRawText(), options)!;
           case "setbreakpoints":
