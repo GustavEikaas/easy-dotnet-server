@@ -1,11 +1,12 @@
 using System.Diagnostics;
+using EasyDotnet.Application.Interfaces;
 using EasyDotnet.BuildServer.Contracts;
 using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.BuildHost;
 
-public sealed class BuildHostManager(ILogger<BuildHostManager> logger, BuildHostFactory factory) : IDisposable, IAsyncDisposable
+public sealed class BuildHostManager(ILogger<BuildHostManager> logger, BuildHostFactory factory) : IDisposable, IAsyncDisposable, IBuildHostManager
 {
   private Process? _serverProcess;
   private JsonRpc? _rpc;
@@ -133,28 +134,5 @@ public sealed class BuildHostManager(ILogger<BuildHostManager> logger, BuildHost
     _isDisposed = true;
     _connectionLock.Dispose();
     await InvalidateConnectionAsync();
-  }
-}
-
-public static class AsyncEnumerableExtensions
-{
-  public static async Task<List<T>> ToListAsync<T>(
-      this IAsyncEnumerable<T> source,
-      CancellationToken cancellationToken)
-  {
-    var list = new List<T>();
-    await foreach (var item in source.WithCancellation(cancellationToken))
-    {
-      list.Add(item);
-    }
-    return list;
-  }
-
-  public static async Task<List<T>> ToListAsync<T>(
-      this Task<IAsyncEnumerable<T>> sourceTask,
-      CancellationToken cancellationToken)
-  {
-    var source = await sourceTask.ConfigureAwait(false);
-    return await source.ToListAsync(cancellationToken).ConfigureAwait(false);
   }
 }

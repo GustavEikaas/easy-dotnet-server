@@ -1,17 +1,13 @@
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
-using EasyDotnet.IDE;
+using EasyDotnet.Controllers;
+using EasyDotnet.Controllers.Nuget;
 using EasyDotnet.Services;
 using StreamJsonRpc;
 
-namespace EasyDotnet.Controllers.Nuget;
+namespace EasyDotnet.IDE.Controllers.Nuget;
 
 public class NugetController(IClientService clientService, NugetService nugetService) : BaseController
 {
-
   [JsonRpcMethod("nuget/restore")]
   public async Task<RestoreResult> RestorePackages(string targetPath)
   {
@@ -58,7 +54,7 @@ public class NugetController(IClientService clientService, NugetService nugetSer
   {
     clientService.ThrowIfNotInitialized();
 
-    var packages = await NugetService.SearchAllSourcesByNameAsync(searchTerm, new CancellationToken(), take: 10, includePrerelease: false, sources);
+    var packages = await nugetService.SearchAllSourcesByNameAsync(searchTerm, new CancellationToken(), take: 10, includePrerelease: false, sources);
 
     var list = packages
         .SelectMany(kvp => kvp.Value.Select(x => NugetPackageMetadata.From(x, kvp.Key)))

@@ -1,5 +1,5 @@
+using EasyDotnet.Application.Interfaces;
 using EasyDotnet.BuildServer.Contracts;
-using EasyDotnet.IDE.BuildHost;
 using EasyDotnet.Infrastructure.Editor;
 using EasyDotnet.MsBuild;
 using Microsoft.Extensions.FileSystemGlobbing;
@@ -11,7 +11,7 @@ namespace EasyDotnet.IDE.TemplateEngine.PostActionHandlers;
 public class RestoreNugetPackagesPostActionHandler(
   ILogger<RestoreNugetPackagesPostActionHandler> logger,
   IProgressScopeFactory progressScopeFactory,
-  BuildHostManager buildHostManager) : IPostActionHandler
+  IBuildHostManager buildHostManager) : IPostActionHandler
 {
   public static readonly Guid Id = Guid.Parse("210D431B-A78B-4D2F-B762-4ED3E3EA9025");
   public Guid ActionId => Id;

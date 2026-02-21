@@ -39,48 +39,6 @@
 
 ---
 
-## NugetController
-
-### `nuget/get-package-versions`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| packageId | string |   |
-| sources | List<string> | ✅  |
-| includePrerelease | bool | ✅  |
-
-**Returns:** `Task<IAsyncEnumerable<string>>`
-
-### `nuget/list-sources`
-_No parameters_
-
-**Returns:** `IAsyncEnumerable<NugetSourceResponse>`
-
-### `nuget/push`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| packagePaths | List<string> |   |
-| source | string |   |
-| apiKey | string | ✅  |
-
-**Returns:** `Task<NugetPushResponse>`
-
-### `nuget/restore`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| targetPath | string |   |
-
-**Returns:** `Task<RestoreResult>`
-
-### `nuget/search-packages`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| searchTerm | string |   |
-| sources | List<string> | ✅  |
-
-**Returns:** `Task<IAsyncEnumerable<NugetPackageMetadata>>`
-
----
-
 ## UserSecretsController
 
 ### `user-secrets/init`
@@ -170,6 +128,48 @@ _No parameters_
 | solutionFilePath | string |   |
 
 **Returns:** `Task<List<SolutionFileProjectResponse>>`
+
+---
+
+## NugetController
+
+### `nuget/get-package-versions`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| packageId | string |   |
+| sources | List<string> | ✅  |
+| includePrerelease | bool | ✅  |
+
+**Returns:** `Task<IAsyncEnumerable<string>>`
+
+### `nuget/list-sources`
+_No parameters_
+
+**Returns:** `IAsyncEnumerable<NugetSourceResponse>`
+
+### `nuget/push`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| packagePaths | List<string> |   |
+| source | string |   |
+| apiKey | string | ✅  |
+
+**Returns:** `Task<NugetPushResponse>`
+
+### `nuget/restore`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| targetPath | string |   |
+
+**Returns:** `Task<RestoreResult>`
+
+### `nuget/search-packages`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| searchTerm | string |   |
+| sources | List<string> | ✅  |
+
+**Returns:** `Task<IAsyncEnumerable<NugetPackageMetadata>>`
 
 ---
 
@@ -300,6 +300,46 @@ _No parameters_
 |-----------|------|----------|
 
 **Returns:** `Task`
+
+---
+
+## DefaultController
+
+### `set-default-build-project`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+
+**Returns:** `Void`
+
+### `set-default-launch-profile`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+| launchProfile | string |   |
+
+**Returns:** `Void`
+
+### `set-default-startup-project`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+
+**Returns:** `Void`
+
+### `set-default-test-project`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+
+**Returns:** `Void`
+
+### `set-default-view-project`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+
+**Returns:** `Void`
 
 ---
 
