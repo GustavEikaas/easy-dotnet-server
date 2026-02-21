@@ -21,7 +21,7 @@ public sealed class DebugRpcTarget : IAsyncDisposable
     var hookPipeName = PipeUtils.GeneratePipeName();
     _hookPipeServer = new NamedPipeServerStream(hookPipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
 
-    var file = "C:/Users/gusta/repo/easy-dotnet-server/EasyDotnet.StartupHook/bin/Debug/net8.0/EasyDotnet.StartupHook.dll";
+    var file = "C:/Users/gusta/repo/easy-dotnet-server/EasyDotnet.StartupHook/bin/Debug/net6.0/EasyDotnet.StartupHook.dll";
 
     psi.EnvironmentVariables["DOTNET_STARTUP_HOOKS"] = file;
     psi.EnvironmentVariables["EASY_DOTNET_HOOK_PIPE"] = hookPipeName;
