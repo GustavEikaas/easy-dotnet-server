@@ -131,3 +131,85 @@ public class Metrics
   public required double MemoryBytes { get; init; }
   public required long Timestamp { get; init; }
 }
+
+public class RunInTerminalRequest : Request
+{
+  public new RunInTerminalRequestArguments Arguments { get; set; } = new();
+
+  public static RunInTerminalRequest Create(string[] args) => new()
+  {
+    Type = "request",
+    Seq = 0,
+    Command = "runInTerminal",
+    Arguments = new RunInTerminalRequestArguments()
+    {
+      // Kind = "integrated",
+      Kind = "external",
+      Title = "EasyDotnet",
+      Args = args,
+      Cwd = ".",
+      ArgsCanBeInterpretedByShell = false
+    }
+  };
+}
+
+public class RunInTerminalRequestArguments
+{
+  /**
+   * What kind of terminal to launch. Defaults to `integrated` if not specified.
+   * Values: 'integrated', 'external'
+   */
+  public string Kind { get; set; } = "integrated";
+
+  /**
+   * Title of the terminal.
+   */
+  public string? Title { get; set; }
+
+  /**
+   * Working directory for the command. For non-empty, valid paths this
+   * typically results in execution of a change directory command.
+   */
+  public string? Cwd { get; set; }
+
+  /**
+   * List of arguments. The first argument is the command to run.
+   */
+  public string[] Args { get; set; } = [];
+
+  /**
+   * Environment key-value pairs that are added to or removed from the default
+   * environment.
+   */
+  public Dictionary<string, string> Env = [];
+
+  /**
+   * This property should only be set if the corresponding capability
+   * `supportsArgsCanBeInterpretedByShell` is true. If the client uses an
+   * intermediary shell to launch the application, then the client must not
+   * attempt to escape characters with special meanings for the shell. The user
+   * is fully responsible for escaping as needed and that arguments using
+   * special characters may not be portable across shells.
+   */
+  public bool ArgsCanBeInterpretedByShell { get; set; }
+}
+
+public class RunInTerminalResponse : Response
+{
+  public new RunInTerminalResponseBody Body { get; set; } = new();
+}
+
+public class RunInTerminalResponseBody
+{
+  /**
+   * The process ID. The value should be less than or equal to 2147483647
+   * (2^31-1).
+   */
+  public int ProcessId;
+
+  /**
+   * The process ID of the terminal shell. The value should be less than or
+   * equal to 2147483647 (2^31-1).
+   */
+  public int ShellProcessId;
+}

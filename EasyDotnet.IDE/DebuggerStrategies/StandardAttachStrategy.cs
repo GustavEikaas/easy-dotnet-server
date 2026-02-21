@@ -18,7 +18,7 @@ public class StandardAttachStrategy(ILogger<StandardAttachStrategy> logger, int 
     return Task.CompletedTask;
   }
 
-  public Task TransformRequestAsync(InterceptableAttachRequest request)
+  public Task TransformRequestAsync(InterceptableAttachRequest request, IDebuggerProxy proxy)
   {
     request.Type = "request";
     request.Command = "attach";
@@ -32,7 +32,7 @@ public class StandardAttachStrategy(ILogger<StandardAttachStrategy> logger, int 
     return Task.CompletedTask;
   }
 
-  public void OnDebugSessionReady(DebugSession debugSession)
+  public void OnDebugSessionReady(DebugSession debugSession, IDebuggerProxy proxy)
   {
 
   }

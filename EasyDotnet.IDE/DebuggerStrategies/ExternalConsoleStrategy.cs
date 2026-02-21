@@ -17,46 +17,50 @@ public class ExternalConsoleStrategy(ILogger<ExternalConsoleStrategy> logger) : 
   private int _pid;
   private JsonRpc? _rpc;
   private NamedPipeServerStream? _pipeServer;
-  private Process? _externalConsoleProcess;
 
-  public async Task PrepareAsync(DotnetProject project, CancellationToken ct)
+  public async Task PrepareAsync(DotnetProject project, CancellationToken ct) => _project = project;
+
+  public async Task TransformRequestAsync(InterceptableAttachRequest request, IDebuggerProxy proxy)
   {
-    _project = project;
-    var pipeName = PipeUtils.GeneratePipeName();
+    logger.LogInformation("Intercepted {Command} request. Initiating external console launch sequence...", request.Command);
 
+    var pipeName = PipeUtils.GeneratePipeName();
     _pipeServer = new NamedPipeServerStream(pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
 
     var extWindowPath = DebuggerPayloadLocator.GetExternalConsolePath();
     var hookPath = DebuggerPayloadLocator.GetStartupHookPath();
 
-    _externalConsoleProcess = Process.Start(new ProcessStartInfo
+    var terminalArgs = new[] { "dotnet", "exec", extWindowPath, "--pipe", pipeName, "--hook", hookPath };
+    var runInTerminalReq = RunInTerminalRequest.Create(terminalArgs);
+    runInTerminalReq.Arguments.Cwd = _project!.ProjectDir;
+
+    logger.LogInformation("Sending runInTerminal request to Neovim");
+    var termResponse = await proxy.RunClientRequestAsync(runInTerminalReq, CancellationToken.None);
+
+    if (!termResponse.Success)
     {
-      FileName = "cmd.exe",
-      ArgumentList = { "/k", "dotnet", extWindowPath, "--pipe", pipeName, "--hook", hookPath },
-      UseShellExecute = true
-    }) ?? throw new InvalidOperationException("Failed to start external console process");
+      throw new InvalidOperationException($"Neovim failed to launch terminal: {termResponse.Message}");
+    }
+
+    logger.LogInformation("runInTerminal response from Neovim");
 
     logger.LogInformation("Waiting for external console to connect on pipe {Pipe}", pipeName);
-    await _pipeServer.WaitForConnectionAsync(ct);
+    await _pipeServer.WaitForConnectionAsync(CancellationToken.None);
 
-    var rpc = new JsonRpc(_pipeServer);
-    _rpc = rpc;
-    rpc.TraceSource.Listeners.Add(new ConsoleTraceListener());
-    rpc.TraceSource.Switch.Level = SourceLevels.Verbose;
-    rpc.StartListening();
+    _rpc = new JsonRpc(_pipeServer);
+    _rpc.TraceSource.Listeners.Add(new ConsoleTraceListener());
+    _rpc.TraceSource.Switch.Level = SourceLevels.Verbose;
+    _rpc.StartListening();
 
     logger.LogInformation("Sending initialize to external console");
-    var res = await rpc.InvokeWithParameterObjectAsync<InitializeResponse>(
+    var res = await _rpc.InvokeWithParameterObjectAsync<InitializeResponse>(
         "initialize",
-        new { Program = "dotnet", Args = new List<string>() { project.TargetPath! } },
-        ct);
+        new { Program = "dotnet", Args = new List<string>() { _project.TargetPath! } },
+        CancellationToken.None);
 
     _pid = res.Pid;
-    logger.LogInformation("Received attachDebugger for pid {Pid}", _pid);
-  }
+    logger.LogInformation("Received attach PID {Pid} from external console", _pid);
 
-  public Task TransformRequestAsync(InterceptableAttachRequest request)
-  {
     request.Type = "request";
     request.Command = "attach";
     request.Arguments.Request = "attach";
@@ -66,7 +70,6 @@ public class ExternalConsoleStrategy(ILogger<ExternalConsoleStrategy> logger) : 
     {
       request.Arguments.Cwd = _project.ProjectDir;
     }
-    return Task.CompletedTask;
   }
 
   public Task<int>? GetProcessIdAsync() => Task.FromResult(_pid);
@@ -80,34 +83,26 @@ public class ExternalConsoleStrategy(ILogger<ExternalConsoleStrategy> logger) : 
       await _pipeServer.DisposeAsync();
       _pipeServer = null;
     }
-    if (_externalConsoleProcess is null) return;
-    try
-    {
-      _externalConsoleProcess.Kill(true);
-      await _externalConsoleProcess.WaitForExitAsync();
-    }
-    catch (Exception ex)
-    {
-      logger.LogWarning(ex, "Failed to kill external console process");
-    }
-    _externalConsoleProcess.Dispose();
   }
 
-  public void OnDebugSessionReady(DebugSession debugSession)
+  public void OnDebugSessionReady(DebugSession debugSession, IDebuggerProxy proxy)
   {
-    logger.LogInformation("Resuming runtime via Startup Hook RPC");
+    logger.LogInformation("ConfigurationDone received. Giving netcoredbg a moment to bind breakpoints...");
+    _ = Task.Run(async () =>
+    {
+      await Task.Delay(500);
 
-    if (_rpc is not null)
-    {
-      // Fire and forget the resume command to unblock the Startup Hook.
-      // If you can change IDebugSessionStrategy to make this method async, 
-      // you should absolutely do 'await _rpc.InvokeAsync("resume");' instead.
-      _ = _rpc.InvokeAsync("resume");
-    }
-    else
-    {
-      logger.LogWarning("RPC connection is null, cannot resume the target process.");
-    }
+      logger.LogInformation("Resuming runtime via Startup Hook RPC.");
+
+      if (_rpc is not null)
+      {
+        await _rpc.InvokeAsync("resume");
+      }
+      else
+      {
+        logger.LogWarning("RPC connection is null, cannot resume the target process.");
+      }
+    });
   }
 }
 

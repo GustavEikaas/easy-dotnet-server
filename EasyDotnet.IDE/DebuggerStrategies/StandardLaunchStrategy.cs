@@ -29,7 +29,7 @@ public class StandardLaunchStrategy(
     return Task.CompletedTask;
   }
 
-  public Task TransformRequestAsync(InterceptableAttachRequest request)
+  public Task TransformRequestAsync(InterceptableAttachRequest request, IDebuggerProxy proxy)
   {
     if (_project == null) throw new InvalidOperationException("Strategy has not been prepared.");
 
@@ -58,7 +58,7 @@ public class StandardLaunchStrategy(
     return Task.CompletedTask;
   }
 
-  public void OnDebugSessionReady(DebugSession debugSession)
+  public void OnDebugSessionReady(DebugSession debugSession, IDebuggerProxy proxy)
   {
 
   }

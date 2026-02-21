@@ -170,9 +170,9 @@ public class DebugOrchestrator(
 
       }
 
-      var session = debugSessionFactory.Create(async (dapRequest) =>
+      var session = debugSessionFactory.Create(async (dapRequest, proxy) =>
              {
-               await strategy.TransformRequestAsync(dapRequest);
+               await strategy.TransformRequestAsync(dapRequest, proxy);
                return dapRequest;
              },
              clientService?.ClientOptions?.DebuggerOptions?.ApplyValueConverters ?? false
@@ -182,24 +182,21 @@ public class DebugOrchestrator(
 
       await strategy.PrepareAsync(project, cancellationToken);
 
-      var strategyProcessIdTask = strategy.GetProcessIdAsync();
-      if (strategyProcessIdTask != null)
+      _ = Task.Run(async () =>
       {
-        _ = Task.Run(async () =>
+        try
         {
-          try
-          {
-            var processId = await strategyProcessIdTask;
-            logger.LogInformation("Strategy reported debugee processId: {processId} for {project}", processId, projectName);
-          }
-          catch (Exception ex)
-          {
-            logger.LogError(ex, "Strategy failed to provide processId for {project}", projectName);
-          }
-        }, cancellationToken);
-      }
-
-      _ = session.ConfigurationDone.ContinueWith(x => strategy.OnDebugSessionReady(session), cancellationToken);
+          var proxy = await session.WaitForConfigurationDoneAsync();
+          strategy.OnDebugSessionReady(session, proxy);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+          logger.LogError(ex, "Failed to wait for DAP configurationDone");
+        }
+      }, cancellationToken);
 
       try
       {

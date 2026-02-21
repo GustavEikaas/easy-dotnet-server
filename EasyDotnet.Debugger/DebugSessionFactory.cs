@@ -9,7 +9,7 @@ namespace EasyDotnet.Debugger;
 public class DebugSessionFactory(ILoggerFactory loggerFactory) : IDebugSessionFactory
 {
   public DebugSession Create(
-    Func<InterceptableAttachRequest, Task<InterceptableAttachRequest>> attachRequestRewriter,
+    Func<InterceptableAttachRequest, IDebuggerProxy, Task<InterceptableAttachRequest>> attachRequestRewriter,
     bool applyValueConverters)
   {
     var valueConverterService = new ValueConverterService(
@@ -27,16 +27,15 @@ public class DebugSessionFactory(ILoggerFactory loggerFactory) : IDebugSessionFa
     var clientInterceptor = new ClientMessageInterceptor(
       loggerFactory.CreateLogger<ClientMessageInterceptor>(),
       valueConverterService,
-      attachRequestRewriter,
-      (int processId) => coordinator?.NotifyDebugeeProcessStarted(processId),
+      (a) => attachRequestRewriter(a, coordinator!.Proxy!),
+      processId => coordinator?.NotifyDebugeeProcessStarted(processId),
       () => coordinator?.NotifyConfigurationDone());
-
 
     var debuggerInterceptor = new DebuggerMessageInterceptor(
       loggerFactory.CreateLogger<DebuggerMessageInterceptor>(),
       valueConverterService,
       applyValueConverters,
-      (int processId) => coordinator?.NotifyDebugeeProcessStarted(processId));
+      processId => coordinator?.NotifyDebugeeProcessStarted(processId));
 
     coordinator = new DebugSessionCoordinator(
      loggerFactory.CreateLogger<DebugSessionCoordinator>(),

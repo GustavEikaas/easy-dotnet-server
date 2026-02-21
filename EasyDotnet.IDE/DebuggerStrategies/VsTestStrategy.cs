@@ -41,7 +41,7 @@ public class VsTestStrategy(ILogger<VsTestStrategy> logger) : IDebugSessionStrat
     return Task.CompletedTask;
   }
 
-  public Task TransformRequestAsync(InterceptableAttachRequest request)
+  public Task TransformRequestAsync(InterceptableAttachRequest request, IDebuggerProxy proxy)
   {
     if (_vsTestWrapperProcess is null || _project is null)
     {
@@ -58,7 +58,7 @@ public class VsTestStrategy(ILogger<VsTestStrategy> logger) : IDebugSessionStrat
     return Task.CompletedTask;
   }
 
-  public void OnDebugSessionReady(DebugSession debugSession)
+  public void OnDebugSessionReady(DebugSession debugSession, IDebuggerProxy proxy)
   {
 
   }
