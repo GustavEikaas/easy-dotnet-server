@@ -189,6 +189,7 @@ public static class DebuggerPayloadLocator
   private static string GetBaseDir()
   {
     var assemblyLocation = Assembly.GetExecutingAssembly().Location;
-    return Path.Combine(assemblyLocation, "../", "../", "DebuggerPayloads");
+    var toolExeDir = Path.GetDirectoryName(assemblyLocation) ?? throw new InvalidOperationException("Unable to determine assembly directory");
+    return Path.Combine(toolExeDir, "DebuggerPayloads");
   }
 }
