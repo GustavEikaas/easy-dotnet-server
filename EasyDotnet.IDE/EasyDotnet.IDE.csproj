@@ -12,7 +12,7 @@
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <IncludePackageReadmeFile>true</IncludePackageReadmeFile>
-    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);IncludeBuildServerInPack</TargetsForTfmSpecificContentInPackage>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);IncludeDynamicContentInPack</TargetsForTfmSpecificContentInPackage>
   </PropertyGroup>
   <ItemGroup>
     <None Include="..\LICENSE" Pack="true" PackagePath="" />
@@ -53,7 +53,7 @@
     <ProjectReference Include="..\EasyDotnet.BuildServer.Contracts\EasyDotnet.BuildServer.Contracts.csproj" />
   </ItemGroup>
 
- <Target Name="PublishBuildServers" BeforeTargets="Build">
+  <Target Name="PublishBuildServers" BeforeTargets="Build">
     <PropertyGroup>
       <BuildServerOutputPath>$(OutputPath)Tools\BuildServer\</BuildServerOutputPath>
     </PropertyGroup>
@@ -71,15 +71,6 @@
       Properties="TargetFramework=net472;Configuration=$(Configuration);PublishDir=$(MSBuildProjectDirectory)\$(BuildServerOutputPath)net472\;SelfContained=false" />
     
     <Message Text="BuildServer publish complete at $(BuildServerOutputPath)" Importance="high" />
-  </Target>
-
-  <Target Name="IncludeBuildServerInPack" DependsOnTargets="PublishBuildServers">
-    <ItemGroup>
-      <TfmSpecificPackageFile Include="$(OutputPath)Tools\BuildServer\**\*">
-        <PackagePath>tools/$(LowestNetCoreTfm)/any/BuildServer/%(RecursiveDir)%(Filename)%(Extension)</PackagePath>
-      </TfmSpecificPackageFile>
-    </ItemGroup>
-    <Message Text="Added @(TfmSpecificPackageFile->Count()) BuildServer files to pack" Importance="high" />
   </Target>
 
   <Target Name="PublishDebuggerPayloads" BeforeTargets="Build">
@@ -100,11 +91,16 @@
       Properties="TargetFramework=net6.0;Configuration=$(Configuration);PublishDir=$(MSBuildProjectDirectory)\$(PayloadsOutputPath)StartupHook\;SelfContained=false" />
   </Target>
 
-  <Target Name="IncludePayloadsInPack" DependsOnTargets="PublishDebuggerPayloads" BeforeTargets="GenerateNuspec">
+  <Target Name="IncludeDynamicContentInPack" DependsOnTargets="PublishBuildServers;PublishDebuggerPayloads">
     <ItemGroup>
-      <TfmSpecificPackageFile Include="$(OutputPath)DebuggerPayloads\**\*">
-        <PackagePath>tools/$(TargetFramework)/any/DebuggerPayloads/%(RecursiveDir)%(Filename)%(Extension)</PackagePath>
-      </TfmSpecificPackageFile>
+      <_PackBuildServer Include="$(OutputPath)Tools\BuildServer\**\*">
+        <PackagePath>tools/$(LowestNetCoreTfm)/any/BuildServer/%(RecursiveDir)%(Filename)%(Extension)</PackagePath>
+      </_PackBuildServer>
+      <_PackPayloads Include="$(OutputPath)DebuggerPayloads\**\*">
+        <PackagePath>tools/$(LowestNetCoreTfm)/any/DebuggerPayloads/%(RecursiveDir)%(Filename)%(Extension)</PackagePath>
+      </_PackPayloads>
+      <TfmSpecificPackageFile Include="@(_PackBuildServer);@(_PackPayloads)" />
     </ItemGroup>
+    <Message Text="Successfully staged BuildServer and DebuggerPayloads for NuGet packing." Importance="high" />
   </Target>
 </Project>
