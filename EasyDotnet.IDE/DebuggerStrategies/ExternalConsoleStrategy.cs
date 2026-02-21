@@ -28,8 +28,8 @@ public class ExternalConsoleStrategy(ILogger<ExternalConsoleStrategy> logger) : 
 
     _externalConsoleProcess = Process.Start(new ProcessStartInfo
     {
-      FileName = "dotnet",
-      ArgumentList = { "C:/Users/Gustav/repo/easy-dotnet-server/EasyDotnet.ExternalConsole/bin/Debug/net8.0/EasyDotnet.ExternalConsole.dll", "--pipe", pipeName },
+      FileName = "cmd.exe",
+      ArgumentList = { "/k", "dotnet", "C:/Users/gusta/repo/easy-dotnet-server/EasyDotnet.ExternalConsole/bin/Debug/net8.0/EasyDotnet.ExternalConsole.dll", "--pipe", pipeName },
       UseShellExecute = true
     }) ?? throw new InvalidOperationException("Failed to start external console process");
 
@@ -92,9 +92,19 @@ public class ExternalConsoleStrategy(ILogger<ExternalConsoleStrategy> logger) : 
 
   public void OnDebugSessionReady(DebugSession debugSession)
   {
-    var diagnosticsClient = new DiagnosticsClient(_pid);
-    logger.LogInformation("Resuming runtime");
-    diagnosticsClient.ResumeRuntime();
+    logger.LogInformation("Resuming runtime via Startup Hook RPC");
+
+    if (_rpc is not null)
+    {
+      // Fire and forget the resume command to unblock the Startup Hook.
+      // If you can change IDebugSessionStrategy to make this method async, 
+      // you should absolutely do 'await _rpc.InvokeAsync("resume");' instead.
+      _ = _rpc.InvokeAsync("resume");
+    }
+    else
+    {
+      logger.LogWarning("RPC connection is null, cannot resume the target process.");
+    }
   }
 }
 

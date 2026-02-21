@@ -35,6 +35,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EasyDotnet.BuildServer.Cont
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EasyDotnet.ExternalConsole", "EasyDotnet.ExternalConsole\EasyDotnet.ExternalConsole.csproj", "{D884E2E9-FC50-4923-AA16-78EC9778EAC5}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EasyDotnet.StartupHook", "EasyDotnet.StartupHook\EasyDotnet.StartupHook.csproj", "{4142D833-C3EB-4401-947D-B8A980603C56}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -237,6 +239,18 @@ Global
 		{D884E2E9-FC50-4923-AA16-78EC9778EAC5}.Release|x64.Build.0 = Release|Any CPU
 		{D884E2E9-FC50-4923-AA16-78EC9778EAC5}.Release|x86.ActiveCfg = Release|Any CPU
 		{D884E2E9-FC50-4923-AA16-78EC9778EAC5}.Release|x86.Build.0 = Release|Any CPU
+		{4142D833-C3EB-4401-947D-B8A980603C56}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4142D833-C3EB-4401-947D-B8A980603C56}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4142D833-C3EB-4401-947D-B8A980603C56}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{4142D833-C3EB-4401-947D-B8A980603C56}.Debug|x64.Build.0 = Debug|Any CPU
+		{4142D833-C3EB-4401-947D-B8A980603C56}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{4142D833-C3EB-4401-947D-B8A980603C56}.Debug|x86.Build.0 = Debug|Any CPU
+		{4142D833-C3EB-4401-947D-B8A980603C56}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4142D833-C3EB-4401-947D-B8A980603C56}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4142D833-C3EB-4401-947D-B8A980603C56}.Release|x64.ActiveCfg = Release|Any CPU
+		{4142D833-C3EB-4401-947D-B8A980603C56}.Release|x64.Build.0 = Release|Any CPU
+		{4142D833-C3EB-4401-947D-B8A980603C56}.Release|x86.ActiveCfg = Release|Any CPU
+		{4142D833-C3EB-4401-947D-B8A980603C56}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
