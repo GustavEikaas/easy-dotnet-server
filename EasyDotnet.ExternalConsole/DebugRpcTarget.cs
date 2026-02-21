@@ -5,7 +5,7 @@ using StreamJsonRpc;
 
 namespace EasyDotnet.ExternalConsole;
 
-public sealed class DebugRpcTarget : IAsyncDisposable
+public sealed class DebugRpcTarget(string hook) : IAsyncDisposable
 {
   private NamedPipeServerStream? _hookPipeServer;
 
@@ -21,7 +21,7 @@ public sealed class DebugRpcTarget : IAsyncDisposable
     var hookPipeName = PipeUtils.GeneratePipeName();
     _hookPipeServer = new NamedPipeServerStream(hookPipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
 
-    psi.EnvironmentVariables["DOTNET_STARTUP_HOOKS"] = GetStartupHookDllPath();
+    psi.EnvironmentVariables["DOTNET_STARTUP_HOOKS"] = hook;
     psi.EnvironmentVariables["EASY_DOTNET_HOOK_PIPE"] = hookPipeName;
 
     var process = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start process");
@@ -49,18 +49,6 @@ public sealed class DebugRpcTarget : IAsyncDisposable
       await _hookPipeServer.DisposeAsync();
     }
   }
-
-#pragma warning disable IDE0022 // Use expression body for method
-  private string GetStartupHookDllPath()
-  {
-#if DEBUG
-    const string file = "C:/Users/gusta/repo/easy-dotnet-server/EasyDotnet.StartupHook/bin/Debug/net6.0/EasyDotnet.StartupHook.dll";
-    return !File.Exists(file) ? throw new Exception($"Fatal, StartupHook dll not found in path: {file}") : file;
-#else
-    return "C:/Users/gusta/repo/easy-dotnet-server/EasyDotnet.StartupHook/bin/Debug/net6.0/EasyDotnet.StartupHook.dll";
-#endif
-  }
-#pragma warning restore IDE0022 // Use expression body for method
 }
 
 public static partial class PipeUtils

@@ -13,6 +13,10 @@ public sealed class DebugCommand : AsyncCommand<DebugCommand.Settings>
     [Description("The pipe to connect to")]
     [CommandOption("--pipe")]
     public string Pipe { get; init; } = "";
+
+    [Description("The startup hook to inject")]
+    [CommandOption("--hook")]
+    public string Hook { get; init; } = "";
   }
 
   public override async Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
@@ -27,7 +31,7 @@ public sealed class DebugCommand : AsyncCommand<DebugCommand.Settings>
     rpc.TraceSource.Switch.Level = SourceLevels.Verbose;
 #endif
 
-    rpc.AddLocalRpcTarget(new DebugRpcTarget());
+    rpc.AddLocalRpcTarget(new DebugRpcTarget(settings.Hook));
     rpc.StartListening();
 
     await rpc.Completion;

@@ -6,7 +6,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>dotnet-easydotnet</ToolCommandName>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
-    <Version>2.7.8</Version>
+    <Version>2.7.9</Version>
     <Authors>Gustav Eikaas</Authors>
     <PackageId>EasyDotnet</PackageId>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
@@ -17,7 +17,7 @@
   <ItemGroup>
     <None Include="..\LICENSE" Pack="true" PackagePath="" />
     <None Include="..\README.md" Pack="true" PackagePath="" />
-   <None Include="bin\Release\net8.0\Tools\**\*" Pack="true" PackagePath="tools/" Exclude="bin\Release\net8.0\Tools\BuildServer\**\*" />
+    <None Include="bin\Release\net8.0\Tools\**\*" Pack="true" PackagePath="tools/" Exclude="bin\Release\net8.0\Tools\BuildServer\**\*" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="DotNetOutdatedTool.Core" Version="4.6.8" />
@@ -79,5 +79,31 @@
       </TfmSpecificPackageFile>
     </ItemGroup>
     <Message Text="Added @(TfmSpecificPackageFile->Count()) BuildServer files to pack" Importance="high" />
+  </Target>
+
+  <Target Name="PublishDebuggerPayloads" BeforeTargets="Build">
+    <PropertyGroup>
+      <PayloadsOutputPath>$(OutputPath)DebuggerPayloads\</PayloadsOutputPath>
+    </PropertyGroup>
+
+    <Message Text="Publishing ExternalConsole payload..." Importance="high" />
+    <MSBuild 
+      Projects="..\EasyDotnet.ExternalConsole\EasyDotnet.ExternalConsole.csproj" 
+      Targets="Publish" 
+      Properties="Configuration=$(Configuration);PublishDir=$(MSBuildProjectDirectory)\$(PayloadsOutputPath)ExternalConsole\;SelfContained=false" />
+
+    <Message Text="Publishing StartupHook payload..." Importance="high" />
+    <MSBuild 
+      Projects="..\EasyDotnet.StartupHook\EasyDotnet.StartupHook.csproj" 
+      Targets="Publish" 
+      Properties="Configuration=$(Configuration);PublishDir=$(MSBuildProjectDirectory)\$(PayloadsOutputPath)StartupHook\;SelfContained=false" />
+  </Target>
+
+  <Target Name="IncludePayloadsInPack" DependsOnTargets="PublishDebuggerPayloads" BeforeTargets="GenerateNuspec">
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="$(OutputPath)DebuggerPayloads\**\*">
+        <PackagePath>tools/$(TargetFramework)/any/DebuggerPayloads/%(RecursiveDir)%(Filename)%(Extension)</PackagePath>
+      </TfmSpecificPackageFile>
+    </ItemGroup>
   </Target>
 </Project>

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO.Pipes;
+using System.Reflection;
 using EasyDotnet.Debugger;
 using EasyDotnet.Debugger.Messages;
 using EasyDotnet.IDE.Types;
@@ -25,10 +26,13 @@ public class ExternalConsoleStrategy(ILogger<ExternalConsoleStrategy> logger) : 
 
     _pipeServer = new NamedPipeServerStream(pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
 
+    var extWindowPath = DebuggerPayloadLocator.GetExternalConsolePath();
+    var hookPath = DebuggerPayloadLocator.GetStartupHookPath();
+
     _externalConsoleProcess = Process.Start(new ProcessStartInfo
     {
       FileName = "cmd.exe",
-      ArgumentList = { "/k", "dotnet", "C:/Users/gusta/repo/easy-dotnet-server/EasyDotnet.ExternalConsole/bin/Debug/net8.0/EasyDotnet.ExternalConsole.dll", "--pipe", pipeName },
+      ArgumentList = { "/k", "dotnet", extWindowPath, "--pipe", pipeName, "--hook", hookPath },
       UseShellExecute = true
     }) ?? throw new InvalidOperationException("Failed to start external console process");
 
@@ -108,3 +112,46 @@ public class ExternalConsoleStrategy(ILogger<ExternalConsoleStrategy> logger) : 
 }
 
 public sealed record InitializeResponse(int Pid);
+
+public static class DebuggerPayloadLocator
+{
+  public static string GetExternalConsolePath()
+  {
+    var path = "";
+#if DEBUG
+    path = Path.GetFullPath(Path.Join(GetAssemblyDir(), "../../../../EasyDotnet.ExternalConsole/bin/Debug/net8.0/EasyDotnet.ExternalConsole.dll"));
+#else
+    path = Path.Combine(GetBaseDir(), "ExternalConsole", "net8.0", "EasyDotnet.ExternalConsole.dll");
+#endif
+    if (!File.Exists(path))
+    {
+      throw new Exception("ExternalConsole dll not found");
+    }
+    return path;
+  }
+
+  public static string GetStartupHookPath()
+  {
+
+    var path = "";
+#if DEBUG
+    path = Path.GetFullPath(Path.Join(GetAssemblyDir(), "../../../../EasyDotnet.StartupHook/bin/Debug/net6.0/EasyDotnet.StartupHook.dll"));
+#else
+    path = Path.Combine(GetBaseDir(), "StartupHook", "net6.0", "EasyDotnet.StartupHook.dll");
+#endif
+    if (!File.Exists(path))
+    {
+      throw new Exception("StartupHook dll not found");
+    }
+    return path;
+  }
+
+  private static string GetAssemblyDir()
+  {
+    var assemblyLocation = Assembly.GetExecutingAssembly().Location;
+    return Path.GetDirectoryName(assemblyLocation)
+        ?? throw new InvalidOperationException("Unable to determine assembly directory");
+  }
+
+  private static string GetBaseDir() => Path.Combine(GetAssemblyDir(), "DebuggerPayloads");
+}
