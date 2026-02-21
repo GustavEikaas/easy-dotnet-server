@@ -58,6 +58,11 @@ public class VsTestStrategy(ILogger<VsTestStrategy> logger) : IDebugSessionStrat
     return Task.CompletedTask;
   }
 
+  public void OnDebugSessionReady(DebugSession debugSession)
+  {
+
+  }
+
   public Task<int>? GetProcessIdAsync() => _processIdTcs.Task;
 
   public ValueTask DisposeAsync()
@@ -114,7 +119,4 @@ public class VsTestStrategy(ILogger<VsTestStrategy> logger) : IDebugSessionStrat
       try { process.Dispose(); } catch { }
     }
   }
-
-  public void OnDebugSessionReady(DebugSession debugSession) => throw new NotImplementedException();
-
 }

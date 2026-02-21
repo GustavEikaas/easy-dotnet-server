@@ -58,9 +58,12 @@ public class StandardLaunchStrategy(
     return Task.CompletedTask;
   }
 
+  public void OnDebugSessionReady(DebugSession debugSession)
+  {
+
+  }
+
   public Task<int>? GetProcessIdAsync() => null!;
 
   public ValueTask DisposeAsync() => ValueTask.CompletedTask;
-  public void OnDebugSessionReady(DebugSession debugSession) => throw new NotImplementedException();
-
 }

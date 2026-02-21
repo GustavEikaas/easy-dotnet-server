@@ -14,16 +14,12 @@ public class StandardAttachStrategy(ILogger<StandardAttachStrategy> logger, int 
   public Task PrepareAsync(DotnetProject project, CancellationToken ct)
   {
     _project = project;
-
-
     logger.LogInformation("Starting Pid attach for {Project} with PID {pid}", project.ProjectName, pid);
-
     return Task.CompletedTask;
   }
 
   public Task TransformRequestAsync(InterceptableAttachRequest request)
   {
-
     request.Type = "request";
     request.Command = "attach";
     request.Arguments.Request = "attach";
@@ -36,9 +32,12 @@ public class StandardAttachStrategy(ILogger<StandardAttachStrategy> logger, int 
     return Task.CompletedTask;
   }
 
+  public void OnDebugSessionReady(DebugSession debugSession)
+  {
+
+  }
+
   public Task<int>? GetProcessIdAsync() => _processIdTcs.Task;
 
   public ValueTask DisposeAsync() => ValueTask.CompletedTask;
-  public void OnDebugSessionReady(DebugSession debugSession) => throw new NotImplementedException();
-
 }
