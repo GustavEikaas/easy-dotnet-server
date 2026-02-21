@@ -20,11 +20,13 @@ public class DebugSessionCoordinator(
   private readonly TaskCompletionSource<bool> _disposalStartedSource = new();
   private readonly TaskCompletionSource<bool> _processStartedSource = new();
   private readonly TaskCompletionSource<int?> _debugeeProcessStartedSource = new();
+  private readonly TaskCompletionSource _configurationDoneSource = new();
   private int _isDisposing;
   private Func<Task>? _onDispose;
 
   public Task ProcessStarted => _processStartedSource.Task;
   public Task DebugeeProcessStarted => _debugeeProcessStartedSource.Task;
+  public Task ConfigurationDone => _configurationDoneSource.Task;
   public Task Completion => _completionSource.Task;
   public Task DisposalStarted => _disposalStartedSource.Task;
   public int Port => tcpServer.Port;
@@ -116,6 +118,17 @@ public class DebugSessionCoordinator(
     _debugeeProcessStartedSource.SetResult(processId);
 
     StartTelemetryMonitoring(processId);
+  }
+
+  public void NotifyConfigurationDone()
+  {
+    if (_configurationDoneSource.Task.IsCompleted)
+    {
+      throw new Exception("ConfigurationDone already called");
+    }
+
+    logger.LogInformation("Configuration done event reported");
+    _configurationDoneSource.SetResult();
   }
 
   private void StartTelemetryMonitoring(int processId)

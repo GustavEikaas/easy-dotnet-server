@@ -1,5 +1,4 @@
-using System.Threading;
-using System.Threading.Tasks;
+using EasyDotnet.Debugger;
 using EasyDotnet.Debugger.Messages;
 using EasyDotnet.IDE.Types;
 using EasyDotnet.MsBuild;
@@ -40,4 +39,6 @@ public class StandardAttachStrategy(ILogger<StandardAttachStrategy> logger, int 
   public Task<int>? GetProcessIdAsync() => _processIdTcs.Task;
 
   public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+  public void OnDebugSessionReady(DebugSession debugSession) => throw new NotImplementedException();
+
 }

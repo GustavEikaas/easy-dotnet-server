@@ -1,8 +1,5 @@
-using System;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
+using EasyDotnet.Debugger;
 using EasyDotnet.Debugger.Messages;
 using EasyDotnet.Domain.Models.LaunchProfile;
 using EasyDotnet.IDE.Types;
@@ -64,4 +61,6 @@ public class StandardLaunchStrategy(
   public Task<int>? GetProcessIdAsync() => null!;
 
   public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+  public void OnDebugSessionReady(DebugSession debugSession) => throw new NotImplementedException();
+
 }

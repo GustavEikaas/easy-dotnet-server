@@ -22,12 +22,15 @@ public class DebugSessionFactory(ILoggerFactory loggerFactory) : IDebugSessionFa
     var processHost = new DebuggerProcessHost(
       loggerFactory.CreateLogger<DebuggerProcessHost>());
 
+    DebugSessionCoordinator? coordinator = null;
+
     var clientInterceptor = new ClientMessageInterceptor(
       loggerFactory.CreateLogger<ClientMessageInterceptor>(),
       valueConverterService,
-      attachRequestRewriter);
+      attachRequestRewriter,
+      (int processId) => coordinator?.NotifyDebugeeProcessStarted(processId),
+      () => coordinator?.NotifyConfigurationDone());
 
-    DebugSessionCoordinator? coordinator = null;
 
     var debuggerInterceptor = new DebuggerMessageInterceptor(
       loggerFactory.CreateLogger<DebuggerMessageInterceptor>(),

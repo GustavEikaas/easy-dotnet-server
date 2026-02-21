@@ -1,6 +1,3 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
 using EasyDotnet.Debugger.Messages;
 using EasyDotnet.MsBuild;
 
@@ -13,4 +10,6 @@ public interface IDebugSessionStrategy : IAsyncDisposable
   Task TransformRequestAsync(InterceptableAttachRequest request);
 
   Task<int>? GetProcessIdAsync();
+
+  void OnDebugSessionReady(Debugger.DebugSession debugSession);
 }

@@ -54,6 +54,7 @@ public class InterceptableAttachArguments
   public string? Request { get; set; }
   public string? Program { get; set; }
   public int? ProcessId { get; set; }
+  public bool StopAtEntry { get; set; }
   public string? Cwd { get; set; }
   public string[]? Args { get; set; }
   public Dictionary<string, string>? Env { get; set; }

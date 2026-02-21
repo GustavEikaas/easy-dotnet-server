@@ -170,7 +170,6 @@ public class DebugOrchestrator(
 
       }
 
-
       var session = debugSessionFactory.Create(async (dapRequest) =>
              {
                await strategy.TransformRequestAsync(dapRequest);
@@ -199,6 +198,8 @@ public class DebugOrchestrator(
           }
         }, cancellationToken);
       }
+
+      _ = session.ConfigurationDone.ContinueWith(x => strategy.OnDebugSessionReady(session), cancellationToken);
 
       try
       {

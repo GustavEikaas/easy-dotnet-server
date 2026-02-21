@@ -1,7 +1,5 @@
-using System;
 using System.Diagnostics;
-using System.Threading;
-using System.Threading.Tasks;
+using EasyDotnet.Debugger;
 using EasyDotnet.Debugger.Messages;
 using EasyDotnet.IDE.Types;
 using EasyDotnet.Infrastructure.Dap;
@@ -116,4 +114,7 @@ public class VsTestStrategy(ILogger<VsTestStrategy> logger) : IDebugSessionStrat
       try { process.Dispose(); } catch { }
     }
   }
+
+  public void OnDebugSessionReady(DebugSession debugSession) => throw new NotImplementedException();
+
 }

@@ -30,6 +30,7 @@
     <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.9" />
     <PackageReference Include="Microsoft.TestPlatform.TranslationLayer" Version="18.0.1" />
     <PackageReference Include="Microsoft.TemplateEngine.Edge" Version="9.0.304" />
+    <PackageReference Include="Microsoft.Diagnostics.NETCore.Client" Version="0.2.661903" />
     <PackageReference Include="Microsoft.TemplateEngine.IDE" Version="9.0.304" />
     <PackageReference Include="Microsoft.TemplateEngine.Utils" Version="9.0.304" />
     <PackageReference Include="Microsoft.TestPlatform" Version="18.0.1" />

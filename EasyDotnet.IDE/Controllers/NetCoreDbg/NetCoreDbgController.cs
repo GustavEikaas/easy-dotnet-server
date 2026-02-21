@@ -1,5 +1,3 @@
-using System.Threading;
-using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
 using EasyDotnet.IDE.DebuggerStrategies;
@@ -47,5 +45,5 @@ public class NetCoreDbgController(
   private IDebugSessionStrategy ResolveStrategy(DotnetProject project, string? launchProfileName) =>
     project.IsVsTest()
       ? debugStrategyFactory.CreateVsTestStrategy()
-      : debugStrategyFactory.CreateStandardLaunchStrategy(launchProfileName);
+      : debugStrategyFactory.CreateExternalConsoleStrategy();
 }

@@ -33,6 +33,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EasyDotnet.BuildServer", "E
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EasyDotnet.BuildServer.Contracts", "EasyDotnet.BuildServer.Contracts\EasyDotnet.BuildServer.Contracts.csproj", "{FDED3803-1699-4509-AB01-83D4680201F4}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EasyDotnet.ExternalConsole", "EasyDotnet.ExternalConsole\EasyDotnet.ExternalConsole.csproj", "{D884E2E9-FC50-4923-AA16-78EC9778EAC5}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -223,6 +225,18 @@ Global
 		{FDED3803-1699-4509-AB01-83D4680201F4}.Release|x64.Build.0 = Release|Any CPU
 		{FDED3803-1699-4509-AB01-83D4680201F4}.Release|x86.ActiveCfg = Release|Any CPU
 		{FDED3803-1699-4509-AB01-83D4680201F4}.Release|x86.Build.0 = Release|Any CPU
+		{D884E2E9-FC50-4923-AA16-78EC9778EAC5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D884E2E9-FC50-4923-AA16-78EC9778EAC5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D884E2E9-FC50-4923-AA16-78EC9778EAC5}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{D884E2E9-FC50-4923-AA16-78EC9778EAC5}.Debug|x64.Build.0 = Debug|Any CPU
+		{D884E2E9-FC50-4923-AA16-78EC9778EAC5}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{D884E2E9-FC50-4923-AA16-78EC9778EAC5}.Debug|x86.Build.0 = Debug|Any CPU
+		{D884E2E9-FC50-4923-AA16-78EC9778EAC5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D884E2E9-FC50-4923-AA16-78EC9778EAC5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D884E2E9-FC50-4923-AA16-78EC9778EAC5}.Release|x64.ActiveCfg = Release|Any CPU
+		{D884E2E9-FC50-4923-AA16-78EC9778EAC5}.Release|x64.Build.0 = Release|Any CPU
+		{D884E2E9-FC50-4923-AA16-78EC9778EAC5}.Release|x86.ActiveCfg = Release|Any CPU
+		{D884E2E9-FC50-4923-AA16-78EC9778EAC5}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -10,6 +10,7 @@ public class DebugSession : IAsyncDisposable
   public Task DisposalStarted => _coordinator.DisposalStarted;
   public Task ProcessStarted => _coordinator.ProcessStarted;
   public Task DebugeeProcessStarted => _coordinator.DebugeeProcessStarted;
+  public Task ConfigurationDone => _coordinator.ConfigurationDone;
   public int? ProcessId => _coordinator.ProcessId;
   public int Port => _coordinator.Port;
 
