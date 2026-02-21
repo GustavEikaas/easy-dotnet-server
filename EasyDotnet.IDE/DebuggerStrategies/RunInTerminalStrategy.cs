@@ -155,7 +155,7 @@ public static class DebuggerPayloadLocator
 #if DEBUG
     path = Path.GetFullPath(Path.Join(GetAssemblyDir(), "../../../../EasyDotnet.ExternalConsole/bin/Debug/net8.0/EasyDotnet.ExternalConsole.dll"));
 #else
-    path = Path.Combine(GetBaseDir(), "ExternalConsole", "net8.0", "EasyDotnet.ExternalConsole.dll");
+    path = Path.Combine(GetBaseDir(), "ExternalConsole", "EasyDotnet.ExternalConsole.dll");
 #endif
     if (!File.Exists(path))
     {
@@ -170,7 +170,7 @@ public static class DebuggerPayloadLocator
 #if DEBUG
     path = Path.GetFullPath(Path.Join(GetAssemblyDir(), "../../../../EasyDotnet.StartupHook/bin/Debug/net6.0/EasyDotnet.StartupHook.dll"));
 #else
-    path = Path.Combine(GetBaseDir(), "StartupHook", "net6.0", "EasyDotnet.StartupHook.dll");
+    path = Path.Combine(GetBaseDir(), "StartupHook", "EasyDotnet.StartupHook.dll");
 #endif
     if (!File.Exists(path))
     {
@@ -186,5 +186,9 @@ public static class DebuggerPayloadLocator
         ?? throw new InvalidOperationException("Unable to determine assembly directory");
   }
 
-  private static string GetBaseDir() => Path.Combine(GetAssemblyDir(), "DebuggerPayloads");
+  private static string GetBaseDir()
+  {
+    var assemblyLocation = Assembly.GetExecutingAssembly().Location;
+    return Path.Combine(assemblyLocation, "../", "../", "DebuggerPayloads");
+  }
 }
