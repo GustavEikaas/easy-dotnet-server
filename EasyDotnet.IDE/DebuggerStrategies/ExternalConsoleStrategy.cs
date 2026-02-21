@@ -132,7 +132,6 @@ public static class DebuggerPayloadLocator
 
   public static string GetStartupHookPath()
   {
-
     var path = "";
 #if DEBUG
     path = Path.GetFullPath(Path.Join(GetAssemblyDir(), "../../../../EasyDotnet.StartupHook/bin/Debug/net6.0/EasyDotnet.StartupHook.dll"));
