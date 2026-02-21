@@ -1,8 +1,5 @@
-using System;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
+using EasyDotnet.Debugger;
 using EasyDotnet.Debugger.Messages;
 using EasyDotnet.Domain.Models.LaunchProfile;
 using EasyDotnet.IDE.Types;
@@ -32,7 +29,7 @@ public class StandardLaunchStrategy(
     return Task.CompletedTask;
   }
 
-  public Task TransformRequestAsync(InterceptableAttachRequest request)
+  public Task TransformRequestAsync(InterceptableAttachRequest request, IDebuggerProxy proxy)
   {
     if (_project == null) throw new InvalidOperationException("Strategy has not been prepared.");
 
@@ -59,6 +56,11 @@ public class StandardLaunchStrategy(
         .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
 
     return Task.CompletedTask;
+  }
+
+  public void OnDebugSessionReady(DebugSession debugSession, IDebuggerProxy proxy)
+  {
+
   }
 
   public Task<int>? GetProcessIdAsync() => null!;

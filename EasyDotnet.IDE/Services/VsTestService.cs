@@ -127,6 +127,8 @@ public class VsTestService(
         var session = await debugOrchestrator.StartClientDebugSessionAsync(project.MSBuildProjectFullPath!, new(project.MSBuildProjectFullPath!, null, null, null), debugStrategyFactory.CreateStandardAttachStrategy(pid), cancellationToken);
         await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
         await session.ProcessStarted;
+        //TODO: make this change and remove the task delay, need to ask for a regression test as I am unable to reproduce
+        // await session.WaitForConfigurationDoneAsync();
 
         //We add a delay only on non-windows platforms to ensure the client is ready
         //#gh785
