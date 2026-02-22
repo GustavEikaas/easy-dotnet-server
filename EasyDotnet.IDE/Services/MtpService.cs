@@ -1,7 +1,7 @@
 using System.Runtime.CompilerServices;
 using EasyDotnet.Application.Interfaces;
-using EasyDotnet.Extensions;
 using EasyDotnet.IDE.DebuggerStrategies;
+using EasyDotnet.IDE.Extensions;
 using EasyDotnet.IDE.MTP.RPC;
 using EasyDotnet.Infrastructure;
 using EasyDotnet.MsBuild;

@@ -1,5 +1,3 @@
-using System;
-using System.Linq;
 using EasyDotnet.IDE;
 using EasyDotnet.Types;
 
@@ -23,16 +21,22 @@ public static class TestCaseExtensions
     };
   }
 
-
-  public static TestRunResult ToTestRunResult(this TestResult x) => new()
+  public static TestRunResult ToTestRunResult(this TestResult x)
   {
-    Duration = (long?)x.Duration.TotalMilliseconds,
-    StackTrace = (x.ErrorStackTrace?.Split([Environment.NewLine, "\n"], StringSplitOptions.RemoveEmptyEntries) ?? []).ToBatchedAsyncEnumerable(30),
-    ErrorMessage = x.ErrorMessage?.Split([Environment.NewLine, "\n"], StringSplitOptions.RemoveEmptyEntries) ?? [],
-    Id = x.TestCase.Id.ToString(),
-    Outcome = GetTestOutcome(x.Outcome),
-    StdOut = (x.GetStandardOutput()?.Split([Environment.NewLine, "\n"], StringSplitOptions.RemoveEmptyEntries) ?? []).ToBatchedAsyncEnumerable(30),
-  };
+    var parsedStack = SimpleStackTraceParser.Parse(x.ErrorStackTrace);
+    var errorLocation = parsedStack.FirstOrDefault(frame => frame.IsUserCode);
+    return new()
+    {
+      Duration = (long?)x.Duration.TotalMilliseconds,
+      StackTrace = (x.ErrorStackTrace?.Split([Environment.NewLine, "\n"], StringSplitOptions.RemoveEmptyEntries) ?? []).ToBatchedAsyncEnumerable(30),
+      PrettyStackTrace = parsedStack.ToBatchedAsyncEnumerable(10),
+      FailingFrame = errorLocation,
+      ErrorMessage = x.ErrorMessage?.Split([Environment.NewLine, "\n"], StringSplitOptions.RemoveEmptyEntries) ?? [],
+      Id = x.TestCase.Id.ToString(),
+      Outcome = GetTestOutcome(x.Outcome),
+      StdOut = (x.GetStandardOutput()?.Split([Environment.NewLine, "\n"], StringSplitOptions.RemoveEmptyEntries) ?? []).ToBatchedAsyncEnumerable(30),
+    };
+  }
 
   public static string GetTestOutcome(TestOutcome outcome) => outcome switch
   {

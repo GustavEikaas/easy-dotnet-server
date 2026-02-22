@@ -1,9 +1,7 @@
-using System;
 using EasyDotnet.MTP.RPC.Models;
 using EasyDotnet.Types;
-using StreamJsonRpc;
 
-namespace EasyDotnet.Extensions;
+namespace EasyDotnet.IDE.Extensions;
 
 public static class TestNodeExtensions
 {
@@ -22,13 +20,20 @@ public static class TestNodeExtensions
     };
   }
 
-  public static TestRunResult ToTestRunResult(this TestNodeUpdate test) => new()
+  public static TestRunResult ToTestRunResult(this TestNodeUpdate test)
   {
-    Id = test.Node.Uid,
-    Outcome = test.Node.ExecutionState,
-    Duration = (long?)test.Node.Duration,
-    ErrorMessage = test.Node.Message?.Split([Environment.NewLine, "\n"], StringSplitOptions.RemoveEmptyEntries) ?? [],
-    StackTrace = (test.Node.StackTrace?.Split([Environment.NewLine, "\n"], StringSplitOptions.RemoveEmptyEntries) ?? []).AsAsyncEnumerable(),
-    StdOut = (test.Node.StandardOutput?.Split([Environment.NewLine, "\n"], StringSplitOptions.RemoveEmptyEntries) ?? []).AsAsyncEnumerable()
-  };
+    var parsedStack = SimpleStackTraceParser.Parse(test.Node.StackTrace);
+    var errorLocation = parsedStack.FirstOrDefault(frame => frame.IsUserCode);
+    return new()
+    {
+      Id = test.Node.Uid,
+      Outcome = test.Node.ExecutionState,
+      Duration = (long?)test.Node.Duration,
+      ErrorMessage = test.Node.Message?.Split([Environment.NewLine, "\n"], StringSplitOptions.RemoveEmptyEntries) ?? [],
+      PrettyStackTrace = parsedStack.ToBatchedAsyncEnumerable(10),
+      FailingFrame = errorLocation,
+      StackTrace = (test.Node.StackTrace?.Split([Environment.NewLine, "\n"], StringSplitOptions.RemoveEmptyEntries) ?? []).ToBatchedAsyncEnumerable(30),
+      StdOut = (test.Node.StandardOutput?.Split([Environment.NewLine, "\n"], StringSplitOptions.RemoveEmptyEntries) ?? []).ToBatchedAsyncEnumerable(30)
+    };
+  }
 }
