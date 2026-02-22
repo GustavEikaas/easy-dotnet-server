@@ -1,18 +1,14 @@
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
+using System.Runtime.CompilerServices;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Extensions;
 using EasyDotnet.IDE.DebuggerStrategies;
-using EasyDotnet.IDE.Services;
+using EasyDotnet.IDE.MTP.RPC;
+using EasyDotnet.Infrastructure;
 using EasyDotnet.MsBuild;
 using EasyDotnet.MTP;
-using EasyDotnet.MTP.RPC;
 using EasyDotnet.Types;
 
-namespace EasyDotnet.Services;
+namespace EasyDotnet.IDE.Services;
 
 public class MtpService(
   IEditorService editorService,
@@ -27,12 +23,15 @@ public class MtpService(
     }
 
     await using var client = await Client.CreateAsync(testExecutablePath);
-    var discovered = await client.DiscoverTestsAsync(token);
-    var tests = discovered.Where(x => x != null && x.Node != null).Select(x => x.ToDiscoveredTest()).ToList();
-    return tests;
+    var discovered = await client.DiscoverTestsAsync(token).ToListAsync(token);
+    return [.. discovered.Where(x => x != null && x.Node != null).Select(x => x.ToDiscoveredTest())];
   }
 
-  public async Task<List<TestRunResult>> DebugTestsAsync(DotnetProject project, string testExecutablePath, RunRequestNode[] filter, CancellationToken token)
+  public async IAsyncEnumerable<TestRunResult> DebugTestsAsync(
+    DotnetProject project,
+    string testExecutablePath,
+    RunRequestNode[] filter,
+    [EnumeratorCancellation] CancellationToken token)
   {
     if (!File.Exists(testExecutablePath))
     {
@@ -47,22 +46,29 @@ public class MtpService(
       token);
 
     await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
-    await session.ProcessStarted;
+    await session.WaitForConfigurationDoneAsync();
 
-    var runResults = await client.RunTestsAsync(filter, token);
-    var results = runResults.Select(x => x.ToTestRunResult()).ToList();
-    return results;
+    await foreach (var update in client.RunTestsAsync(filter, token))
+    {
+      yield return update.ToTestRunResult();
+    }
   }
 
-  public async Task<List<TestRunResult>> RunTestsAsync(string testExecutablePath, RunRequestNode[] filter, CancellationToken token)
+  public async IAsyncEnumerable<TestRunResult> RunTestsAsync(
+    string testExecutablePath,
+    RunRequestNode[] filter,
+    [EnumeratorCancellation] CancellationToken token)
   {
     if (!File.Exists(testExecutablePath))
     {
       throw new FileNotFoundException("Test executable not found.", testExecutablePath);
     }
+
     await using var client = await Client.CreateAsync(testExecutablePath);
-    var runResults = await client.RunTestsAsync(filter, token);
-    var results = runResults.Select(x => x.ToTestRunResult()).ToList();
-    return results;
+
+    await foreach (var update in client.RunTestsAsync(filter, token))
+    {
+      yield return update.ToTestRunResult();
+    }
   }
 }

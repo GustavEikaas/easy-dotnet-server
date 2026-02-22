@@ -1,17 +1,15 @@
-using System;
 using System.Diagnostics;
-using System.Linq;
 using System.Net;
 using System.Net.Sockets;
-using System.Threading;
-using System.Threading.Tasks;
-using EasyDotnet.IDE.MTP;
+using System.Runtime.CompilerServices;
+using System.Threading.Channels;
+using EasyDotnet.MTP;
 using EasyDotnet.MTP.RPC.Models;
 using EasyDotnet.MTP.RPC.Requests;
 using EasyDotnet.MTP.RPC.Response;
 using StreamJsonRpc;
 
-namespace EasyDotnet.MTP.RPC;
+namespace EasyDotnet.IDE.MTP.RPC;
 
 public class Client : IAsyncDisposable
 {
@@ -90,58 +88,63 @@ public class Client : IAsyncDisposable
     return new Client(jsonRpc, tcpClient, processHandle, server, res.ProcessId ?? processHandle.Id);
   }
 
-  public async Task<TestNodeUpdate[]> DiscoverTestsAsync(CancellationToken cancellationToken = default)
+  public IAsyncEnumerable<TestNodeUpdate> DiscoverTestsAsync(CancellationToken cancellationToken = default)
+  {
+    var runId = Guid.NewGuid();
+    return StreamRpcAsync("testing/discoverTests", new DiscoveryRequest(runId), runId, cancellationToken);
+  }
+
+  public async IAsyncEnumerable<TestNodeUpdate> RunTestsAsync(RunRequestNode[] filter, [EnumeratorCancellation] CancellationToken cancellationToken)
   {
     var runId = Guid.NewGuid();
 
-    return await WithCancellation(
-           runId,
-           () => _jsonRpc.InvokeWithParameterObjectAsync<DiscoveryResponse>(
-               "testing/discoverTests", new DiscoveryRequest(runId), cancellationToken),
-           cancellationToken
-       );
-  }
-
-  public async Task<TestNodeUpdate[]> RunTestsAsync(RunRequestNode[] filter, CancellationToken cancellationToken)
-  {
-    var runId = Guid.NewGuid();
-
-    var tests = await WithCancellation(
-           runId,
-           () => _jsonRpc.InvokeWithParameterObjectAsync<DiscoveryResponse>(
-               "testing/runTests", new RunRequest(filter, runId), cancellationToken),
-           cancellationToken
-       );
-
-    return [.. tests.Where(x => x.Node.ExecutionState != "in-progress" && x.Node.ExecutionState != "discovered")];
-  }
-
-  private async Task<TestNodeUpdate[]> WithCancellation(
-      Guid runId,
-      Func<Task> invokeRpcAsync,
-      CancellationToken cancellationToken)
-  {
-    var tcs = new TaskCompletionSource<TestNodeUpdate[]>(TaskCreationOptions.RunContinuationsAsynchronously);
-
-    _server.RegisterResponseListener(runId, tcs);
-
-    using (cancellationToken.Register(() =>
+    await foreach (var node in StreamRpcAsync("testing/runTests", new RunRequest(filter, runId), runId, cancellationToken))
     {
-      tcs.TrySetCanceled(cancellationToken);
-      _server.RemoveResponseListener(runId);
-    }))
+      if (node.Node.ExecutionState != "in-progress" && node.Node.ExecutionState != "discovered")
+      {
+        yield return node;
+      }
+    }
+  }
+
+  private async IAsyncEnumerable<TestNodeUpdate> StreamRpcAsync(
+        string rpcMethod,
+        object requestObject,
+        Guid runId,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+  {
+    var channel = Channel.CreateUnbounded<TestNodeUpdate>();
+    _server.RegisterStreamListener(runId, channel.Writer);
+
+    var rpcTask = Task.Run(async () =>
     {
       try
       {
-        await invokeRpcAsync();
-        return await tcs.Task;
+        await _jsonRpc.InvokeWithParameterObjectAsync<DiscoveryResponse>(rpcMethod, requestObject, cancellationToken);
       }
-      catch
+      catch (Exception ex)
       {
-        _server.RemoveResponseListener(runId);
-        throw;
+        channel.Writer.TryComplete(ex);
       }
+      finally
+      {
+        channel.Writer.TryComplete();
+        _server.RemoveStreamListener(runId);
+      }
+    }, cancellationToken);
+
+    await using var _ = cancellationToken.Register(() =>
+    {
+      _server.RemoveStreamListener(runId);
+      channel.Writer.TryComplete();
+    });
+
+    await foreach (var node in channel.Reader.ReadAllAsync(cancellationToken))
+    {
+      yield return node;
     }
+
+    await rpcTask;
   }
 
   public async ValueTask DisposeAsync()

@@ -8,7 +8,6 @@ using EasyDotnet.IDE.Utils;
 using EasyDotnet.Infrastructure.Settings;
 using EasyDotnet.MsBuild;
 using EasyDotnet.MTP;
-using EasyDotnet.Services;
 using EasyDotnet.Types;
 using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
@@ -67,19 +66,12 @@ public class TestController(
     }
     var project = await GetProject(projectPath, targetFrameworkMoniker, configuration, token);
 
-
     if (project.IsMTP())
     {
       var path = GetExecutablePath(project);
-
-      var res = await WithTimeout(
-        (token) => mtpService.DebugTestsAsync(project, path, filter, token),
-        TimeSpan.FromMinutes(3),
-        token
-      );
-      foreach (var item in res)
+      await foreach (var result in mtpService.DebugTestsAsync(project, path, filter, token))
       {
-        yield return item;
+        yield return result;
       }
     }
     else
@@ -111,25 +103,19 @@ public class TestController(
 
     var runSettingsFile = settingsService.GetProjectRunSettings(projectPath!);
     var runSettings = runSettingsFile is not null ? fileSystem.File.ReadAllText(runSettingsFile) : null;
-    logger.LogInformation("Using runsettings {runSettings}", runSettingsFile);
 
     if (project.IsMTP())
     {
       var path = GetExecutablePath(project);
-
-      var res = await WithTimeout(
-        (token) => mtpService.RunTestsAsync(path, filter, token),
-        TimeSpan.FromMinutes(3),
-        token
-      );
-      foreach (var item in res)
+      await foreach (var result in mtpService.RunTestsAsync(path, filter, token))
       {
-        yield return item;
+        yield return result;
       }
     }
     else
     {
       var testIds = filter.Select(x => Guid.Parse(x.Uid)).ToArray();
+      logger.LogInformation("Using runsettings {runSettings}", runSettingsFile);
       await foreach (var result in vsTestService.RunTests(project, testIds, runSettings, token))
       {
         yield return result;

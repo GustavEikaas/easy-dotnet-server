@@ -1,50 +1,38 @@
-using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Threading.Tasks;
+using System.Threading.Channels;
 using EasyDotnet.MTP.RPC.Models;
 using Newtonsoft.Json;
 using StreamJsonRpc;
 
-namespace EasyDotnet.MTP;
+namespace EasyDotnet.IDE.MTP;
 
 internal class MtpServer
 {
-  private readonly ConcurrentDictionary<Guid, TaskCompletionSource<TestNodeUpdate[]>> _listeners = new();
-  private readonly ConcurrentDictionary<Guid, List<TestNodeUpdate>> _buffers = new();
-
-  public void RegisterResponseListener(Guid runId, TaskCompletionSource<TestNodeUpdate[]> task) => _ = _listeners.TryAdd(runId, task);
-
-  public void RemoveResponseListener(Guid runId) => _ = _listeners.TryRemove(runId, out _);
+  private readonly ConcurrentDictionary<Guid, ChannelWriter<TestNodeUpdate>> _streamListeners = new();
+  public void RegisterStreamListener(Guid runId, ChannelWriter<TestNodeUpdate> writer) => _streamListeners.TryAdd(runId, writer);
+  public void RemoveStreamListener(Guid runId) => _streamListeners.TryRemove(runId, out _);
 
   [JsonRpcMethod("client/attachDebugger", UseSingleObjectParameterDeserialization = true)]
   public static Task AttachDebuggerAsync(AttachDebuggerInfo attachDebuggerInfo) => throw new NotImplementedException();
 
   [JsonRpcMethod("testing/testUpdates/tests")]
-  public Task TestsUpdateAsync(Guid runId, TestNodeUpdate[]? changes)
+  public void TestsUpdate(Guid runId, TestNodeUpdate[]? changes)
   {
-    _listeners.TryGetValue(runId, out var handler);
-    if (handler is null)
+    if (_streamListeners.TryGetValue(runId, out var streamWriter))
     {
-      return Task.CompletedTask;
-    }
-
-    if (changes is null)
-    {
-      var success = _buffers.TryGetValue(runId, out var result);
-      if (!success || result is null)
+      if (changes is null)
       {
-        throw new Exception("No result from server");
+        streamWriter.TryComplete();
+        _streamListeners.TryRemove(runId, out _);
       }
-      handler.SetResult([.. result]);
-      _buffers.TryRemove(runId, out _);
-      _listeners.TryRemove(runId, out _);
+      else
+      {
+        foreach (var change in changes)
+        {
+          streamWriter.TryWrite(change);
+        }
+      }
     }
-    else
-    {
-      _buffers.GetOrAdd(runId, _ => []).AddRange(changes);
-    }
-    return Task.CompletedTask;
   }
 
   [JsonRpcMethod("telemetry/update", UseSingleObjectParameterDeserialization = true)]
