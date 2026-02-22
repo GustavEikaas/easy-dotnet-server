@@ -1,6 +1,4 @@
-using System.Diagnostics;
 using System.IO.Pipes;
-using System.Reflection;
 using System.Text.Json;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Debugger;
@@ -40,11 +38,12 @@ public class RunInTerminalStrategy(
   {
     if (_project == null) throw new InvalidOperationException("Strategy has not been prepared.");
 
-    var hookPath = DebuggerPayloadLocator.GetStartupHookPath();
-
-    var terminalArgs = new[] { "dotnet", _project.TargetPath! };
+    var hookPath = StartupHookLocator.GetStartupHookPath();
+    var extraArgs = BuildCommandLineArgs();
+    var terminalArgs = new List<string>() { "dotnet", _project.TargetPath! };
+    terminalArgs.AddRange(extraArgs);
     var terminalKind = ExtractTerminalKind(request.Arguments.Console);
-    var runInTerminalReq = RunInTerminalRequest.Create(terminalKind, terminalArgs);
+    var runInTerminalReq = RunInTerminalRequest.Create(terminalKind, [.. terminalArgs]);
 
     var cwd = !string.IsNullOrWhiteSpace(_activeProfile?.WorkingDirectory)
         ? DebugStrategyUtils.NormalizePath(DebugStrategyUtils.InterpolateVariables(_activeProfile.WorkingDirectory, _project))
@@ -52,18 +51,16 @@ public class RunInTerminalStrategy(
 
     runInTerminalReq.Arguments.Cwd = cwd;
 
-    var env = DebugStrategyUtils.GetEnvironmentVariables(_activeProfile);
     var hookPipeName = PipeUtils.GeneratePipeName();
     _hookPipeServer = new NamedPipeServerStream(hookPipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
 
-    runInTerminalReq.Arguments.Env =
-        new Dictionary<string, string>(
-            runInTerminalReq.Arguments.Env ?? []
-        )
-        {
-          ["DOTNET_STARTUP_HOOKS"] = hookPath,
-          ["EASY_DOTNET_HOOK_PIPE"] = hookPipeName
-        }.Concat(env).ToDictionary();
+    var env = DebugStrategyUtils.GetEnvironmentVariables(_activeProfile);
+
+    runInTerminalReq.Arguments.Env = BuildEnvironmentVariables(
+        request.Arguments.Env,
+        env,
+        hookPath,
+        hookPipeName);
 
     logger.LogInformation("Sending runInTerminal request to Neovim: {payload}", JsonSerializer.Serialize(runInTerminalReq, new JsonSerializerOptions { WriteIndented = true }));
     var termResponse = await proxy.RunClientRequestAsync(runInTerminalReq, CancellationToken.None);
@@ -139,38 +136,52 @@ public class RunInTerminalStrategy(
       _ => RunInTerminalKind.Internal
     };
   }
-}
 
-public sealed record InitializeResponse(int Pid);
-
-public static class DebuggerPayloadLocator
-{
-  public static string GetStartupHookPath()
+  private string[] BuildCommandLineArgs()
   {
-    var path = "";
-#if DEBUG
-    path = Path.GetFullPath(Path.Join(GetAssemblyDir(), "../../../../EasyDotnet.StartupHook/bin/Debug/net6.0/EasyDotnet.StartupHook.dll"));
-#else
-    path = Path.Combine(GetBaseDir(), "StartupHook", "EasyDotnet.StartupHook.dll");
-#endif
-    if (!File.Exists(path))
+    if (_activeProfile?.CommandLineArgs is not null && _project is not null)
     {
-      throw new Exception("StartupHook dll not found");
+      var interpolatedArgs = DebugStrategyUtils.InterpolateVariables(_activeProfile.CommandLineArgs, _project);
+      return DebugStrategyUtils.SplitCommandLineArgs(interpolatedArgs);
     }
-    return path;
+    return [];
   }
 
-  private static string GetAssemblyDir()
+  private static Dictionary<string, string> BuildEnvironmentVariables(
+        Dictionary<string, string>? requestEnv,
+        Dictionary<string, string>? profileEnv,
+        string hookPath,
+        string hookPipeName)
   {
-    var assemblyLocation = Assembly.GetExecutingAssembly().Location;
-    return Path.GetDirectoryName(assemblyLocation)
-        ?? throw new InvalidOperationException("Unable to determine assembly directory");
-  }
+    var finalEnv = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-  private static string GetBaseDir()
-  {
-    var assemblyLocation = Assembly.GetExecutingAssembly().Location;
-    var toolExeDir = Path.GetDirectoryName(assemblyLocation) ?? throw new InvalidOperationException("Unable to determine assembly directory");
-    return Path.Combine(toolExeDir, "DebuggerPayloads");
+    if (profileEnv != null)
+    {
+      foreach (var kvp in profileEnv)
+      {
+        finalEnv[kvp.Key] = kvp.Value;
+      }
+    }
+
+    if (requestEnv != null)
+    {
+      foreach (var kvp in requestEnv)
+      {
+        finalEnv[kvp.Key] = kvp.Value;
+      }
+    }
+
+    if (finalEnv.TryGetValue("DOTNET_STARTUP_HOOKS", out var existingHooks) && !string.IsNullOrWhiteSpace(existingHooks))
+    {
+      finalEnv["DOTNET_STARTUP_HOOKS"] = $"{hookPath}{Path.PathSeparator}{existingHooks}";
+    }
+    else
+    {
+      finalEnv["DOTNET_STARTUP_HOOKS"] = hookPath;
+    }
+
+    finalEnv["EASY_DOTNET_HOOK_PIPE"] = hookPipeName;
+
+    return finalEnv;
   }
 }
