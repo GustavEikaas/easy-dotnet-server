@@ -7,10 +7,7 @@ internal static class StartupHook
   public static void Initialize()
   {
     LogIfDebug($"ProcessId: {Environment.ProcessId}");
-    LogIfDebug($"ProcessName: {Environment.ProcessPath}");
-    LogIfDebug($"ThreadId: {Environment.CurrentManagedThreadId}");
     LogIfDebug($"CurrentDirectory: {Environment.CurrentDirectory}");
-    LogIfDebug($"OS: {Environment.OSVersion}");
     LogIfDebug($".NET Version: {Environment.Version}");
 
     var pipeName = Environment.GetEnvironmentVariable("EASY_DOTNET_HOOK_PIPE");
