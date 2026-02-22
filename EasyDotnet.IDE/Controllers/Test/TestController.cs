@@ -1,4 +1,5 @@
 using System.IO.Abstractions;
+using System.Runtime.CompilerServices;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
 using EasyDotnet.Domain.Models.Client;
@@ -53,13 +54,12 @@ public class TestController(
   }
 
   [JsonRpcMethod("test/debug")]
-  public async Task<IAsyncEnumerable<TestRunResult>> Debug(
+  public async IAsyncEnumerable<TestRunResult> Debug(
     string projectPath,
     string configuration,
     RunRequestNode[] filter,
     string? targetFrameworkMoniker = null,
-    CancellationToken token = default
-  )
+    [EnumeratorCancellation] CancellationToken token = default)
   {
     if (!clientService.IsInitialized)
     {
@@ -77,25 +77,31 @@ public class TestController(
         TimeSpan.FromMinutes(3),
         token
       );
-      return res.AsAsyncEnumerable();
+      foreach (var item in res)
+      {
+        yield return item;
+      }
     }
     else
     {
-      var runSettingsFile = settingsService.GetProjectRunSettings(projectPath!);
+      var runSettingsFile = settingsService.GetProjectRunSettings(projectPath);
       var runSettings = runSettingsFile is not null ? fileSystem.File.ReadAllText(runSettingsFile) : null;
       logger.LogInformation("Using runsettings {runSettings}", runSettingsFile);
-      return (await vsTestService.DebugTests(project, [.. filter.Select(x => Guid.Parse(x.Uid))], runSettings, token)).ToBatchedAsyncEnumerable(30);
+      var testIds = filter.Select(x => Guid.Parse(x.Uid)).ToArray();
+      await foreach (var result in vsTestService.DebugTests(project, testIds, runSettings, token))
+      {
+        yield return result;
+      }
     }
   }
 
   [JsonRpcMethod("test/run")]
-  public async Task<IAsyncEnumerable<TestRunResult>> Run(
+  public async IAsyncEnumerable<TestRunResult> Run(
     string projectPath,
     string configuration,
     RunRequestNode[] filter,
     string? targetFrameworkMoniker = null,
-    CancellationToken token = default
-  )
+    [EnumeratorCancellation] CancellationToken token = default)
   {
     if (!clientService.IsInitialized)
     {
@@ -116,11 +122,18 @@ public class TestController(
         TimeSpan.FromMinutes(3),
         token
       );
-      return res.AsAsyncEnumerable();
+      foreach (var item in res)
+      {
+        yield return item;
+      }
     }
     else
     {
-      return (await vsTestService.RunTests(project, [.. filter.Select(x => Guid.Parse(x.Uid))], runSettings, token)).ToBatchedAsyncEnumerable(30);
+      var testIds = filter.Select(x => Guid.Parse(x.Uid)).ToArray();
+      await foreach (var result in vsTestService.RunTests(project, testIds, runSettings, token))
+      {
+        yield return result;
+      }
     }
   }
 
