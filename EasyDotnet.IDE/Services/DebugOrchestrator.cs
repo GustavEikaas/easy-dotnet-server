@@ -191,9 +191,7 @@ public class DebugOrchestrator(
           await Task.Delay(500, cancellationToken);
           strategy.OnDebugSessionReady(session, proxy);
         }
-        catch (OperationCanceledException)
-        {
-        }
+        catch (OperationCanceledException) { }
         catch (Exception ex)
         {
           logger.LogError(ex, "Failed to wait for DAP configurationDone");
