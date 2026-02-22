@@ -7,6 +7,7 @@ public class ClientService : IClientService
 {
   public bool IsInitialized { get; set; }
   public bool UseVisualStudio { get; set; }
+  public bool HasExternalTerminal => !string.IsNullOrEmpty(ClientOptions?.ExternalTerminal?.Command);
   public ProjectInfo? ProjectInfo { get; set; }
   public ClientInfo? ClientInfo { get; set; }
   public ClientOptions? ClientOptions { get; set; }
