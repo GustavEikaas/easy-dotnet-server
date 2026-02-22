@@ -10,8 +10,7 @@ internal static class StartupHook
     if (string.IsNullOrEmpty(pipeName)) return;
 
     using var client = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut);
-    //TODO: lets do a timeout and crash the program if its unable to connect
-    client.Connect();
+    client.Connect(5000);
 
     var pid = Environment.ProcessId;
     var pidBytes = BitConverter.GetBytes(pid);
