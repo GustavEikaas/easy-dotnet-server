@@ -23,6 +23,12 @@ public class RunInTerminalStrategy(
   private LaunchProfile? _activeProfile;
   private NamedPipeServerStream? _hookPipeServer;
 
+  private readonly JsonSerializerOptions _jsonSerializerOptions = new()
+  {
+    WriteIndented = true,
+    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+  };
+
   public async Task PrepareAsync(DotnetProject project, CancellationToken ct)
   {
     if (!string.IsNullOrEmpty(launchProfileName) &&
@@ -62,7 +68,7 @@ public class RunInTerminalStrategy(
         hookPath,
         hookPipeName);
 
-    logger.LogInformation("Sending runInTerminal request to Neovim: {payload}", JsonSerializer.Serialize(runInTerminalReq, new JsonSerializerOptions { WriteIndented = true }));
+    logger.LogInformation("Sending runInTerminal request to Neovim: {payload}", JsonSerializer.Serialize(runInTerminalReq, _jsonSerializerOptions));
     var termResponse = await proxy.RunClientRequestAsync(runInTerminalReq, CancellationToken.None);
 
     if (!termResponse.Success)
