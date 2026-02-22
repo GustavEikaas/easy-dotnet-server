@@ -159,7 +159,10 @@ public class VsTestService(
       var session = await debugOrchestrator.StartClientDebugSessionAsync(project.MSBuildProjectFullPath!, new(project.MSBuildProjectFullPath!, null, null, null), debugStrategyFactory.CreateStandardAttachStrategy(pid), ct);
       await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
       await session.ProcessStarted;
+      //We add a delay to ensure the client is ready #gh785
       await Task.Delay(1000, ct);
+      //This would replace the ProcessStarted and delay but we need help to regression test it
+      // await session.WaitForConfigurationDoneAsync();
       return true;
     });
 

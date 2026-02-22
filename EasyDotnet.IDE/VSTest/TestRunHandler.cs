@@ -30,7 +30,6 @@ internal sealed class TestRunHandler(ChannelWriter<TestRunResult> writer) : ITes
     {
       foreach (var result in testRunChangedArgs.NewTestResults)
       {
-        // Push to the channel immediately
         writer.TryWrite(result.ToTestRunResult());
       }
     }

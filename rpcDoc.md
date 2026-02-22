@@ -60,7 +60,7 @@
 | filter | RunRequestNode[] |   |
 | targetFrameworkMoniker | string | ✅  |
 
-**Returns:** `Task<IAsyncEnumerable<TestRunResult>>`
+**Returns:** `IAsyncEnumerable<TestRunResult>`
 
 ### `test/discover`
 | Parameter | Type | Optional |
@@ -79,7 +79,7 @@
 | filter | RunRequestNode[] |   |
 | targetFrameworkMoniker | string | ✅  |
 
-**Returns:** `Task<IAsyncEnumerable<TestRunResult>>`
+**Returns:** `IAsyncEnumerable<TestRunResult>`
 
 ### `test/set-project-run-settings`
 | Parameter | Type | Optional |
