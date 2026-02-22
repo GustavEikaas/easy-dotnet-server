@@ -15,5 +15,3 @@ internal class DebuggerTestHostLauncher(Func<int, CancellationToken, Task<bool>>
 
   public int LaunchTestHost(TestProcessStartInfo defaultTestHostStartInfo, CancellationToken cancellationToken) => throw new NotImplementedException("LaunchTestHost not implemented yet");
 }
-
-
