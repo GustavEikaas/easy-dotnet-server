@@ -9,7 +9,8 @@ public class LaunchProfileService : ILaunchProfileService
   private static readonly JsonSerializerOptions DeserializerOptions = new()
   {
     PropertyNameCaseInsensitive = true,
-    ReadCommentHandling = JsonCommentHandling.Skip
+    ReadCommentHandling = JsonCommentHandling.Skip,
+    AllowTrailingCommas = true
   };
 
   public LaunchProfile? GetLaunchProfile(string targetPath, string? profileName)
