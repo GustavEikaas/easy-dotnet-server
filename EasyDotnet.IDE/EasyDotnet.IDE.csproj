@@ -6,18 +6,18 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>dotnet-easydotnet</ToolCommandName>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
-    <Version>2.7.11</Version>
+    <Version>2.8.0</Version>
     <Authors>Gustav Eikaas</Authors>
     <PackageId>EasyDotnet</PackageId>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <IncludePackageReadmeFile>true</IncludePackageReadmeFile>
-    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);IncludeBuildServerInPack</TargetsForTfmSpecificContentInPackage>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);IncludeDynamicContentInPack</TargetsForTfmSpecificContentInPackage>
   </PropertyGroup>
   <ItemGroup>
     <None Include="..\LICENSE" Pack="true" PackagePath="" />
     <None Include="..\README.md" Pack="true" PackagePath="" />
-   <None Include="bin\Release\net8.0\Tools\**\*" Pack="true" PackagePath="tools/" Exclude="bin\Release\net8.0\Tools\BuildServer\**\*" />
+    <None Include="bin\Release\net8.0\Tools\**\*" Pack="true" PackagePath="tools/" Exclude="bin\Release\net8.0\Tools\BuildServer\**\*" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="DotNetOutdatedTool.Core" Version="4.6.8" />
@@ -53,7 +53,7 @@
     <ProjectReference Include="..\EasyDotnet.BuildServer.Contracts\EasyDotnet.BuildServer.Contracts.csproj" />
   </ItemGroup>
 
- <Target Name="PublishBuildServers" BeforeTargets="Build">
+  <Target Name="PublishBuildServers" BeforeTargets="Build">
     <PropertyGroup>
       <BuildServerOutputPath>$(OutputPath)Tools\BuildServer\</BuildServerOutputPath>
     </PropertyGroup>
@@ -73,12 +73,28 @@
     <Message Text="BuildServer publish complete at $(BuildServerOutputPath)" Importance="high" />
   </Target>
 
-  <Target Name="IncludeBuildServerInPack" DependsOnTargets="PublishBuildServers">
+  <Target Name="PublishDebuggerPayloads" BeforeTargets="Build">
+    <PropertyGroup>
+      <PayloadsOutputPath>$(OutputPath)DebuggerPayloads\</PayloadsOutputPath>
+    </PropertyGroup>
+
+    <Message Text="Publishing StartupHook payload..." Importance="high" />
+    <MSBuild 
+      Projects="..\EasyDotnet.StartupHook\EasyDotnet.StartupHook.csproj" 
+      Targets="Publish" 
+      Properties="TargetFramework=net6.0;Configuration=$(Configuration);PublishDir=$(MSBuildProjectDirectory)\$(PayloadsOutputPath)StartupHook\;SelfContained=false" />
+  </Target>
+
+  <Target Name="IncludeDynamicContentInPack" DependsOnTargets="PublishBuildServers;PublishDebuggerPayloads">
     <ItemGroup>
-      <TfmSpecificPackageFile Include="$(OutputPath)Tools\BuildServer\**\*">
+      <_PackBuildServer Include="$(OutputPath)Tools\BuildServer\**\*">
         <PackagePath>tools/$(LowestNetCoreTfm)/any/BuildServer/%(RecursiveDir)%(Filename)%(Extension)</PackagePath>
-      </TfmSpecificPackageFile>
+      </_PackBuildServer>
+      <_PackPayloads Include="$(OutputPath)DebuggerPayloads\**\*">
+        <PackagePath>tools/$(LowestNetCoreTfm)/any/DebuggerPayloads/%(RecursiveDir)%(Filename)%(Extension)</PackagePath>
+      </_PackPayloads>
+      <TfmSpecificPackageFile Include="@(_PackBuildServer);@(_PackPayloads)" />
     </ItemGroup>
-    <Message Text="Added @(TfmSpecificPackageFile->Count()) BuildServer files to pack" Importance="high" />
+    <Message Text="Successfully staged BuildServer and DebuggerPayloads for NuGet packing." Importance="high" />
   </Target>
 </Project>

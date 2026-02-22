@@ -8,7 +8,8 @@ public class GlobalJsonService(IClientService clientService)
   private readonly JsonSerializerOptions _jsonSerializerOptions = new()
   {
     PropertyNameCaseInsensitive = true,
-    ReadCommentHandling = JsonCommentHandling.Skip
+    ReadCommentHandling = JsonCommentHandling.Skip,
+    AllowTrailingCommas = true
   };
 
   public GlobalJson? GetGlobalJson()

@@ -1,7 +1,5 @@
-using System;
 using System.Diagnostics;
-using System.Threading;
-using System.Threading.Tasks;
+using EasyDotnet.Debugger;
 using EasyDotnet.Debugger.Messages;
 using EasyDotnet.IDE.Types;
 using EasyDotnet.Infrastructure.Dap;
@@ -43,7 +41,7 @@ public class VsTestStrategy(ILogger<VsTestStrategy> logger) : IDebugSessionStrat
     return Task.CompletedTask;
   }
 
-  public Task TransformRequestAsync(InterceptableAttachRequest request)
+  public Task TransformRequestAsync(InterceptableAttachRequest request, IDebuggerProxy proxy)
   {
     if (_vsTestWrapperProcess is null || _project is null)
     {
@@ -58,6 +56,11 @@ public class VsTestStrategy(ILogger<VsTestStrategy> logger) : IDebugSessionStrat
     request.Arguments.Cwd = _project.ProjectDir;
 
     return Task.CompletedTask;
+  }
+
+  public void OnDebugSessionReady(DebugSession debugSession, IDebuggerProxy proxy)
+  {
+
   }
 
   public Task<int>? GetProcessIdAsync() => _processIdTcs.Task;

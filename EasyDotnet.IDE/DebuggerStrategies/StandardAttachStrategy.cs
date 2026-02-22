@@ -1,5 +1,4 @@
-using System.Threading;
-using System.Threading.Tasks;
+using EasyDotnet.Debugger;
 using EasyDotnet.Debugger.Messages;
 using EasyDotnet.IDE.Types;
 using EasyDotnet.MsBuild;
@@ -15,16 +14,12 @@ public class StandardAttachStrategy(ILogger<StandardAttachStrategy> logger, int 
   public Task PrepareAsync(DotnetProject project, CancellationToken ct)
   {
     _project = project;
-
-
     logger.LogInformation("Starting Pid attach for {Project} with PID {pid}", project.ProjectName, pid);
-
     return Task.CompletedTask;
   }
 
-  public Task TransformRequestAsync(InterceptableAttachRequest request)
+  public Task TransformRequestAsync(InterceptableAttachRequest request, IDebuggerProxy proxy)
   {
-
     request.Type = "request";
     request.Command = "attach";
     request.Arguments.Request = "attach";
@@ -35,6 +30,11 @@ public class StandardAttachStrategy(ILogger<StandardAttachStrategy> logger, int 
     }
 
     return Task.CompletedTask;
+  }
+
+  public void OnDebugSessionReady(DebugSession debugSession, IDebuggerProxy proxy)
+  {
+
   }
 
   public Task<int>? GetProcessIdAsync() => _processIdTcs.Task;

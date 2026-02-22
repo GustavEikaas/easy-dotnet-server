@@ -9,7 +9,10 @@ namespace EasyDotnet.Debugger.Session;
 public class ClientMessageInterceptor(
   ILogger<ClientMessageInterceptor> logger,
   ValueConverterService valueConverterService,
-  Func<InterceptableAttachRequest, Task<InterceptableAttachRequest>> attachRequestRewriter) : IDapMessageInterceptor
+  Func<InterceptableAttachRequest, Task<InterceptableAttachRequest>> attachRequestRewriter,
+  Action<int> onDebugeeProcessStarted,
+  Action onConfigurationDone
+  ) : IDapMessageInterceptor
 {
   private static readonly JsonSerializerOptions LoggingOptions = new()
   {
@@ -45,6 +48,11 @@ public class ClientMessageInterceptor(
     var modified = await attachRequestRewriter(request);
     logger.LogInformation("[CLIENT] Attach request: {request}",
       JsonSerializer.Serialize(modified, LoggingOptions));
+    var processId = modified.Arguments.ProcessId;
+    if (processId is not null)
+    {
+      onDebugeeProcessStarted?.Invoke(processId.Value);
+    }
     return modified;
   }
 
@@ -94,6 +102,10 @@ public class ClientMessageInterceptor(
 
   private Request LogAndPassthrough(Request request)
   {
+    if (request.Command == "configurationDone")
+    {
+      onConfigurationDone();
+    }
     logger.LogDebug("[CLIENT] Request: {command}", request.Command);
     return request;
   }

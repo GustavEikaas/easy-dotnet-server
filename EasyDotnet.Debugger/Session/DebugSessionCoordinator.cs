@@ -14,17 +14,19 @@ public class DebugSessionCoordinator(
   IDapMessageInterceptor debuggerInterceptor,
   ILogger<DebuggerProxy> proxyLogger) : IAsyncDisposable
 {
-  private DebuggerProxy? _proxy;
+  public DebuggerProxy? Proxy;
   private CancellationTokenSource? _cts;
   private readonly TaskCompletionSource<bool> _completionSource = new();
   private readonly TaskCompletionSource<bool> _disposalStartedSource = new();
   private readonly TaskCompletionSource<bool> _processStartedSource = new();
   private readonly TaskCompletionSource<int?> _debugeeProcessStartedSource = new();
+  private readonly TaskCompletionSource _configurationDoneSource = new();
   private int _isDisposing;
   private Func<Task>? _onDispose;
 
   public Task ProcessStarted => _processStartedSource.Task;
   public Task DebugeeProcessStarted => _debugeeProcessStartedSource.Task;
+  public Task ConfigurationDone => _configurationDoneSource.Task;
   public Task Completion => _completionSource.Task;
   public Task DisposalStarted => _disposalStartedSource.Task;
   public int Port => tcpServer.Port;
@@ -83,12 +85,12 @@ public class DebugSessionCoordinator(
         var debuggerDap = new Debugger(processHost.StandardInput, processHost.StandardOutput,
           async (msg, proxy) => await debuggerInterceptor.InterceptAsync(msg, proxy, CancellationToken.None));
 
-        _proxy = new DebuggerProxy(clientDap, debuggerDap, proxyLogger);
-        _proxy.Start(_cts.Token, async () => await TriggerCleanupAsync());
+        Proxy = new DebuggerProxy(clientDap, debuggerDap, proxyLogger);
+        Proxy.Start(_cts.Token, async () => await TriggerCleanupAsync());
 
         logger.LogInformation("Debug session ready");
 
-        await _proxy.Completion;
+        await Proxy.Completion;
         _completionSource.SetResult(true);
       }
       catch (OperationCanceledException)
@@ -118,6 +120,17 @@ public class DebugSessionCoordinator(
     StartTelemetryMonitoring(processId);
   }
 
+  public void NotifyConfigurationDone()
+  {
+    if (_configurationDoneSource.Task.IsCompleted)
+    {
+      throw new Exception("ConfigurationDone already called");
+    }
+
+    logger.LogInformation("Configuration done event reported");
+    _configurationDoneSource.SetResult();
+  }
+
   private void StartTelemetryMonitoring(int processId)
   {
     if (_cts is null)
@@ -138,7 +151,7 @@ public class DebugSessionCoordinator(
         {
           await Task.Delay(100, token);
 
-          if (_proxy is null)
+          if (Proxy is null)
           {
             logger.LogDebug("Proxy is null, stopping telemetry");
             break;
@@ -160,7 +173,7 @@ public class DebugSessionCoordinator(
             lastCpuTime = currentCpuTime;
             lastCheckTime = currentTime;
 
-            await _proxy.EmitEventToClientAsync(new TelemetryEvent
+            await Proxy.EmitEventToClientAsync(new TelemetryEvent
             {
               Seq = 0,
               Type = "event",

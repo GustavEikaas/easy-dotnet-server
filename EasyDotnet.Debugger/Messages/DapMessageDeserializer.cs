@@ -75,7 +75,6 @@ public static class DapMessageDeserializer
       };
     }
 
-
     private static ProtocolMessage DeserializeRequest(JsonElement root, JsonSerializerOptions options)
     {
       if (root.TryGetProperty("command", out var cmdProp))

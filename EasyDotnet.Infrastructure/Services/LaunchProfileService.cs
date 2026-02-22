@@ -9,8 +9,26 @@ public class LaunchProfileService : ILaunchProfileService
   private static readonly JsonSerializerOptions DeserializerOptions = new()
   {
     PropertyNameCaseInsensitive = true,
-    ReadCommentHandling = JsonCommentHandling.Skip
+    ReadCommentHandling = JsonCommentHandling.Skip,
+    AllowTrailingCommas = true
   };
+
+  public LaunchProfile? GetLaunchProfile(string targetPath, string? profileName)
+  {
+    if (string.IsNullOrEmpty(profileName))
+    {
+      return null;
+    }
+
+    var profiles = GetLaunchProfiles(targetPath);
+
+    if (profiles != null && profiles.TryGetValue(profileName, out var profile))
+    {
+      return profile;
+    }
+
+    return null;
+  }
 
   public Dictionary<string, LaunchProfile>? GetLaunchProfiles(string targetPath)
   {
