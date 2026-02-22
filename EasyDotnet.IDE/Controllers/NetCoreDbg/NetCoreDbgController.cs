@@ -46,6 +46,6 @@ public class NetCoreDbgController(
     project.IsVsTest()
       ? debugStrategyFactory.CreateVsTestStrategy()
       : project.IsMTP()
-        ? debugStrategyFactory.CreateStandardLaunchStrategy(launchProfileName: null)
+        ? debugStrategyFactory.CreateStandardLaunchStrategy()
         : debugStrategyFactory.CreateRunInTerminalStrategy(launchProfileName);
 }
