@@ -9,8 +9,9 @@ internal static class StartupHook
     LogIfDebug($"ProcessId: {Environment.ProcessId}");
     LogIfDebug($"CurrentDirectory: {Environment.CurrentDirectory}");
     LogIfDebug($".NET Version: {Environment.Version}");
+    var pipeName = ReadAndDiscardHookPipe();
+    RemoveStartupHookEnvironment();
 
-    var pipeName = Environment.GetEnvironmentVariable("EASY_DOTNET_HOOK_PIPE");
     LogIfDebug($"EASY_DOTNET_HOOK_PIPE: '{pipeName}'");
     if (string.IsNullOrEmpty(pipeName)) return;
 
@@ -29,6 +30,34 @@ internal static class StartupHook
     LogIfDebug("Waiting for resume byte...");
     client.ReadByte();
     LogIfDebug("Received resume byte");
+  }
+
+  private static string? ReadAndDiscardHookPipe()
+  {
+    const string envVarName = "EASY_DOTNET_HOOK_PIPE";
+    var pipeName = Environment.GetEnvironmentVariable(envVarName);
+    Environment.SetEnvironmentVariable(envVarName, null);
+    return pipeName;
+  }
+
+  private static void RemoveStartupHookEnvironment()
+  {
+    try
+    {
+      var currentHooks = Environment.GetEnvironmentVariable("DOTNET_STARTUP_HOOKS");
+      if (string.IsNullOrEmpty(currentHooks)) return;
+
+      var hooksList = currentHooks.Split(Path.PathSeparator);
+
+      var remainingHooks = string.Join(Path.PathSeparator.ToString(), hooksList.Skip(1));
+
+      Environment.SetEnvironmentVariable("DOTNET_STARTUP_HOOKS", string.IsNullOrEmpty(remainingHooks) ? null : remainingHooks);
+      LogIfDebug("Successfully scrubbed hook from environment.");
+    }
+    catch (Exception ex)
+    {
+      LogIfDebug($"Failed to scrub environment: {ex.Message}");
+    }
   }
 
   private static void LogIfDebug(string message)
