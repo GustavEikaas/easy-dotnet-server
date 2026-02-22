@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO.Pipes;
 using System.Reflection;
+using System.Text.Json;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Debugger;
 using EasyDotnet.Debugger.Messages;
@@ -21,8 +22,8 @@ public class RunInTerminalStrategy(
   private DotnetProject? _project;
   private int _pid;
   private JsonRpc? _rpc;
-  private NamedPipeServerStream? _pipeServer;
   private LaunchProfile? _activeProfile;
+  private NamedPipeServerStream? _hookPipeServer;
 
   public async Task PrepareAsync(DotnetProject project, CancellationToken ct)
   {
@@ -39,13 +40,9 @@ public class RunInTerminalStrategy(
   {
     if (_project == null) throw new InvalidOperationException("Strategy has not been prepared.");
 
-    var pipeName = PipeUtils.GeneratePipeName();
-    _pipeServer = new NamedPipeServerStream(pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
-
-    var extWindowPath = DebuggerPayloadLocator.GetExternalConsolePath();
     var hookPath = DebuggerPayloadLocator.GetStartupHookPath();
 
-    var terminalArgs = new[] { "dotnet", "exec", extWindowPath, "--pipe", pipeName, "--hook", hookPath };
+    var terminalArgs = new[] { "dotnet", _project.TargetPath! };
     var terminalKind = ExtractTerminalKind(request.Arguments.Console);
     var runInTerminalReq = RunInTerminalRequest.Create(terminalKind, terminalArgs);
 
@@ -56,41 +53,34 @@ public class RunInTerminalStrategy(
     runInTerminalReq.Arguments.Cwd = cwd;
 
     var env = DebugStrategyUtils.GetEnvironmentVariables(_activeProfile);
+    var hookPipeName = PipeUtils.GeneratePipeName();
+    _hookPipeServer = new NamedPipeServerStream(hookPipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
 
-    logger.LogInformation("Sending runInTerminal request to Neovim");
+    runInTerminalReq.Arguments.Env =
+        new Dictionary<string, string>(
+            runInTerminalReq.Arguments.Env ?? []
+        )
+        {
+          ["DOTNET_STARTUP_HOOKS"] = hookPath,
+          ["EASY_DOTNET_HOOK_PIPE"] = hookPipeName
+        }.Concat(env).ToDictionary();
+
+    logger.LogInformation("Sending runInTerminal request to Neovim: {payload}", JsonSerializer.Serialize(runInTerminalReq, new JsonSerializerOptions { WriteIndented = true }));
     var termResponse = await proxy.RunClientRequestAsync(runInTerminalReq, CancellationToken.None);
 
     if (!termResponse.Success)
     {
       throw new InvalidOperationException($"Neovim failed to launch terminal: {termResponse.Message}");
     }
-
     logger.LogInformation("runInTerminal response from Neovim");
 
-    logger.LogInformation("Waiting for external console to connect on pipe {Pipe}", pipeName);
-    await _pipeServer.WaitForConnectionAsync(CancellationToken.None);
+    await _hookPipeServer.WaitForConnectionAsync(CancellationToken.None);
 
-    _rpc = new JsonRpc(_pipeServer);
-#if DEBUG
-    _rpc.TraceSource.Listeners.Add(new ConsoleTraceListener());
-    _rpc.TraceSource.Switch.Level = SourceLevels.Verbose;
-#endif
-    _rpc.StartListening();
+    var pidBuffer = new byte[4];
+    await _hookPipeServer.ReadExactlyAsync(pidBuffer, 0, 4, CancellationToken.None);
+    _pid = BitConverter.ToInt32(pidBuffer, 0);
 
-    logger.LogInformation("Sending initialize to external console");
-    var res = await _rpc.InvokeWithParameterObjectAsync<InitializeResponse>(
-        "initialize",
-        new
-        {
-          Program = "dotnet",
-          Args = new List<string>() { _project.TargetPath! },
-          Cwd = cwd,
-          Env = (request.Arguments.Env ?? []).Concat(env).ToDictionary(kvp => kvp.Key, kvp => kvp.Value)
-        },
-        CancellationToken.None);
-
-    _pid = res.Pid;
-    logger.LogInformation("Received attach PID {Pid} from external console", _pid);
+    logger.LogInformation("Received attach PID {Pid} from Startup Hook", _pid);
 
     request.Type = "request";
     request.Command = "attach";
@@ -108,24 +98,30 @@ public class RunInTerminalStrategy(
   {
     _rpc?.Dispose();
     _rpc = null;
-    if (_pipeServer is not null)
+
+    if (_hookPipeServer != null)
     {
-      await _pipeServer.DisposeAsync();
-      _pipeServer = null;
+      await _hookPipeServer.DisposeAsync();
+      _hookPipeServer = null;
     }
   }
 
   public void OnDebugSessionReady(DebugSession debugSession, IDebuggerProxy proxy)
   {
     logger.LogInformation("Resuming runtime via Startup Hook RPC.");
+    ResumeProgram();
+  }
 
-    if (_rpc is not null)
+  private void ResumeProgram()
+  {
+    if (_hookPipeServer?.IsConnected == true)
     {
-      _ = _rpc.InvokeAsync("resume");
+      _hookPipeServer.WriteByte(1);
+      _hookPipeServer.Flush();
     }
     else
     {
-      logger.LogWarning("RPC connection is null, cannot resume the target process.");
+      throw new Exception("StartupHook is not connected, unable to resume program");
     }
   }
 
@@ -149,21 +145,6 @@ public sealed record InitializeResponse(int Pid);
 
 public static class DebuggerPayloadLocator
 {
-  public static string GetExternalConsolePath()
-  {
-    var path = "";
-#if DEBUG
-    path = Path.GetFullPath(Path.Join(GetAssemblyDir(), "../../../../EasyDotnet.ExternalConsole/bin/Debug/net8.0/EasyDotnet.ExternalConsole.dll"));
-#else
-    path = Path.Combine(GetBaseDir(), "ExternalConsole", "EasyDotnet.ExternalConsole.dll");
-#endif
-    if (!File.Exists(path))
-    {
-      throw new Exception("ExternalConsole dll not found");
-    }
-    return path;
-  }
-
   public static string GetStartupHookPath()
   {
     var path = "";

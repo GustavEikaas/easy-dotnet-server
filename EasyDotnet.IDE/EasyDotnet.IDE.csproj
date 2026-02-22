@@ -78,12 +78,6 @@
       <PayloadsOutputPath>$(OutputPath)DebuggerPayloads\</PayloadsOutputPath>
     </PropertyGroup>
 
-    <Message Text="Publishing ExternalConsole payload..." Importance="high" />
-    <MSBuild 
-      Projects="..\EasyDotnet.ExternalConsole\EasyDotnet.ExternalConsole.csproj" 
-      Targets="Publish" 
-      Properties="Configuration=$(Configuration);PublishDir=$(MSBuildProjectDirectory)\$(PayloadsOutputPath)ExternalConsole\;SelfContained=false" />
-
     <Message Text="Publishing StartupHook payload..." Importance="high" />
     <MSBuild 
       Projects="..\EasyDotnet.StartupHook\EasyDotnet.StartupHook.csproj" 

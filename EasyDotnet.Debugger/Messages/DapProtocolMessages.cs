@@ -153,7 +153,8 @@ public class RunInTerminalRequest : Request
       Title = "EasyDotnet",
       Args = args,
       Cwd = ".",
-      ArgsCanBeInterpretedByShell = false
+      ArgsCanBeInterpretedByShell = false,
+      Env = []
     }
   };
 }
@@ -186,7 +187,7 @@ public class RunInTerminalRequestArguments
    * Environment key-value pairs that are added to or removed from the default
    * environment.
    */
-  public Dictionary<string, string> Env = [];
+  public Dictionary<string, string> Env { get; set; } = [];
 
   /**
    * This property should only be set if the corresponding capability
