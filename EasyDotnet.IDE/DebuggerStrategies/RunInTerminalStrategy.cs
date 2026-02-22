@@ -77,10 +77,11 @@ public class RunInTerminalStrategy(
     }
     logger.LogInformation("runInTerminal response from Neovim");
 
-    await _hookPipeServer.WaitForConnectionAsync(CancellationToken.None);
+    using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    await _hookPipeServer.WaitForConnectionAsync(timeoutCts.Token);
 
     var pidBuffer = new byte[4];
-    await _hookPipeServer.ReadExactlyAsync(pidBuffer, 0, 4, CancellationToken.None);
+    await _hookPipeServer.ReadExactlyAsync(pidBuffer, 0, 4, timeoutCts.Token);
     _pid = BitConverter.ToInt32(pidBuffer, 0);
 
     logger.LogInformation("Received attach PID {Pid} from Startup Hook", _pid);
