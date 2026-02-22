@@ -12,6 +12,23 @@ public class LaunchProfileService : ILaunchProfileService
     ReadCommentHandling = JsonCommentHandling.Skip
   };
 
+  public LaunchProfile? GetLaunchProfile(string targetPath, string? profileName)
+  {
+    if (string.IsNullOrEmpty(profileName))
+    {
+      return null;
+    }
+
+    var profiles = GetLaunchProfiles(targetPath);
+
+    if (profiles != null && profiles.TryGetValue(profileName, out var profile))
+    {
+      return profile;
+    }
+
+    return null;
+  }
+
   public Dictionary<string, LaunchProfile>? GetLaunchProfiles(string targetPath)
   {
     var baseDir = File.Exists(targetPath) ? Path.GetDirectoryName(targetPath)! : targetPath;

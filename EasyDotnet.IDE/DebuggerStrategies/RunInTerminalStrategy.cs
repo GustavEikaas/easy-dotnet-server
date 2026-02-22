@@ -31,12 +31,7 @@ public class RunInTerminalStrategy(
 
   public async Task PrepareAsync(DotnetProject project, CancellationToken ct)
   {
-    if (!string.IsNullOrEmpty(launchProfileName) &&
-        launchProfileService.GetLaunchProfiles(project.MSBuildProjectFullPath!) is { } profiles &&
-        profiles.TryGetValue(launchProfileName, out var profile))
-    {
-      _activeProfile = profile;
-    }
+    _activeProfile = launchProfileService.GetLaunchProfile(project.MSBuildProjectFullPath!, launchProfileName);
     _project = project;
   }
 
