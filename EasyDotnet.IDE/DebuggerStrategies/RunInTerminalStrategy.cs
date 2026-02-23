@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO.Pipes;
 using System.Text.Json;
 using EasyDotnet.Application.Interfaces;
@@ -22,6 +23,7 @@ public class RunInTerminalStrategy(
   private JsonRpc? _rpc;
   private LaunchProfile? _activeProfile;
   private NamedPipeServerStream? _hookPipeServer;
+  private Process? _browserProcess;
 
   private readonly JsonSerializerOptions _jsonSerializerOptions = new()
   {
@@ -103,12 +105,76 @@ public class RunInTerminalStrategy(
       await _hookPipeServer.DisposeAsync();
       _hookPipeServer = null;
     }
+
+    if (_browserProcess != null)
+    {
+      try
+      {
+        _browserProcess.Dispose();
+      }
+      catch (Exception ex)
+      {
+        logger.LogWarning(ex, "Failed to dispose browser process handle.");
+      }
+      finally
+      {
+        _browserProcess = null;
+      }
+    }
   }
 
   public void OnDebugSessionReady(DebugSession debugSession, IDebuggerProxy proxy)
   {
     logger.LogInformation("Resuming runtime via Startup Hook RPC.");
     ResumeProgram();
+    TryOpenBrowser();
+  }
+
+  private void TryOpenBrowser()
+  {
+    if (_activeProfile?.LaunchBrowser != true)
+    {
+      return;
+    }
+
+    // ApplicationUrl often has multiple URLs (e.g., https://localhost:7033;http://localhost:5275)
+    var applicationUrls = _activeProfile.ApplicationUrl?.Split(';', StringSplitOptions.RemoveEmptyEntries);
+    var baseUrl = applicationUrls?.FirstOrDefault();
+
+    if (string.IsNullOrWhiteSpace(baseUrl))
+    {
+      logger.LogWarning("LaunchBrowser is true, but no ApplicationUrl was found in the active profile.");
+      return;
+    }
+
+    var fullUrl = baseUrl;
+    var launchUrl = _activeProfile.LaunchUrl;
+
+    if (!string.IsNullOrWhiteSpace(launchUrl))
+    {
+      try
+      {
+        var uriBuilder = new UriBuilder(baseUrl);
+        var existingPath = uriBuilder.Path.TrimEnd('/');
+        var newPath = launchUrl.TrimStart('/');
+        uriBuilder.Path = $"{existingPath}/{newPath}";
+
+        fullUrl = uriBuilder.ToString();
+      }
+      catch (UriFormatException ex)
+      {
+        logger.LogWarning(ex, "Failed to parse the application URL: {Url}", baseUrl);
+      }
+    }
+
+    try
+    {
+      _browserProcess = BrowserHelper.OpenBrowser(fullUrl);
+    }
+    catch (Exception ex)
+    {
+      logger.LogError(ex, "An error occurred while trying to open the browser.");
+    }
   }
 
   private void ResumeProgram()
