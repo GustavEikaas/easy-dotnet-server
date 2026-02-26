@@ -35,7 +35,7 @@ public sealed class DateTimeOffsetValueConverter(ILogger<DateTimeOffsetValueConv
       LogFailure("Missing or invalid required DateTime fields", id);
       return response!;
     }
-    
+
     var dateTimeOffset = new DateTimeOffset(ticks, TimeSpan.FromMinutes(offsetInMinutes));
     response.Body!.AssignComputedResult(dateTimeOffset.ToString());
     return response;

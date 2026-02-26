@@ -74,7 +74,7 @@ public static class ValueConverterHelpers
       }
     ];
   }
-  
+
   public static bool TryGetLong(Dictionary<string, string> lookup, string fieldName, out long value)
   {
     if (lookup.TryGetValue(fieldName, out var strValue) &&
