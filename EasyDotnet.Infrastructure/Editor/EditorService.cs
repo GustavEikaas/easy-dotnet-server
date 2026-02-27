@@ -66,8 +66,7 @@ public class EditorService(
 
     try
     {
-      _ = await jsonRpc.InvokeWithParameterObjectAsync<RunCommandResponse>(
-          rpcMethod, new TrackedJob(guid, command), ct);
+      await jsonRpc.InvokeWithParameterObjectAsync(rpcMethod, new TrackedJob(guid, command), ct);
     }
     catch (RemoteInvocationException e)
     {
@@ -176,14 +175,10 @@ public class EditorService(
       await process.WaitForExitAsync(ct);
 
       editorProcessManagerService.CompleteJob(jobId, process.ExitCode);
-
-      await jsonRpc.NotifyAsync("notifyExternalTerminalExited");
     }
     catch (ArgumentException)
     {
       editorProcessManagerService.CompleteJob(jobId, -1);
-
-      await jsonRpc.NotifyAsync("notifyExternalTerminalExited");
     }
   }
 }
