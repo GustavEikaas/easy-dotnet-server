@@ -1,7 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <TargetFramework>$(LowestNetCoreTfm)</TargetFramework>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\EasyDotnet.BuildServer.Contracts\EasyDotnet.BuildServer.Contracts.csproj" />
+  </ItemGroup>
 </Project>
