@@ -11,11 +11,12 @@ public interface IDebugStrategyFactory
   VsTestStrategy CreateVsTestStrategy();
 }
 
-public class DebugStrategyFactory(ILoggerFactory loggerFactory, ILaunchProfileService launchProfileService) : IDebugStrategyFactory
+public class DebugStrategyFactory(ILoggerFactory loggerFactory, ILaunchProfileService launchProfileService, IStartupHookService startupHookService) : IDebugStrategyFactory
 {
   public RunInTerminalStrategy CreateRunInTerminalStrategy(string? launchProfileName) => new(
     launchProfileName,
     loggerFactory.CreateLogger<RunInTerminalStrategy>(),
+    startupHookService,
     launchProfileService);
 
   public StandardLaunchStrategy CreateStandardLaunchStrategy() => new();
