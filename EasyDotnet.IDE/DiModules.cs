@@ -1,6 +1,4 @@
-using System;
 using System.Diagnostics;
-using System.IO;
 using System.IO.Abstractions;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -10,6 +8,7 @@ using EasyDotnet.Debugger;
 using EasyDotnet.IDE.BuildHost;
 using EasyDotnet.IDE.DebuggerStrategies;
 using EasyDotnet.IDE.Services;
+using EasyDotnet.IDE.StartupHook;
 using EasyDotnet.IDE.TemplateEngine.PostActionHandlers;
 using EasyDotnet.IDE.Utils;
 using EasyDotnet.Infrastructure.Aspire;
@@ -69,6 +68,7 @@ public static class DiModules
     services.AddSingleton<IBuildHostManager, BuildHostManager>();
 
     services.AddTransient<IProgressScopeFactory, ProgressScopeFactory>();
+    services.AddTransient<IStartupHookService, StartupHookService>();
     services.AddTransient<IMsBuildService, MsBuildService>();
     services.AddTransient<IAspireService, AspireService>();
     services.AddTransient<IJsonCodeGenService, JsonCodeGenService>();

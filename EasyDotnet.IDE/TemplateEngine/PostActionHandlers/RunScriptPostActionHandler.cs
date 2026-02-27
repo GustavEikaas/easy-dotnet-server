@@ -5,7 +5,7 @@ using Microsoft.TemplateEngine.Abstractions;
 
 namespace EasyDotnet.IDE.TemplateEngine.PostActionHandlers;
 
-public sealed class RunScriptPostActionHandler(IEditorService editorService, IEditorProcessManagerService editorProcessManagerService) : IPostActionHandler
+public sealed class RunScriptPostActionHandler(IEditorService editorService) : IPostActionHandler
 {
   public static readonly Guid Id = Guid.Parse("3A7C4B45-1F5D-4A30-959A-51B88E82B5D2");
 
@@ -22,8 +22,11 @@ public sealed class RunScriptPostActionHandler(IEditorService editorService, IEd
 
     if (!config.RedirectStandardOutput)
     {
-      var processId = await editorService.RequestRunCommand(new(config.Executable, [.. CommandLineParser.SplitCommandLine(config.Arguments)], workingDirectory, []));
-      var exitCode = await editorProcessManagerService.WaitForExitAsync(processId);
+      var exitCode = await editorService.RequestRunCommandAndWaitAsync(new(
+          config.Executable,
+          [.. CommandLineParser.SplitCommandLine(config.Arguments)],
+          workingDirectory,
+          []), cancellationToken);
       return exitCode == 0;
     }
 
