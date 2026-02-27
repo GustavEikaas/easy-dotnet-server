@@ -22,7 +22,7 @@ public sealed class RunScriptPostActionHandler(IEditorService editorService) : I
 
     if (!config.RedirectStandardOutput)
     {
-      var exitCode = await editorService.RequestRunCommandAndWaitAsync(new(
+      var exitCode = await editorService.RequestRunCommandAsync(new(
           config.Executable,
           [.. CommandLineParser.SplitCommandLine(config.Arguments)],
           workingDirectory,
