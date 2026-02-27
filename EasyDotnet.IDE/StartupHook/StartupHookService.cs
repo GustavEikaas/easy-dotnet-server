@@ -40,4 +40,3 @@ public class StartupHookService() : IStartupHookService
     return env;
   }
 }
-

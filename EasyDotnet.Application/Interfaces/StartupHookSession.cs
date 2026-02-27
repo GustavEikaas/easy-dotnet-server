@@ -29,5 +29,3 @@ public sealed class StartupHookSession(
 
   public async ValueTask DisposeAsync() => await pipe.DisposeAsync();
 }
-
-
