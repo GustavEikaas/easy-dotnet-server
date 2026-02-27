@@ -40,23 +40,19 @@ public class EditorService(
     return selectedIds == null ? null : [.. choices.Where(option => selectedIds.Contains(option.Id))];
   }
 
-  public async Task<Guid> RequestRunCommand(RunCommand command)
+  public async Task<int> RequestRunCommandAsync(RunCommand command, CancellationToken ct = default)
   {
     var guid = editorProcessManagerService.RegisterJob(TerminalSlot.Managed);
     try
     {
-      _ = await jsonRpc.InvokeWithParameterObjectAsync<RunCommandResponse>("runCommandManaged", new TrackedJob(guid, command));
+      _ = await jsonRpc.InvokeWithParameterObjectAsync<RunCommandResponse>(
+          "runCommandManaged", new TrackedJob(guid, command), ct);
     }
     catch (RemoteInvocationException e)
     {
       editorProcessManagerService.SetFailedToStart(guid, TerminalSlot.Managed, e.Message);
+      throw;
     }
-    return guid;
-  }
-
-  public async Task<int> RequestRunCommandAndWaitAsync(RunCommand command, CancellationToken ct = default)
-  {
-    var guid = await RequestRunCommand(command);
     return await editorProcessManagerService.WaitForExitAsync(guid, TerminalSlot.Managed);
   }
 

@@ -25,11 +25,11 @@ public class EntityFrameworkController(
     migrationName ??= await editorService.RequestString("Enter migration name", null);
     if (migrationName is null) return;
 
-    await editorService.RequestRunCommand(new RunCommand(
+    _ = editorService.RequestRunCommandAsync(new RunCommand(
       "dotnet-ef",
       ["migrations", "add", migrationName, "--project", efProject, "--startup-project", startupProject, "--context", dbContext, "--no-build"],
       ".",
-      []));
+      []), cancellationToken);
   }
 
   [JsonRpcMethod("ef/migrations-remove")]
@@ -39,11 +39,11 @@ public class EntityFrameworkController(
     var success = await editorService.BuildProject(startupProject, cancellationToken);
     if (!success) return;
 
-    await editorService.RequestRunCommand(new RunCommand(
+    _ = editorService.RequestRunCommandAsync(new RunCommand(
       "dotnet-ef",
       ["migrations", "remove", "--project", efProject, "--startup-project", startupProject, "--context", dbContext, "--no-build"],
       ".",
-      []));
+      []), cancellationToken);
   }
 
   [JsonRpcMethod("ef/migrations-apply")]
@@ -67,11 +67,11 @@ public class EntityFrameworkController(
       [.. migrations.Select(m => new SelectionOption(m.Id, m.Name))])
       ?? throw new InvalidOperationException("No migration selected");
 
-    await editorService.RequestRunCommand(new RunCommand(
+    _ = editorService.RequestRunCommandAsync(new RunCommand(
       "dotnet-ef",
       ["database", "update", selectedMigration.Id, "--project", efProject, "--startup-project", startupProject, "--context", dbContext, "--no-build"],
       ".",
-      []));
+      []), cancellationToken);
   }
 
   [JsonRpcMethod("ef/database-update")]
@@ -81,11 +81,11 @@ public class EntityFrameworkController(
     var success = await editorService.BuildProject(startupProject, cancellationToken);
     if (!success) return;
 
-    await editorService.RequestRunCommand(new RunCommand(
+    _ = editorService.RequestRunCommandAsync(new RunCommand(
       "dotnet-ef",
       ["database", "update", "--project", efProject, "--startup-project", startupProject, "--context", dbContext, "--no-build"],
       ".",
-      []));
+      []), cancellationToken);
   }
 
   [JsonRpcMethod("ef/database-drop")]
@@ -95,11 +95,11 @@ public class EntityFrameworkController(
     var success = await editorService.BuildProject(startupProject, cancellationToken);
     if (!success) return;
 
-    await editorService.RequestRunCommand(new RunCommand(
+    _ = editorService.RequestRunCommandAsync(new RunCommand(
       "dotnet-ef",
       ["database", "drop", "--project", efProject, "--startup-project", startupProject, "--context", dbContext, "--no-build"],
       ".",
-      []));
+      []), cancellationToken);
   }
 
   private async Task<(string EfProject, string StartupProject, string DbContext)> PromptEfProjectInfoAsync(CancellationToken cancellationToken)

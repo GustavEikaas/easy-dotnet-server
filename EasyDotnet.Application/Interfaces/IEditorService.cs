@@ -11,8 +11,7 @@ public interface IEditorService
   Task<bool> RequestConfirmation(string prompt, bool defaultValue);
   Task<SelectionOption[]?> RequestMultiSelection(string prompt, SelectionOption[] choices);
   Task<bool> RequestOpenBuffer(string path, int? line = null);
-  Task<Guid> RequestRunCommand(RunCommand command);
-  Task<int> RequestRunCommandAndWaitAsync(RunCommand command, CancellationToken ct = default);
+  Task<int> RequestRunCommandAsync(RunCommand command, CancellationToken ct = default);
   Task<int> RequestRunProjectAsync(RunProjectRequest request, CancellationToken ct = default);
   Task<SelectionOption?> RequestSelection(string prompt, SelectionOption[] choices, string? defaultSelectionId = null);
   Task<bool> RequestSetBreakpoint(string path, int lineNumber);
