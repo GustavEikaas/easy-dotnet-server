@@ -2,8 +2,6 @@ namespace EasyDotnet.BuildServer.Contracts;
 
 public sealed record GetProjectPropertiesBatchRequest(string[] ProjectPaths, string? Configuration);
 
-public sealed record ProjectPropertiesBatchResponse(ProjectEvaluationResult[] Proijects);
-
 public sealed record ProjectEvaluationResult(string ProjectPath, string? Configuration, string? TargetFramework, bool Success, DotnetProject? Project, ProjectEvaluationError? Error);
 
 public sealed record ProjectEvaluationError(string Message, string? StackTrace, string? MsBuildErrorCode);

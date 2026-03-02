@@ -66,6 +66,7 @@ public static class DiModules
     services.AddSingleton<IDebugStrategyFactory, DebugStrategyFactory>();
     services.AddSingleton<BuildHostFactory>();
     services.AddSingleton<IBuildHostManager, BuildHostManager>();
+    services.AddSingleton<WorkspaceBuildHostManager>();
 
     services.AddTransient<IProgressScopeFactory, ProgressScopeFactory>();
     services.AddTransient<IStartupHookService, StartupHookService>();
