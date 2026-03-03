@@ -137,8 +137,11 @@ public class ProjectPropertiesBatchHandler
       var propertyDictionary = ExtractProperties(project);
       var bag = new MsBuildPropertyBag(propertyDictionary);
       var dotnetProject = DotnetProjectDeserializer.FromBag(bag);
+      var validated = ValidatedDotnetProject.TryCreate(dotnetProject);
 
-      return new ProjectEvaluationResult(projectPath, request.Configuration, targetFramework, true, dotnetProject, null);
+      return validated is not null
+          ? new ProjectEvaluationResult(projectPath, request.Configuration, targetFramework, true, validated, null)
+          : new ProjectEvaluationResult(projectPath, request.Configuration, targetFramework, false, null, new ProjectEvaluationError("Project is missing required properties (TargetFramework, OutputType, etc.)", null, null));
     }
     finally
     {
