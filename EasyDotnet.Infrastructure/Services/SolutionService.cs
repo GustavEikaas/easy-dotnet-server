@@ -25,7 +25,8 @@ public class SolutionService : ISolutionService
                 ProjectName: p.ActualDisplayName,
                 AbsolutePath: absolutePath
             );
-        })];
+        })
+        .OnlyDotnetProjects()];
   }
 
   public async Task<bool> AddProjectToSolutionAsync(string solutionFilePath, string projectPath, CancellationToken cancellationToken)
