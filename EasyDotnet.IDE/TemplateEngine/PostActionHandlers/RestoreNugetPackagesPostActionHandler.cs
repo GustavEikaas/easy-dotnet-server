@@ -38,9 +38,8 @@ public class RestoreNugetPackagesPostActionHandler(
       var results = new List<RestoreResult>();
 
       using var restoreProgress = progressScopeFactory.Create("Restoring nuget packages", "Restoring nuget packages");
-      var asyncEnumerable = await buildHostManager.RestoreNugetPackagesAsync(request, cancellationToken);
 
-      await foreach (var result in asyncEnumerable)
+      await foreach (var result in buildHostManager.RestoreNugetPackagesAsync(request, cancellationToken))
       {
         results.Add(result);
 
