@@ -1,15 +1,15 @@
-using System;
 using System.Diagnostics;
-using System.IO;
 using System.IO.Abstractions;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using DotNetOutdated.Core.Services;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Debugger;
-using EasyDotnet.IDE;
+using EasyDotnet.IDE.BuildHost;
 using EasyDotnet.IDE.DebuggerStrategies;
 using EasyDotnet.IDE.Services;
+using EasyDotnet.IDE.StartupHook;
+using EasyDotnet.IDE.TemplateEngine.PostActionHandlers;
 using EasyDotnet.IDE.Utils;
 using EasyDotnet.Infrastructure.Aspire;
 using EasyDotnet.Infrastructure.Editor;
@@ -26,13 +26,16 @@ using StreamJsonRpc;
 
 namespace EasyDotnet;
 
+public record CurrentLogLevel(SourceLevels Loglevel, string LogDir);
+
 public static class DiModules
 {
   public static ServiceProvider BuildServiceProvider(JsonRpc jsonRpc, SourceLevels levels)
   {
     var services = new ServiceCollection();
 
-    ConfigureLogging(levels);
+    var logDir = Path.Combine(Directory.GetCurrentDirectory(), "logs");
+    ConfigureLogging(levels, logDir);
 
     services.AddLogging(builder =>
         {
@@ -42,6 +45,8 @@ public static class DiModules
 
     services.AddMemoryCache();
     services.AddSingleton(jsonRpc);
+    services.AddSingleton<DbContextCache>();
+    services.AddSingleton(new CurrentLogLevel(levels, logDir));
     services.AddSingleton<IClientService, ClientService>();
     services.AddSingleton<IVisualStudioLocator, VisualStudioLocator>();
     services.AddSingleton<IFileSystem, FileSystem>();
@@ -60,8 +65,12 @@ public static class DiModules
     services.AddSingleton<IEditorProcessManagerService, EditorProcessManagerService>();
     services.AddSingleton<IEditorService, EditorService>();
     services.AddSingleton<IDebugStrategyFactory, DebugStrategyFactory>();
+    services.AddSingleton<BuildHostFactory>();
+    services.AddSingleton<IBuildHostManager, BuildHostManager>();
+    services.AddSingleton<WorkspaceBuildHostManager>();
 
     services.AddTransient<IProgressScopeFactory, ProgressScopeFactory>();
+    services.AddTransient<IStartupHookService, StartupHookService>();
     services.AddTransient<IMsBuildService, MsBuildService>();
     services.AddTransient<IAspireService, AspireService>();
     services.AddTransient<IJsonCodeGenService, JsonCodeGenService>();
@@ -73,6 +82,17 @@ public static class DiModules
     services.AddTransient<IVsTestService, VsTestService>();
     services.AddTransient<MtpService>();
     services.AddTransient<OutdatedService>();
+    services.AddTransient<GlobalJsonService>();
+
+    services.AddTransient<PostActionProcessor>();
+    services.AddTransient<IPostActionHandler, RunScriptPostActionHandler>();
+    services.AddTransient<IPostActionHandler, OpenFilePostActionHandler>();
+    services.AddTransient<IPostActionHandler, ChangeFilePermissionsPostActionHandler>();
+    services.AddTransient<IPostActionHandler, DisplayManualInstructionsPostActionHandler>();
+    services.AddTransient<IPostActionHandler, RestoreNugetPackagesPostActionHandler>();
+    services.AddTransient<IPostActionHandler, AddProjectsToSolutionFilePostActionHandler>();
+    services.AddTransient<IPostActionHandler, AddPropertyToExistingJsonFilePostActionHandler>();
+    services.AddTransient<IPostActionHandler, AddReferenceToProjectFilePostActionHandler>();
 
     //Dotnet oudated
     services.AddSingleton<IProjectAnalysisService, ProjectAnalysisService>();
@@ -97,12 +117,11 @@ public static class DiModules
     return serviceProvider;
   }
 
-  private static void ConfigureLogging(SourceLevels levels)
+  private static void ConfigureLogging(SourceLevels levels, string logDir)
   {
     string? logFile = null;
     if (levels.HasFlag(SourceLevels.Verbose))
     {
-      var logDir = Path.Combine(Directory.GetCurrentDirectory(), "logs");
       Directory.CreateDirectory(logDir);
       logFile = Path.Combine(logDir,
           $"easy-dotnet-{DateTime.UtcNow:yyyyMMdd_HHmmss}-{Environment.ProcessId}.log");

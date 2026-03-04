@@ -1,24 +1,21 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
 using System.IO.Abstractions;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
+using System.Runtime.CompilerServices;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
 using EasyDotnet.Domain.Models.Client;
-using EasyDotnet.Domain.Models.Test;
+using EasyDotnet.IDE.Services;
+using EasyDotnet.IDE.Utils;
 using EasyDotnet.Infrastructure.Settings;
 using EasyDotnet.MsBuild;
 using EasyDotnet.MTP;
-using EasyDotnet.Services;
+using EasyDotnet.Types;
 using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Controllers.Test;
 
 public class TestController(
+  GlobalJsonService globalJsonService,
   ILogger<TestController> logger,
   IClientService clientService,
   MtpService mtpService,
@@ -43,7 +40,7 @@ public class TestController(
       throw new Exception("Client has not initialized yet");
     }
     var project = await GetProject(projectPath, targetFrameworkMoniker, configuration, token);
-    if (project.TestingPlatformDotnetTestSupport)
+    if (project.IsMTP())
     {
       var path = GetExecutablePath(project);
       var res = await mtpService.RunDiscoverAsync(path, token);
@@ -57,13 +54,12 @@ public class TestController(
   }
 
   [JsonRpcMethod("test/debug")]
-  public async Task<IAsyncEnumerable<TestRunResult>> Debug(
+  public async IAsyncEnumerable<TestRunResult> Debug(
     string projectPath,
     string configuration,
     RunRequestNode[] filter,
     string? targetFrameworkMoniker = null,
-    CancellationToken token = default
-  )
+    [EnumeratorCancellation] CancellationToken token = default)
   {
     if (!clientService.IsInitialized)
     {
@@ -71,35 +67,34 @@ public class TestController(
     }
     var project = await GetProject(projectPath, targetFrameworkMoniker, configuration, token);
 
-
-    if (project.TestingPlatformDotnetTestSupport)
+    if (project.IsMTP())
     {
       var path = GetExecutablePath(project);
-
-      var res = await WithTimeout(
-        (token) => mtpService.DebugTestsAsync(project, path, filter, token),
-        TimeSpan.FromMinutes(3),
-        token
-      );
-      return res.AsAsyncEnumerable();
+      await foreach (var result in mtpService.DebugTestsAsync(project, path, filter, token))
+      {
+        yield return result;
+      }
     }
     else
     {
-      var runSettingsFile = settingsService.GetProjectRunSettings(projectPath!);
+      var runSettingsFile = settingsService.GetProjectRunSettings(projectPath);
       var runSettings = runSettingsFile is not null ? fileSystem.File.ReadAllText(runSettingsFile) : null;
       logger.LogInformation("Using runsettings {runSettings}", runSettingsFile);
-      return (await vsTestService.DebugTests(project, [.. filter.Select(x => Guid.Parse(x.Uid))], runSettings, token)).ToBatchedAsyncEnumerable(30);
+      var testIds = filter.Select(x => Guid.Parse(x.Uid)).ToArray();
+      await foreach (var result in vsTestService.DebugTests(project, testIds, runSettings, token))
+      {
+        yield return result;
+      }
     }
   }
 
   [JsonRpcMethod("test/run")]
-  public async Task<IAsyncEnumerable<TestRunResult>> Run(
+  public async IAsyncEnumerable<TestRunResult> Run(
     string projectPath,
     string configuration,
     RunRequestNode[] filter,
     string? targetFrameworkMoniker = null,
-    CancellationToken token = default
-  )
+    [EnumeratorCancellation] CancellationToken token = default)
   {
     if (!clientService.IsInitialized)
     {
@@ -109,28 +104,28 @@ public class TestController(
 
     var runSettingsFile = settingsService.GetProjectRunSettings(projectPath!);
     var runSettings = runSettingsFile is not null ? fileSystem.File.ReadAllText(runSettingsFile) : null;
-    logger.LogInformation("Using runsettings {runSettings}", runSettingsFile);
 
-    if (project.TestingPlatformDotnetTestSupport)
+    if (project.IsMTP())
     {
       var path = GetExecutablePath(project);
-
-      var res = await WithTimeout(
-        (token) => mtpService.RunTestsAsync(path, filter, token),
-        TimeSpan.FromMinutes(3),
-        token
-      );
-      return res.AsAsyncEnumerable();
+      await foreach (var result in mtpService.RunTestsAsync(path, filter, token))
+      {
+        yield return result;
+      }
     }
     else
     {
-      throw new NotImplementedException();
-      // return (await vsTestService.RunTests(project, [.. filter.Select(x => Guid.Parse(x.Uid))], runSettings, token)).ToBatchedAsyncEnumerable(30);
+      var testIds = filter.Select(x => Guid.Parse(x.Uid)).ToArray();
+      logger.LogInformation("Using runsettings {runSettings}", runSettingsFile);
+      await foreach (var result in vsTestService.RunTests(project, testIds, runSettings, token))
+      {
+        yield return result;
+      }
     }
   }
 
   [JsonRpcMethod("test/set-project-run-settings")]
-  public async Task SetRunSettings()
+  public async Task SetRunSettings(CancellationToken cancellationToken)
   {
     clientService.ThrowIfNotInitialized();
     if (clientService.ProjectInfo?.SolutionFile is null)
@@ -138,7 +133,7 @@ public class TestController(
       throw new Exception("No solution file found");
     }
 
-    var projects = solutionService.GetProjectsFromSolutionFile(clientService.ProjectInfo.SolutionFile).Select(x => new SelectionOption(x.AbsolutePath, x.ProjectName)).ToArray();
+    var projects = (await solutionService.GetProjectsFromSolutionFile(clientService.ProjectInfo.SolutionFile, cancellationToken)).Select(x => new SelectionOption(x.AbsolutePath, x.ProjectName)).ToArray();
     if (projects.Length == 0)
     {
       await editorService.DisplayMessage("No projects found");
@@ -177,7 +172,7 @@ public class TestController(
 
   private async Task<DotnetProject> GetProject(string projectPath, string? targetFrameworkMoniker, string? configuration, CancellationToken cancellationToken)
   {
-    var project = await msBuildService.GetProjectPropertiesAsync(projectPath, targetFrameworkMoniker, configuration ?? "Debug", cancellationToken);
+    var project = await msBuildService.GetOrSetProjectPropertiesAsync(projectPath, targetFrameworkMoniker, configuration ?? "Debug", cancellationToken);
     return string.IsNullOrEmpty(project.TargetPath) ? throw new Exception("TargetPath is null or empty") : project;
   }
 
@@ -196,5 +191,20 @@ public class TestController(
     return await func(linkedCts.Token);
   }
 
+  [JsonRpcMethod("test/solution-command")]
+  public RunCommand GetTestCommandForSolution()
+  {
+    var solutionFile = clientService.RequireSolutionFile();
+    var globalJson = globalJsonService.GetGlobalJson();
+    var isMicrosoftTestingPlatformRunner = globalJson.IsMicrosoftTestingPlatformRunner();
 
+    if (isMicrosoftTestingPlatformRunner)
+    {
+      return new("dotnet", ["test", "--solution", solutionFile], ".", []);
+    }
+    else
+    {
+      return new("dotnet", ["test", solutionFile], ".", []);
+    }
+  }
 }

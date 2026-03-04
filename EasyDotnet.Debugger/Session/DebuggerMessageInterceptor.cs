@@ -10,7 +10,7 @@ public class DebuggerMessageInterceptor(
   ILogger<DebuggerMessageInterceptor> logger,
   ValueConverterService valueConverterService,
   bool applyValueConverters,
-  Action<int>? onDebugeeProcessStarted = null) : IDapMessageInterceptor
+  Action<int> onDebugeeProcessStarted) : IDapMessageInterceptor
 
 {
   public async Task<ProtocolMessage?> InterceptAsync(
@@ -92,10 +92,10 @@ public class DebuggerMessageInterceptor(
         processId = pidElement.GetInt32();
       }
 
-      if (processId.HasValue && processId.Value > 0)
+      if (processId > 0)
       {
         logger.LogInformation("[DEBUGGER] Process event - debugee process started: {processId}", processId.Value);
-        onDebugeeProcessStarted?.Invoke(processId.Value);
+        onDebugeeProcessStarted(processId.Value);
       }
       else
       {

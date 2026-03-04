@@ -13,6 +13,8 @@ public class SettingsService(
     SettingsFileResolver fileResolver,
     SettingsSerializer serializer,
     IClientService clientService,
+    ILaunchProfileService launchProfileService,
+    IBuildHostManager buildHostManager,
     ILogger<SettingsService> logger)
 {
 
@@ -57,16 +59,7 @@ public class SettingsService(
     return settings?.Defaults?.TestProject;
   }
 
-  public string? GetDefaultDebugProject()
-  {
-    var sln = clientService.ProjectInfo?.SolutionFile;
-    if (sln is null) return null;
-
-    var settings = GetOrCreateSolutionSettings(sln);
-    return settings?.Defaults?.DebugProject;
-  }
-
-  public void SetDefaultDebugProject(string? projectName)
+  public void SetDefaultStartupProject(string? projectName)
   {
     var sln = clientService.ProjectInfo?.SolutionFile;
     if (sln is null) return;
@@ -74,29 +67,17 @@ public class SettingsService(
     var settings = GetOrCreateSolutionSettings(sln);
     settings.Defaults ??= new DefaultProjects();
 
-    settings.Defaults.DebugProject = projectName;
+    settings.Defaults.StartupProject = projectName;
     SaveSolutionSettings(sln, settings);
   }
 
-  public string? GetDefaultRunProject()
+  public string? GetDefaultStartupProject()
   {
     var sln = clientService.ProjectInfo?.SolutionFile;
     if (sln is null) return null;
 
     var settings = GetOrCreateSolutionSettings(sln);
-    return settings?.Defaults?.RunProject;
-  }
-
-  public void SetDefaultRunProject(string? projectName)
-  {
-    var sln = clientService.ProjectInfo?.SolutionFile;
-    if (sln is null) return;
-
-    var settings = GetOrCreateSolutionSettings(sln);
-    settings.Defaults ??= new DefaultProjects();
-
-    settings.Defaults.RunProject = projectName;
-    SaveSolutionSettings(sln, settings);
+    return settings?.Defaults?.StartupProject;
   }
 
   public string? GetDefaultViewProject()
@@ -125,12 +106,12 @@ public class SettingsService(
 
   #region Project Settings
 
-  public string? GetProjectTargetFramework(string projectPath)
+  public async Task<string?> GetProjectTargetFramework(string projectPath, CancellationToken cancellationToken)
   {
     if (!ValidateProjectExists(projectPath))
       return null;
 
-    var settings = GetOrCreateProjectSettings(projectPath);
+    var settings = await GetValidatedProjectSettings(projectPath, cancellationToken);
     return settings?.TargetFramework;
   }
 
@@ -157,12 +138,12 @@ public class SettingsService(
     SaveProjectSettings(projectPath, settings);
   }
 
-  public string? GetProjectLaunchProfile(string projectPath)
+  public async Task<string?> GetProjectLaunchProfile(string projectPath, CancellationToken cancellationToken)
   {
     if (!ValidateProjectExists(projectPath))
       return null;
 
-    var settings = GetOrCreateProjectSettings(projectPath);
+    var settings = await GetValidatedProjectSettings(projectPath, cancellationToken);
     return settings?.LaunchProfile;
   }
 
@@ -173,12 +154,53 @@ public class SettingsService(
     SaveProjectSettings(projectPath, settings);
   }
 
-  public ProjectSettings? GetProjectSettings(string projectPath)
+  public async Task<ProjectSettings?> GetValidatedProjectSettings(string projectPath, CancellationToken cancellationToken)
   {
     if (!ValidateProjectExists(projectPath))
+    {
       return null;
+    }
+
+    await ValidateTargetFrameworkAsync(projectPath, cancellationToken);
+    ValidateLaunchProfile(projectPath);
 
     return GetOrCreateProjectSettings(projectPath);
+  }
+
+  private async Task ValidateTargetFrameworkAsync(string projectPath, CancellationToken cancellationToken)
+  {
+    var settings = GetOrCreateProjectSettings(projectPath);
+    if (settings.TargetFramework is null)
+    {
+      return;
+    }
+
+    var projectTfms = await buildHostManager
+      .GetProjectPropertiesBatchAsync(new([projectPath], null), cancellationToken)
+      .ToListAsync(cancellationToken);
+
+    if (projectTfms.Count <= 1 || !projectTfms.Any(x => x.TargetFramework == settings.TargetFramework))
+    {
+      settings.TargetFramework = null;
+      SaveProjectSettings(projectPath, settings);
+    }
+  }
+
+  private void ValidateLaunchProfile(string projectPath)
+  {
+    var settings = GetOrCreateProjectSettings(projectPath);
+    if (settings.LaunchProfile is null)
+    {
+      return;
+    }
+
+    var profiles = launchProfileService.GetLaunchProfiles(projectPath);
+
+    if (profiles?.ContainsKey(settings.LaunchProfile) != true)
+    {
+      settings.LaunchProfile = null;
+      SaveProjectSettings(projectPath, settings);
+    }
   }
 
   #endregion

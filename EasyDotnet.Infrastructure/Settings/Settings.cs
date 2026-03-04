@@ -34,9 +34,8 @@ public class SolutionSettings : IVersionedSettings
 public class DefaultProjects
 {
   public string? BuildProject { get; set; }
-  public string? DebugProject { get; set; }
+  public string? StartupProject { get; set; }
   public string? TestProject { get; set; }
-  public string? RunProject { get; set; }
   public string? ViewProject { get; set; }
 }
 

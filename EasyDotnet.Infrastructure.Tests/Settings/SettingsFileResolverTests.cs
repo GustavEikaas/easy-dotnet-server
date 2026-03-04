@@ -97,7 +97,7 @@ public class SettingsFileResolverTests : IDisposable
 
     var files = _resolver.GetAllSettingsFiles(SettingsScope.Solution).ToList();
 
-    await Assert.That(files).HasCount().EqualTo(1);
+    await Assert.That(files.Count).IsEqualTo(1);
     await Assert.That(files[0]).IsEqualTo(_mockFileSystem.Path.GetFullPath(solutionFile));
   }
 
@@ -114,7 +114,7 @@ public class SettingsFileResolverTests : IDisposable
 
     var files = _resolver.GetAllSettingsFiles(SettingsScope.Project).ToList();
 
-    await Assert.That(files).HasCount().EqualTo(1);
+    await Assert.That(files.Count).IsEqualTo(1);
     await Assert.That(files[0]).IsEqualTo(_mockFileSystem.Path.GetFullPath(projectFile));
   }
 
@@ -131,7 +131,7 @@ public class SettingsFileResolverTests : IDisposable
 
     var files = _resolver.GetAllSettingsFiles(SettingsScope.Solution).ToList();
 
-    await Assert.That(files).HasCount().EqualTo(3);
+    await Assert.That(files.Count).IsEqualTo(3);
   }
 
   [Test]
@@ -164,7 +164,7 @@ public class SettingsFileResolverTests : IDisposable
 
     var fileName = _mockFileSystem.Path.GetFileNameWithoutExtension(filePath);
     var hash = fileName.Replace("solution_", "");
-    await Assert.That(hash).HasLength().EqualTo(32);
+    await Assert.That(hash.Length).EqualTo(32);
   }
 
   [Test]

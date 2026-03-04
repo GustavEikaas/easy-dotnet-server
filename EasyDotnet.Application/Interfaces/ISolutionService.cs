@@ -4,6 +4,6 @@ namespace EasyDotnet.Application.Interfaces;
 
 public interface ISolutionService
 {
-  List<SolutionFileProject> GetProjectsFromSolutionFile(string solutionFilePath);
+  Task<List<SolutionFileProject>> GetProjectsFromSolutionFile(string solutionFilePath, CancellationToken cancellationToken);
   Task<bool> AddProjectToSolutionAsync(string solutionFilePath, string projectPath, CancellationToken cancellationToken);
 }

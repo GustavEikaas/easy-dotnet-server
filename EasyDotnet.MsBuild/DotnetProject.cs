@@ -165,8 +165,11 @@ public static class DotnetProjectExtensions
 
     var baseDir = File.Exists(targetPath) ? Path.GetDirectoryName(targetPath)! : targetPath;
     return Path.Combine(baseDir, "Properties", "launchSettings.json");
-
   }
+
+  //https://github.com/microsoft/testfx/issues/7397
+  public static bool IsMTP(this DotnetProject project) => project.IsTestingPlatformApplication;
+  public static bool IsVsTest(this DotnetProject project) => !project.IsTestingPlatformApplication && project.IsTestProject;
 }
 
 public static class DotnetProjectTfmExtensions

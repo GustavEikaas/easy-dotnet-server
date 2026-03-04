@@ -1,10 +1,16 @@
+using System.CommandLine.Parsing;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Domain.Models.Client;
 using StreamJsonRpc;
 
 namespace EasyDotnet.Infrastructure.Editor;
 
-public class EditorService(IEditorProcessManagerService editorProcessManagerService, JsonRpc jsonRpc) : IEditorService
+public class EditorService(
+  IEditorProcessManagerService editorProcessManagerService,
+  IStartupHookService startupHookService,
+  IMsBuildService buildService,
+  IClientService clientService,
+  JsonRpc jsonRpc) : IEditorService
 {
   public async Task DisplayError(string message) =>
       await jsonRpc.NotifyWithParameterObjectAsync("displayError", new DisplayMessage(message));
@@ -34,19 +40,49 @@ public class EditorService(IEditorProcessManagerService editorProcessManagerServ
     return selectedIds == null ? null : [.. choices.Where(option => selectedIds.Contains(option.Id))];
   }
 
-  public async Task<Guid> RequestRunCommand(RunCommand command)
+  public async Task<int> RequestRunCommandAsync(RunCommand command, CancellationToken ct = default)
   {
-    var guid = editorProcessManagerService.RegisterJob();
+    var guid = editorProcessManagerService.RegisterJob(TerminalSlot.Managed);
     try
     {
-      _ = await jsonRpc.InvokeWithParameterObjectAsync<RunCommandResponse>("runCommand", new TrackedJob(guid, command));
+      _ = await jsonRpc.InvokeWithParameterObjectAsync<RunCommandResponse>(
+          "runCommandManaged", new TrackedJob(guid, command), ct);
     }
     catch (RemoteInvocationException e)
     {
-      editorProcessManagerService.SetFailedToStart(guid, e.Message);
+      editorProcessManagerService.SetFailedToStart(guid, TerminalSlot.Managed, e.Message);
+      throw;
+    }
+    return await editorProcessManagerService.WaitForExitAsync(guid, TerminalSlot.Managed);
+  }
+
+  public async Task<int> RequestRunProjectAsync(RunProjectRequest request, CancellationToken ct = default)
+  {
+    var guid = editorProcessManagerService.RegisterJob(TerminalSlot.LongRunning);
+    await using var session = startupHookService.CreateSession(request.EnvironmentVariables);
+
+    var command = BuildRunCommand(request, session.EnvironmentVariables);
+    var rpcMethod = clientService.HasExternalTerminal ? "runCommandExternal" : "runCommandManaged";
+
+    try
+    {
+      await jsonRpc.InvokeWithParameterObjectAsync(rpcMethod, new TrackedJob(guid, command), ct);
+    }
+    catch (RemoteInvocationException e)
+    {
+      editorProcessManagerService.SetFailedToStart(guid, TerminalSlot.LongRunning, e.Message);
+      throw;
     }
 
-    return guid;
+    var pid = await session.WaitForPidAsync(ct);
+    session.Resume();
+
+    if (clientService.HasExternalTerminal)
+    {
+      _ = MonitorExternalProcessAsync(pid, guid, ct);
+    }
+
+    return await editorProcessManagerService.WaitForExitAsync(guid, TerminalSlot.LongRunning);
   }
 
   public async Task<int> RequestStartDebugSession(string host, int port)
@@ -82,4 +118,67 @@ public class EditorService(IEditorProcessManagerService editorProcessManagerServ
   public async Task SetQuickFixList(QuickFixItem[] quickFixItems) => await jsonRpc.NotifyWithParameterObjectAsync("quickfix/set", quickFixItems);
 
   public async Task CloseQuickFixList() => await jsonRpc.NotifyWithParameterObjectAsync("quickfix/close");
+
+  public async Task<bool> BuildProject(string projectPath, CancellationToken cancellationToken)
+  {
+    using var progress = new ProgressScope(this, "Building", $"Building {Path.GetFileNameWithoutExtension(projectPath)}");
+    var res = await buildService.RequestBuildAsync(projectPath, null, null, null, cancellationToken);
+    if (res.Success)
+    {
+      return true;
+    }
+    progress.Report("Build failed", 100);
+    var errors = res.Errors.Select(x => new QuickFixItem(x.FilePath, x.LineNumber, x.ColumnNumber, x.Message ?? "ERR", QuickFixItemType.Error));
+    await SetQuickFixList([.. errors]);
+    return false;
+  }
+
+  private static RunCommand BuildRunCommand(RunProjectRequest request, Dictionary<string, string> hookEnv)
+  {
+    var args = new List<string> { request.Project.TargetPath! };
+
+    if (request.LaunchProfile?.CommandLineArgs is not null)
+    {
+      args.AddRange(CommandLineParser.SplitCommandLine(request.LaunchProfile.CommandLineArgs));
+    }
+
+    if (request.AdditionalArguments is { Length: > 0 })
+    {
+      args.AddRange(request.AdditionalArguments);
+    }
+
+    var env = new Dictionary<string, string>(request.EnvironmentVariables ?? [], StringComparer.OrdinalIgnoreCase);
+
+    foreach (var kvp in request.LaunchProfile?.EnvironmentVariables ?? [])
+    {
+      env[kvp.Key] = kvp.Value;
+    }
+
+    foreach (var kvp in hookEnv)
+    {
+      env[kvp.Key] = kvp.Value;
+    }
+
+    return new RunCommand(
+        "dotnet",
+        [.. args],
+        request.LaunchProfile?.WorkingDirectory ?? request.Project.ProjectDir ?? ".",
+        env);
+  }
+
+  private async Task MonitorExternalProcessAsync(int pid, Guid jobId, CancellationToken ct)
+  {
+    try
+    {
+      using var process = System.Diagnostics.Process.GetProcessById(pid);
+      process.EnableRaisingEvents = true;
+      await process.WaitForExitAsync(ct);
+
+      editorProcessManagerService.CompleteJob(jobId, process.ExitCode);
+    }
+    catch (ArgumentException)
+    {
+      editorProcessManagerService.CompleteJob(jobId, -1);
+    }
+  }
 }

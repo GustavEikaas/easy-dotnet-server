@@ -75,6 +75,18 @@ public static class ValueConverterHelpers
     ];
   }
 
+  public static bool TryGetLong(Dictionary<string, string> lookup, string fieldName, out long value)
+  {
+    if (lookup.TryGetValue(fieldName, out var strValue) &&
+        long.TryParse(strValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out value))
+    {
+      return true;
+    }
+
+    value = 0;
+    return false;
+  }
+
   public static bool TryGetInt(Dictionary<string, string> lookup, string fieldName, out int value)
   {
     if (lookup.TryGetValue(fieldName, out var strValue) &&

@@ -12,6 +12,7 @@ public interface IDebuggerProxy
   Task Completion { get; }
   void Start(CancellationToken cancellationToken, Action? onDisconnect = null);
   Task<Response> RunInternalRequestAsync(Request request, CancellationToken cancellationToken);
+  Task<Response> RunClientRequestAsync(Request request, CancellationToken cancellationToken);
   Task<VariablesResponse?> GetVariablesAsync(int variablesReference, CancellationToken cancellationToken);
   Task WriteProxyToClientAsync(ProtocolMessage response, CancellationToken cancellationToken);
   Task EmitEventToClientAsync(Event evt, CancellationToken cancellationToken);
@@ -126,6 +127,21 @@ public class DebuggerProxy : IDebuggerProxy
   public async Task WriteProxyToClientAsync(ProtocolMessage json, CancellationToken cancellationToken)
     => await _channels.ProxyToClientWriter.WriteAsync(json, cancellationToken);
 
+  public async Task<Response> RunClientRequestAsync(Request request, CancellationToken cancellationToken)
+  {
+    var tcs = new TaskCompletionSource<Response>();
+
+    var proxySeq = _requestTracker.RegisterProxyRequest(tcs, cancellationToken);
+    request.Seq = proxySeq;
+
+    _logger?.LogDebug("Proxy client request seq {proxySeq}, command: {command}", proxySeq, request.Command);
+
+    await _channels.ProxyToClientWriter.WriteAsync(request, cancellationToken);
+
+    await using var registration = cancellationToken.Register(() => tcs.TrySetCanceled(cancellationToken));
+    return await tcs.Task;
+  }
+
   public async Task EmitEventToClientAsync(Event evt, CancellationToken cancellationToken)
   {
     evt.Seq = _requestTracker.GetNextSequenceNumber();
@@ -181,6 +197,17 @@ public class DebuggerProxy : IDebuggerProxy
         }
 
         var message = DapMessageDeserializer.Parse(json);
+
+        if (message is Response response)
+        {
+          var context = _requestTracker.GetAndRemoveContext(response.RequestSeq);
+          if (context != null && context.Origin == RequestOrigin.Proxy)
+          {
+            context.CompletionSource.TrySetResult(response);
+            continue;
+          }
+        }
+
         await _channels.ClientToProxyWriter.WriteAsync(message, cancellationToken);
       }
     }

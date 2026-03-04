@@ -33,6 +33,7 @@ public class ValueConverterService(
 
   public readonly List<IValueConverter> ValueConverters = [
       new DateTimeValueConverter(loggerFactory.CreateLogger<DateTimeValueConverter>()),
+      new DateTimeOffsetValueConverter(loggerFactory.CreateLogger<DateTimeOffsetValueConverter>()),
       new GuidValueConverter(loggerFactory.CreateLogger<GuidValueConverter>()),
       new HashSetValueConverter(loggerFactory.CreateLogger<HashSetValueConverter>()),
       new QueueValueConverter(loggerFactory.CreateLogger<QueueValueConverter>()),

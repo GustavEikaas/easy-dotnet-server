@@ -1,0 +1,8 @@
+<Project>
+  <PropertyGroup>
+    <LowestNetCoreTfm>net8.0</LowestNetCoreTfm>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+</Project>

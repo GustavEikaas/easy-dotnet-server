@@ -1,9 +1,8 @@
-using System;
-using System.Linq;
-using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
 using EasyDotnet.Domain.Models.Client;
+using EasyDotnet.IDE.Services;
+using EasyDotnet.Infrastructure.Editor;
 using EasyDotnet.Infrastructure.EntityFramework;
 using StreamJsonRpc;
 
@@ -13,42 +12,49 @@ public class EntityFrameworkController(
   ISolutionService solutionService,
   IClientService clientService,
   EntityFrameworkService entityFrameworkService,
+  DbContextCache dbContextCache,
   IEditorService editorService,
   IProgressScopeFactory progressScopeFactory) : BaseController
 {
   [JsonRpcMethod("ef/migrations-add")]
-  public async Task AddMigration(string? migrationName = null)
+  public async Task AddMigration(string? migrationName = null, CancellationToken cancellationToken = default)
   {
-    var (efProject, startupProject, dbContext) = await PromptEfProjectInfoAsync();
+    var (efProject, startupProject, dbContext) = await PromptEfProjectInfoAsync(cancellationToken);
+    var success = await editorService.BuildProject(startupProject, cancellationToken);
+    if (!success) return;
     migrationName ??= await editorService.RequestString("Enter migration name", null);
     if (migrationName is null) return;
 
-    await editorService.RequestRunCommand(new RunCommand(
+    _ = editorService.RequestRunCommandAsync(new RunCommand(
       "dotnet-ef",
-      ["migrations", "add", migrationName, "--project", efProject, "--startup-project", startupProject, "--context", dbContext],
+      ["migrations", "add", migrationName, "--project", efProject, "--startup-project", startupProject, "--context", dbContext, "--no-build"],
       ".",
-      []));
+      []), cancellationToken);
   }
 
   [JsonRpcMethod("ef/migrations-remove")]
-  public async Task RemoveMigration()
+  public async Task RemoveMigration(CancellationToken cancellationToken)
   {
-    var (efProject, startupProject, dbContext) = await PromptEfProjectInfoAsync();
+    var (efProject, startupProject, dbContext) = await PromptEfProjectInfoAsync(cancellationToken);
+    var success = await editorService.BuildProject(startupProject, cancellationToken);
+    if (!success) return;
 
-    await editorService.RequestRunCommand(new RunCommand(
+    _ = editorService.RequestRunCommandAsync(new RunCommand(
       "dotnet-ef",
-      ["migrations", "remove", "--project", efProject, "--startup-project", startupProject, "--context", dbContext],
+      ["migrations", "remove", "--project", efProject, "--startup-project", startupProject, "--context", dbContext, "--no-build"],
       ".",
-      []));
+      []), cancellationToken);
   }
 
   [JsonRpcMethod("ef/migrations-apply")]
-  public async Task ApplyMigration()
+  public async Task ApplyMigration(CancellationToken cancellationToken)
   {
-    var (efProject, startupProject, dbContext) = await PromptEfProjectInfoAsync();
+    var (efProject, startupProject, dbContext) = await PromptEfProjectInfoAsync(cancellationToken);
+    var success = await editorService.BuildProject(startupProject, cancellationToken);
+    if (!success) return;
 
     using var migrationScope = progressScopeFactory.Create("Listing migrations", "Resolving migrations");
-    var migrations = await entityFrameworkService.ListMigrationsAsync(efProject, startupProject, dbContext);
+    var migrations = await entityFrameworkService.ListMigrationsAsync(efProject, startupProject, dbContext, noBuild: true, cancellationToken: cancellationToken);
     migrationScope.Dispose();
 
     if (migrations.Count == 0)
@@ -61,63 +67,68 @@ public class EntityFrameworkController(
       [.. migrations.Select(m => new SelectionOption(m.Id, m.Name))])
       ?? throw new InvalidOperationException("No migration selected");
 
-    await editorService.RequestRunCommand(new RunCommand(
+    _ = editorService.RequestRunCommandAsync(new RunCommand(
       "dotnet-ef",
-      ["database", "update", selectedMigration.Id, "--project", efProject, "--startup-project", startupProject, "--context", dbContext],
+      ["database", "update", selectedMigration.Id, "--project", efProject, "--startup-project", startupProject, "--context", dbContext, "--no-build"],
       ".",
-      []));
+      []), cancellationToken);
   }
 
   [JsonRpcMethod("ef/database-update")]
-  public async Task UpdateDatabase()
+  public async Task UpdateDatabase(CancellationToken cancellationToken)
   {
-    var (efProject, startupProject, dbContext) = await PromptEfProjectInfoAsync();
+    var (efProject, startupProject, dbContext) = await PromptEfProjectInfoAsync(cancellationToken);
+    var success = await editorService.BuildProject(startupProject, cancellationToken);
+    if (!success) return;
 
-    await editorService.RequestRunCommand(new RunCommand(
+    _ = editorService.RequestRunCommandAsync(new RunCommand(
       "dotnet-ef",
-      ["database", "update", "--project", efProject, "--startup-project", startupProject, "--context", dbContext],
+      ["database", "update", "--project", efProject, "--startup-project", startupProject, "--context", dbContext, "--no-build"],
       ".",
-      []));
+      []), cancellationToken);
   }
 
   [JsonRpcMethod("ef/database-drop")]
-  public async Task DropDatabase()
+  public async Task DropDatabase(CancellationToken cancellationToken)
   {
-    var (efProject, startupProject, dbContext) = await PromptEfProjectInfoAsync();
+    var (efProject, startupProject, dbContext) = await PromptEfProjectInfoAsync(cancellationToken);
+    var success = await editorService.BuildProject(startupProject, cancellationToken);
+    if (!success) return;
 
-    await editorService.RequestRunCommand(new RunCommand(
+    _ = editorService.RequestRunCommandAsync(new RunCommand(
       "dotnet-ef",
-      ["database", "update", "--project", efProject, "--startup-project", startupProject, "--context", dbContext],
+      ["database", "drop", "--project", efProject, "--startup-project", startupProject, "--context", dbContext, "--no-build"],
       ".",
-      []));
+      []), cancellationToken);
   }
 
-  private async Task<(string EfProject, string StartupProject, string DbContext)> PromptEfProjectInfoAsync()
+  private async Task<(string EfProject, string StartupProject, string DbContext)> PromptEfProjectInfoAsync(CancellationToken cancellationToken)
   {
     var solutionFile = clientService.RequireSolutionFile();
-    var projects = solutionService.GetProjectsFromSolutionFile(solutionFile);
+    var projects = await solutionService.GetProjectsFromSolutionFile(solutionFile, cancellationToken);
 
     var efProject = await editorService.RequestSelection(
       "Pick project",
-      [.. projects.Select(x => new SelectionOption(x.AbsolutePath, x.ProjectName))]);
-
-    if (efProject is null)
-    {
-      throw new InvalidOperationException("No EF project selected");
-    }
+      [.. projects.Select(x => new SelectionOption(x.AbsolutePath, x.ProjectName))]) ?? throw new InvalidOperationException("No EF project selected");
 
     var startupProject = await editorService.RequestSelection(
       "Pick startup project",
-      [.. projects.Select(x => new SelectionOption(x.AbsolutePath, x.ProjectName))]);
+      [.. projects.Select(x => new SelectionOption(x.AbsolutePath, x.ProjectName))]) ?? throw new InvalidOperationException("No startup project selected");
 
-    if (startupProject is null)
+    var cached = await dbContextCache.TryGetAsync(efProj: efProject.Id, startupProj: startupProject.Id);
+
+    if (cached is not null && cached.Count != 0)
     {
-      throw new InvalidOperationException("No startup project selected");
+      var scanOption = new SelectionOption("SCAN", "🔄️ Scan for more dbcontexts");
+      var options = cached.Select(x => new SelectionOption(x.FullName, x.Name)).Concat([scanOption]);
+      var selection = await editorService.RequestSelection("Select db context", [.. options]) ?? throw new InvalidOperationException("No db context selected");
+      if (selection.Id != scanOption.Id)
+      {
+        return (efProject.Id, startupProject.Id, selection.Id);
+      }
     }
 
-    using var scope = progressScopeFactory.Create("Listing db contexts", "Resolving db contexts");
-    var dbContexts = await entityFrameworkService.ListDbContextsAsync(efProject.Id, startupProject.Id, ".");
-    scope.Dispose();
+    var dbContexts = await ScanForContextsAsync(efProject: efProject.Id, startupProject: startupProject.Id, cancellationToken);
 
     if (dbContexts.Count == 0)
     {
@@ -135,5 +146,25 @@ public class EntityFrameworkController(
       ?? throw new InvalidOperationException("No db context selected");
 
     return (efProject.Id, startupProject.Id, selectedContext.Id);
+  }
+
+  private async Task<List<DbContextInfo>> ScanForContextsAsync(string efProject, string startupProject, CancellationToken cancellationToken)
+  {
+    using var scope = progressScopeFactory.Create("Listing db contexts", "Resolving db contexts");
+
+    var success = await editorService.BuildProject(startupProject, cancellationToken);
+    if (!success)
+    {
+      throw new Exception("Build failed");
+    }
+
+    var contexts = await entityFrameworkService.ListDbContextsAsync(efProject, startupProject, noBuild: true, ".", cancellationToken);
+
+    if (contexts.Count != 0)
+    {
+      await dbContextCache.SetAsync(efProject, startupProject, contexts);
+    }
+
+    return contexts;
   }
 }

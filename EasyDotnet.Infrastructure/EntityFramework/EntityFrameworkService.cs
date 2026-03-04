@@ -15,6 +15,7 @@ public class EntityFrameworkService
   public async Task<List<DbContextInfo>> ListDbContextsAsync(
     string efProjectPath,
     string startupProjectPath,
+    bool noBuild,
     string workingDirectory = ".",
     CancellationToken cancellationToken = default)
   {
@@ -25,8 +26,12 @@ public class EntityFrameworkService
       "--project", $"\"{efProjectPath}\"",
       "--startup-project", $"\"{startupProjectPath}\"",
       "--json",
-      "--prefix-output"
+      "--prefix-output",
     };
+    if (noBuild)
+    {
+      args.Add("--no-build");
+    }
 
     var result = await RunEfCommandAsync(args, workingDirectory, cancellationToken);
 
@@ -54,6 +59,7 @@ public class EntityFrameworkService
       string efProjectPath,
       string startupProjectPath,
       string dbContext,
+      bool noBuild,
       string workingDirectory = ".",
       CancellationToken cancellationToken = default)
   {
@@ -65,9 +71,14 @@ public class EntityFrameworkService
       "--startup-project", $"\"{startupProjectPath}\"",
       "--context", dbContext,
       "--json",
-      "--prefix-output"
+      "--prefix-output",
+      "--no-build"
     };
 
+    if (noBuild)
+    {
+      args.Add("--no-build");
+    }
     var result = await RunEfCommandAsync(args, workingDirectory, cancellationToken);
 
     if (!result.Success)

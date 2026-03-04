@@ -1,14 +1,3 @@
-## SolutionController
-
-### `solution/list-projects`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| solutionFilePath | string |   |
-
-**Returns:** `List<SolutionFileProjectResponse>`
-
----
-
 ## RoslynController
 
 ### `roslyn/bootstrap-file`
@@ -47,6 +36,98 @@
 | includeTransitive | bool? | ✅  |
 
 **Returns:** `Task<IAsyncEnumerable<OutdatedDependencyInfoResponse>>`
+
+---
+
+## UserSecretsController
+
+### `user-secrets/init`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+
+**Returns:** `Task<ProjectUserSecretsInitResponse>`
+
+---
+
+## TestController
+
+### `test/debug`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+| configuration | string |   |
+| filter | RunRequestNode[] |   |
+| targetFrameworkMoniker | string | ✅  |
+
+**Returns:** `IAsyncEnumerable<TestRunResult>`
+
+### `test/discover`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+| targetFrameworkMoniker | string | ✅  |
+| configuration | string | ✅  |
+
+**Returns:** `Task<IAsyncEnumerable<DiscoveredTest>>`
+
+### `test/run`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+| configuration | string |   |
+| filter | RunRequestNode[] |   |
+| targetFrameworkMoniker | string | ✅  |
+
+**Returns:** `IAsyncEnumerable<TestRunResult>`
+
+### `test/set-project-run-settings`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+
+**Returns:** `Task`
+
+### `test/solution-command`
+_No parameters_
+
+**Returns:** `RunCommand`
+
+---
+
+## TemplateController
+
+### `template/instantiate/v2`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| identity | string |   |
+| name | string |   |
+| outputPath | string |   |
+| parameters | Dictionary<string, string> |   |
+
+**Returns:** `Task`
+
+### `template/list`
+_No parameters_
+
+**Returns:** `Task<IAsyncEnumerable<DotnetNewTemplateResponse>>`
+
+### `template/parameters`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| identity | string |   |
+
+**Returns:** `Task<IAsyncEnumerable<DotnetNewParameterResponse>>`
+
+---
+
+## SolutionController
+
+### `solution/list-projects`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| solutionFilePath | string |   |
+
+**Returns:** `Task<List<SolutionFileProjectResponse>>`
 
 ---
 
@@ -89,81 +170,6 @@ _No parameters_
 | sources | List<string> | ✅  |
 
 **Returns:** `Task<IAsyncEnumerable<NugetPackageMetadata>>`
-
----
-
-## UserSecretsController
-
-### `user-secrets/init`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| projectPath | string |   |
-
-**Returns:** `Task<ProjectUserSecretsInitResponse>`
-
----
-
-## TestController
-
-### `test/debug`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| projectPath | string |   |
-| configuration | string |   |
-| filter | RunRequestNode[] |   |
-| targetFrameworkMoniker | string | ✅  |
-
-**Returns:** `Task<IAsyncEnumerable<TestRunResult>>`
-
-### `test/discover`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| projectPath | string |   |
-| targetFrameworkMoniker | string | ✅  |
-| configuration | string | ✅  |
-
-**Returns:** `Task<IAsyncEnumerable<DiscoveredTest>>`
-
-### `test/run`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| projectPath | string |   |
-| configuration | string |   |
-| filter | RunRequestNode[] |   |
-| targetFrameworkMoniker | string | ✅  |
-
-**Returns:** `Task<IAsyncEnumerable<TestRunResult>>`
-
-### `test/set-project-run-settings`
-_No parameters_
-
-**Returns:** `Task`
-
----
-
-## TemplateController
-
-### `template/instantiate/v2`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| identity | string |   |
-| name | string |   |
-| outputPath | string |   |
-| parameters | Dictionary<string, string> |   |
-
-**Returns:** `Task`
-
-### `template/list`
-_No parameters_
-
-**Returns:** `Task<IAsyncEnumerable<DotnetNewTemplateResponse>>`
-
-### `template/parameters`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| identity | string |   |
-
-**Returns:** `Task<IAsyncEnumerable<DotnetNewParameterResponse>>`
 
 ---
 
@@ -265,12 +271,14 @@ _No parameters_
 ## EntityFrameworkController
 
 ### `ef/database-drop`
-_No parameters_
+| Parameter | Type | Optional |
+|-----------|------|----------|
 
 **Returns:** `Task`
 
 ### `ef/database-update`
-_No parameters_
+| Parameter | Type | Optional |
+|-----------|------|----------|
 
 **Returns:** `Task`
 
@@ -282,14 +290,56 @@ _No parameters_
 **Returns:** `Task`
 
 ### `ef/migrations-apply`
-_No parameters_
+| Parameter | Type | Optional |
+|-----------|------|----------|
 
 **Returns:** `Task`
 
 ### `ef/migrations-remove`
-_No parameters_
+| Parameter | Type | Optional |
+|-----------|------|----------|
 
 **Returns:** `Task`
+
+---
+
+## DefaultController
+
+### `set-default-build-project`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+
+**Returns:** `Void`
+
+### `set-default-launch-profile`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+| launchProfile | string |   |
+
+**Returns:** `Void`
+
+### `set-default-startup-project`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+
+**Returns:** `Void`
+
+### `set-default-test-project`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+
+**Returns:** `Void`
+
+### `set-default-view-project`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| projectPath | string |   |
+
+**Returns:** `Void`
 
 ---
 

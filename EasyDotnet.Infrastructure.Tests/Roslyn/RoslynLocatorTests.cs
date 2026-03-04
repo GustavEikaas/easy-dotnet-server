@@ -12,7 +12,7 @@ public class RoslynLocatorTests
   {
 
     Environment.SetEnvironmentVariable(RoslynLocator.ROSLYN_DLL_PATH_ENV, null);
-    Assert.Throws(() => RoslynLocator.GetRoslynDllPath());
+    Assert.Throws<Exception>(() => RoslynLocator.GetRoslynDllPath());
   }
 
   [Test]

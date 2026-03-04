@@ -5,6 +5,6 @@ namespace EasyDotnet.Debugger.Interfaces;
 public interface IDebugSessionFactory
 {
   DebugSession Create(
-    Func<InterceptableAttachRequest, Task<InterceptableAttachRequest>> attachRequestRewriter,
+    Func<InterceptableAttachRequest, IDebuggerProxy, Task<InterceptableAttachRequest>> attachRequestRewriter,
     bool applyValueConverters);
 }
