@@ -12,8 +12,12 @@ namespace EasyDotnet.IDE.TestRunner.Dispatch;
 public class StatusDispatcher(JsonRpc rpc)
 {
   /// <summary>Notify the client of a node registration or update.</summary>
-  public Task SendRegisterTestAsync(TestNode node) =>
-      rpc.NotifyWithParameterObjectAsync("registerTest", new { test = node });
+  public Task SendRegisterTestAsync(TestNode node)
+  {
+    ArgumentNullException.ThrowIfNull(node);
+    return rpc.NotifyWithParameterObjectAsync("registerTest", new { test = node });
+  }
+
 
   /// <summary>
   /// Send a status update for a single node, optionally with updated available actions.
