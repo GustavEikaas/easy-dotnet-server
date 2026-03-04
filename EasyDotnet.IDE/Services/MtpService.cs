@@ -1,12 +1,12 @@
 using System.Runtime.CompilerServices;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.IDE.DebuggerStrategies;
-using EasyDotnet.IDE.Extensions;
 using EasyDotnet.IDE.MTP.RPC;
+using EasyDotnet.IDE.TestRunner.Adapters;
+using EasyDotnet.IDE.TestRunner.Models;
 using EasyDotnet.Infrastructure;
 using EasyDotnet.MsBuild;
 using EasyDotnet.MTP;
-using EasyDotnet.Types;
 
 namespace EasyDotnet.IDE.Services;
 
@@ -51,7 +51,7 @@ public class MtpService(
 
     await foreach (var update in client.RunTestsAsync(filter, token))
     {
-      yield return update.ToTestRunResult();
+      yield return update.ToTestRunResult()!;
     }
   }
 
@@ -69,7 +69,7 @@ public class MtpService(
 
     await foreach (var update in client.RunTestsAsync(filter, token))
     {
-      yield return update.ToTestRunResult();
+      yield return update.ToTestRunResult()!;
     }
   }
 }

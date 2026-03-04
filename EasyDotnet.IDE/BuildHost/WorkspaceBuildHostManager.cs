@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.IDE.BuildHost;
 
-public class WorkspaceBuildHostManager(IBuildHostManager innerManager, ILogger<WorkspaceBuildHostManager> logger) : IBuildHostManager
+public class WorkspaceBuildHostManager(ISolutionService solutionService, IBuildHostManager innerManager, ILogger<WorkspaceBuildHostManager> logger) : IBuildHostManager
 {
   private readonly ConcurrentDictionary<(string Path, string Config), TaskCompletionSource<List<ProjectEvaluationResult>>> _evaluationCache = new();
 
@@ -64,6 +64,79 @@ public class WorkspaceBuildHostManager(IBuildHostManager innerManager, ILogger<W
       }
     }
   }
+
+  public async Task<ValidatedDotnetProject?> GetProjectAsync(
+       string projectPath,
+       string targetFramework,
+       string configuration = "Debug",
+       CancellationToken ct = default)
+  {
+    var request = new GetProjectPropertiesBatchRequest([projectPath], configuration);
+
+    await foreach (var result in GetProjectPropertiesBatchAsync(request, ct))
+    {
+      if (result.Success
+          && result.Project is not null
+          && string.Equals(result.TargetFramework, targetFramework, StringComparison.OrdinalIgnoreCase))
+      {
+        return result.Project;
+      }
+    }
+
+    logger.LogWarning(
+        "Could not resolve {ProjectPath} for TFM {TFM}",
+        projectPath, targetFramework);
+
+    return null;
+  }
+
+  public async Task<List<ValidatedDotnetProject>> GetProjectsFromSolutionAsync(
+       string solutionPath,
+       Func<ValidatedDotnetProject, bool>? filter = null,
+       string configuration = "Debug",
+       CancellationToken ct = default)
+  {
+    var solutionProjects = await solutionService.GetProjectsFromSolutionFile(solutionPath, ct);
+    var projectPaths = solutionProjects.ConvertAll(x => x.AbsolutePath);
+
+    if (projectPaths.Count == 0) return [];
+
+    var results = new List<ValidatedDotnetProject>();
+    var request = new GetProjectPropertiesBatchRequest([.. projectPaths], configuration);
+
+    await foreach (var result in GetProjectPropertiesBatchAsync(request, ct))
+    {
+      if (result.Success && result.Project is not null)
+      {
+        if (filter is null || filter(result.Project))
+          results.Add(result.Project);
+      }
+      else if (!result.Success)
+      {
+        logger.LogWarning(
+            "Failed to evaluate {ProjectPath} ({TFM}): {Error}",
+            result.ProjectPath,
+            result.TargetFramework ?? "unknown",
+            result.Error?.Message);
+      }
+    }
+
+    return results;
+  }
+
+  /// <summary>
+  /// Returns all test projects from a solution, flattened across TFMs.
+  /// A project qualifies if IsTestProject or IsTestPlatformProject is true.
+  /// </summary>
+  public Task<List<ValidatedDotnetProject>> GetTestProjectsFromSolutionAsync(
+      string solutionPath,
+      string configuration = "Debug",
+      CancellationToken ct = default) =>
+      GetProjectsFromSolutionAsync(
+          solutionPath,
+          p => p.IsMTP || p.IsVsTest,
+          configuration,
+          ct);
 
   private async Task ExecuteBatchFetchAsync(
       List<string> missingPaths,

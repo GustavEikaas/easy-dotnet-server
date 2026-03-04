@@ -4,11 +4,12 @@ using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
 using EasyDotnet.Domain.Models.Client;
 using EasyDotnet.IDE.Services;
+using EasyDotnet.IDE.TestRunner.Adapters;
+using EasyDotnet.IDE.TestRunner.Models;
 using EasyDotnet.IDE.Utils;
 using EasyDotnet.Infrastructure.Settings;
 using EasyDotnet.MsBuild;
 using EasyDotnet.MTP;
-using EasyDotnet.Types;
 using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
 

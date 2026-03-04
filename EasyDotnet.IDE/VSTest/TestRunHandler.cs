@@ -1,6 +1,5 @@
 using System.Threading.Channels;
-using EasyDotnet.Types;
-using EasyDotnet.VSTest;
+using EasyDotnet.IDE.TestRunner.Adapters;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Client;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Logging;
