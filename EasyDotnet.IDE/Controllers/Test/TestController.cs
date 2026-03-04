@@ -19,7 +19,7 @@ public class TestController(
   ILogger<TestController> logger,
   IClientService clientService,
   MtpService mtpService,
-  VsTestService vsTestService,
+  IVsTestService vsTestService,
   IMsBuildService msBuildService,
   IFileSystem fileSystem,
   SettingsService settingsService,
@@ -48,7 +48,8 @@ public class TestController(
     }
     else
     {
-      return (await vsTestService.RunDiscover(project.TargetPath!, token)).ToBatchedAsyncEnumerable(30);
+      throw new NotImplementedException();
+      // return (await vsTestService.RunDiscover(project.TargetPath!, token)).ToBatchedAsyncEnumerable(30);
     }
   }
 
