@@ -20,11 +20,11 @@ public record TestRunnerStatus(
 [JsonConverter(typeof(StringEnumConverter))]
 public enum OverallStatus
 {
-    Idle,
-    Building,
-    Discovering,
-    Running,
-    Debugging,
-    Failed,
-    Passed
+  Idle,
+  Building,
+  Discovering,
+  Running,
+  Debugging,
+  Failed,
+  Passed
 }

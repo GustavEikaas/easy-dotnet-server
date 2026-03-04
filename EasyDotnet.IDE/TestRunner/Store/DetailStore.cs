@@ -11,26 +11,26 @@ namespace EasyDotnet.IDE.TestRunner.Store;
 /// </summary>
 public class DetailStore
 {
-    private readonly ConcurrentDictionary<string, TestDetail> _details = new();
+  private readonly ConcurrentDictionary<string, TestDetail> _details = new();
 
-    public void Set(string stableNodeId, TestDetail detail) =>
-        _details[stableNodeId] = detail;
+  public void Set(string stableNodeId, TestDetail detail) =>
+      _details[stableNodeId] = detail;
 
-    public TestDetail? Get(string stableNodeId) =>
-        _details.TryGetValue(stableNodeId, out var detail) ? detail : null;
+  public TestDetail? Get(string stableNodeId) =>
+      _details.TryGetValue(stableNodeId, out var detail) ? detail : null;
 
-    public void Clear(string stableNodeId) =>
-        _details.TryRemove(stableNodeId, out _);
+  public void Clear(string stableNodeId) =>
+      _details.TryRemove(stableNodeId, out _);
 
-    /// <summary>Clears details for a node and all its descendants.</summary>
-    public void ClearSubtree(IEnumerable<string> stableNodeIds)
-    {
-        foreach (var id in stableNodeIds)
-            _details.TryRemove(id, out _);
-    }
+  /// <summary>Clears details for a node and all its descendants.</summary>
+  public void ClearSubtree(IEnumerable<string> stableNodeIds)
+  {
+    foreach (var id in stableNodeIds)
+      _details.TryRemove(id, out _);
+  }
 
-    public void ClearAll() => _details.Clear();
+  public void ClearAll() => _details.Clear();
 
-    public bool HasResults(string stableNodeId) =>
-        _details.TryGetValue(stableNodeId, out var d) && d.HasResults;
+  public bool HasResults(string stableNodeId) =>
+      _details.TryGetValue(stableNodeId, out var d) && d.HasResults;
 }
