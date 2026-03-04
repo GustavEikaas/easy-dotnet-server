@@ -46,7 +46,8 @@ public class MtpService(
       token);
 
     await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
-    await session.WaitForConfigurationDoneAsync();
+    await session.ProcessStarted;
+    await Task.Delay(1000, token);
 
     await foreach (var update in client.RunTestsAsync(filter, token))
     {
