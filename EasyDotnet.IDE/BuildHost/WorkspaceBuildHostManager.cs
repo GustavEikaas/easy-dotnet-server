@@ -190,6 +190,14 @@ public class WorkspaceBuildHostManager(ISolutionService solutionService, IBuildH
     }
   }
 
+  public async IAsyncEnumerable<BatchBuildResult> BatchBuildAsync(BatchBuildRequest request, [EnumeratorCancellation] CancellationToken cancellationToken)
+  {
+    await foreach (var result in innerManager.BatchBuildAsync(request, cancellationToken))
+    {
+      yield return result;
+    }
+  }
+
   public Task<GetWatchListResponse> GetProjectWatchListAsync(GetWatchListRequest request, CancellationToken ct)
       => innerManager.GetProjectWatchListAsync(request, ct);
 

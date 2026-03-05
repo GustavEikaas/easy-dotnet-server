@@ -27,8 +27,7 @@ public class TestRunnerService(
   // -------------------------------------------------------------------------
   public async Task<InitializeResult> InitializeAsync(string solutionPath, CancellationToken ct)
   {
-    using var token = operationLock.TryAcquire("initialize", ct)
-        ?? throw new InvalidOperationException("Operation already in progress");
+    using var token = operationLock.TryAcquire("initialize", ct) ?? throw new InvalidOperationException("Operation already in progress");
 
     await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
         IsLoading: true,
@@ -61,19 +60,52 @@ public class TestRunnerService(
     var testProjects = await buildHost.GetTestProjectsFromSolutionAsync(solutionPath, ct: token.Ct);
 
     await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
-        IsLoading: true, CurrentOperation: "Building",
-        OverallStatus: OverallStatus.Building,
-        TotalTests: registry.GetLeafCount(), TotalRunning: 0,
-        TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
+           IsLoading: true, CurrentOperation: "Building",
+           OverallStatus: OverallStatus.Building,
+           TotalTests: registry.GetLeafCount(), TotalRunning: 0,
+           TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
 
-    foreach (var project in testProjects)
+    // Group by path — multi-TFM projects 
+    // but MSBuild only needs to build the project file once.
+    var projectsByPath = testProjects
+        .GroupBy(p => p.ProjectFullPath, StringComparer.OrdinalIgnoreCase)
+        .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+
+    var buildRequest = new BatchBuildRequest(
+        ProjectPaths: [.. projectsByPath.Keys],
+        Configuration: null);
+
+    var discoverTasks = new List<Task>();
+
+    await foreach (var result in buildHost.BatchBuildAsync(buildRequest, token.Ct))
     {
       token.Ct.ThrowIfCancellationRequested();
-      var projectId = NodeIdBuilder.Project(solutionId, project.ProjectName, project.TargetFramework ?? "");
-      await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.Building());
-      var buildSuccess = await msBuildService.RequestBuildAsync(project.ProjectFullPath, project.TargetFramework, buildArgs: null, configuration: null, token.Ct);
-      if (!buildSuccess.Success)
-        await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.Failed("", []));
+
+      var tfmVariants = projectsByPath.GetValueOrDefault(result.ProjectPath);
+      if (tfmVariants is null) continue;
+
+      if (result.Kind == BatchBuildResultKind.Started)
+      {
+        foreach (var project in tfmVariants)
+        {
+          var projectId = NodeIdBuilder.Project(solutionId, project.ProjectName, project.TargetFramework ?? "");
+          await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.Building());
+        }
+        continue;
+      }
+
+      foreach (var project in tfmVariants)
+      {
+        var projectId = NodeIdBuilder.Project(solutionId, project.ProjectName, project.TargetFramework ?? "");
+
+        if (result.Success != true)
+        {
+          await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.Failed("", []));
+          continue;
+        }
+
+        discoverTasks.Add(executor.DiscoverProjectAsync(project, solutionId, token));
+      }
     }
 
     await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
@@ -82,8 +114,6 @@ public class TestRunnerService(
         TotalTests: registry.GetLeafCount(), TotalRunning: 0,
         TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
 
-    var discoverTasks = testProjects.Select(project =>
-        executor.DiscoverProjectAsync(project, solutionId, token));
     await Task.WhenAll(discoverTasks);
 
     await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
