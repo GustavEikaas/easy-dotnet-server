@@ -31,12 +31,20 @@ public class OperationExecutor(
     var adapter = adapterResolver.Resolve(project);
     var emittedNamespaces = new HashSet<string>();
     var emittedClasses = new HashSet<string>();
-
+    var rootNs = project.Raw.RootNamespace ?? project.ProjectName;
+    var rootNamespaceParts = rootNs.Split('.', StringSplitOptions.RemoveEmptyEntries);
     await adapter.DiscoverAsync(project.TargetPath, async discovered =>
     {
       token.Ct.ThrowIfCancellationRequested();
 
-      var namespaceNodeId = await EnsureNamespaceChainAsync(projectNodeId, discovered.NamespaceParts, emittedNamespaces);
+      var namespaceParts = StripRootNamespace(discovered.NamespaceParts, rootNamespaceParts);
+
+      var namespaceNodeId = namespaceParts.Count > 0
+                      ? await EnsureNamespaceChainAsync(
+                          projectNodeId, discovered.NamespaceParts,
+                          namespaceParts, emittedNamespaces, token.Ct)
+                      : projectNodeId;
+
       var parentId = namespaceNodeId;
       if (discovered.ClassName is not null)
       {
@@ -58,11 +66,18 @@ public class OperationExecutor(
         }
         parentId = classNodeId;
       }
+      var shortMethodName = discovered.MethodName.Contains('.')
+          ? discovered.MethodName[(discovered.MethodName.LastIndexOf('.') + 1)..]
+          : discovered.MethodName;
+
+      var shortName = discovered.Arguments is not null
+          ? $"{shortMethodName}({discovered.Arguments})"
+          : shortMethodName;
 
       var methodNodeId = NodeIdBuilder.Method(parentId, discovered.MethodName);
       var methodNode = new TestNode(
               Id: methodNodeId,
-              DisplayName: discovered.DisplayName,
+              DisplayName: shortName,
               ParentId: parentId,
               FilePath: discovered.FilePath,
               LineNumber: discovered.LineNumber,
@@ -78,6 +93,23 @@ public class OperationExecutor(
     }, token.Ct);
 
     await dispatcher.SendStatusAsync(projectNodeId, new TestNodeStatus.Idle());
+  }
+
+  private static IReadOnlyList<string> StripRootNamespace(
+         IReadOnlyList<string> parts,
+         string[] rootParts)
+  {
+    if (parts.Count < rootParts.Length) return parts;
+
+    for (var i = 0; i < rootParts.Length; i++)
+    {
+      if (!string.Equals(parts[i], rootParts[i], StringComparison.OrdinalIgnoreCase))
+      {
+        return parts;
+      }
+    }
+
+    return parts.Skip(rootParts.Length).ToList();
   }
 
   public async Task<RunProgressCounter> RunNodeAsync(
@@ -196,32 +228,44 @@ public class OperationExecutor(
     return projectNodeId;
   }
 
-  private async Task<string> EnsureNamespaceChainAsync(string projectNodeId, IReadOnlyList<string> parts, HashSet<string> emitted)
+  private async Task<string> EnsureNamespaceChainAsync(
+       string projectNodeId,
+       IReadOnlyList<string> originalParts,
+       IReadOnlyList<string> displayParts,
+       HashSet<string> emitted,
+       CancellationToken ct)
   {
     var currentParentId = projectNodeId;
+    var skipCount = originalParts.Count - displayParts.Count;
 
-    for (var i = 0; i < parts.Count; i++)
+    for (var i = 0; i < originalParts.Count; i++)
     {
-      var segmentParts = parts.Take(i + 1).ToArray();
+      var segmentParts = originalParts.Take(i + 1).ToArray();
       var nsId = NodeIdBuilder.Namespace(projectNodeId, segmentParts);
 
       if (emitted.Add(nsId))
       {
-        var nsNode = new TestNode(
-            Id: nsId,
-            DisplayName: parts[i],
-            ParentId: currentParentId,
-            FilePath: null,
-            LineNumber: null,
-            Type: new NodeType.Namespace(),
-            ProjectId: projectNodeId,
-            AvailableActions: [TestAction.Run, TestAction.Debug]
-        );
-        registry.Register(nsNode);
-        await dispatcher.SendRegisterTestAsync(nsNode);
+        if (i >= skipCount)
+        {
+          var nsNode = new TestNode(
+              Id: nsId,
+              DisplayName: displayParts[i - skipCount],
+              ParentId: currentParentId,
+              FilePath: null,
+              LineNumber: null,
+              Type: new NodeType.Namespace(),
+              ProjectId: projectNodeId,
+              AvailableActions: [TestAction.Run, TestAction.Debug]
+          );
+          registry.Register(nsNode);
+          await dispatcher.SendRegisterTestAsync(nsNode);
+        }
       }
 
-      currentParentId = nsId;
+      if (i >= skipCount)
+      {
+        currentParentId = nsId;
+      }
     }
 
     return currentParentId;
