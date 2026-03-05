@@ -1,5 +1,9 @@
 using System.Runtime.InteropServices;
+using EasyDotnet.Application.Interfaces;
+using EasyDotnet.BuildServer.Contracts;
+using EasyDotnet.IDE.DebuggerStrategies;
 using EasyDotnet.IDE.MTP.RPC;
+using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.TestRunner.Models;
 using EasyDotnet.MTP;
 
@@ -12,28 +16,31 @@ namespace EasyDotnet.IDE.TestRunner.Adapters;
 ///
 /// Future: keep the Client alive between operations to eliminate spawn latency.
 /// </summary>
-public sealed class MtpAdapter : ITestAdapter
+public sealed class MtpAdapter(
+  IEditorService editorService,
+  IDebugStrategyFactory debugStrategyFactory,
+  IDebugOrchestrator debugOrchestrator
+) : ITestAdapter
 {
-  public async Task DiscoverAsync(string dllPath, Func<DiscoveredTest, Task> onDiscovered, CancellationToken ct)
+  public async Task DiscoverAsync(ValidatedDotnetProject project, Func<DiscoveredTest, Task> onDiscovered, CancellationToken ct)
   {
-    var exe = TransformDllPath(dllPath);
+    var exe = TransformDllPath(project.TargetPath);
     await using var client = await Client.CreateAsync(exe);
 
     await foreach (var update in client.DiscoverTestsAsync(ct))
     {
-      // Skip container/group nodes — we only want executable leaf tests
       if (update.Node.NodeType != "action") continue;
       await onDiscovered(update.ToDiscoveredTest());
     }
   }
 
   public async Task RunAsync(
-      string dllPath,
+      ValidatedDotnetProject project,
       IReadOnlyList<string> nativeIds,
       Func<TestRunResult, Task> onResult,
       CancellationToken ct)
   {
-    var exe = TransformDllPath(dllPath);
+    var exe = TransformDllPath(project.TargetPath);
     await using var client = await Client.CreateAsync(exe);
     var filter = nativeIds
         .Select(id => new RunRequestNode(id, ""))
@@ -47,16 +54,32 @@ public sealed class MtpAdapter : ITestAdapter
   }
 
   public async Task DebugAsync(
-      string dllPath,
+      ValidatedDotnetProject project,
       IReadOnlyList<string> nativeIds,
       Func<TestRunResult, Task> onResult,
       CancellationToken ct)
   {
 
-    var exe = TransformDllPath(dllPath);
-    // TODO: wire debug support — MTP debug requires attaching after process spawn
-    // For now delegate to run; debug orchestration follows in a subsequent PR
-    await RunAsync(exe, nativeIds, onResult, ct);
+    var exe = TransformDllPath(project.TargetPath);
+    await using var client = await Client.CreateAsync(exe);
+    var session = await debugOrchestrator.StartClientDebugSessionAsync(
+      project.ProjectFullPath,
+      new(project.ProjectFullPath, project.TargetFramework, null, null),
+      debugStrategyFactory.CreateStandardAttachStrategy(client.DebugeeProcessId),
+      ct);
+
+    await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
+    await session.ProcessStarted;
+    await Task.Delay(1000, ct);
+    var filter = nativeIds
+        .Select(id => new RunRequestNode(id, ""))
+        .ToArray();
+
+    await foreach (var update in client.RunTestsAsync(filter, ct))
+    {
+      var result = update.ToTestRunResult();
+      if (result is not null) await onResult(result);
+    }
   }
 
   private static string TransformDllPath(string dllPath)

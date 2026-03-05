@@ -149,6 +149,7 @@ public class Client : IAsyncDisposable
 
   public async ValueTask DisposeAsync()
   {
+    //TODO: check if reader is already disposed
     await _jsonRpc.NotifyWithParameterObjectAsync("exit", new object());
     _jsonRpc.Dispose();
     _tcpClient.Dispose();

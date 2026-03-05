@@ -1,3 +1,4 @@
+using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.IDE.TestRunner.Models;
 
 namespace EasyDotnet.IDE.TestRunner.Adapters;
@@ -16,7 +17,7 @@ public interface ITestAdapter
   /// onDiscovered is called for each test as it arrives — do not buffer.
   /// </summary>
   Task DiscoverAsync(
-      string dllPath,
+      ValidatedDotnetProject project,
       Func<DiscoveredTest, Task> onDiscovered,
       CancellationToken ct);
 
@@ -25,7 +26,7 @@ public interface ITestAdapter
   /// onResult is called as each test completes.
   /// </summary>
   Task RunAsync(
-      string dllPath,
+      ValidatedDotnetProject project,
       IReadOnlyList<string> nativeIds,
       Func<TestRunResult, Task> onResult,
       CancellationToken ct);
@@ -35,7 +36,7 @@ public interface ITestAdapter
   /// onResult is called as each test completes.
   /// </summary>
   Task DebugAsync(
-      string dllPath,
+      ValidatedDotnetProject project,
       IReadOnlyList<string> nativeIds,
       Func<TestRunResult, Task> onResult,
       CancellationToken ct);

@@ -33,7 +33,7 @@ public class OperationExecutor(
     var emittedClasses = new HashSet<string>();
     var rootNs = project.Raw.RootNamespace ?? project.ProjectName;
     var rootNamespaceParts = rootNs.Split('.', StringSplitOptions.RemoveEmptyEntries);
-    await adapter.DiscoverAsync(project.TargetPath, async discovered =>
+    await adapter.DiscoverAsync(project, async discovered =>
     {
       token.Ct.ThrowIfCancellationRequested();
 
@@ -193,11 +193,11 @@ public class OperationExecutor(
 
     if (debug)
     {
-      await adapter.DebugAsync(project.TargetPath!, nativeIds, onResult, token.Ct);
+      await adapter.DebugAsync(project, nativeIds, onResult, token.Ct);
     }
     else
     {
-      await adapter.RunAsync(project.TargetPath!, nativeIds, onResult, token.Ct);
+      await adapter.RunAsync(project, nativeIds, onResult, token.Ct);
     }
 
 

@@ -1,5 +1,8 @@
 using System.Threading.Channels;
 using EasyDotnet.Application.Interfaces;
+using EasyDotnet.BuildServer.Contracts;
+using EasyDotnet.IDE.DebuggerStrategies;
+using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.TestRunner.Models;
 using EasyDotnet.IDE.VSTest;
 using Microsoft.Extensions.Logging;
@@ -16,6 +19,9 @@ namespace EasyDotnet.IDE.TestRunner.Adapters;
 /// </summary>
 public sealed class VsTestAdapter(
     IMsBuildService msBuildService,
+    IEditorService editorService,
+    IDebugStrategyFactory debugStrategyFactory,
+    IDebugOrchestrator debugOrchestrator,
     ILoggerFactory loggerFactory) : ITestAdapter, IAsyncDisposable
 {
   private static readonly TestPlatformOptions DefaultOptions = new()
@@ -26,36 +32,36 @@ public sealed class VsTestAdapter(
 
   private VsTestConsoleWrapper? _wrapper;
 
-  public Task DiscoverAsync(string dllPath, Func<DiscoveredTest, Task> onDiscovered, CancellationToken ct)
+  public Task DiscoverAsync(ValidatedDotnetProject project, Func<DiscoveredTest, Task> onDiscovered, CancellationToken ct)
   {
     var wrapper = EnsureWrapper();
     var handler = new StreamingDiscoveryHandler(onDiscovered, loggerFactory);
-    wrapper.DiscoverTests([dllPath], null, DefaultOptions, null, handler);
+    wrapper.DiscoverTests([project.TargetPath], null, DefaultOptions, null, handler);
     return handler.Completion;
   }
 
   public async Task RunAsync(
-      string dllPath,
+      ValidatedDotnetProject project,
       IReadOnlyList<string> nativeIds,
       Func<TestRunResult, Task> onResult,
       CancellationToken ct)
   {
     var nativeGuids = nativeIds.Select(Guid.Parse).ToHashSet();
-    await RunCoreAsync(dllPath, nativeGuids, onResult, attachDebugger: false, ct);
+    await RunCoreAsync(project, nativeGuids, onResult, attachDebugger: false, ct);
   }
 
   public async Task DebugAsync(
-      string dllPath,
+      ValidatedDotnetProject project,
       IReadOnlyList<string> nativeIds,
       Func<TestRunResult, Task> onResult,
       CancellationToken ct)
   {
     var nativeGuids = nativeIds.Select(Guid.Parse).ToHashSet();
-    await RunCoreAsync(dllPath, nativeGuids, onResult, attachDebugger: true, ct);
+    await RunCoreAsync(project, nativeGuids, onResult, attachDebugger: true, ct);
   }
 
   private async Task RunCoreAsync(
-      string dllPath,
+      ValidatedDotnetProject project,
       HashSet<Guid> nativeGuids,
       Func<TestRunResult, Task> onResult,
       bool attachDebugger,
@@ -66,7 +72,7 @@ public sealed class VsTestAdapter(
 
     // Re-discover to get TestCase objects needed by VSTest run API
     var discoveryHandler = new TestDiscoveryHandler(loggerFactory.CreateLogger<TestDiscoveryHandler>());
-    wrapper.DiscoverTests([dllPath], null, DefaultOptions, null, discoveryHandler);
+    wrapper.DiscoverTests([project.TargetPath], null, DefaultOptions, null, discoveryHandler);
     var toRun = discoveryHandler.TestCases
         .Where(x => nativeGuids.Contains(x.Id))
         .ToList();
@@ -80,7 +86,7 @@ public sealed class VsTestAdapter(
       try
       {
         if (attachDebugger)
-          wrapper.RunTestsWithCustomTestHost(toRun, null, DefaultOptions, null, runHandler, CreateDebuggerLauncher());
+          wrapper.RunTestsWithCustomTestHost(toRun, null, DefaultOptions, null, runHandler, CreateDebuggerLauncher(project));
         else
           wrapper.RunTests(toRun, null, DefaultOptions, null, runHandler);
       }
@@ -119,12 +125,18 @@ public sealed class VsTestAdapter(
     return Path.Join(sdk.ToList()[0].MSBuildPath, "vstest.console.dll");
   }
 
-  private DebuggerTestHostLauncher CreateDebuggerLauncher()
-  {
-    // TODO: wire debug orchestrator — injected in a follow-up once
-    // the debugger strategy is integrated with the new TestRunnerService
-    throw new NotImplementedException("Debug launcher not yet wired in VsTestAdapter");
-  }
+  private DebuggerTestHostLauncher CreateDebuggerLauncher(ValidatedDotnetProject project) =>
+    new(async (pid, ct) =>
+    {
+      var session = await debugOrchestrator.StartClientDebugSessionAsync(project.ProjectFullPath, new(project.ProjectFullPath, project.TargetFramework, null, null), debugStrategyFactory.CreateStandardAttachStrategy(pid), ct);
+      await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
+      await session.ProcessStarted;
+      //We add a delay to ensure the client is ready #gh785
+      await Task.Delay(1000, ct);
+      //This would replace the ProcessStarted and delay but we need help to regression test it
+      // await session.WaitForConfigurationDoneAsync();
+      return true;
+    });
 
   public ValueTask DisposeAsync()
   {
