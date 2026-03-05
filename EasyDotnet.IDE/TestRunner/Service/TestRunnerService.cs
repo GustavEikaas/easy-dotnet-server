@@ -1,4 +1,3 @@
-using EasyDotnet.Application.Interfaces;
 using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.IDE.BuildHost;
 using EasyDotnet.IDE.TestRunner.Adapters;
@@ -19,15 +18,15 @@ public class TestRunnerService(
     GlobalOperationLock operationLock,
     OperationExecutor executor,
     AdapterResolver adapterResolver,
-    WorkspaceBuildHostManager buildHost,
-    IMsBuildService msBuildService)
+    WorkspaceBuildHostManager buildHost)
 {
   // -------------------------------------------------------------------------
   // testrunner/initialize
   // -------------------------------------------------------------------------
   public async Task<InitializeResult> InitializeAsync(string solutionPath, CancellationToken ct)
   {
-    using var token = operationLock.TryAcquire("initialize", ct) ?? throw new InvalidOperationException("Operation already in progress");
+    using var token = operationLock.TryAcquire("initialize", ct)
+        ?? throw new InvalidOperationException("Operation already in progress");
 
     await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
         IsLoading: true,
@@ -60,12 +59,12 @@ public class TestRunnerService(
     var testProjects = await buildHost.GetTestProjectsFromSolutionAsync(solutionPath, ct: token.Ct);
 
     await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
-           IsLoading: true, CurrentOperation: "Building",
-           OverallStatus: OverallStatus.Building,
-           TotalTests: registry.GetLeafCount(), TotalRunning: 0,
-           TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
+        IsLoading: true, CurrentOperation: "Building",
+        OverallStatus: OverallStatus.Building,
+        TotalTests: registry.GetLeafCount(), TotalRunning: 0,
+        TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
 
-    // Group by path — multi-TFM projects 
+    // Group by path — multi-TFM projects (net8.0;net10.0) produce one entry per TFM
     // but MSBuild only needs to build the project file once.
     var projectsByPath = testProjects
         .GroupBy(p => p.ProjectFullPath, StringComparer.OrdinalIgnoreCase)
@@ -86,6 +85,7 @@ public class TestRunnerService(
 
       if (result.Kind == BatchBuildResultKind.Started)
       {
+        // Emit Building status for every TFM node of this project
         foreach (var project in tfmVariants)
         {
           var projectId = NodeIdBuilder.Project(solutionId, project.ProjectName, project.TargetFramework ?? "");
@@ -94,6 +94,7 @@ public class TestRunnerService(
         continue;
       }
 
+      // Kind == Finished — emit result for each TFM node, then start discovery
       foreach (var project in tfmVariants)
       {
         var projectId = NodeIdBuilder.Project(solutionId, project.ProjectName, project.TargetFramework ?? "");
@@ -104,7 +105,10 @@ public class TestRunnerService(
           continue;
         }
 
-        discoverTasks.Add(executor.DiscoverProjectAsync(project, solutionId, token));
+        // Each TFM variant discovers independently — they share a build output
+        // but produce separate test nodes under their own project node.
+        discoverTasks.Add(
+            executor.DiscoverProjectAsync(project, solutionId, token));
       }
     }
 
@@ -160,6 +164,10 @@ public class TestRunnerService(
 
     try
     {
+      // Resolve and invalidate caches upfront, then dedupe by path for the build
+      var projectsByPath = new Dictionary<string, List<ValidatedDotnetProject>>(
+          StringComparer.OrdinalIgnoreCase);
+
       foreach (var projectId in projectIds)
       {
         var project = await ResolveProjectAsync(projectId, token.Ct);
@@ -168,20 +176,55 @@ public class TestRunnerService(
         await adapterResolver.InvalidateAsync(project.ProjectFullPath);
         buildHost.InvalidateCache(project.ProjectFullPath);
 
-        await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.Building());
-        var buildSuccess = await msBuildService.RequestBuildAsync(
-            project.ProjectFullPath, project.TargetFramework,
-            buildArgs: null, configuration: null, token.Ct);
+        if (!projectsByPath.TryGetValue(project.ProjectFullPath, out var variants))
+          projectsByPath[project.ProjectFullPath] = variants = [];
+        variants.Add(project);
+      }
 
-        if (!buildSuccess.Success)
+      if (projectsByPath.Count == 0)
+      {
+        await dispatcher.SendRunnerStatusAsync(BuildIdleStatus());
+        return new OperationResult(Success: true);
+      }
+
+      var buildRequest = new BatchBuildRequest(
+          ProjectPaths: [.. projectsByPath.Keys],
+          Configuration: null);
+
+      var discoverTasks = new List<Task>();
+
+      await foreach (var result in buildHost.BatchBuildAsync(buildRequest, token.Ct))
+      {
+        token.Ct.ThrowIfCancellationRequested();
+
+        var variants = projectsByPath.GetValueOrDefault(result.ProjectPath);
+        if (variants is null) continue;
+
+        if (result.Kind == BatchBuildResultKind.Started)
         {
-          await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.Failed("", []));
+          foreach (var project in variants)
+          {
+            var pid = NodeIdBuilder.Project(node.ParentId ?? "", project.ProjectName, project.TargetFramework ?? "");
+            await dispatcher.SendStatusAsync(pid, new TestNodeStatus.Building());
+          }
           continue;
         }
 
-        await executor.DiscoverProjectAsync(project, node.ParentId ?? "", token);
+        // Finished
+        foreach (var project in variants)
+        {
+          var pid = NodeIdBuilder.Project(node.ParentId ?? "", project.ProjectName, project.TargetFramework ?? "");
+          if (result.Success != true)
+          {
+            await dispatcher.SendStatusAsync(pid, new TestNodeStatus.Failed("", []));
+            continue;
+          }
+
+          discoverTasks.Add(executor.DiscoverProjectAsync(project, node.ParentId ?? "", token));
+        }
       }
 
+      await Task.WhenAll(discoverTasks);
       await dispatcher.SendRunnerStatusAsync(BuildIdleStatus());
       return new OperationResult(Success: true);
     }
@@ -241,13 +284,11 @@ public class TestRunnerService(
           node.Id, loc.SignatureLine, loc.BodyStartLine, loc.EndLine);
 
       if (changed)
-      {
-        updates.Add(new LineNumberUpdateDto(node.Id, loc.SignatureLine, loc.BodyStartLine, loc.EndLine));
-      }
-
+        updates.Add(new LineNumberUpdateDto(
+            node.Id, loc.SignatureLine, loc.BodyStartLine, loc.EndLine));
     }
 
-    return new SyncFileResult([.. updates], req.Version);
+    return new SyncFileResult(updates.ToArray(), req.Version);
   }
 
   // -------------------------------------------------------------------------
@@ -260,8 +301,6 @@ public class TestRunnerService(
     using var token = operationLock.TryAcquire(opName, ct)
         ?? throw new InvalidOperationException("Operation already in progress");
 
-    await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus(debug ? "Debugging" : "Running"));
-
     var node = registry.Get(nodeId)
         ?? throw new KeyNotFoundException($"Node {nodeId} not found");
 
@@ -273,6 +312,30 @@ public class TestRunnerService(
 
     try
     {
+      // Build before run/debug to ensure output is up to date.
+      // Deduplication is not needed here — we always target a single project path.
+      await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus("Building"));
+      await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.Building());
+
+      var buildFailed = false;
+      await foreach (var result in buildHost.BatchBuildAsync(
+          new BatchBuildRequest([project.ProjectFullPath], Configuration: null), token.Ct))
+      {
+        if (result.Kind == BatchBuildResultKind.Finished && result.Success != true)
+        {
+          await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.Failed("", []));
+          buildFailed = true;
+        }
+      }
+
+      if (buildFailed)
+      {
+        await dispatcher.SendRunnerStatusAsync(BuildIdleStatus());
+        return new OperationResult(Success: false);
+      }
+
+      await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus(debug ? "Debugging" : "Running"));
+
       var counter = await executor.RunNodeAsync(nodeId, project, token, debug);
       var (_, passed, failed, skipped, cancelled) = counter.Snapshot();
 
