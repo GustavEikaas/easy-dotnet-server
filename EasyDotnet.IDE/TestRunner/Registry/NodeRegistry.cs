@@ -6,14 +6,11 @@ namespace EasyDotnet.IDE.TestRunner.Registry;
 public class NodeRegistry
 {
   private readonly ConcurrentDictionary<string, TestNode> _nodes = new();
-
-  // Stable protocol ID → native framework ID (VSTest GUID or MTP Uid)
-  // Only populated for TestMethod and Subcase nodes
   private readonly ConcurrentDictionary<string, string> _stableToNative = new();
-
-  // Native framework ID → stable protocol ID (reverse lookup)
   private readonly ConcurrentDictionary<string, string> _nativeToStable = new();
 
+  // Last status type string sent for each node — used to suppress duplicate notifications.
+  // Stored as the discriminated union type name, e.g. "Running", "Passed", "Failed".
   private readonly ConcurrentDictionary<string, string?> _lastStatus = new();
 
   /// <summary>
@@ -30,18 +27,20 @@ public class NodeRegistry
     }
   }
 
+  /// <summary>
+  /// Records the last dispatched status for a node and returns whether it changed.
+  /// The StatusDispatcher calls this before sending — if unchanged, skip the notification.
+  /// </summary>
   public bool SetLastStatus(string stableId, TestNodeStatus? status)
   {
     var key = status?.GetType().Name;
     var previous = _lastStatus.GetOrAdd(stableId, (string?)null);
 
     if (previous == key)
-    {
-      return false;
-    }
+      return false; // unchanged — suppress
 
     _lastStatus[stableId] = key;
-    return true;
+    return true; // changed — send
   }
 
   public TestNode? Get(string stableId) =>
@@ -77,7 +76,7 @@ public class NodeRegistry
 
   /// <summary>Returns all leaf nodes (TestMethod, Subcase) under a given root.</summary>
   public IEnumerable<TestNode> GetLeafDescendants(string rootId) =>
-      GetDescendants(rootId).Where(n => n.Type is Models.NodeType.TestMethod or Models.NodeType.Subcase);
+      GetDescendants(rootId).Where(n => n.Type is NodeType.TestMethod or NodeType.Subcase);
 
   public void Clear()
   {
@@ -98,7 +97,51 @@ public class NodeRegistry
     }
   }
 
+  public int GetLeafCount() =>
+      _nodes.Values.Count(n => n.Type is NodeType.TestMethod or NodeType.Subcase);
+
   public bool Exists(string stableId) => _nodes.ContainsKey(stableId);
 
-  public int GetLeafCount() => _nodes.Values.Count(n => n.Type is NodeType.TestMethod or NodeType.Subcase);
+  /// <summary>
+  /// Returns all TestMethod/Subcase nodes whose FilePath matches the given path.
+  /// Comparison is case-insensitive and normalises backslashes to forward slashes.
+  /// </summary>
+  public IEnumerable<TestNode> GetNodesForFile(string filePath)
+  {
+    var normalized = filePath.Replace('\\', '/');
+    return _nodes.Values.Where(n =>
+        n.Type is NodeType.TestMethod or NodeType.Subcase &&
+        string.Equals(
+            n.FilePath?.Replace('\\', '/'),
+            normalized,
+            StringComparison.OrdinalIgnoreCase));
+  }
+
+  /// <summary>
+  /// Replaces the position fields on a TestMethod/Subcase node in-place.
+  /// Returns false if the node doesn't exist or positions are unchanged.
+  /// </summary>
+  public bool UpdateLineNumbers(
+      string stableId, int signatureLine, int bodyStartLine, int endLine)
+  {
+    if (!_nodes.TryGetValue(stableId, out var node)) return false;
+
+    // No-op if nothing changed — avoids unnecessary re-renders
+    if (node.SignatureLine == signatureLine &&
+        node.BodyStartLine == bodyStartLine &&
+        node.EndLine == endLine)
+    {
+
+      return false;
+    }
+
+
+    _nodes[stableId] = node with
+    {
+      SignatureLine = signatureLine,
+      BodyStartLine = bodyStartLine,
+      EndLine = endLine,
+    };
+    return true;
+  }
 }

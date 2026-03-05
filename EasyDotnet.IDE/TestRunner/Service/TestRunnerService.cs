@@ -2,6 +2,7 @@ using EasyDotnet.Application.Interfaces;
 using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.IDE.BuildHost;
 using EasyDotnet.IDE.TestRunner.Adapters;
+using EasyDotnet.IDE.TestRunner.Analysis;
 using EasyDotnet.IDE.TestRunner.Dispatch;
 using EasyDotnet.IDE.TestRunner.Executor;
 using EasyDotnet.IDE.TestRunner.Lock;
@@ -23,8 +24,6 @@ public class TestRunnerService(
 {
   // -------------------------------------------------------------------------
   // testrunner/initialize
-  // Builds all projects and runs full discovery.
-  // This is the only entry point that populates the solution/project nodes.
   // -------------------------------------------------------------------------
   public async Task<InitializeResult> InitializeAsync(string solutionPath, CancellationToken ct)
   {
@@ -49,7 +48,9 @@ public class TestRunnerService(
         DisplayName: solutionName,
         ParentId: null,
         FilePath: solutionPath,
-        LineNumber: null,
+        SignatureLine: null,
+        BodyStartLine: null,
+        EndLine: null,
         Type: new NodeType.Solution(),
         ProjectId: null,
         AvailableActions: [TestAction.Run, TestAction.Invalidate]
@@ -72,25 +73,24 @@ public class TestRunnerService(
       await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.Building());
       var buildSuccess = await msBuildService.RequestBuildAsync(project.ProjectFullPath, project.TargetFramework, buildArgs: null, configuration: null, token.Ct);
       if (!buildSuccess.Success)
-      {
         await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.Failed("", []));
-      }
     }
 
     await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
         IsLoading: true, CurrentOperation: "Discovering",
         OverallStatus: OverallStatus.Discovering,
-        TotalTests: registry.GetLeafCount(), TotalRunning: 0, TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
+        TotalTests: registry.GetLeafCount(), TotalRunning: 0,
+        TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
 
     var discoverTasks = testProjects.Select(project =>
         executor.DiscoverProjectAsync(project, solutionId, token));
     await Task.WhenAll(discoverTasks);
 
-    //TODO: calculate how many tests there are in total?
     await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
         IsLoading: false, CurrentOperation: null,
         OverallStatus: OverallStatus.Idle,
-        TotalTests: registry.GetLeafCount(), TotalRunning: 0, TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
+        TotalTests: registry.GetLeafCount(), TotalRunning: 0,
+        TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
 
     return new InitializeResult(Success: true);
   }
@@ -109,7 +109,6 @@ public class TestRunnerService(
 
   // -------------------------------------------------------------------------
   // testrunner/invalidate
-  // Rebuilds and rediscovers a subtree.
   // -------------------------------------------------------------------------
   public async Task<OperationResult> InvalidateAsync(string nodeId, CancellationToken ct)
   {
@@ -122,33 +121,34 @@ public class TestRunnerService(
     var node = registry.Get(nodeId)
         ?? throw new KeyNotFoundException($"Node {nodeId} not found");
 
-    // Collect all affected project nodes
     var projectIds = node.Type is NodeType.Project
         ? [nodeId]
         : registry.GetDescendants(nodeId)
             .Where(n => n.Type is NodeType.Project)
             .Select(n => n.Id)
             .ToList();
+
     try
     {
       foreach (var projectId in projectIds)
       {
         var project = await ResolveProjectAsync(projectId, token.Ct);
-        if (project is null)
-        {
-          continue;
-        }
+        if (project is null) continue;
 
         await adapterResolver.InvalidateAsync(project.ProjectFullPath);
         buildHost.InvalidateCache(project.ProjectFullPath);
 
         await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.Building());
-        var buildSuccess = await msBuildService.RequestBuildAsync(project.ProjectFullPath, project.TargetFramework, buildArgs: null, configuration: null, token.Ct);
+        var buildSuccess = await msBuildService.RequestBuildAsync(
+            project.ProjectFullPath, project.TargetFramework,
+            buildArgs: null, configuration: null, token.Ct);
+
         if (!buildSuccess.Success)
         {
           await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.Failed("", []));
           continue;
         }
+
         await executor.DiscoverProjectAsync(project, node.ParentId ?? "", token);
       }
 
@@ -170,10 +170,7 @@ public class TestRunnerService(
   {
     var detail = detailStore.Get(nodeId);
     if (detail is null)
-    {
       return new GetResultsResult(Found: false, null, null, null, null, null);
-    }
-
 
     return new GetResultsResult(
         Found: true,
@@ -194,27 +191,61 @@ public class TestRunnerService(
   }
 
   // -------------------------------------------------------------------------
+  // testrunner/syncFile  (no lock — read-only registry, position-only writes)
+  // Called by the Lua client on BufWritePost for known test files.
+  // Parses in-memory buffer content, diffs against stored positions,
+  // and returns only nodes whose positions changed along with the version
+  // token so the client can discard stale responses.
+  // -------------------------------------------------------------------------
+  public SyncFileResult SyncFile(SyncFileRequest req)
+  {
+    var contentMap = TestSourceLocator.ParseContent(req.Content);
+    var updates = new List<LineNumberUpdateDto>();
+
+    foreach (var node in registry.GetNodesForFile(req.Path))
+    {
+      var loc = TestSourceLocator.Lookup(contentMap, node.DisplayName);
+      if (loc is null) continue;
+
+      var changed = registry.UpdateLineNumbers(
+          node.Id, loc.SignatureLine, loc.BodyStartLine, loc.EndLine);
+
+      if (changed)
+      {
+        updates.Add(new LineNumberUpdateDto(node.Id, loc.SignatureLine, loc.BodyStartLine, loc.EndLine));
+      }
+
+    }
+
+    return new SyncFileResult([.. updates], req.Version);
+  }
+
+  // -------------------------------------------------------------------------
   // Shared helpers
   // -------------------------------------------------------------------------
 
   private async Task<OperationResult> ExecuteOnNodeAsync(
       string nodeId, string opName, bool debug, CancellationToken ct)
   {
-    using var token = operationLock.TryAcquire(opName, ct) ?? throw new InvalidOperationException("Operation already in progress");
+    using var token = operationLock.TryAcquire(opName, ct)
+        ?? throw new InvalidOperationException("Operation already in progress");
 
     await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus(debug ? "Debugging" : "Running"));
 
-    var node = registry.Get(nodeId) ?? throw new KeyNotFoundException($"Node {nodeId} not found");
+    var node = registry.Get(nodeId)
+        ?? throw new KeyNotFoundException($"Node {nodeId} not found");
 
-    //TODO: solution
-    var projectId = node.ProjectId ?? throw new InvalidOperationException($"Node {nodeId} has no project");
+    var projectId = node.ProjectId
+        ?? throw new InvalidOperationException($"Node {nodeId} has no project");
 
-    var project = await ResolveProjectAsync(projectId, token.Ct) ?? throw new InvalidOperationException($"Project {projectId} not found");
+    var project = await ResolveProjectAsync(projectId, token.Ct)
+        ?? throw new InvalidOperationException($"Project {projectId} not found");
+
     try
     {
       var counter = await executor.RunNodeAsync(nodeId, project, token, debug);
+      var (_, passed, failed, skipped, cancelled) = counter.Snapshot();
 
-      var (running, passed, failed, skipped, cancelled) = counter.Snapshot();
       await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
           IsLoading: false, CurrentOperation: null,
           OverallStatus: failed > 0 ? OverallStatus.Failed : OverallStatus.Passed,
@@ -241,26 +272,25 @@ public class TestRunnerService(
     }
   }
 
-  private async Task<ValidatedDotnetProject?> ResolveProjectAsync(string projectNodeId, CancellationToken ct = default)
+  private async Task<ValidatedDotnetProject?> ResolveProjectAsync(
+      string projectNodeId, CancellationToken ct = default)
   {
     var node = registry.Get(projectNodeId);
-    if (node?.FilePath is null || node.TargetFramework is null)
-    {
-      return null;
-    }
-
+    if (node?.FilePath is null || node.TargetFramework is null) return null;
     return await buildHost.GetProjectAsync(node.FilePath, node.TargetFramework, ct: ct);
   }
 
   private TestRunnerStatus BuildLoadingStatus(string operation) =>
       new(IsLoading: true, CurrentOperation: operation,
           OverallStatus: OverallStatus.Running,
-          TotalTests: registry.GetLeafCount(), TotalRunning: 0, TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0);
+          TotalTests: registry.GetLeafCount(), TotalRunning: 0,
+          TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0);
 
   private TestRunnerStatus BuildIdleStatus() =>
       new(IsLoading: false, CurrentOperation: null,
           OverallStatus: OverallStatus.Idle,
-          TotalTests: registry.GetLeafCount(), TotalRunning: 0, TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0);
+          TotalTests: registry.GetLeafCount(), TotalRunning: 0,
+          TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0);
 
   private static string FormatDuration(long ms) =>
       ms switch
@@ -283,3 +313,6 @@ public record GetResultsResult(
     string? DurationDisplay
 );
 public record StackFrameDto(string OriginalText, string? File, int? Line, bool IsUserCode);
+public record SyncFileRequest(string Path, string Content, int Version);
+public record SyncFileResult(LineNumberUpdateDto[] Updates, int Version);
+public record LineNumberUpdateDto(string Id, int SignatureLine, int BodyStartLine, int EndLine);

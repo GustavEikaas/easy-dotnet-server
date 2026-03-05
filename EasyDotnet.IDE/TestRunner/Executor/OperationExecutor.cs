@@ -1,5 +1,6 @@
 using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.IDE.TestRunner.Adapters;
+using EasyDotnet.IDE.TestRunner.Analysis;
 using EasyDotnet.IDE.TestRunner.Dispatch;
 using EasyDotnet.IDE.TestRunner.Lock;
 using EasyDotnet.IDE.TestRunner.Models;
@@ -33,6 +34,7 @@ public class OperationExecutor(
     var emittedClasses = new HashSet<string>();
     var rootNs = project.Raw.RootNamespace ?? project.ProjectName;
     var rootNamespaceParts = rootNs.Split('.', StringSplitOptions.RemoveEmptyEntries);
+    var locator = new TestSourceLocator();
     await adapter.DiscoverAsync(project, async discovered =>
     {
       token.Ct.ThrowIfCancellationRequested();
@@ -40,9 +42,7 @@ public class OperationExecutor(
       var namespaceParts = StripRootNamespace(discovered.NamespaceParts, rootNamespaceParts);
 
       var namespaceNodeId = namespaceParts.Count > 0
-                      ? await EnsureNamespaceChainAsync(
-                          projectNodeId, discovered.NamespaceParts,
-                          namespaceParts, emittedNamespaces, token.Ct)
+                      ? await EnsureNamespaceChainAsync(projectNodeId, discovered.NamespaceParts, namespaceParts, emittedNamespaces)
                       : projectNodeId;
 
       var parentId = namespaceNodeId;
@@ -56,7 +56,9 @@ public class OperationExecutor(
                   DisplayName: discovered.ClassName,
                   ParentId: namespaceNodeId,
                   FilePath: discovered.FilePath,
-                  LineNumber: null,
+                  SignatureLine: null,
+                  BodyStartLine: null,
+                  EndLine: null,
                   Type: new NodeType.TestClass(),
                   ProjectId: projectNodeId,
                   AvailableActions: [TestAction.Run, TestAction.Debug]
@@ -66,6 +68,7 @@ public class OperationExecutor(
         }
         parentId = classNodeId;
       }
+
       var shortMethodName = discovered.MethodName.Contains('.')
           ? discovered.MethodName[(discovered.MethodName.LastIndexOf('.') + 1)..]
           : discovered.MethodName;
@@ -74,18 +77,23 @@ public class OperationExecutor(
           ? $"{shortMethodName}({discovered.Arguments})"
           : shortMethodName;
 
+      var location = locator.Locate(discovered.FilePath, shortMethodName);
       var methodNodeId = NodeIdBuilder.Method(parentId, discovered.MethodName);
       var methodNode = new TestNode(
               Id: methodNodeId,
               DisplayName: shortName,
               ParentId: parentId,
               FilePath: discovered.FilePath,
-              LineNumber: discovered.LineNumber,
+              SignatureLine: location?.SignatureLine,
+              BodyStartLine: location?.BodyStartLine,
+              EndLine: location?.EndLine,
               Type: discovered.Arguments is not null
                   ? new NodeType.Subcase()
                   : new NodeType.TestMethod(),
               ProjectId: projectNodeId,
-              AvailableActions: [TestAction.Run, TestAction.Debug, TestAction.GoToSource]
+              AvailableActions: discovered.FilePath is not null
+                  ? [TestAction.Run, TestAction.Debug, TestAction.GoToSource]
+                  : [TestAction.Run, TestAction.Debug]
           );
       registry.Register(methodNode, nativeId: discovered.NativeId);
       await dispatcher.SendRegisterTestAsync(methodNode);
@@ -99,17 +107,23 @@ public class OperationExecutor(
          IReadOnlyList<string> parts,
          string[] rootParts)
   {
-    if (parts.Count < rootParts.Length) return parts;
+    if (parts.Count < rootParts.Length)
+    {
+      return parts;
+    }
+
 
     for (var i = 0; i < rootParts.Length; i++)
     {
       if (!string.Equals(parts[i], rootParts[i], StringComparison.OrdinalIgnoreCase))
       {
+
         return parts;
       }
+
     }
 
-    return parts.Skip(rootParts.Length).ToList();
+    return [.. parts.Skip(rootParts.Length)];
   }
 
   public async Task<RunProgressCounter> RunNodeAsync(
@@ -120,9 +134,6 @@ public class OperationExecutor(
   {
     detailStore.ClearSubtree(registry.GetDescendants(nodeId).Select(n => n.Id).Append(nodeId));
 
-    await dispatcher.SendBatchStatusAsync(nodeId, null, registry);
-    await dispatcher.SendStatusAsync(nodeId, debug ? new TestNodeStatus.Debugging() : new TestNodeStatus.Running());
-
     var leafNodes = registry.GetLeafDescendants(nodeId).ToList();
     var self = registry.Get(nodeId);
     if (self?.Type is NodeType.TestMethod or NodeType.Subcase)
@@ -130,7 +141,7 @@ public class OperationExecutor(
       leafNodes.Add(self);
     }
 
-    var leafIds = leafNodes.Select(n => n.Id).ToHashSet();
+
     var runningStatus = debug ? (TestNodeStatus)new TestNodeStatus.Debugging() : new TestNodeStatus.Running();
     await dispatcher.SendBatchStatusAsync(nodeId, runningStatus, registry);
 
@@ -154,7 +165,10 @@ public class OperationExecutor(
               TotalTests: counter.TotalTests,
               TotalRunning: counter.TotalTests,
               TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
+
     var adapter = adapterResolver.Resolve(project);
+    var leafIds = leafNodes.Select(n => n.Id).ToHashSet();
+
     Func<TestRunResult, Task> onResult = async result =>
     {
       var stableId = registry.GetStableId(result.NativeId);
@@ -200,7 +214,6 @@ public class OperationExecutor(
       await adapter.RunAsync(project, nativeIds, onResult, token.Ct);
     }
 
-
     return counter;
   }
 
@@ -216,7 +229,9 @@ public class OperationExecutor(
           DisplayName: $"{project.ProjectName} ({project.TargetFramework})",
           ParentId: solutionNodeId,
           FilePath: project.ProjectFullPath,
-          LineNumber: null,
+          SignatureLine: null,
+          BodyStartLine: null,
+          EndLine: null,
           Type: new NodeType.Project(),
           ProjectId: projectNodeId,
           AvailableActions: [TestAction.Run, TestAction.Debug, TestAction.Invalidate],
@@ -232,8 +247,7 @@ public class OperationExecutor(
        string projectNodeId,
        IReadOnlyList<string> originalParts,
        IReadOnlyList<string> displayParts,
-       HashSet<string> emitted,
-       CancellationToken ct)
+       HashSet<string> emitted)
   {
     var currentParentId = projectNodeId;
     var skipCount = originalParts.Count - displayParts.Count;
@@ -243,29 +257,29 @@ public class OperationExecutor(
       var segmentParts = originalParts.Take(i + 1).ToArray();
       var nsId = NodeIdBuilder.Namespace(projectNodeId, segmentParts);
 
-      if (emitted.Add(nsId))
+      if (emitted.Add(nsId) && i >= skipCount)
       {
-        if (i >= skipCount)
-        {
-          var nsNode = new TestNode(
-              Id: nsId,
-              DisplayName: displayParts[i - skipCount],
-              ParentId: currentParentId,
-              FilePath: null,
-              LineNumber: null,
-              Type: new NodeType.Namespace(),
-              ProjectId: projectNodeId,
-              AvailableActions: [TestAction.Run, TestAction.Debug]
-          );
-          registry.Register(nsNode);
-          await dispatcher.SendRegisterTestAsync(nsNode);
-        }
+        var nsNode = new TestNode(
+            Id: nsId,
+            DisplayName: displayParts[i - skipCount],
+            ParentId: currentParentId,
+            FilePath: null,
+            SignatureLine: null,
+            BodyStartLine: null,
+            EndLine: null,
+            Type: new NodeType.Namespace(),
+            ProjectId: projectNodeId,
+            AvailableActions: [TestAction.Run, TestAction.Debug]
+        );
+        registry.Register(nsNode);
+        await dispatcher.SendRegisterTestAsync(nsNode);
       }
 
       if (i >= skipCount)
       {
         currentParentId = nsId;
       }
+
     }
 
     return currentParentId;
@@ -275,7 +289,11 @@ public class OperationExecutor(
   {
     var baseActions = new List<TestAction> { TestAction.Run, TestAction.Debug, TestAction.GoToSource };
     var hasDetails = result.Frames.Length > 0 || result.Stdout.Length > 0 || result.ErrorMessage.Length > 0;
-    if (hasDetails) baseActions.Add(TestAction.PeekResults);
+    if (hasDetails)
+    {
+      baseActions.Add(TestAction.PeekResults);
+    }
+
 
     var duration = result.DurationMs.HasValue
         ? FormatDuration(result.DurationMs.Value)
@@ -292,10 +310,6 @@ public class OperationExecutor(
     return (status, baseActions);
   }
 
-  /// <summary>
-  /// Walks up from a leaf node, recalculating aggregate status for each ancestor.
-  /// Worst-child wins: Failed > Skipped > Passed.
-  /// </summary>
   private async Task BubbleStatusAsync(string leafId, HashSet<string> runningLeafIds)
   {
     var node = registry.Get(leafId);

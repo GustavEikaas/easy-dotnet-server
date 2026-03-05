@@ -47,6 +47,9 @@ public class TestRunnerController(TestRunnerService service) : BaseController
   // [JsonRpcMethod("testrunner/getBuildErrors", UseSingleObjectParameterDeserialization = true)]
   // public GetResultsResult GetResults(NodeRequest request) =>
   //     service.GetResults(request.Id);
+  [JsonRpcMethod("testrunner/syncFile", UseSingleObjectParameterDeserialization = true)]
+  public SyncFileResult SyncFile(SyncFileRequest request) =>
+          service.SyncFile(request);
 }
 
 public record InitializeRequest(string SolutionPath);
