@@ -41,7 +41,6 @@ public class TestRunnerService(
     detailStore.ClearAll();
     await adapterResolver.InvalidateAllAsync();
 
-    // Emit solution node
     var solutionName = Path.GetFileName(solutionPath);
     var solutionId = NodeIdBuilder.Solution(solutionName);
     var solutionNode = new TestNode(
@@ -59,7 +58,6 @@ public class TestRunnerService(
 
     var testProjects = await buildHost.GetTestProjectsFromSolutionAsync(solutionPath, ct: token.Ct);
 
-    // Build phase
     await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
         IsLoading: true, CurrentOperation: "Building",
         OverallStatus: OverallStatus.Building,
@@ -68,19 +66,20 @@ public class TestRunnerService(
     foreach (var project in testProjects)
     {
       token.Ct.ThrowIfCancellationRequested();
-      await dispatcher.SendStatusAsync(
-          NodeIdBuilder.Project(solutionId, project.ProjectName, project.TargetFramework ?? ""),
-          new TestNodeStatus.Building());
-      // TODO: call msBuildService.BuildAsync(project, token.Ct)
+      var projectId = NodeIdBuilder.Project(solutionId, project.ProjectName, project.TargetFramework ?? "");
+      await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.Building());
+      var buildSuccess = await msBuildService.RequestBuildAsync(project.ProjectFullPath, project.TargetFramework, buildArgs: null, configuration: null, token.Ct);
+      if (!buildSuccess.Success)
+      {
+        await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.Failed("", []));
+      }
     }
 
-    // Discovery phase
     await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
         IsLoading: true, CurrentOperation: "Discovering",
         OverallStatus: OverallStatus.Discovering,
         TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
 
-    // Discover projects in parallel — each project is independent
     var discoverTasks = testProjects.Select(project =>
         executor.DiscoverProjectAsync(project, solutionId, token));
     await Task.WhenAll(discoverTasks);
@@ -115,7 +114,7 @@ public class TestRunnerService(
         ?? throw new InvalidOperationException("Operation already in progress");
 
     await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus("Invalidating"));
-    await dispatcher.SendToSubtreeAsync(nodeId, null, registry);
+    await dispatcher.SendBatchStatusAsync(nodeId, null, registry);
 
     var node = registry.Get(nodeId)
         ?? throw new KeyNotFoundException($"Node {nodeId} not found");
@@ -144,7 +143,6 @@ public class TestRunnerService(
       if (!buildSuccess.Success)
       {
         await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.Failed("", []));
-        await dispatcher.SendBuildErrorsAsync(projectId, buildSuccess.Errors);
         continue;
       }
       await executor.DiscoverProjectAsync(project, node.ParentId ?? "", token);
@@ -197,14 +195,12 @@ public class TestRunnerService(
     await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus(
         debug ? "Debugging" : "Running"));
 
-    var node = registry.Get(nodeId)
-        ?? throw new KeyNotFoundException($"Node {nodeId} not found");
+    var node = registry.Get(nodeId) ?? throw new KeyNotFoundException($"Node {nodeId} not found");
 
-    var projectId = node.ProjectId
-        ?? throw new InvalidOperationException($"Node {nodeId} has no project");
+    //TODO: solution
+    var projectId = node.ProjectId ?? throw new InvalidOperationException($"Node {nodeId} has no project");
 
-    var project = await ResolveProjectAsync(projectId, token.Ct)
-        ?? throw new InvalidOperationException($"Project {projectId} not found");
+    var project = await ResolveProjectAsync(projectId, token.Ct) ?? throw new InvalidOperationException($"Project {projectId} not found");
 
     await executor.RunNodeAsync(nodeId, project, token, debug);
 

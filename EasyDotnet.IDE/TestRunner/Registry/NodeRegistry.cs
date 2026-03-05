@@ -14,6 +14,8 @@ public class NodeRegistry
   // Native framework ID → stable protocol ID (reverse lookup)
   private readonly ConcurrentDictionary<string, string> _nativeToStable = new();
 
+  private readonly ConcurrentDictionary<string, string?> _lastStatus = new();
+
   /// <summary>
   /// Upserts a node. If nativeId is provided, registers the bidirectional ID mapping.
   /// </summary>
@@ -26,6 +28,20 @@ public class NodeRegistry
       _stableToNative[node.Id] = nativeId;
       _nativeToStable[nativeId] = node.Id;
     }
+  }
+
+  public bool SetLastStatus(string stableId, TestNodeStatus? status)
+  {
+    var key = status?.GetType().Name;
+    var previous = _lastStatus.GetOrAdd(stableId, (string?)null);
+
+    if (previous == key)
+    {
+      return false;
+    }
+
+    _lastStatus[stableId] = key;
+    return true;
   }
 
   public TestNode? Get(string stableId) =>
@@ -68,6 +84,7 @@ public class NodeRegistry
     _nodes.Clear();
     _stableToNative.Clear();
     _nativeToStable.Clear();
+    _lastStatus.Clear();
   }
 
   public void ClearDescendants(string rootId)
@@ -75,6 +92,7 @@ public class NodeRegistry
     foreach (var descendant in GetDescendants(rootId).ToList())
     {
       _nodes.TryRemove(descendant.Id, out _);
+      _lastStatus.TryRemove(descendant.Id, out _);
       if (_stableToNative.TryRemove(descendant.Id, out var native))
         _nativeToStable.TryRemove(native, out _);
     }

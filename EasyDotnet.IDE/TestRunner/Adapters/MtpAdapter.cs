@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using EasyDotnet.IDE.MTP.RPC;
 using EasyDotnet.IDE.TestRunner.Models;
 using EasyDotnet.MTP;
@@ -15,7 +16,8 @@ public sealed class MtpAdapter : ITestAdapter
 {
   public async Task DiscoverAsync(string dllPath, Func<DiscoveredTest, Task> onDiscovered, CancellationToken ct)
   {
-    await using var client = await Client.CreateAsync(dllPath);
+    var exe = TransformDllPath(dllPath);
+    await using var client = await Client.CreateAsync(exe);
 
     await foreach (var update in client.DiscoverTestsAsync(ct))
     {
@@ -31,7 +33,8 @@ public sealed class MtpAdapter : ITestAdapter
       Func<TestRunResult, Task> onResult,
       CancellationToken ct)
   {
-    await using var client = await Client.CreateAsync(dllPath);
+    var exe = TransformDllPath(dllPath);
+    await using var client = await Client.CreateAsync(exe);
     var filter = nativeIds
         .Select(id => new RunRequestNode(id, ""))
         .ToArray();
@@ -49,8 +52,18 @@ public sealed class MtpAdapter : ITestAdapter
       Func<TestRunResult, Task> onResult,
       CancellationToken ct)
   {
+
+    var exe = TransformDllPath(dllPath);
     // TODO: wire debug support — MTP debug requires attaching after process spawn
     // For now delegate to run; debug orchestration follows in a subsequent PR
-    await RunAsync(dllPath, nativeIds, onResult, ct);
+    await RunAsync(exe, nativeIds, onResult, ct);
+  }
+
+  private static string TransformDllPath(string dllPath)
+  {
+    return RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+      ? Path.ChangeExtension(dllPath, ".exe")
+      : Path.ChangeExtension(dllPath, null);
+
   }
 }

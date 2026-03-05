@@ -37,15 +37,12 @@ public class OperationExecutor(
     var emittedNamespaces = new HashSet<string>();
     var emittedClasses = new HashSet<string>();
 
-    await adapter.DiscoverAsync(project.TargetPath!, async discovered =>
+    await adapter.DiscoverAsync(project.TargetPath, async discovered =>
     {
       token.Ct.ThrowIfCancellationRequested();
 
       // 1. Namespace chain
-      var namespaceNodeId = await EnsureNamespaceChainAsync(
-              projectNodeId, project.ProjectFullPath, discovered.NamespaceParts,
-              emittedNamespaces, token.Ct);
-
+      var namespaceNodeId = await EnsureNamespaceChainAsync(projectNodeId, discovered.NamespaceParts, emittedNamespaces);
       // 2. TestClass node (if applicable)
       var parentId = namespaceNodeId;
       if (discovered.ClassName is not null)
@@ -97,15 +94,23 @@ public class OperationExecutor(
 
   public async Task RunNodeAsync(string nodeId, ValidatedDotnetProject project, OperationToken token, bool debug = false)
   {
-    // Reset detail cache for the whole subtree before running
-    detailStore.ClearSubtree(
-        registry.GetDescendants(nodeId).Select(n => n.Id).Append(nodeId));
+    detailStore.ClearSubtree(registry.GetDescendants(nodeId).Select(n => n.Id).Append(nodeId));
 
-    // Reset statuses to null (signals new operation to client)
-    await dispatcher.SendToSubtreeAsync(nodeId, null, registry);
+    await dispatcher.SendBatchStatusAsync(nodeId, null, registry);
+    //TODO: send running batch status for all leaf nodes
     await dispatcher.SendStatusAsync(nodeId, debug ? new TestNodeStatus.Debugging() : new TestNodeStatus.Running());
 
     var leafNodes = registry.GetLeafDescendants(nodeId).ToList();
+    var self = registry.Get(nodeId);
+    if (self?.Type is NodeType.TestMethod or NodeType.Subcase)
+    {
+      leafNodes.Add(self);
+    }
+
+    var leafIds = leafNodes.Select(n => n.Id).ToHashSet();
+    var runningStatus = debug ? (TestNodeStatus)new TestNodeStatus.Debugging() : new TestNodeStatus.Running();
+    await dispatcher.SendBatchStatusAsync(nodeId, runningStatus, registry);
+
     var nativeIds = leafNodes
         .Select(n => registry.GetNativeId(n.Id))
         .Where(id => id is not null)
@@ -119,7 +124,6 @@ public class OperationExecutor(
     }
 
     var adapter = adapterResolver.Resolve(project);
-
     Func<TestRunResult, Task> onResult = async result =>
     {
       var stableId = registry.GetStableId(result.NativeId);
@@ -129,8 +133,8 @@ public class OperationExecutor(
         return;
       }
 
-      // Cache details — client fetches on demand
       detailStore.Set(stableId, new TestDetail(
+              Outcome: result.Outcome,
               ErrorMessage: result.ErrorMessage,
               DurationMs: result.DurationMs,
               Frames: result.Frames,
@@ -140,7 +144,7 @@ public class OperationExecutor(
 
       var (status, actions) = BuildStatusAndActions(result);
       await dispatcher.SendStatusAsync(stableId, status, actions);
-      await BubbleStatusAsync(stableId);
+      await BubbleStatusAsync(stableId, leafIds);
     };
 
     if (debug)
@@ -168,8 +172,8 @@ public class OperationExecutor(
           LineNumber: null,
           Type: new NodeType.Project(),
           ProjectId: projectNodeId,
-          AvailableActions: [TestAction.Run, TestAction.Debug, TestAction.Invalidate]
-      );
+          AvailableActions: [TestAction.Run, TestAction.Debug, TestAction.Invalidate],
+          TargetFramework: project.TargetFramework);
       registry.Register(node);
       // Fire-and-forget notification; the caller awaits the full discover
       _ = dispatcher.SendRegisterTestAsync(node);
@@ -178,12 +182,7 @@ public class OperationExecutor(
     return projectNodeId;
   }
 
-  private async Task<string> EnsureNamespaceChainAsync(
-      string projectNodeId,
-      string projectPath,
-      IReadOnlyList<string> parts,
-      HashSet<string> emitted,
-      CancellationToken ct)
+  private async Task<string> EnsureNamespaceChainAsync(string projectNodeId, IReadOnlyList<string> parts, HashSet<string> emitted)
   {
     var currentParentId = projectNodeId;
 
@@ -239,23 +238,48 @@ public class OperationExecutor(
   /// Walks up from a leaf node, recalculating aggregate status for each ancestor.
   /// Worst-child wins: Failed > Skipped > Passed.
   /// </summary>
-  private async Task BubbleStatusAsync(string leafId)
+  private async Task BubbleStatusAsync(string leafId, HashSet<string> runningLeafIds)
   {
     var node = registry.Get(leafId);
     var parentId = node?.ParentId;
 
     while (parentId is not null)
     {
-      var children = registry.GetChildren(parentId).ToList();
-      if (children.Count == 0) break;
+      // Only consider leaves that were part of this run, not all siblings
+      var scopedLeaves = registry.GetLeafDescendants(parentId)
+          .Where(n => runningLeafIds.Contains(n.Id))
+          .ToList();
 
-      // Aggregate: any failed child → parent is failed, etc.
-      // We check DetailStore for leaf nodes; for parent nodes we rely on previously
-      // bubbled statuses already stored in DetailStore at aggregate level.
-      // For now emit Running on the parent during an in-progress run, and the
-      // final aggregate after all results are in.
-      // TODO: track per-parent aggregate properly once run completes
+      if (scopedLeaves.Count == 0)
+      {
+        parentId = registry.Get(parentId)?.ParentId;
+        continue;
+      }
 
+      var allComplete = scopedLeaves.All(n => detailStore.Get(n.Id) is not null);
+      if (!allComplete)
+      {
+        await dispatcher.SendStatusAsync(parentId, new TestNodeStatus.Running());
+        parentId = registry.Get(parentId)?.ParentId;
+        continue;
+      }
+
+      var hasFailed = scopedLeaves.Any(n => detailStore.Get(n.Id)?.Outcome == "failed");
+      var hasSkipped = !hasFailed && scopedLeaves.Any(n => detailStore.Get(n.Id)?.Outcome == "skipped");
+
+      var maxDuration = scopedLeaves
+          .Select(n => detailStore.Get(n.Id)?.DurationMs ?? 0)
+          .DefaultIfEmpty(0)
+          .Max();
+      var durationDisplay = FormatDuration(maxDuration);
+
+      TestNodeStatus aggregateStatus = hasFailed
+          ? new TestNodeStatus.Failed(durationDisplay, [])
+          : hasSkipped
+              ? new TestNodeStatus.Skipped("")
+              : new TestNodeStatus.Passed(durationDisplay);
+
+      await dispatcher.SendStatusAsync(parentId, aggregateStatus);
       parentId = registry.Get(parentId)?.ParentId;
     }
   }

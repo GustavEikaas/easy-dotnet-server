@@ -8,6 +8,7 @@ namespace EasyDotnet.IDE.TestRunner.Models;
 /// Cleared when a new operation begins on the node.
 /// </summary>
 public record TestDetail(
+    string Outcome,
     string[] ErrorMessage,
     long? DurationMs,
     ParsedStackFrame[] Frames,

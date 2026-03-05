@@ -42,6 +42,11 @@ public class TestRunnerController(TestRunnerService service) : BaseController
   [JsonRpcMethod("testrunner/getResults", UseSingleObjectParameterDeserialization = true)]
   public GetResultsResult GetResults(NodeRequest request) =>
       service.GetResults(request.Id);
+
+  //This endpoint will be used when user requests the build errors
+  // [JsonRpcMethod("testrunner/getBuildErrors", UseSingleObjectParameterDeserialization = true)]
+  // public GetResultsResult GetResults(NodeRequest request) =>
+  //     service.GetResults(request.Id);
 }
 
 public record InitializeRequest(string SolutionPath);
