@@ -99,4 +99,6 @@ public class NodeRegistry
   }
 
   public bool Exists(string stableId) => _nodes.ContainsKey(stableId);
+
+  public int GetLeafCount() => _nodes.Values.Count(n => n.Type is NodeType.TestMethod or NodeType.Subcase);
 }

@@ -35,6 +35,7 @@ public class TestRunnerService(
         IsLoading: true,
         CurrentOperation: "Initializing",
         OverallStatus: OverallStatus.Building,
+        TotalTests: registry.GetLeafCount(), TotalRunning: 0,
         TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
 
     registry.Clear();
@@ -61,6 +62,7 @@ public class TestRunnerService(
     await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
         IsLoading: true, CurrentOperation: "Building",
         OverallStatus: OverallStatus.Building,
+        TotalTests: registry.GetLeafCount(), TotalRunning: 0,
         TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
 
     foreach (var project in testProjects)
@@ -78,16 +80,17 @@ public class TestRunnerService(
     await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
         IsLoading: true, CurrentOperation: "Discovering",
         OverallStatus: OverallStatus.Discovering,
-        TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
+        TotalTests: registry.GetLeafCount(), TotalRunning: 0, TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
 
     var discoverTasks = testProjects.Select(project =>
         executor.DiscoverProjectAsync(project, solutionId, token));
     await Task.WhenAll(discoverTasks);
 
+    //TODO: calculate how many tests there are in total?
     await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
         IsLoading: false, CurrentOperation: null,
         OverallStatus: OverallStatus.Idle,
-        TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
+        TotalTests: registry.GetLeafCount(), TotalRunning: 0, TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
 
     return new InitializeResult(Success: true);
   }
@@ -189,11 +192,9 @@ public class TestRunnerService(
   private async Task<OperationResult> ExecuteOnNodeAsync(
       string nodeId, string opName, bool debug, CancellationToken ct)
   {
-    using var token = operationLock.TryAcquire(opName, ct)
-        ?? throw new InvalidOperationException("Operation already in progress");
+    using var token = operationLock.TryAcquire(opName, ct) ?? throw new InvalidOperationException("Operation already in progress");
 
-    await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus(
-        debug ? "Debugging" : "Running"));
+    await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus(debug ? "Debugging" : "Running"));
 
     var node = registry.Get(nodeId) ?? throw new KeyNotFoundException($"Node {nodeId} not found");
 
@@ -202,16 +203,18 @@ public class TestRunnerService(
 
     var project = await ResolveProjectAsync(projectId, token.Ct) ?? throw new InvalidOperationException($"Project {projectId} not found");
 
-    await executor.RunNodeAsync(nodeId, project, token, debug);
+    var counter = await executor.RunNodeAsync(nodeId, project, token, debug);
 
-    var (passed, failed, skipped) = BuildSummary();
+    var (running, passed, failed, skipped, cancelled) = counter.Snapshot();
     await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
         IsLoading: false, CurrentOperation: null,
         OverallStatus: failed > 0 ? OverallStatus.Failed : OverallStatus.Passed,
+        TotalTests: counter.TotalTests,
+        TotalRunning: 0,
         TotalPassed: passed,
         TotalFailed: failed,
         TotalSkipped: skipped,
-        TotalCancelled: 0));
+        TotalCancelled: cancelled));
 
     return new OperationResult(Success: failed == 0);
   }
@@ -224,25 +227,18 @@ public class TestRunnerService(
       return null;
     }
 
-
     return await buildHost.GetProjectAsync(node.FilePath, node.TargetFramework, ct: ct);
   }
 
-  private static (int Passed, int Failed, int Skipped) BuildSummary()
-  {
-    // TODO: track counts incrementally in DetailStore or a separate counter
-    return (0, 0, 0);
-  }
-
-  private static TestRunnerStatus BuildLoadingStatus(string operation) =>
+  private TestRunnerStatus BuildLoadingStatus(string operation) =>
       new(IsLoading: true, CurrentOperation: operation,
           OverallStatus: OverallStatus.Running,
-          TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0);
+          TotalTests: registry.GetLeafCount(), TotalRunning: 0, TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0);
 
-  private static TestRunnerStatus BuildIdleStatus() =>
+  private TestRunnerStatus BuildIdleStatus() =>
       new(IsLoading: false, CurrentOperation: null,
           OverallStatus: OverallStatus.Idle,
-          TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0);
+          TotalTests: registry.GetLeafCount(), TotalRunning: 0, TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0);
 
   private static string FormatDuration(long ms) =>
       ms switch

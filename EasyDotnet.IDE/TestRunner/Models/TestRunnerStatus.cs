@@ -11,6 +11,8 @@ public record TestRunnerStatus(
     bool IsLoading,
     string? CurrentOperation,
     OverallStatus OverallStatus,
+    int TotalTests,
+    int TotalRunning,
     int TotalPassed,
     int TotalFailed,
     int TotalSkipped,

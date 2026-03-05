@@ -21,16 +21,11 @@ public class OperationExecutor(
     AdapterResolver adapterResolver,
     ILogger<OperationExecutor> logger)
 {
-  // -------------------------------------------------------------------------
-  // Discovery
-  // -------------------------------------------------------------------------
-
   public async Task DiscoverProjectAsync(ValidatedDotnetProject project, string solutionNodeId, OperationToken token)
   {
     var projectNodeId = EnsureProjectNode(project, solutionNodeId);
     await dispatcher.SendStatusAsync(projectNodeId, new TestNodeStatus.Discovering());
 
-    // Wipe stale child nodes from a previous discovery pass
     registry.ClearDescendants(projectNodeId);
 
     var adapter = adapterResolver.Resolve(project);
@@ -41,9 +36,7 @@ public class OperationExecutor(
     {
       token.Ct.ThrowIfCancellationRequested();
 
-      // 1. Namespace chain
       var namespaceNodeId = await EnsureNamespaceChainAsync(projectNodeId, discovered.NamespaceParts, emittedNamespaces);
-      // 2. TestClass node (if applicable)
       var parentId = namespaceNodeId;
       if (discovered.ClassName is not null)
       {
@@ -66,7 +59,6 @@ public class OperationExecutor(
         parentId = classNodeId;
       }
 
-      // 3. TestMethod / Subcase node
       var methodNodeId = NodeIdBuilder.Method(parentId, discovered.MethodName);
       var methodNode = new TestNode(
               Id: methodNodeId,
@@ -88,16 +80,15 @@ public class OperationExecutor(
     await dispatcher.SendStatusAsync(projectNodeId, new TestNodeStatus.Idle());
   }
 
-  // -------------------------------------------------------------------------
-  // Run / Debug
-  // -------------------------------------------------------------------------
-
-  public async Task RunNodeAsync(string nodeId, ValidatedDotnetProject project, OperationToken token, bool debug = false)
+  public async Task<RunProgressCounter> RunNodeAsync(
+    string nodeId,
+    ValidatedDotnetProject project,
+    OperationToken token,
+    bool debug = false)
   {
     detailStore.ClearSubtree(registry.GetDescendants(nodeId).Select(n => n.Id).Append(nodeId));
 
     await dispatcher.SendBatchStatusAsync(nodeId, null, registry);
-    //TODO: send running batch status for all leaf nodes
     await dispatcher.SendStatusAsync(nodeId, debug ? new TestNodeStatus.Debugging() : new TestNodeStatus.Running());
 
     var leafNodes = registry.GetLeafDescendants(nodeId).ToList();
@@ -120,9 +111,17 @@ public class OperationExecutor(
     if (nativeIds.Count == 0)
     {
       logger.LogWarning("No runnable tests found under node {NodeId}", nodeId);
-      return;
+      return new RunProgressCounter(0);
     }
 
+    var counter = new RunProgressCounter(nativeIds.Count);
+    await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
+              IsLoading: true,
+              CurrentOperation: debug ? "Debugging" : "Running",
+              OverallStatus: OverallStatus.Running,
+              TotalTests: counter.TotalTests,
+              TotalRunning: counter.TotalTests,
+              TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
     var adapter = adapterResolver.Resolve(project);
     Func<TestRunResult, Task> onResult = async result =>
     {
@@ -142,20 +141,36 @@ public class OperationExecutor(
               Stdout: result.Stdout
           ));
 
+      counter.Record(result.Outcome);
+      var (running, passed, failed, skipped, cancelled) = counter.Snapshot();
+      await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
+                   IsLoading: true,
+                   CurrentOperation: debug ? "Debugging" : "Running",
+                   OverallStatus: OverallStatus.Running,
+                   TotalTests: counter.TotalTests,
+                   TotalRunning: running,
+                   TotalPassed: passed,
+                   TotalFailed: failed,
+                   TotalSkipped: skipped,
+                   TotalCancelled: cancelled));
+
       var (status, actions) = BuildStatusAndActions(result);
       await dispatcher.SendStatusAsync(stableId, status, actions);
       await BubbleStatusAsync(stableId, leafIds);
     };
 
     if (debug)
+    {
       await adapter.DebugAsync(project.TargetPath!, nativeIds, onResult, token.Ct);
+    }
     else
+    {
       await adapter.RunAsync(project.TargetPath!, nativeIds, onResult, token.Ct);
-  }
+    }
 
-  // -------------------------------------------------------------------------
-  // Helpers
-  // -------------------------------------------------------------------------
+
+    return counter;
+  }
 
   private string EnsureProjectNode(ValidatedDotnetProject project, string solutionNodeId)
   {
@@ -175,7 +190,6 @@ public class OperationExecutor(
           AvailableActions: [TestAction.Run, TestAction.Debug, TestAction.Invalidate],
           TargetFramework: project.TargetFramework);
       registry.Register(node);
-      // Fire-and-forget notification; the caller awaits the full discover
       _ = dispatcher.SendRegisterTestAsync(node);
     }
 
@@ -245,7 +259,6 @@ public class OperationExecutor(
 
     while (parentId is not null)
     {
-      // Only consider leaves that were part of this run, not all siblings
       var scopedLeaves = registry.GetLeafDescendants(parentId)
           .Where(n => runningLeafIds.Contains(n.Id))
           .ToList();
