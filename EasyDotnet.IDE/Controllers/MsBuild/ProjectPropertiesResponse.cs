@@ -46,7 +46,7 @@ public static class DotnetProjectExtensions
       string testCommand)
   {
     var nugetVersion = project.Version?.ToString();
-    var targetFrameworkVersion = project.TargetFrameworkVersion;
+    var targetFrameworkVersion = project.TargetFrameworkVersion ?? project.TargetFrameworks?.FirstOrDefault();
     var isNetFramework = targetFrameworkVersion?.StartsWith("v4") == true;
     var useIISExpress = project.UseIISExpress;
     var targetPath = project.TargetPath;
