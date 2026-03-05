@@ -20,9 +20,6 @@ public class TestRunnerService(
     AdapterResolver adapterResolver,
     WorkspaceBuildHostManager buildHost)
 {
-  // -------------------------------------------------------------------------
-  // testrunner/initialize
-  // -------------------------------------------------------------------------
   public async Task<InitializeResult> InitializeAsync(string solutionPath, CancellationToken ct)
   {
     using var token = operationLock.TryAcquire("initialize", ct)
@@ -64,8 +61,6 @@ public class TestRunnerService(
         TotalTests: registry.GetLeafCount(), TotalRunning: 0,
         TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
 
-    // Group by path — multi-TFM projects (net8.0;net10.0) produce one entry per TFM
-    // but MSBuild only needs to build the project file once.
     var projectsByPath = testProjects
         .GroupBy(p => p.ProjectFullPath, StringComparer.OrdinalIgnoreCase)
         .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
@@ -85,7 +80,6 @@ public class TestRunnerService(
 
       if (result.Kind == BatchBuildResultKind.Started)
       {
-        // Emit Building status for every TFM node of this project
         foreach (var project in tfmVariants)
         {
           var projectId = NodeIdBuilder.Project(solutionId, project.ProjectName, project.TargetFramework ?? "");
@@ -94,7 +88,6 @@ public class TestRunnerService(
         continue;
       }
 
-      // Kind == Finished — emit result for each TFM node, then start discovery
       foreach (var project in tfmVariants)
       {
         var projectId = NodeIdBuilder.Project(solutionId, project.ProjectName, project.TargetFramework ?? "");
@@ -105,10 +98,7 @@ public class TestRunnerService(
           continue;
         }
 
-        // Each TFM variant discovers independently — they share a build output
-        // but produce separate test nodes under their own project node.
-        discoverTasks.Add(
-            executor.DiscoverProjectAsync(project, solutionId, token));
+        discoverTasks.Add(executor.DiscoverProjectAsync(project, solutionId, token));
       }
     }
 
@@ -129,21 +119,12 @@ public class TestRunnerService(
     return new InitializeResult(Success: true);
   }
 
-  // -------------------------------------------------------------------------
-  // testrunner/run
-  // -------------------------------------------------------------------------
   public async Task<OperationResult> RunAsync(string nodeId, CancellationToken ct)
       => await ExecuteOnNodeAsync(nodeId, "run", debug: false, ct);
 
-  // -------------------------------------------------------------------------
-  // testrunner/debug
-  // -------------------------------------------------------------------------
   public async Task<OperationResult> DebugAsync(string nodeId, CancellationToken ct)
       => await ExecuteOnNodeAsync(nodeId, "debug", debug: true, ct);
 
-  // -------------------------------------------------------------------------
-  // testrunner/invalidate
-  // -------------------------------------------------------------------------
   public async Task<OperationResult> InvalidateAsync(string nodeId, CancellationToken ct)
   {
     using var token = operationLock.TryAcquire("invalidate", ct)
@@ -164,7 +145,6 @@ public class TestRunnerService(
 
     try
     {
-      // Resolve and invalidate caches upfront, then dedupe by path for the build
       var projectsByPath = new Dictionary<string, List<ValidatedDotnetProject>>(
           StringComparer.OrdinalIgnoreCase);
 
@@ -210,7 +190,6 @@ public class TestRunnerService(
           continue;
         }
 
-        // Finished
         foreach (var project in variants)
         {
           var pid = NodeIdBuilder.Project(node.ParentId ?? "", project.ProjectName, project.TargetFramework ?? "");
@@ -236,9 +215,6 @@ public class TestRunnerService(
     }
   }
 
-  // -------------------------------------------------------------------------
-  // testrunner/getResults  (no lock — read-only)
-  // -------------------------------------------------------------------------
   public GetResultsResult GetResults(string nodeId)
   {
     var detail = detailStore.Get(nodeId);
@@ -263,13 +239,6 @@ public class TestRunnerService(
     );
   }
 
-  // -------------------------------------------------------------------------
-  // testrunner/syncFile  (no lock — read-only registry, position-only writes)
-  // Called by the Lua client on BufWritePost for known test files.
-  // Parses in-memory buffer content, diffs against stored positions,
-  // and returns only nodes whose positions changed along with the version
-  // token so the client can discard stale responses.
-  // -------------------------------------------------------------------------
   public SyncFileResult SyncFile(SyncFileRequest req)
   {
     var contentMap = TestSourceLocator.ParseContent(req.Content);
@@ -291,10 +260,6 @@ public class TestRunnerService(
     return new SyncFileResult(updates.ToArray(), req.Version);
   }
 
-  // -------------------------------------------------------------------------
-  // Shared helpers
-  // -------------------------------------------------------------------------
-
   private async Task<OperationResult> ExecuteOnNodeAsync(
       string nodeId, string opName, bool debug, CancellationToken ct)
   {
@@ -312,8 +277,6 @@ public class TestRunnerService(
 
     try
     {
-      // Build before run/debug to ensure output is up to date.
-      // Deduplication is not needed here — we always target a single project path.
       await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus("Building"));
       await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.Building());
 
@@ -394,7 +357,6 @@ public class TestRunnerService(
       };
 }
 
-// Result DTOs
 public record InitializeResult(bool Success);
 public record OperationResult(bool Success);
 public record GetResultsResult(
