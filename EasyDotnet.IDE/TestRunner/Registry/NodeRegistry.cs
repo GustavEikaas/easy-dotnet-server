@@ -37,11 +37,16 @@ public class NodeRegistry
     var previous = _lastStatus.GetOrAdd(stableId, (string?)null);
 
     if (previous == key)
-      return false; // unchanged — suppress
+    {
+      return false;
+    }
 
     _lastStatus[stableId] = key;
-    return true; // changed — send
+    return true;
   }
+
+  public string? GetLastStatus(string stableId) =>
+      _lastStatus.TryGetValue(stableId, out var s) ? s : null;
 
   public TestNode? Get(string stableId) =>
       _nodes.TryGetValue(stableId, out var node) ? node : null;
@@ -76,7 +81,7 @@ public class NodeRegistry
 
   /// <summary>Returns all leaf nodes (TestMethod, Subcase) under a given root.</summary>
   public IEnumerable<TestNode> GetLeafDescendants(string rootId) =>
-      GetDescendants(rootId).Where(n => n.Type is Models.NodeType.TestMethod or Models.NodeType.Subcase);
+      GetDescendants(rootId).Where(n => n.Type is NodeType.TestMethod or NodeType.Subcase);
 
   public void Clear()
   {
@@ -130,7 +135,9 @@ public class NodeRegistry
     if (node.SignatureLine == signatureLine &&
         node.BodyStartLine == bodyStartLine &&
         node.EndLine == endLine)
+    {
       return false;
+    }
 
     _nodes[stableId] = node with
     {

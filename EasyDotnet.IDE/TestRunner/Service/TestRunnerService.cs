@@ -20,7 +20,6 @@ public class TestRunnerService(
     AdapterResolver adapterResolver,
     WorkspaceBuildHostManager buildHost)
 {
-
   public async Task QuickDiscoverAsync(string solutionPath, CancellationToken ct)
   {
     using var token = operationLock.TryAcquire("quickDiscover", ct);
@@ -100,58 +99,90 @@ public class TestRunnerService(
         .GroupBy(p => p.ProjectFullPath, StringComparer.OrdinalIgnoreCase)
         .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
 
+    foreach (var variants in projectsByPath.Values)
+    {
+      foreach (var project in variants)
+      {
+        var projectId = NodeIdBuilder.Project(solutionId, project.ProjectName, project.TargetFramework ?? "");
+        var projectNode = new TestNode(
+            Id: projectId,
+            DisplayName: $"{project.ProjectName} ({project.TargetFramework})",
+            ParentId: solutionId,
+            FilePath: project.ProjectFullPath,
+            SignatureLine: null, BodyStartLine: null, EndLine: null,
+            Type: new NodeType.Project(),
+            ProjectId: projectId,
+            AvailableActions: [TestAction.Run, TestAction.Debug, TestAction.Invalidate]
+        );
+        registry.Register(projectNode);
+        await dispatcher.SendRegisterTestAsync(projectNode);
+      }
+    }
+
     var buildRequest = new BatchBuildRequest(
         ProjectPaths: [.. projectsByPath.Keys],
         Configuration: null);
 
     var discoverTasks = new List<Task>();
 
-    await foreach (var result in buildHost.BatchBuildAsync(buildRequest, token.Ct))
+    try
     {
-      token.Ct.ThrowIfCancellationRequested();
-
-      var tfmVariants = projectsByPath.GetValueOrDefault(result.ProjectPath);
-      if (tfmVariants is null) continue;
-
-      if (result.Kind == BatchBuildResultKind.Started)
+      await foreach (var result in buildHost.BatchBuildAsync(buildRequest, token.Ct))
       {
-        foreach (var project in tfmVariants)
-        {
-          var projectId = NodeIdBuilder.Project(solutionId, project.ProjectName, project.TargetFramework ?? "");
-          await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.Building());
-        }
-        continue;
-      }
+        token.Ct.ThrowIfCancellationRequested();
 
-      foreach (var project in tfmVariants)
-      {
-        var projectId = NodeIdBuilder.Project(solutionId, project.ProjectName, project.TargetFramework ?? "");
+        var tfmVariants = projectsByPath.GetValueOrDefault(result.ProjectPath);
+        if (tfmVariants is null) continue;
 
-        if (result.Success != true)
+        if (result.Kind == BatchBuildResultKind.Started)
         {
-          await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.Failed("", []));
+          foreach (var project in tfmVariants)
+          {
+            var projectId = NodeIdBuilder.Project(solutionId, project.ProjectName, project.TargetFramework ?? "");
+            await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.Building());
+          }
           continue;
         }
 
-        discoverTasks.Add(executor.DiscoverProjectAsync(project, solutionId, token));
+        foreach (var project in tfmVariants)
+        {
+          var projectId = NodeIdBuilder.Project(solutionId, project.ProjectName, project.TargetFramework ?? "");
+
+          if (result.Success != true)
+          {
+            await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.Failed("", []));
+            continue;
+          }
+
+          discoverTasks.Add(
+              executor.DiscoverProjectAsync(project, solutionId, token));
+        }
       }
+
+      token.Ct.ThrowIfCancellationRequested();
+
+      await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
+          IsLoading: true, CurrentOperation: "Discovering",
+          OverallStatus: OverallStatus.Discovering,
+          TotalTests: registry.GetLeafCount(), TotalRunning: 0,
+          TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
+
+      await Task.WhenAll(discoverTasks);
+
+      await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
+          IsLoading: false, CurrentOperation: null,
+          OverallStatus: OverallStatus.Idle,
+          TotalTests: registry.GetLeafCount(), TotalRunning: 0,
+          TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
+
+      return new InitializeResult(Success: true);
     }
-
-    await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
-        IsLoading: true, CurrentOperation: "Discovering",
-        OverallStatus: OverallStatus.Discovering,
-        TotalTests: registry.GetLeafCount(), TotalRunning: 0,
-        TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
-
-    await Task.WhenAll(discoverTasks);
-
-    await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
-        IsLoading: false, CurrentOperation: null,
-        OverallStatus: OverallStatus.Idle,
-        TotalTests: registry.GetLeafCount(), TotalRunning: 0,
-        TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
-
-    return new InitializeResult(Success: true);
+    catch (OperationCanceledException)
+    {
+      await ResetTransientNodesAsync();
+      await dispatcher.SendRunnerStatusAsync(BuildIdleStatus());
+      return new InitializeResult(Success: false);
+    }
   }
 
   public async Task<OperationResult> RunAsync(string nodeId, CancellationToken ct)
@@ -238,13 +269,15 @@ public class TestRunnerService(
         }
       }
 
+      token.Ct.ThrowIfCancellationRequested();
+
       await Task.WhenAll(discoverTasks);
       await dispatcher.SendRunnerStatusAsync(BuildIdleStatus());
       return new OperationResult(Success: true);
     }
     catch (OperationCanceledException)
     {
-      await dispatcher.SendBatchStatusAsync(nodeId, null, registry);
+      await ResetTransientNodesAsync();
       await dispatcher.SendRunnerStatusAsync(BuildIdleStatus());
       return new OperationResult(Success: false);
     }
@@ -351,7 +384,7 @@ public class TestRunnerService(
     }
     catch (OperationCanceledException)
     {
-      await dispatcher.SendBatchStatusAsync(nodeId, null, registry);
+      await ResetTransientNodesAsync();
       await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
           IsLoading: false, CurrentOperation: null,
           OverallStatus: OverallStatus.Idle,
@@ -382,6 +415,16 @@ public class TestRunnerService(
           OverallStatus: OverallStatus.Idle,
           TotalTests: registry.GetLeafCount(), TotalRunning: 0,
           TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0);
+
+  private async Task ResetTransientNodesAsync()
+  {
+    var transient = new HashSet<string> { "Building", "Discovering", "Running", "Debugging", "Cancelling" };
+    foreach (var node in registry.GetAll())
+    {
+      if (registry.GetLastStatus(node.Id) is { } s && transient.Contains(s))
+        await dispatcher.SendStatusAsync(node.Id, null);
+    }
+  }
 
   private static string FormatDuration(long ms) =>
       ms switch
