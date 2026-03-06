@@ -24,17 +24,18 @@ public static class NodeIdBuilder
   public static string Namespace(string projectNodeId, IReadOnlyList<string> namespaceParts) =>
       $"{projectNodeId}::{string.Join(".", namespaceParts)}";
 
-  // Overload for adding one more segment onto an existing namespace ID
   public static string Namespace(string parentNamespaceId, string segment) =>
       $"{parentNamespaceId}.{segment}";
 
   public static string Class(string namespaceNodeId, string className) =>
       $"{namespaceNodeId}::{className}";
 
+  public static string TheoryGroup(string classNodeId, string methodName) =>
+      $"{classNodeId}::{methodName}::theory";
+
   public static string Method(string classNodeId, string methodName) =>
       $"{classNodeId}::{methodName}";
 
-  // For Expecto-style tests with no class — method hangs directly off namespace
   public static string MethodNoClass(string namespaceNodeId, string methodName) =>
       $"{namespaceNodeId}::{methodName}";
 }

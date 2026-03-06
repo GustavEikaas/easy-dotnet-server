@@ -114,7 +114,7 @@ public class VsTestService(
       {
         var discoveryHandler = new TestDiscoveryHandler(loggerFactory.CreateLogger<TestDiscoveryHandler>());
         var sessionHandler = new TestSessionHandler();
-        var runHandler = new TestRunHandler(channel.Writer);
+        var runHandler = new TestRunHandler(channel.Writer, loggerFactory.CreateLogger<TestRunHandler>());
 
         testHost.DiscoverTests([project.TargetPath!], null, DefaultOptions, sessionHandler.TestSessionInfo, discoveryHandler);
         var runTests = discoveryHandler.TestCases.Where(x => testIds.Contains(x.Id)).ToList();

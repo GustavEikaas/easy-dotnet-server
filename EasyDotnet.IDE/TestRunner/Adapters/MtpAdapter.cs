@@ -6,6 +6,7 @@ using EasyDotnet.IDE.MTP.RPC;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.TestRunner.Models;
 using EasyDotnet.MTP;
+using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.IDE.TestRunner.Adapters;
 
@@ -19,7 +20,8 @@ namespace EasyDotnet.IDE.TestRunner.Adapters;
 public sealed class MtpAdapter(
   IEditorService editorService,
   IDebugStrategyFactory debugStrategyFactory,
-  IDebugOrchestrator debugOrchestrator
+  IDebugOrchestrator debugOrchestrator,
+  ILogger<MtpAdapter> logger
 ) : ITestAdapter
 {
   public async Task DiscoverAsync(ValidatedDotnetProject project, Func<DiscoveredTest, Task> onDiscovered, CancellationToken ct)
@@ -48,7 +50,13 @@ public sealed class MtpAdapter(
 
     await foreach (var update in client.RunTestsAsync(filter, ct))
     {
-      var result = update.ToTestRunResult();
+      TestRunResult? result;
+      try { result = update.ToTestRunResult(); }
+      catch (ArgumentOutOfRangeException ex)
+      {
+        logger.LogError(ex, "Skipping result with unmapped MTP execution state for {Uid}", update.Node.Uid);
+        continue;
+      }
       if (result is not null) await onResult(result);
     }
   }
@@ -77,7 +85,13 @@ public sealed class MtpAdapter(
 
     await foreach (var update in client.RunTestsAsync(filter, ct))
     {
-      var result = update.ToTestRunResult();
+      TestRunResult? result;
+      try { result = update.ToTestRunResult(); }
+      catch (ArgumentOutOfRangeException ex)
+      {
+        logger.LogError(ex, "Skipping result with unmapped MTP execution state for {Uid}", update.Node.Uid);
+        continue;
+      }
       if (result is not null) await onResult(result);
     }
   }

@@ -32,9 +32,12 @@ public class OperationExecutor(
     var adapter = adapterResolver.Resolve(project);
     var emittedNamespaces = new HashSet<string>();
     var emittedClasses = new HashSet<string>();
+    var emittedTheoryGroups = new HashSet<string>();
     var rootNs = project.Raw.RootNamespace ?? project.ProjectName;
     var rootNamespaceParts = rootNs.Split('.', StringSplitOptions.RemoveEmptyEntries);
+
     var locator = new TestSourceLocator();
+
     await adapter.DiscoverAsync(project, async discovered =>
     {
       token.Ct.ThrowIfCancellationRequested();
@@ -42,7 +45,9 @@ public class OperationExecutor(
       var namespaceParts = StripRootNamespace(discovered.NamespaceParts, rootNamespaceParts);
 
       var namespaceNodeId = namespaceParts.Count > 0
-                      ? await EnsureNamespaceChainAsync(projectNodeId, discovered.NamespaceParts, namespaceParts, emittedNamespaces)
+                      ? await EnsureNamespaceChainAsync(
+                          projectNodeId, discovered.NamespaceParts,
+                          namespaceParts, emittedNamespaces, token.Ct)
                       : projectNodeId;
 
       var parentId = namespaceNodeId;
@@ -73,12 +78,40 @@ public class OperationExecutor(
           ? discovered.MethodName[(discovered.MethodName.LastIndexOf('.') + 1)..]
           : discovered.MethodName;
 
+      var location = locator.Locate(discovered.FilePath, shortMethodName);
+
+      if (discovered.Arguments is not null)
+      {
+        var groupId = NodeIdBuilder.TheoryGroup(parentId, shortMethodName);
+        if (emittedTheoryGroups.Add(groupId))
+        {
+          var groupNode = new TestNode(
+                  Id: groupId,
+                  DisplayName: shortMethodName,
+                  ParentId: parentId,
+                  FilePath: discovered.FilePath,
+                  SignatureLine: location?.SignatureLine,
+                  BodyStartLine: location?.BodyStartLine,
+                  EndLine: location?.EndLine,
+                  Type: new NodeType.TheoryGroup(),
+                  ProjectId: projectNodeId,
+                  AvailableActions: discovered.FilePath is not null
+                      ? [TestAction.Run, TestAction.GoToSource]
+                      : [TestAction.Run]
+              );
+          registry.Register(groupNode);
+          await dispatcher.SendRegisterTestAsync(groupNode);
+        }
+        parentId = groupId;
+      }
+
       var shortName = discovered.Arguments is not null
-          ? $"{shortMethodName}({discovered.Arguments})"
+          ? discovered.Arguments
           : shortMethodName;
 
-      var location = locator.Locate(discovered.FilePath, shortMethodName);
-      var methodNodeId = NodeIdBuilder.Method(parentId, discovered.MethodName);
+      var methodNodeId = discovered.Arguments is not null
+          ? NodeIdBuilder.Method(parentId, shortMethodName + discovered.Arguments)
+          : NodeIdBuilder.Method(parentId, discovered.MethodName);
       var methodNode = new TestNode(
               Id: methodNodeId,
               DisplayName: shortName,
@@ -107,23 +140,15 @@ public class OperationExecutor(
          IReadOnlyList<string> parts,
          string[] rootParts)
   {
-    if (parts.Count < rootParts.Length)
-    {
-      return parts;
-    }
-
+    if (parts.Count < rootParts.Length) return parts;
 
     for (var i = 0; i < rootParts.Length; i++)
     {
       if (!string.Equals(parts[i], rootParts[i], StringComparison.OrdinalIgnoreCase))
-      {
-
         return parts;
-      }
-
     }
 
-    return [.. parts.Skip(rootParts.Length)];
+    return parts.Skip(rootParts.Length).ToList();
   }
 
   public async Task<RunProgressCounter> RunNodeAsync(
@@ -137,10 +162,7 @@ public class OperationExecutor(
     var leafNodes = registry.GetLeafDescendants(nodeId).ToList();
     var self = registry.Get(nodeId);
     if (self?.Type is NodeType.TestMethod or NodeType.Subcase)
-    {
       leafNodes.Add(self);
-    }
-
 
     var runningStatus = debug ? (TestNodeStatus)new TestNodeStatus.Debugging() : new TestNodeStatus.Running();
     await dispatcher.SendBatchStatusAsync(nodeId, runningStatus, registry);
@@ -206,13 +228,9 @@ public class OperationExecutor(
     };
 
     if (debug)
-    {
       await adapter.DebugAsync(project, nativeIds, onResult, token.Ct);
-    }
     else
-    {
       await adapter.RunAsync(project, nativeIds, onResult, token.Ct);
-    }
 
     return counter;
   }
@@ -247,7 +265,8 @@ public class OperationExecutor(
        string projectNodeId,
        IReadOnlyList<string> originalParts,
        IReadOnlyList<string> displayParts,
-       HashSet<string> emitted)
+       HashSet<string> emitted,
+       CancellationToken ct)
   {
     var currentParentId = projectNodeId;
     var skipCount = originalParts.Count - displayParts.Count;
@@ -257,29 +276,29 @@ public class OperationExecutor(
       var segmentParts = originalParts.Take(i + 1).ToArray();
       var nsId = NodeIdBuilder.Namespace(projectNodeId, segmentParts);
 
-      if (emitted.Add(nsId) && i >= skipCount)
+      if (emitted.Add(nsId))
       {
-        var nsNode = new TestNode(
-            Id: nsId,
-            DisplayName: displayParts[i - skipCount],
-            ParentId: currentParentId,
-            FilePath: null,
-            SignatureLine: null,
-            BodyStartLine: null,
-            EndLine: null,
-            Type: new NodeType.Namespace(),
-            ProjectId: projectNodeId,
-            AvailableActions: [TestAction.Run, TestAction.Debug]
-        );
-        registry.Register(nsNode);
-        await dispatcher.SendRegisterTestAsync(nsNode);
+        if (i >= skipCount)
+        {
+          var nsNode = new TestNode(
+              Id: nsId,
+              DisplayName: displayParts[i - skipCount],
+              ParentId: currentParentId,
+              FilePath: null,
+              SignatureLine: null,
+              BodyStartLine: null,
+              EndLine: null,
+              Type: new NodeType.Namespace(),
+              ProjectId: projectNodeId,
+              AvailableActions: [TestAction.Run, TestAction.Debug]
+          );
+          registry.Register(nsNode);
+          await dispatcher.SendRegisterTestAsync(nsNode);
+        }
       }
 
       if (i >= skipCount)
-      {
         currentParentId = nsId;
-      }
-
     }
 
     return currentParentId;
@@ -289,11 +308,7 @@ public class OperationExecutor(
   {
     var baseActions = new List<TestAction> { TestAction.Run, TestAction.Debug, TestAction.GoToSource };
     var hasDetails = result.Frames.Length > 0 || result.Stdout.Length > 0 || result.ErrorMessage.Length > 0;
-    if (hasDetails)
-    {
-      baseActions.Add(TestAction.PeekResults);
-    }
-
+    if (hasDetails) baseActions.Add(TestAction.PeekResults);
 
     var duration = result.DurationMs.HasValue
         ? FormatDuration(result.DurationMs.Value)
@@ -318,8 +333,11 @@ public class OperationExecutor(
     while (parentId is not null)
     {
       var scopedLeaves = registry.GetLeafDescendants(parentId)
-          .Where(n => runningLeafIds.Contains(n.Id))
+          .Where(n => IsInScope(n.Id, runningLeafIds))
           .ToList();
+
+      logger.LogDebug("Bubble from {LeafId} at parent {ParentId}: scopedLeaves={Count}",
+          leafId, parentId, scopedLeaves.Count);
 
       if (scopedLeaves.Count == 0)
       {
@@ -338,6 +356,9 @@ public class OperationExecutor(
       var hasFailed = scopedLeaves.Any(n => detailStore.Get(n.Id)?.Outcome == "failed");
       var hasSkipped = !hasFailed && scopedLeaves.Any(n => detailStore.Get(n.Id)?.Outcome == "skipped");
 
+      logger.LogDebug("Bubble parent {ParentId}: hasFailed={HasFailed} hasSkipped={HasSkipped}",
+          parentId, hasFailed, hasSkipped);
+
       var maxDuration = scopedLeaves
           .Select(n => detailStore.Get(n.Id)?.DurationMs ?? 0)
           .DefaultIfEmpty(0)
@@ -353,6 +374,18 @@ public class OperationExecutor(
       await dispatcher.SendStatusAsync(parentId, aggregateStatus);
       parentId = registry.Get(parentId)?.ParentId;
     }
+  }
+
+  private bool IsInScope(string leafId, HashSet<string> runningLeafIds)
+  {
+    if (runningLeafIds.Contains(leafId)) return true;
+    var n = registry.Get(leafId);
+    while (n?.ParentId is not null)
+    {
+      if (runningLeafIds.Contains(n.ParentId)) return true;
+      n = registry.Get(n.ParentId);
+    }
+    return false;
   }
 
   private static string FormatDuration(long ms) =>

@@ -79,7 +79,7 @@ public sealed class VsTestAdapter(
 
     if (toRun.Count == 0) return;
 
-    var runHandler = new TestRunHandler(channel.Writer);
+    var runHandler = new TestRunHandler(channel.Writer, loggerFactory.CreateLogger<TestRunHandler>());
 
     var runTask = Task.Run(() =>
     {

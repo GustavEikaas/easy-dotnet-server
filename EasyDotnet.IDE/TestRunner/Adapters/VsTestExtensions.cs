@@ -57,8 +57,10 @@ public static class VsTestExtensions
     };
   }
 
-  public static TestRunResult ToTestRunResult(this TestResult x)
+  public static TestRunResult? ToTestRunResult(this TestResult x)
   {
+    var outcome = GetOutcome(x.Outcome);
+    if (outcome is null) return null;
     var parsedFrames = SimpleStackTraceParser.Parse(x.ErrorStackTrace);
     var failingFrame = parsedFrames.FirstOrDefault(f => f.IsUserCode);
     var stdout = GetStandardOutput(x)
@@ -67,7 +69,7 @@ public static class VsTestExtensions
     return new TestRunResult
     {
       NativeId = x.TestCase.Id.ToString(),
-      Outcome = GetOutcome(x.Outcome),
+      Outcome = outcome,
       DurationMs = (long?)x.Duration.TotalMilliseconds,
       ErrorMessage = x.ErrorMessage
             ?.Split([Environment.NewLine, "\n"], StringSplitOptions.RemoveEmptyEntries) ?? [],
@@ -77,13 +79,14 @@ public static class VsTestExtensions
     };
   }
 
-  private static string GetOutcome(TestOutcome outcome) =>
+  private static string? GetOutcome(TestOutcome outcome) =>
       outcome switch
       {
         TestOutcome.Passed => "passed",
         TestOutcome.Failed => "failed",
         TestOutcome.Skipped => "skipped",
-        _ => "none"
+        TestOutcome.None => "failed",
+        _ => null
       };
 
   private static string? GetStandardOutput(TestResult result) =>
@@ -96,7 +99,7 @@ public static class VsTestExtensions
     var start = displayName.IndexOf('(');
     var end = displayName.LastIndexOf(')');
     if (start >= 0 && end > start && end == displayName.Length - 1)
-      return (displayName, displayName[start..(end + 1)]);
+      return (displayName[..start], displayName[start..(end + 1)]);
     return (displayName, null);
   }
 

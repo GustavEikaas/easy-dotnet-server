@@ -25,7 +25,7 @@ public class AdapterResolver(
   {
     if (project.IsMTP)
     {
-      return new MtpAdapter(editorService, debugStrategyFactory, debugOrchestrator);
+      return new MtpAdapter(editorService, debugStrategyFactory, debugOrchestrator, loggerFactory.CreateLogger<MtpAdapter>());
     }
 
     if (!_vsTestAdapters.TryGetValue(project.ProjectFullPath, out var adapter))

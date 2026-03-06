@@ -84,8 +84,9 @@ public static class MtpExtensions
       {
         "passed" => "passed",
         "failed" => "failed",
+        "error" => "failed",
         "skipped" => "skipped",
-        _ => "none"
+        _ => throw new ArgumentOutOfRangeException(nameof(executionState), executionState, "Unmapped MTP execution state")
       };
 
   private static (string MethodName, string? Args) ParseArguments(string rawName)
@@ -93,7 +94,7 @@ public static class MtpExtensions
     var start = rawName.IndexOf('(');
     var end = rawName.LastIndexOf(')');
     if (start >= 0 && end > start && end == rawName.Length - 1)
-      return (rawName, rawName[start..(end + 1)]);
+      return (rawName[..start], rawName[start..(end + 1)]);
     return (rawName, null);
   }
 }
