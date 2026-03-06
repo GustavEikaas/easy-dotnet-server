@@ -6,6 +6,13 @@ namespace EasyDotnet.IDE.TestRunner.Controllers;
 
 public class TestRunnerController(TestRunnerService service) : BaseController
 {
+  [JsonRpcMethod("testrunner/quickDiscover", UseSingleObjectParameterDeserialization = true)]
+  public async Task QuickDiscoverAsync(InitializeRequest request, CancellationToken ct)
+  {
+    try { await service.QuickDiscoverAsync(request.SolutionPath, ct); }
+    catch { }
+  }
+
   [JsonRpcMethod("testrunner/initialize", UseSingleObjectParameterDeserialization = true)]
   public async Task<InitializeResult> InitializeAsync(InitializeRequest request, CancellationToken ct)
   {

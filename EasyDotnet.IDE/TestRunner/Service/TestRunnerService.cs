@@ -20,6 +20,41 @@ public class TestRunnerService(
     AdapterResolver adapterResolver,
     WorkspaceBuildHostManager buildHost)
 {
+
+  public async Task QuickDiscoverAsync(string solutionPath, CancellationToken ct)
+  {
+    using var token = operationLock.TryAcquire("quickDiscover", ct);
+    if (token is null) return;
+
+    registry.Clear();
+    detailStore.ClearAll();
+    await adapterResolver.InvalidateAllAsync();
+
+    var solutionName = Path.GetFileName(solutionPath);
+    var solutionId = NodeIdBuilder.Solution(solutionName);
+    var solutionNode = new TestNode(
+        Id: solutionId, DisplayName: solutionName,
+        ParentId: null, FilePath: solutionPath,
+        SignatureLine: null, BodyStartLine: null, EndLine: null,
+        Type: new NodeType.Solution(), ProjectId: null,
+        AvailableActions: [TestAction.Run, TestAction.Invalidate]);
+    registry.Register(solutionNode);
+    await dispatcher.SendRegisterTestAsync(solutionNode);
+
+    var testProjects = await buildHost.GetTestProjectsFromSolutionAsync(solutionPath, ct: token.Ct);
+
+    var discoverTasks = testProjects.Select(project =>
+        executor.DiscoverProjectAsync(project, solutionId, token));
+
+    await Task.WhenAll(discoverTasks);
+
+    await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
+        IsLoading: false, CurrentOperation: null,
+        OverallStatus: OverallStatus.Idle,
+        TotalTests: registry.GetLeafCount(), TotalRunning: 0,
+        TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
+  }
+
   public async Task<InitializeResult> InitializeAsync(string solutionPath, CancellationToken ct)
   {
     using var token = operationLock.TryAcquire("initialize", ct)
