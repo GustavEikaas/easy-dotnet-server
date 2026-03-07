@@ -163,7 +163,8 @@ public sealed record ValidatedDotnetProject
   public required string TargetFramework { get; init; }
   public required string OutputType { get; init; }
   public required string ProjectPath { get; init; }
-  public required string MSBuildProjectFullPath { get; init; }
+  public required string ProjectFullPath { get; init; }
+  public required string ProjectName { get; init; }
   public required string AssemblyName { get; init; }
   public required string TargetPath { get; init; }
   public required DotnetProject Raw { get; init; }
@@ -184,9 +185,9 @@ public sealed record ValidatedDotnetProject
   {
     get
     {
-      var baseDir = File.Exists(MSBuildProjectFullPath)
-          ? Path.GetDirectoryName(MSBuildProjectFullPath)!
-          : MSBuildProjectFullPath;
+      var baseDir = File.Exists(ProjectFullPath)
+          ? Path.GetDirectoryName(ProjectFullPath)
+          : ProjectFullPath;
       return Path.Combine(baseDir, "Properties", "launchSettings.json");
     }
   }
@@ -200,13 +201,15 @@ public sealed record ValidatedDotnetProject
           ProjectPath: { } projectPath,
           MSBuildProjectFullPath: { } fullPath,
           AssemblyName: { } assemblyName,
-          TargetPath: { } targetPath
+          TargetPath: { } targetPath,
+          MSBuildProjectName: { } projectName
         } => new ValidatedDotnetProject
         {
           TargetFramework = tfm,
           OutputType = outputType,
           ProjectPath = projectPath,
-          MSBuildProjectFullPath = fullPath,
+          ProjectFullPath = fullPath,
+          ProjectName = projectName,
           AssemblyName = assemblyName,
           TargetPath = targetPath,
           Raw = project

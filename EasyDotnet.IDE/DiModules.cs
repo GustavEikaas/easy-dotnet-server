@@ -10,6 +10,13 @@ using EasyDotnet.IDE.DebuggerStrategies;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.StartupHook;
 using EasyDotnet.IDE.TemplateEngine.PostActionHandlers;
+using EasyDotnet.IDE.TestRunner.Adapters;
+using EasyDotnet.IDE.TestRunner.Dispatch;
+using EasyDotnet.IDE.TestRunner.Executor;
+using EasyDotnet.IDE.TestRunner.Lock;
+using EasyDotnet.IDE.TestRunner.Registry;
+using EasyDotnet.IDE.TestRunner.Service;
+using EasyDotnet.IDE.TestRunner.Store;
 using EasyDotnet.IDE.Utils;
 using EasyDotnet.Infrastructure.Aspire;
 using EasyDotnet.Infrastructure.Editor;
@@ -18,6 +25,7 @@ using EasyDotnet.Infrastructure.Process;
 using EasyDotnet.Infrastructure.Services;
 using EasyDotnet.Infrastructure.Settings;
 using EasyDotnet.Services;
+using Microsoft.Build.Execution;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog;
@@ -67,6 +75,14 @@ public static class DiModules
     services.AddSingleton<BuildHostFactory>();
     services.AddSingleton<IBuildHostManager, BuildHostManager>();
     services.AddSingleton<WorkspaceBuildHostManager>();
+
+    services.AddSingleton<TestRunnerService>();
+    services.AddSingleton<NodeRegistry>();
+    services.AddSingleton<StatusDispatcher>();
+    services.AddSingleton<DetailStore>();
+    services.AddSingleton<GlobalOperationLock>();
+    services.AddSingleton<OperationExecutor>();
+    services.AddSingleton<AdapterResolver>();
 
     services.AddTransient<IProgressScopeFactory, ProgressScopeFactory>();
     services.AddTransient<IStartupHookService, StartupHookService>();

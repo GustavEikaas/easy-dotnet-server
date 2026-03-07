@@ -9,4 +9,5 @@ public interface IBuildHostManager
   IAsyncEnumerable<ProjectEvaluationResult> GetProjectPropertiesBatchAsync(GetProjectPropertiesBatchRequest request, CancellationToken cancellationToken);
   Task<GetWatchListResponse> GetProjectWatchListAsync(GetWatchListRequest request, CancellationToken cancellationToken);
   IAsyncEnumerable<RestoreResult> RestoreNugetPackagesAsync(RestoreRequest request, CancellationToken cancellationToken);
+  IAsyncEnumerable<BatchBuildResult> BatchBuildAsync(BatchBuildRequest request, CancellationToken cancellationToken);
 }

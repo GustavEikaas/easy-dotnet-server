@@ -1,12 +1,12 @@
 using System.Runtime.CompilerServices;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.IDE.DebuggerStrategies;
-using EasyDotnet.IDE.Extensions;
-using EasyDotnet.IDE.MTP.RPC;
+using EasyDotnet.IDE.TestRunner.Adapters;
+using EasyDotnet.IDE.TestRunner.Adapters.MTP;
+using EasyDotnet.IDE.TestRunner.Adapters.MTP.RPC;
+using EasyDotnet.IDE.TestRunner.Models;
 using EasyDotnet.Infrastructure;
 using EasyDotnet.MsBuild;
-using EasyDotnet.MTP;
-using EasyDotnet.Types;
 
 namespace EasyDotnet.IDE.Services;
 
@@ -22,7 +22,7 @@ public class MtpService(
       throw new FileNotFoundException("Test executable not found.", testExecutablePath);
     }
 
-    await using var client = await Client.CreateAsync(testExecutablePath);
+    await using var client = await MtpClient.CreateAsync(testExecutablePath);
     var discovered = await client.DiscoverTestsAsync(token).ToListAsync(token);
     return [.. discovered.Where(x => x != null && x.Node != null).Select(x => x.ToDiscoveredTest())];
   }
@@ -37,7 +37,7 @@ public class MtpService(
     {
       throw new FileNotFoundException("Test executable not found.", testExecutablePath);
     }
-    await using var client = await Client.CreateAsync(testExecutablePath);
+    await using var client = await MtpClient.CreateAsync(testExecutablePath);
 
     var session = await debugOrchestrator.StartClientDebugSessionAsync(
       project.MSBuildProjectFullPath!,
@@ -51,7 +51,7 @@ public class MtpService(
 
     await foreach (var update in client.RunTestsAsync(filter, token))
     {
-      yield return update.ToTestRunResult();
+      yield return update.ToTestRunResult()!;
     }
   }
 
@@ -65,11 +65,11 @@ public class MtpService(
       throw new FileNotFoundException("Test executable not found.", testExecutablePath);
     }
 
-    await using var client = await Client.CreateAsync(testExecutablePath);
+    await using var client = await MtpClient.CreateAsync(testExecutablePath);
 
     await foreach (var update in client.RunTestsAsync(filter, token))
     {
-      yield return update.ToTestRunResult();
+      yield return update.ToTestRunResult()!;
     }
   }
 }
