@@ -50,10 +50,6 @@ public class TestRunnerController(TestRunnerService service) : BaseController
   public GetResultsResult GetResults(NodeRequest request) =>
       service.GetResults(request.Id);
 
-  //This endpoint will be used when user requests the build errors
-  // [JsonRpcMethod("testrunner/getBuildErrors", UseSingleObjectParameterDeserialization = true)]
-  // public GetResultsResult GetResults(NodeRequest request) =>
-  //     service.GetResults(request.Id);
   [JsonRpcMethod("testrunner/syncFile", UseSingleObjectParameterDeserialization = true)]
   public SyncFileResult SyncFile(SyncFileRequest request) =>
           service.SyncFile(request);

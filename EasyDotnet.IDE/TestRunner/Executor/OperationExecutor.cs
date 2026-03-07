@@ -27,6 +27,12 @@ public class OperationExecutor(
     var projectNodeId = EnsureProjectNode(project, solutionNodeId);
     await dispatcher.SendStatusAsync(projectNodeId, new TestNodeStatus.Discovering());
 
+    // Snapshot existing descendants before clearing — used after discovery to
+    // emit removeTest for any nodes that no longer exist (e.g. renamed namespace).
+    var preDiscoveryIds = registry.GetDescendants(projectNodeId)
+        .Select(n => n.Id)
+        .ToHashSet();
+
     registry.ClearDescendants(projectNodeId);
 
     var adapter = adapterResolver.Resolve(project);
@@ -109,9 +115,7 @@ public class OperationExecutor(
           parentId = groupId;
         }
 
-        var shortName = discovered.Arguments is not null
-            ? discovered.Arguments
-            : shortMethodName;
+        var shortName = discovered.Arguments ?? shortMethodName;
 
         var methodNodeId = discovered.Arguments is not null
             ? NodeIdBuilder.Method(parentId, shortMethodName + discovered.Arguments)
@@ -141,6 +145,14 @@ public class OperationExecutor(
       foreach (var node in pendingEmit)
         await dispatcher.SendRegisterTestAsync(node);
 
+      // Emit removeTest for any node that existed before but was not re-registered.
+      var postDiscoveryIds = pendingEmit.Select(n => n.Id).ToHashSet();
+      foreach (var orphanId in preDiscoveryIds)
+      {
+        if (!postDiscoveryIds.Contains(orphanId))
+          await dispatcher.SendRemoveTestAsync(orphanId);
+      }
+
       await dispatcher.SendStatusAsync(projectNodeId, new TestNodeStatus.Idle());
     }
     catch (OperationCanceledException)
@@ -166,7 +178,7 @@ public class OperationExecutor(
         return parts;
     }
 
-    return parts.Skip(rootParts.Length).ToList();
+    return [.. parts.Skip(rootParts.Length)];
   }
 
   public async Task<RunProgressCounter> RunNodeAsync(
@@ -295,25 +307,22 @@ public class OperationExecutor(
       var segmentParts = originalParts.Take(i + 1).ToArray();
       var nsId = NodeIdBuilder.Namespace(projectNodeId, segmentParts);
 
-      if (emitted.Add(nsId))
+      if (emitted.Add(nsId) && i >= skipCount)
       {
-        if (i >= skipCount)
-        {
-          var nsNode = new TestNode(
-              Id: nsId,
-              DisplayName: displayParts[i - skipCount],
-              ParentId: currentParentId,
-              FilePath: null,
-              SignatureLine: null,
-              BodyStartLine: null,
-              EndLine: null,
-              Type: new NodeType.Namespace(),
-              ProjectId: projectNodeId,
-              AvailableActions: [TestAction.Run, TestAction.Debug]
-          );
-          registry.Register(nsNode);
-          pendingEmit.Add(nsNode);
-        }
+        var nsNode = new TestNode(
+            Id: nsId,
+            DisplayName: displayParts[i - skipCount],
+            ParentId: currentParentId,
+            FilePath: null,
+            SignatureLine: null,
+            BodyStartLine: null,
+            EndLine: null,
+            Type: new NodeType.Namespace(),
+            ProjectId: projectNodeId,
+            AvailableActions: [TestAction.Run, TestAction.Debug]
+        );
+        registry.Register(nsNode);
+        pendingEmit.Add(nsNode);
       }
 
       if (i >= skipCount)
@@ -341,8 +350,7 @@ public class OperationExecutor(
 
     void Walk(string parentId)
     {
-      var childIds = childrenOf.GetValueOrDefault(parentId) ?? [];
-      foreach (var childId in childIds)
+      foreach (var childId in childrenOf.GetValueOrDefault(parentId) ?? [])
       {
         if (!byId.TryGetValue(childId, out var child)) continue;
 
@@ -365,7 +373,11 @@ public class OperationExecutor(
             chain.Add(grandchild);
             current = grandchild;
           }
-          else break;
+          else
+          {
+            break;
+          }
+
         }
 
         if (chain.Count > 1)
