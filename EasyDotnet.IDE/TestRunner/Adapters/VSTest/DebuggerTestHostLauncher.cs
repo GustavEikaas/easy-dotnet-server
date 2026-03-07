@@ -1,7 +1,7 @@
 using Microsoft.VisualStudio.TestPlatform.ObjectModel;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Client.Interfaces;
 
-namespace EasyDotnet.IDE.VSTest;
+namespace EasyDotnet.IDE.TestRunner.Adapters.VSTest;
 
 internal class DebuggerTestHostLauncher(Func<int, CancellationToken, Task<bool>> attach) : ITestHostLauncher2
 {

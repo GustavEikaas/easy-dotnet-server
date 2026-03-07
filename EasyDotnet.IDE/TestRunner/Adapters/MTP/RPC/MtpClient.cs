@@ -3,15 +3,14 @@ using System.Net;
 using System.Net.Sockets;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
-using EasyDotnet.MTP;
-using EasyDotnet.MTP.RPC.Models;
-using EasyDotnet.MTP.RPC.Requests;
-using EasyDotnet.MTP.RPC.Response;
+using EasyDotnet.IDE.TestRunner.Adapters.MTP.RPC.Models;
+using EasyDotnet.IDE.TestRunner.Adapters.MTP.RPC.Requests;
+using EasyDotnet.IDE.TestRunner.Adapters.MTP.RPC.Response;
 using StreamJsonRpc;
 
-namespace EasyDotnet.IDE.MTP.RPC;
+namespace EasyDotnet.IDE.TestRunner.Adapters.MTP.RPC;
 
-public class Client : IAsyncDisposable
+public sealed class MtpClient : IAsyncDisposable
 {
   private readonly JsonRpc _jsonRpc;
   private readonly TcpClient _tcpClient;
@@ -19,7 +18,7 @@ public class Client : IAsyncDisposable
   private readonly MtpServer _server;
   public readonly int DebugeeProcessId;
 
-  private Client(JsonRpc jsonRpc, TcpClient tcpClient, IProcessHandle processHandle, MtpServer server, int debugeeProcessId)
+  private MtpClient(JsonRpc jsonRpc, TcpClient tcpClient, IProcessHandle processHandle, MtpServer server, int debugeeProcessId)
   {
     _jsonRpc = jsonRpc;
     _tcpClient = tcpClient;
@@ -28,7 +27,7 @@ public class Client : IAsyncDisposable
     DebugeeProcessId = debugeeProcessId;
   }
 
-  public static async Task<Client> CreateAsync(string testExePath, bool debug = false)
+  public static async Task<MtpClient> CreateAsync(string testExePath, bool debug = false)
   {
     var tcpListener = new TcpListener(IPAddress.Loopback, 0);
     tcpListener.Start();
@@ -85,7 +84,7 @@ public class Client : IAsyncDisposable
       new InitializeRequest(Environment.ProcessId, new("easy-dotnet"), new(new(DebuggerProvider: true)))
     );
 
-    return new Client(jsonRpc, tcpClient, processHandle, server, res.ProcessId ?? processHandle.Id);
+    return new MtpClient(jsonRpc, tcpClient, processHandle, server, res.ProcessId ?? processHandle.Id);
   }
 
   public IAsyncEnumerable<TestNodeUpdate> DiscoverTestsAsync(CancellationToken cancellationToken = default)

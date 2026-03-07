@@ -1,10 +1,10 @@
 using System.Collections.Concurrent;
 using System.Threading.Channels;
-using EasyDotnet.MTP.RPC.Models;
+using EasyDotnet.IDE.TestRunner.Adapters.MTP.RPC.Models;
 using Newtonsoft.Json;
 using StreamJsonRpc;
 
-namespace EasyDotnet.IDE.MTP;
+namespace EasyDotnet.IDE.TestRunner.Adapters.MTP;
 
 internal class MtpServer
 {

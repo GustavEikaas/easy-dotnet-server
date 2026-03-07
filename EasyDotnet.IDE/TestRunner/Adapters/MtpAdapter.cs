@@ -2,10 +2,10 @@ using System.Runtime.InteropServices;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.IDE.DebuggerStrategies;
-using EasyDotnet.IDE.MTP.RPC;
 using EasyDotnet.IDE.Services;
+using EasyDotnet.IDE.TestRunner.Adapters.MTP;
+using EasyDotnet.IDE.TestRunner.Adapters.MTP.RPC;
 using EasyDotnet.IDE.TestRunner.Models;
-using EasyDotnet.MTP;
 using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.IDE.TestRunner.Adapters;
@@ -27,7 +27,7 @@ public sealed class MtpAdapter(
   public async Task DiscoverAsync(ValidatedDotnetProject project, Func<DiscoveredTest, Task> onDiscovered, CancellationToken ct)
   {
     var exe = TransformDllPath(project.TargetPath);
-    await using var client = await Client.CreateAsync(exe);
+    await using var client = await MtpClient.CreateAsync(exe);
 
     await foreach (var update in client.DiscoverTestsAsync(ct))
     {
@@ -43,7 +43,7 @@ public sealed class MtpAdapter(
       CancellationToken ct)
   {
     var exe = TransformDllPath(project.TargetPath);
-    await using var client = await Client.CreateAsync(exe);
+    await using var client = await MtpClient.CreateAsync(exe);
     var filter = nativeIds
         .Select(id => new RunRequestNode(id, ""))
         .ToArray();
@@ -69,7 +69,7 @@ public sealed class MtpAdapter(
   {
 
     var exe = TransformDllPath(project.TargetPath);
-    await using var client = await Client.CreateAsync(exe);
+    await using var client = await MtpClient.CreateAsync(exe);
     var session = await debugOrchestrator.StartClientDebugSessionAsync(
       project.ProjectFullPath,
       new(project.ProjectFullPath, project.TargetFramework, null, null),

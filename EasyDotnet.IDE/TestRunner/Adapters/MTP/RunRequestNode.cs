@@ -1,6 +1,6 @@
 using Newtonsoft.Json;
 
-namespace EasyDotnet.MTP;
+namespace EasyDotnet.IDE.TestRunner.Adapters.MTP;
 
 public sealed record RunRequestNode
 (

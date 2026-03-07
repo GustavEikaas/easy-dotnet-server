@@ -1,8 +1,6 @@
-using System;
-
 using Newtonsoft.Json;
 
-namespace EasyDotnet.MTP.RPC.Requests;
+namespace EasyDotnet.IDE.TestRunner.Adapters.MTP.RPC.Requests;
 
 public sealed record DiscoveryRequest(
     [property:JsonProperty("runId")]

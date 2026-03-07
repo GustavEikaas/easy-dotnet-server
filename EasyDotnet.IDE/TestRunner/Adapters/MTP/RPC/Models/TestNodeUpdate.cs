@@ -1,6 +1,6 @@
 using Newtonsoft.Json;
 
-namespace EasyDotnet.MTP.RPC.Models;
+namespace EasyDotnet.IDE.TestRunner.Adapters.MTP.RPC.Models;
 
 public sealed record TestNodeUpdate
 (

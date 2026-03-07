@@ -3,8 +3,8 @@ using EasyDotnet.Application.Interfaces;
 using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.IDE.DebuggerStrategies;
 using EasyDotnet.IDE.Services;
+using EasyDotnet.IDE.TestRunner.Adapters.VSTest;
 using EasyDotnet.IDE.TestRunner.Models;
-using EasyDotnet.IDE.VSTest;
 using Microsoft.Extensions.Logging;
 using Microsoft.TestPlatform.VsTestConsole.TranslationLayer;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Client;
@@ -80,6 +80,12 @@ public sealed class VsTestAdapter(
     if (toRun.Count == 0) return;
 
     var runHandler = new TestRunHandler(channel.Writer, loggerFactory.CreateLogger<TestRunHandler>());
+
+    //TODO: add runsettings
+    // var project = await GetProject(projectPath, targetFrameworkMoniker, configuration, token);
+    //
+    // var runSettingsFile = settingsService.GetProjectRunSettings(projectPath!);
+    // var runSettings = runSettingsFile is not null ? fileSystem.File.ReadAllText(runSettingsFile) : null;
 
     var runTask = Task.Run(() =>
     {

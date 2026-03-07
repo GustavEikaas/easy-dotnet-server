@@ -1,5 +1,5 @@
+using EasyDotnet.IDE.TestRunner.Adapters.MTP.RPC.Models;
 using EasyDotnet.IDE.TestRunner.Models;
-using EasyDotnet.MTP.RPC.Models;
 
 namespace EasyDotnet.IDE.TestRunner.Adapters;
 

@@ -1,11 +1,10 @@
 using System.Threading.Channels;
-using EasyDotnet.IDE.TestRunner.Adapters;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Client;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Logging;
 
-namespace EasyDotnet.IDE.VSTest;
+namespace EasyDotnet.IDE.TestRunner.Adapters.VSTest;
 
 internal sealed class TestRunHandler(
     ChannelWriter<TestRunResult> writer,
