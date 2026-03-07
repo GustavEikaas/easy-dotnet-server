@@ -59,17 +59,18 @@ public class OperationExecutor(
           var classNodeId = NodeIdBuilder.Class(namespaceNodeId, discovered.ClassName);
           if (emittedClasses.Add(classNodeId))
           {
+            var classLocation = locator.LocateClass(discovered.FilePath, discovered.ClassName);
             var classNode = new TestNode(
                     Id: classNodeId,
                     DisplayName: discovered.ClassName,
                     ParentId: namespaceNodeId,
                     FilePath: discovered.FilePath,
-                    SignatureLine: null,
-                    BodyStartLine: null,
-                    EndLine: null,
+                    SignatureLine: classLocation?.SignatureLine,
+                    BodyStartLine: classLocation?.BodyStartLine,
+                    EndLine: classLocation?.EndLine,
                     Type: new NodeType.TestClass(),
                     ProjectId: projectNodeId,
-                    AvailableActions: [TestAction.Run, TestAction.Debug]
+                    AvailableActions: [TestAction.Run, TestAction.Debug, TestAction.GoToSource]
                 );
             registry.Register(classNode);
             pendingEmit.Add(classNode);

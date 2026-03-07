@@ -161,6 +161,8 @@ public class TestRunnerService(
 
       token.Ct.ThrowIfCancellationRequested();
 
+      token.Ct.ThrowIfCancellationRequested();
+
       await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
           IsLoading: true, CurrentOperation: "Discovering",
           OverallStatus: OverallStatus.Discovering,
@@ -271,6 +273,8 @@ public class TestRunnerService(
 
       token.Ct.ThrowIfCancellationRequested();
 
+      token.Ct.ThrowIfCancellationRequested();
+
       await Task.WhenAll(discoverTasks);
       await dispatcher.SendRunnerStatusAsync(BuildIdleStatus());
       return new OperationResult(Success: true);
@@ -309,12 +313,14 @@ public class TestRunnerService(
 
   public SyncFileResult SyncFile(SyncFileRequest req)
   {
-    var contentMap = TestSourceLocator.ParseContent(req.Content);
+    var parsed = TestSourceLocator.ParseContent(req.Content);
     var updates = new List<LineNumberUpdateDto>();
 
     foreach (var node in registry.GetNodesForFile(req.Path))
     {
-      var loc = TestSourceLocator.Lookup(contentMap, node.DisplayName);
+      var loc = node.Type is NodeType.TestClass
+          ? (parsed.Classes.TryGetValue(node.DisplayName, out var clsLoc) ? clsLoc : null)
+          : TestSourceLocator.LookupMethod(parsed.Methods, node.DisplayName);
       if (loc is null) continue;
 
       var changed = registry.UpdateLineNumbers(
@@ -358,6 +364,10 @@ public class TestRunnerService(
           buildFailed = true;
         }
       }
+
+      token.Ct.ThrowIfCancellationRequested();
+
+      token.Ct.ThrowIfCancellationRequested();
 
       if (buildFailed)
       {

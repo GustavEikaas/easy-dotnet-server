@@ -37,12 +37,10 @@ public class NodeRegistry
     var previous = _lastStatus.GetOrAdd(stableId, (string?)null);
 
     if (previous == key)
-    {
-      return false;
-    }
+      return false; // unchanged — suppress
 
     _lastStatus[stableId] = key;
-    return true;
+    return true; // changed — send
   }
 
   public string? GetLastStatus(string stableId) =>
@@ -115,7 +113,7 @@ public class NodeRegistry
   {
     var normalized = filePath.Replace('\\', '/');
     return _nodes.Values.Where(n =>
-        (n.Type is NodeType.TestMethod or NodeType.Subcase or NodeType.TheoryGroup) &&
+        (n.Type is NodeType.TestMethod or NodeType.Subcase or NodeType.TheoryGroup or NodeType.TestClass) &&
         string.Equals(
             n.FilePath?.Replace('\\', '/'),
             normalized,
@@ -138,6 +136,7 @@ public class NodeRegistry
     {
       return false;
     }
+
 
     _nodes[stableId] = node with
     {

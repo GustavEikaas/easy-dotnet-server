@@ -23,7 +23,7 @@ public sealed record ParsedStackFrame
   public required string OriginalText { get; init; }
   public string? File { get; init; }
   public int? Line { get; init; }
-  public bool IsUserCode => !string.IsNullOrEmpty(File);
+  public bool IsUserCode => !string.IsNullOrEmpty(File) && System.IO.File.Exists(File);
 }
 
 public static partial class SimpleStackTraceParser
