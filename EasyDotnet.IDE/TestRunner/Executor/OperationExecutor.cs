@@ -37,103 +37,120 @@ public class OperationExecutor(
     var rootNamespaceParts = rootNs.Split('.', StringSplitOptions.RemoveEmptyEntries);
 
     var locator = new TestSourceLocator();
+    var pendingEmit = new List<TestNode>();
 
-    await adapter.DiscoverAsync(project, async discovered =>
+    try
     {
-      token.Ct.ThrowIfCancellationRequested();
-
-      var namespaceParts = StripRootNamespace(discovered.NamespaceParts, rootNamespaceParts);
-
-      var namespaceNodeId = namespaceParts.Count > 0
-                      ? await EnsureNamespaceChainAsync(
-                          projectNodeId, discovered.NamespaceParts,
-                          namespaceParts, emittedNamespaces, token.Ct)
-                      : projectNodeId;
-
-      var parentId = namespaceNodeId;
-      if (discovered.ClassName is not null)
+      await adapter.DiscoverAsync(project, async discovered =>
       {
-        var classNodeId = NodeIdBuilder.Class(namespaceNodeId, discovered.ClassName);
-        if (emittedClasses.Add(classNodeId))
+        token.Ct.ThrowIfCancellationRequested();
+
+        var namespaceParts = StripRootNamespace(discovered.NamespaceParts, rootNamespaceParts);
+
+        var namespaceNodeId = namespaceParts.Count > 0
+                        ? await EnsureNamespaceChainAsync(
+                            projectNodeId, discovered.NamespaceParts,
+                            namespaceParts, emittedNamespaces, pendingEmit, token.Ct)
+                        : projectNodeId;
+
+        var parentId = namespaceNodeId;
+        if (discovered.ClassName is not null)
         {
-          var classNode = new TestNode(
-                  Id: classNodeId,
-                  DisplayName: discovered.ClassName,
-                  ParentId: namespaceNodeId,
-                  FilePath: discovered.FilePath,
-                  SignatureLine: null,
-                  BodyStartLine: null,
-                  EndLine: null,
-                  Type: new NodeType.TestClass(),
-                  ProjectId: projectNodeId,
-                  AvailableActions: [TestAction.Run, TestAction.Debug]
-              );
-          registry.Register(classNode);
-          await dispatcher.SendRegisterTestAsync(classNode);
+          var classNodeId = NodeIdBuilder.Class(namespaceNodeId, discovered.ClassName);
+          if (emittedClasses.Add(classNodeId))
+          {
+            var classNode = new TestNode(
+                    Id: classNodeId,
+                    DisplayName: discovered.ClassName,
+                    ParentId: namespaceNodeId,
+                    FilePath: discovered.FilePath,
+                    SignatureLine: null,
+                    BodyStartLine: null,
+                    EndLine: null,
+                    Type: new NodeType.TestClass(),
+                    ProjectId: projectNodeId,
+                    AvailableActions: [TestAction.Run, TestAction.Debug]
+                );
+            registry.Register(classNode);
+            pendingEmit.Add(classNode);
+          }
+          parentId = classNodeId;
         }
-        parentId = classNodeId;
-      }
 
-      var shortMethodName = discovered.MethodName.Contains('.')
-          ? discovered.MethodName[(discovered.MethodName.LastIndexOf('.') + 1)..]
-          : discovered.MethodName;
+        var shortMethodName = discovered.MethodName.Contains('.')
+            ? discovered.MethodName[(discovered.MethodName.LastIndexOf('.') + 1)..]
+            : discovered.MethodName;
 
-      var location = locator.Locate(discovered.FilePath, shortMethodName);
+        var location = locator.Locate(discovered.FilePath, shortMethodName);
 
-      if (discovered.Arguments is not null)
-      {
-        var groupId = NodeIdBuilder.TheoryGroup(parentId, shortMethodName);
-        if (emittedTheoryGroups.Add(groupId))
+        if (discovered.Arguments is not null)
         {
-          var groupNode = new TestNode(
-                  Id: groupId,
-                  DisplayName: shortMethodName,
-                  ParentId: parentId,
-                  FilePath: discovered.FilePath,
-                  SignatureLine: location?.SignatureLine,
-                  BodyStartLine: location?.BodyStartLine,
-                  EndLine: location?.EndLine,
-                  Type: new NodeType.TheoryGroup(),
-                  ProjectId: projectNodeId,
-                  AvailableActions: discovered.FilePath is not null
-                      ? [TestAction.Run, TestAction.GoToSource]
-                      : [TestAction.Run]
-              );
-          registry.Register(groupNode);
-          await dispatcher.SendRegisterTestAsync(groupNode);
+          var groupId = NodeIdBuilder.TheoryGroup(parentId, shortMethodName);
+          if (emittedTheoryGroups.Add(groupId))
+          {
+            var groupNode = new TestNode(
+                    Id: groupId,
+                    DisplayName: shortMethodName,
+                    ParentId: parentId,
+                    FilePath: discovered.FilePath,
+                    SignatureLine: location?.SignatureLine,
+                    BodyStartLine: location?.BodyStartLine,
+                    EndLine: location?.EndLine,
+                    Type: new NodeType.TheoryGroup(),
+                    ProjectId: projectNodeId,
+                    AvailableActions: discovered.FilePath is not null
+                        ? [TestAction.Run, TestAction.GoToSource]
+                        : [TestAction.Run]
+                );
+            registry.Register(groupNode);
+            pendingEmit.Add(groupNode);
+          }
+          parentId = groupId;
         }
-        parentId = groupId;
-      }
 
-      var shortName = discovered.Arguments is not null
-          ? discovered.Arguments
-          : shortMethodName;
+        var shortName = discovered.Arguments is not null
+            ? discovered.Arguments
+            : shortMethodName;
 
-      var methodNodeId = discovered.Arguments is not null
-          ? NodeIdBuilder.Method(parentId, shortMethodName + discovered.Arguments)
-          : NodeIdBuilder.Method(parentId, discovered.MethodName);
-      var methodNode = new TestNode(
-              Id: methodNodeId,
-              DisplayName: shortName,
-              ParentId: parentId,
-              FilePath: discovered.FilePath,
-              SignatureLine: location?.SignatureLine,
-              BodyStartLine: location?.BodyStartLine,
-              EndLine: location?.EndLine,
-              Type: discovered.Arguments is not null
-                  ? new NodeType.Subcase()
-                  : new NodeType.TestMethod(),
-              ProjectId: projectNodeId,
-              AvailableActions: discovered.FilePath is not null
-                  ? [TestAction.Run, TestAction.Debug, TestAction.GoToSource]
-                  : [TestAction.Run, TestAction.Debug]
-          );
-      registry.Register(methodNode, nativeId: discovered.NativeId);
-      await dispatcher.SendRegisterTestAsync(methodNode);
+        var methodNodeId = discovered.Arguments is not null
+            ? NodeIdBuilder.Method(parentId, shortMethodName + discovered.Arguments)
+            : NodeIdBuilder.Method(parentId, discovered.MethodName);
+        var methodNode = new TestNode(
+                Id: methodNodeId,
+                DisplayName: shortName,
+                ParentId: parentId,
+                FilePath: discovered.FilePath,
+                SignatureLine: location?.SignatureLine,
+                BodyStartLine: location?.BodyStartLine,
+                EndLine: location?.EndLine,
+                Type: discovered.Arguments is not null
+                    ? new NodeType.Subcase()
+                    : new NodeType.TestMethod(),
+                ProjectId: projectNodeId,
+                AvailableActions: discovered.FilePath is not null
+                    ? [TestAction.Run, TestAction.Debug, TestAction.GoToSource]
+                    : [TestAction.Run, TestAction.Debug]
+            );
+        registry.Register(methodNode, nativeId: discovered.NativeId);
+        pendingEmit.Add(methodNode);
 
-    }, token.Ct);
+      }, token.Ct);
 
-    await dispatcher.SendStatusAsync(projectNodeId, new TestNodeStatus.Idle());
+      CollapseNamespaces(projectNodeId, pendingEmit);
+      foreach (var node in pendingEmit)
+        await dispatcher.SendRegisterTestAsync(node);
+
+      await dispatcher.SendStatusAsync(projectNodeId, new TestNodeStatus.Idle());
+    }
+    catch (OperationCanceledException)
+    {
+      throw;
+    }
+    catch (Exception ex)
+    {
+      logger.LogWarning(ex, "Discovery failed for project {Project} — DLL may be missing or stale", project.ProjectName);
+      await dispatcher.SendStatusAsync(projectNodeId, null);
+    }
   }
 
   private static IReadOnlyList<string> StripRootNamespace(
@@ -266,6 +283,7 @@ public class OperationExecutor(
        IReadOnlyList<string> originalParts,
        IReadOnlyList<string> displayParts,
        HashSet<string> emitted,
+       List<TestNode> pendingEmit,
        CancellationToken ct)
   {
     var currentParentId = projectNodeId;
@@ -293,7 +311,7 @@ public class OperationExecutor(
               AvailableActions: [TestAction.Run, TestAction.Debug]
           );
           registry.Register(nsNode);
-          await dispatcher.SendRegisterTestAsync(nsNode);
+          pendingEmit.Add(nsNode);
         }
       }
 
@@ -302,6 +320,81 @@ public class OperationExecutor(
     }
 
     return currentParentId;
+  }
+
+  /// <summary>
+  /// Collapses chains of single-child Namespace nodes into one node with a
+  /// dotted display name. The registry keeps all nodes intact for server-side
+  /// operations (bubbling, running). Only the client-facing emit list is modified.
+  /// </summary>
+  private static void CollapseNamespaces(string projectNodeId, List<TestNode> nodes)
+  {
+    var byId = nodes.ToDictionary(n => n.Id);
+    var childrenOf = nodes
+        .Where(n => n.ParentId is not null)
+        .GroupBy(n => n.ParentId!)
+        .ToDictionary(g => g.Key, g => g.Select(n => n.Id).ToList());
+
+    var toRemove = new HashSet<string>();
+    var toUpdate = new Dictionary<string, TestNode>();
+
+    void Walk(string parentId)
+    {
+      var childIds = childrenOf.GetValueOrDefault(parentId) ?? [];
+      foreach (var childId in childIds)
+      {
+        if (!byId.TryGetValue(childId, out var child)) continue;
+
+        if (child.Type is not NodeType.Namespace)
+        {
+          Walk(childId);
+          continue;
+        }
+
+        // Walk forward through single-child Namespace chains
+        var chain = new List<TestNode> { child };
+        var current = child;
+        while (true)
+        {
+          var grandchildIds = childrenOf.GetValueOrDefault(current.Id) ?? [];
+          if (grandchildIds.Count == 1
+              && byId.TryGetValue(grandchildIds[0], out var grandchild)
+              && grandchild.Type is NodeType.Namespace)
+          {
+            chain.Add(grandchild);
+            current = grandchild;
+          }
+          else break;
+        }
+
+        if (chain.Count > 1)
+        {
+          // Remove all intermediate nodes, update terminal with dotted name + first's parent
+          for (var i = 0; i < chain.Count - 1; i++)
+            toRemove.Add(chain[i].Id);
+
+          var terminal = chain[^1];
+          toUpdate[terminal.Id] = terminal with
+          {
+            DisplayName = string.Join(".", chain.Select(n => n.DisplayName)),
+            ParentId = chain[0].ParentId
+          };
+        }
+
+        Walk(chain[^1].Id);
+      }
+    }
+
+    Walk(projectNodeId);
+
+    for (var i = nodes.Count - 1; i >= 0; i--)
+    {
+      var node = nodes[i];
+      if (toRemove.Contains(node.Id))
+        nodes.RemoveAt(i);
+      else if (toUpdate.TryGetValue(node.Id, out var updated))
+        nodes[i] = updated;
+    }
   }
 
   private static (TestNodeStatus status, List<TestAction> actions) BuildStatusAndActions(TestRunResult result)
