@@ -300,7 +300,9 @@ public class TestRunnerService(
   {
     var detail = detailStore.Get(nodeId);
     if (detail is null)
+    {
       return new GetResultsResult(Found: false, null, null, null, null, null);
+    }
 
     return new GetResultsResult(
         Found: true,
@@ -353,6 +355,113 @@ public class TestRunnerService(
     var node = registry.Get(nodeId)
         ?? throw new KeyNotFoundException($"Node {nodeId} not found");
 
+    return node.Type is NodeType.Solution or NodeType.Namespace
+        ? await ExecuteMultiProjectAsync(nodeId, node, token, debug)
+        : await ExecuteSingleProjectAsync(nodeId, node, token, debug);
+  }
+
+  private async Task<OperationResult> ExecuteMultiProjectAsync(
+      string nodeId, TestNode node, OperationToken token, bool debug)
+  {
+    try
+    {
+      var projectNodes = (node.Type is NodeType.Project
+              ? [node]
+              : registry.GetDescendants(nodeId).Where(n => n.Type is NodeType.Project))
+          .ToList();
+
+      if (projectNodes.Count == 0)
+      {
+        await dispatcher.SendRunnerStatusAsync(BuildIdleStatus());
+        return new OperationResult(Success: true);
+      }
+
+      var projects = (await Task.WhenAll(
+              projectNodes.Select(pn => ResolveProjectAsync(pn.Id, token.Ct))))
+          .Where(p => p is not null)
+          .Select(p => p!)
+          .ToList();
+
+      await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus("Building"));
+      foreach (var pn in projectNodes)
+        await dispatcher.SendStatusAsync(pn.Id, new TestNodeStatus.Building());
+
+      var projectsByPath = projects
+          .GroupBy(p => p.ProjectFullPath, StringComparer.OrdinalIgnoreCase)
+          .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+
+      var failedProjectIds = new HashSet<string>();
+
+      await foreach (var result in buildHost.BatchBuildAsync(
+          new BatchBuildRequest([.. projectsByPath.Keys], Configuration: null), token.Ct))
+      {
+        token.Ct.ThrowIfCancellationRequested();
+        if (result.Kind != BatchBuildResultKind.Finished) { continue; }
+
+        foreach (var p in projectsByPath.GetValueOrDefault(result.ProjectPath) ?? [])
+        {
+          var pn = projectNodes.First(n => string.Equals(n.FilePath, p.ProjectFullPath, StringComparison.OrdinalIgnoreCase));
+          if (result.Success != true)
+          {
+            await dispatcher.SendStatusAsync(pn.Id, new TestNodeStatus.Failed("", []));
+            failedProjectIds.Add(pn.Id);
+          }
+        }
+      }
+
+      token.Ct.ThrowIfCancellationRequested();
+
+      var runnableProjects = projects
+          .Where(p => !failedProjectIds.Contains(
+              projectNodes.First(n => string.Equals(n.FilePath, p.ProjectFullPath, StringComparison.OrdinalIgnoreCase)).Id))
+          .ToList();
+
+      if (runnableProjects.Count == 0)
+      {
+        await dispatcher.SendRunnerStatusAsync(BuildIdleStatus());
+        return new OperationResult(Success: failedProjectIds.Count == 0);
+      }
+
+      var totalLeafCount = runnableProjects
+          .Sum(p => registry.GetLeafDescendants(nodeId)
+              .Count(n => n.ProjectId == projectNodes
+                  .First(pn => string.Equals(pn.FilePath, p.ProjectFullPath, StringComparison.OrdinalIgnoreCase)).Id));
+
+      var sharedCounter = new RunProgressCounter(totalLeafCount);
+
+      await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
+          IsLoading: true,
+          CurrentOperation: debug ? "Debugging" : "Running",
+          OverallStatus: OverallStatus.Running,
+          TotalTests: sharedCounter.TotalTests,
+          TotalRunning: sharedCounter.TotalTests,
+          TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
+
+      var runTasks = runnableProjects
+          .Select(p => executor.RunNodeAsync(nodeId, p, token, debug, sharedCounter));
+      await Task.WhenAll(runTasks);
+
+      var (_, passed, failed, skipped, cancelled) = sharedCounter.Snapshot();
+      await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
+          IsLoading: false, CurrentOperation: null,
+          OverallStatus: failed > 0 ? OverallStatus.Failed : OverallStatus.Passed,
+          TotalTests: sharedCounter.TotalTests, TotalRunning: 0,
+          TotalPassed: passed, TotalFailed: failed,
+          TotalSkipped: skipped, TotalCancelled: cancelled));
+
+      return new OperationResult(Success: failed == 0 && failedProjectIds.Count == 0);
+    }
+    catch (OperationCanceledException)
+    {
+      await ResetTransientNodesAsync();
+      await dispatcher.SendRunnerStatusAsync(BuildIdleStatus());
+      return new OperationResult(Success: false);
+    }
+  }
+
+  private async Task<OperationResult> ExecuteSingleProjectAsync(
+      string nodeId, TestNode node, OperationToken token, bool debug)
+  {
     var projectId = node.ProjectId
         ?? throw new InvalidOperationException($"Node {nodeId} has no project");
 
@@ -377,8 +486,6 @@ public class TestRunnerService(
 
       token.Ct.ThrowIfCancellationRequested();
 
-      token.Ct.ThrowIfCancellationRequested();
-
       if (buildFailed)
       {
         await dispatcher.SendRunnerStatusAsync(BuildIdleStatus());
@@ -393,25 +500,16 @@ public class TestRunnerService(
       await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
           IsLoading: false, CurrentOperation: null,
           OverallStatus: failed > 0 ? OverallStatus.Failed : OverallStatus.Passed,
-          TotalTests: counter.TotalTests,
-          TotalRunning: 0,
-          TotalPassed: passed,
-          TotalFailed: failed,
-          TotalSkipped: skipped,
-          TotalCancelled: cancelled));
+          TotalTests: counter.TotalTests, TotalRunning: 0,
+          TotalPassed: passed, TotalFailed: failed,
+          TotalSkipped: skipped, TotalCancelled: cancelled));
 
       return new OperationResult(Success: failed == 0);
     }
     catch (OperationCanceledException)
     {
       await ResetTransientNodesAsync();
-      await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
-          IsLoading: false, CurrentOperation: null,
-          OverallStatus: OverallStatus.Idle,
-          TotalTests: registry.GetLeafCount(),
-          TotalRunning: 0,
-          TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
-
+      await dispatcher.SendRunnerStatusAsync(BuildIdleStatus());
       return new OperationResult(Success: false);
     }
   }

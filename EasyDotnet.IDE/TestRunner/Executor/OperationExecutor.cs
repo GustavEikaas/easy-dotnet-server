@@ -10,11 +10,6 @@ using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.IDE.TestRunner.Executor;
 
-/// <summary>
-/// Executes the multi-step pipeline for each operation type.
-/// Emits registerTest and updateStatus notifications as work progresses.
-/// TestRunnerService stays thin — all sequencing lives here.
-/// </summary>
 public class OperationExecutor(
     NodeRegistry registry,
     StatusDispatcher dispatcher,
@@ -27,8 +22,6 @@ public class OperationExecutor(
     var projectNodeId = EnsureProjectNode(project, solutionNodeId);
     await dispatcher.SendStatusAsync(projectNodeId, new TestNodeStatus.Discovering());
 
-    // Snapshot existing descendants before clearing — used after discovery to
-    // emit removeTest for any nodes that no longer exist (e.g. renamed namespace).
     var preDiscoveryIds = registry.GetDescendants(projectNodeId)
         .Select(n => n.Id)
         .ToHashSet();
@@ -52,12 +45,7 @@ public class OperationExecutor(
         token.Ct.ThrowIfCancellationRequested();
 
         var namespaceParts = StripRootNamespace(discovered.NamespaceParts, rootNamespaceParts);
-
-        var namespaceNodeId = namespaceParts.Count > 0
-                        ? await EnsureNamespaceChainAsync(
-                            projectNodeId, discovered.NamespaceParts,
-                            namespaceParts, emittedNamespaces, pendingEmit, token.Ct)
-                        : projectNodeId;
+        var namespaceNodeId = namespaceParts.Count > 0 ? await EnsureNamespaceChainAsync(projectNodeId, discovered.NamespaceParts, namespaceParts, emittedNamespaces, pendingEmit) : projectNodeId;
 
         var parentId = namespaceNodeId;
         if (discovered.ClassName is not null)
@@ -145,7 +133,6 @@ public class OperationExecutor(
       foreach (var node in pendingEmit)
         await dispatcher.SendRegisterTestAsync(node);
 
-      // Emit removeTest for any node that existed before but was not re-registered.
       var postDiscoveryIds = pendingEmit.Select(n => n.Id).ToHashSet();
       foreach (var orphanId in preDiscoveryIds)
       {
@@ -185,14 +172,14 @@ public class OperationExecutor(
     string nodeId,
     ValidatedDotnetProject project,
     OperationToken token,
-    bool debug = false)
+    bool debug = false,
+    RunProgressCounter? sharedCounter = null)
   {
     detailStore.ClearSubtree(registry.GetDescendants(nodeId).Select(n => n.Id).Append(nodeId));
 
     var leafNodes = registry.GetLeafDescendants(nodeId).ToList();
     var self = registry.Get(nodeId);
-    if (self?.Type is NodeType.TestMethod or NodeType.Subcase)
-      leafNodes.Add(self);
+    if (self?.Type is NodeType.TestMethod or NodeType.Subcase) { leafNodes.Add(self); }
 
     var runningStatus = debug ? (TestNodeStatus)new TestNodeStatus.Debugging() : new TestNodeStatus.Running();
     await dispatcher.SendBatchStatusAsync(nodeId, runningStatus, registry);
@@ -206,22 +193,26 @@ public class OperationExecutor(
     if (nativeIds.Count == 0)
     {
       logger.LogWarning("No runnable tests found under node {NodeId}", nodeId);
-      return new RunProgressCounter(0);
+      return sharedCounter ?? new RunProgressCounter(0);
     }
 
-    var counter = new RunProgressCounter(nativeIds.Count);
-    await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
-              IsLoading: true,
-              CurrentOperation: debug ? "Debugging" : "Running",
-              OverallStatus: OverallStatus.Running,
-              TotalTests: counter.TotalTests,
-              TotalRunning: counter.TotalTests,
-              TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
+    var counter = sharedCounter ?? new RunProgressCounter(nativeIds.Count);
+
+    if (sharedCounter is null)
+    {
+      await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
+          IsLoading: true,
+          CurrentOperation: debug ? "Debugging" : "Running",
+          OverallStatus: OverallStatus.Running,
+          TotalTests: counter.TotalTests,
+          TotalRunning: counter.TotalTests,
+          TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
+    }
 
     var adapter = adapterResolver.Resolve(project);
     var leafIds = leafNodes.Select(n => n.Id).ToHashSet();
 
-    Func<TestRunResult, Task> onResult = async result =>
+    async Task OnResult(TestRunResult result)
     {
       var stableId = registry.GetStableId(result.NativeId);
       if (stableId is null)
@@ -231,36 +222,35 @@ public class OperationExecutor(
       }
 
       detailStore.Set(stableId, new TestDetail(
-              Outcome: result.Outcome,
-              ErrorMessage: result.ErrorMessage,
-              DurationMs: result.DurationMs,
-              Frames: result.Frames,
-              FailingFrame: result.FailingFrame,
-              Stdout: result.Stdout
-          ));
+          Outcome: result.Outcome,
+          ErrorMessage: result.ErrorMessage,
+          DurationMs: result.DurationMs,
+          Frames: result.Frames,
+          FailingFrame: result.FailingFrame,
+          Stdout: result.Stdout));
 
       counter.Record(result.Outcome);
       var (running, passed, failed, skipped, cancelled) = counter.Snapshot();
       await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
-                   IsLoading: true,
-                   CurrentOperation: debug ? "Debugging" : "Running",
-                   OverallStatus: OverallStatus.Running,
-                   TotalTests: counter.TotalTests,
-                   TotalRunning: running,
-                   TotalPassed: passed,
-                   TotalFailed: failed,
-                   TotalSkipped: skipped,
-                   TotalCancelled: cancelled));
+          IsLoading: true,
+          CurrentOperation: debug ? "Debugging" : "Running",
+          OverallStatus: OverallStatus.Running,
+          TotalTests: counter.TotalTests,
+          TotalRunning: running,
+          TotalPassed: passed,
+          TotalFailed: failed,
+          TotalSkipped: skipped,
+          TotalCancelled: cancelled));
 
       var (status, actions) = BuildStatusAndActions(result);
       await dispatcher.SendStatusAsync(stableId, status, actions);
       await BubbleStatusAsync(stableId, leafIds);
-    };
+    }
 
     if (debug)
-      await adapter.DebugAsync(project, nativeIds, onResult, token.Ct);
+      await adapter.DebugAsync(project, nativeIds, OnResult, token.Ct);
     else
-      await adapter.RunAsync(project, nativeIds, onResult, token.Ct);
+      await adapter.RunAsync(project, nativeIds, OnResult, token.Ct);
 
     return counter;
   }
@@ -296,8 +286,7 @@ public class OperationExecutor(
        IReadOnlyList<string> originalParts,
        IReadOnlyList<string> displayParts,
        HashSet<string> emitted,
-       List<TestNode> pendingEmit,
-       CancellationToken ct)
+       List<TestNode> pendingEmit)
   {
     var currentParentId = projectNodeId;
     var skipCount = originalParts.Count - displayParts.Count;
@@ -332,11 +321,6 @@ public class OperationExecutor(
     return currentParentId;
   }
 
-  /// <summary>
-  /// Collapses chains of single-child Namespace nodes into one node with a
-  /// dotted display name. The registry keeps all nodes intact for server-side
-  /// operations (bubbling, running). Only the client-facing emit list is modified.
-  /// </summary>
   private static void CollapseNamespaces(string projectNodeId, List<TestNode> nodes)
   {
     var byId = nodes.ToDictionary(n => n.Id);
@@ -360,7 +344,6 @@ public class OperationExecutor(
           continue;
         }
 
-        // Walk forward through single-child Namespace chains
         var chain = new List<TestNode> { child };
         var current = child;
         while (true)
@@ -382,9 +365,10 @@ public class OperationExecutor(
 
         if (chain.Count > 1)
         {
-          // Remove all intermediate nodes, update terminal with dotted name + first's parent
           for (var i = 0; i < chain.Count - 1; i++)
+          {
             toRemove.Add(chain[i].Id);
+          }
 
           var terminal = chain[^1];
           toUpdate[terminal.Id] = terminal with
