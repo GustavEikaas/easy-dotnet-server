@@ -11,6 +11,7 @@ using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.StartupHook;
 using EasyDotnet.IDE.TemplateEngine.PostActionHandlers;
 using EasyDotnet.IDE.TestRunner.Adapters;
+using EasyDotnet.IDE.TestRunner.Adapters.MTP.RPC;
 using EasyDotnet.IDE.TestRunner.Dispatch;
 using EasyDotnet.IDE.TestRunner.Executor;
 using EasyDotnet.IDE.TestRunner.Lock;
@@ -83,6 +84,9 @@ public static class DiModules
     services.AddSingleton<GlobalOperationLock>();
     services.AddSingleton<OperationExecutor>();
     services.AddSingleton<AdapterResolver>();
+    services.AddSingleton<VsTestAdapter>();
+    services.AddSingleton<MtpAdapter>();
+    services.AddSingleton<MtpClientFactory>();
 
     services.AddTransient<IProgressScopeFactory, ProgressScopeFactory>();
     services.AddTransient<IStartupHookService, StartupHookService>();
@@ -95,7 +99,6 @@ public static class DiModules
     services.AddTransient<INotificationService, NotificationService>();
     services.AddTransient<NugetService>();
     services.AddSingleton<VsTestService>();
-    services.AddTransient<MtpService>();
     services.AddTransient<OutdatedService>();
     services.AddTransient<GlobalJsonService>();
 

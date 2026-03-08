@@ -1,12 +1,13 @@
 using System.Collections.Concurrent;
 using System.Threading.Channels;
 using EasyDotnet.IDE.TestRunner.Adapters.MTP.RPC.Models;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.TestRunner.Adapters.MTP;
 
-internal class MtpServer
+public class MtpServer()
 {
   private readonly ConcurrentDictionary<Guid, ChannelWriter<TestNodeUpdate>> _streamListeners = new();
   public void RegisterStreamListener(Guid runId, ChannelWriter<TestNodeUpdate> writer) => _streamListeners.TryAdd(runId, writer);
@@ -45,41 +46,3 @@ internal class MtpServer
 public sealed record AttachDebuggerInfo([property: JsonProperty("processId")] int ProcessId);
 
 public record TelemetryPayload([property: JsonProperty(nameof(TelemetryPayload.EventName))] string EventName, [property: JsonProperty("metrics")] IDictionary<string, string> Metrics);
-
-public enum LogLevel
-{
-  /// <summary>
-  /// Trace.
-  /// </summary>
-  Trace = 0,
-
-  /// <summary>
-  /// Debug.
-  /// </summary>
-  Debug = 1,
-
-  /// <summary>
-  /// Information.
-  /// </summary>
-  Information = 2,
-
-  /// <summary>
-  /// Warning.
-  /// </summary>
-  Warning = 3,
-
-  /// <summary>
-  /// Error.
-  /// </summary>
-  Error = 4,
-
-  /// <summary>
-  /// Critical.
-  /// </summary>
-  Critical = 5,
-
-  /// <summary>
-  /// None.
-  /// </summary>
-  None = 6,
-}

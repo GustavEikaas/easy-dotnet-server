@@ -6,6 +6,7 @@ using System.Threading.Channels;
 using EasyDotnet.IDE.TestRunner.Adapters.MTP.RPC.Models;
 using EasyDotnet.IDE.TestRunner.Adapters.MTP.RPC.Requests;
 using EasyDotnet.IDE.TestRunner.Adapters.MTP.RPC.Response;
+using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.TestRunner.Adapters.MTP.RPC;
@@ -16,75 +17,79 @@ public sealed class MtpClient : IAsyncDisposable
   private readonly TcpClient _tcpClient;
   private readonly IProcessHandle _processHandle;
   private readonly MtpServer _server;
+  private readonly ILogger<MtpClient> _logger;
   public readonly int DebugeeProcessId;
 
-  private MtpClient(JsonRpc jsonRpc, TcpClient tcpClient, IProcessHandle processHandle, MtpServer server, int debugeeProcessId)
+  private MtpClient(
+      JsonRpc jsonRpc,
+      TcpClient tcpClient,
+      IProcessHandle processHandle,
+      MtpServer server,
+      ILogger<MtpClient> logger,
+      int debugeeProcessId)
   {
     _jsonRpc = jsonRpc;
     _tcpClient = tcpClient;
     _processHandle = processHandle;
     _server = server;
+    _logger = logger;
     DebugeeProcessId = debugeeProcessId;
   }
 
-  public static async Task<MtpClient> CreateAsync(string testExePath, bool debug = false)
+  internal static async Task<MtpClient> CreateAsync(
+      string testExePath,
+      ILogger<MtpClient> logger,
+      MtpServer server,
+      SourceLevels traceLevel,
+      CancellationToken ct = default)
   {
     var tcpListener = new TcpListener(IPAddress.Loopback, 0);
     tcpListener.Start();
 
     var port = ((IPEndPoint)tcpListener.LocalEndpoint).Port;
-    Console.WriteLine($"Listening on port: {port}");
+    logger.LogDebug("MTP listening on port {Port} for {Exe}", port, testExePath);
 
-    var server = new MtpServer();
+    var exeName = Path.GetFileNameWithoutExtension(testExePath);
 
     var processConfig = new ProcessConfiguration(testExePath)
     {
       Arguments = $"--server --client-host localhost --client-port {port} --diagnostic --diagnostic-verbosity trace",
-
-      OnStandardOutput = (_, output) =>
-      {
-        if (debug)
-        {
-          Console.WriteLine(output);
-        }
-      },
-      OnErrorOutput = (_, output) => Console.Error.WriteLine(output),
+      OnStandardOutput = (_, output) => logger.LogTrace("[{Exe}] {Output}", exeName, output),
+      OnErrorOutput = (_, output) => logger.LogWarning("[{Exe}] stderr: {Output}", exeName, output),
       OnExit = (_, exitCode) =>
       {
-        if (exitCode == 0)
-        {
-          return;
-        }
-        // Console.Error.WriteLine($"[{testExePath}]: exit code '{exitCode}'");
+        if (exitCode != 0)
+          logger.LogWarning("[{Exe}] exited with code {ExitCode}", exeName, exitCode);
       }
     };
 
     var processHandle = ProcessFactory.Start(processConfig, false);
 
-    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
-    var tcpClient = await tcpListener.AcceptTcpClientAsync(cts.Token);
+    using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+    connectCts.CancelAfter(TimeSpan.FromSeconds(60));
 
-    Console.WriteLine("Client connected");
+    var tcpClient = await tcpListener.AcceptTcpClientAsync(connectCts.Token);
+    logger.LogDebug("[{Exe}] TCP connected", exeName);
 
     var stream = tcpClient.GetStream();
     var jsonRpc = new JsonRpc(stream);
 
-    if (debug)
-    {
-      var ts = jsonRpc.TraceSource;
-      ts.Switch.Level = SourceLevels.Verbose;
-      ts.Listeners.Add(new ConsoleTraceListener());
-    }
+    jsonRpc.TraceSource.Switch.Level = traceLevel;
+    jsonRpc.TraceSource.Listeners.Clear();
+    jsonRpc.TraceSource.Listeners.Add(new JsonRpcLogger(logger, $"MTP:{exeName}"));
 
     jsonRpc.AddLocalRpcTarget(server, new JsonRpcTargetOptions { MethodNameTransform = CommonMethodNameTransforms.CamelCase });
     jsonRpc.StartListening();
 
     var res = await jsonRpc.InvokeWithParameterObjectAsync<InitializeResponse>(
       "initialize",
-      new InitializeRequest(Environment.ProcessId, new("easy-dotnet"), new(new(DebuggerProvider: true)))
+      new InitializeRequest(
+        ProcessId: Environment.ProcessId,
+        ClientInfo: new(Name: "easy-dotnet"),
+        Capabilities: new(Testing: new(DebuggerProvider: true)))
     );
 
-    return new MtpClient(jsonRpc, tcpClient, processHandle, server, res.ProcessId ?? processHandle.Id);
+    return new MtpClient(jsonRpc, tcpClient, processHandle, server, logger, res.ProcessId ?? processHandle.Id);
   }
 
   public IAsyncEnumerable<TestNodeUpdate> DiscoverTestsAsync(CancellationToken cancellationToken = default)
@@ -93,36 +98,38 @@ public sealed class MtpClient : IAsyncDisposable
     return StreamRpcAsync("testing/discoverTests", new DiscoveryRequest(runId), runId, cancellationToken);
   }
 
-  public async IAsyncEnumerable<TestNodeUpdate> RunTestsAsync(RunRequestNode[] filter, [EnumeratorCancellation] CancellationToken cancellationToken)
+  public async IAsyncEnumerable<TestNodeUpdate> RunTestsAsync(
+      RunRequestNode[] filter,
+      [EnumeratorCancellation] CancellationToken cancellationToken)
   {
     var runId = Guid.NewGuid();
 
     await foreach (var node in StreamRpcAsync("testing/runTests", new RunRequest(filter, runId), runId, cancellationToken))
     {
       if (node.Node.ExecutionState != "in-progress" && node.Node.ExecutionState != "discovered")
-      {
         yield return node;
-      }
     }
   }
 
   private async IAsyncEnumerable<TestNodeUpdate> StreamRpcAsync(
-        string rpcMethod,
-        object requestObject,
-        Guid runId,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
+      string rpcMethod,
+      object requestObject,
+      Guid runId,
+      [EnumeratorCancellation] CancellationToken cancellationToken)
   {
     var channel = Channel.CreateUnbounded<TestNodeUpdate>();
     _server.RegisterStreamListener(runId, channel.Writer);
 
+#pragma warning disable CA2016
     var rpcTask = Task.Run(async () =>
     {
       try
       {
-        await _jsonRpc.InvokeWithParameterObjectAsync<DiscoveryResponse>(rpcMethod, requestObject, cancellationToken);
+        await _jsonRpc.InvokeWithParameterObjectAsync<DiscoveryResponse>(rpcMethod, requestObject, CancellationToken.None);
       }
-      catch (Exception ex)
+      catch (Exception ex) when (ex is not OperationCanceledException)
       {
+        _logger.LogError(ex, "MTP RPC {Method} faulted for run {RunId}", rpcMethod, runId);
         channel.Writer.TryComplete(ex);
       }
       finally
@@ -130,31 +137,42 @@ public sealed class MtpClient : IAsyncDisposable
         channel.Writer.TryComplete();
         _server.RemoveStreamListener(runId);
       }
-    }, cancellationToken);
+    });
+#pragma warning restore CA2016
 
-    await using var _ = cancellationToken.Register(() =>
+    await using var _ = cancellationToken.Register(async () =>
     {
-      _server.RemoveStreamListener(runId);
-      channel.Writer.TryComplete();
+      try
+      {
+        _logger.LogDebug("Sending cancelTestRun for {RunId}", runId);
+        await _jsonRpc.NotifyWithParameterObjectAsync("testing/cancelTestRun", new { runId });
+      }
+      catch (Exception ex)
+      {
+        _logger.LogWarning(ex, "cancelTestRun failed for {RunId}", runId);
+      }
+      finally
+      {
+        _server.RemoveStreamListener(runId);
+        channel.Writer.TryComplete();
+      }
     });
 
-    await foreach (var node in channel.Reader.ReadAllAsync(cancellationToken))
-    {
+    await foreach (var node in channel.Reader.ReadAllAsync(CancellationToken.None))
       yield return node;
-    }
 
-    await rpcTask;
+    try { await rpcTask; }
+    catch (OperationCanceledException) { }
   }
 
   public async ValueTask DisposeAsync()
   {
-    //TODO: check if reader is already disposed
-    await _jsonRpc.NotifyWithParameterObjectAsync("exit", new object());
+    try { await _jsonRpc.NotifyWithParameterObjectAsync("exit", new object()); }
+    catch (Exception ex) { _logger.LogWarning(ex, "MTP exit notification failed"); }
     _jsonRpc.Dispose();
     _tcpClient.Dispose();
     _processHandle.WaitForExit();
     _processHandle.Dispose();
     GC.SuppressFinalize(this);
   }
-
 }

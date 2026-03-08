@@ -1,8 +1,4 @@
-using EasyDotnet.Application.Interfaces;
 using EasyDotnet.BuildServer.Contracts;
-using EasyDotnet.IDE.DebuggerStrategies;
-using EasyDotnet.IDE.Services;
-using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.IDE.TestRunner.Adapters;
 
@@ -11,12 +7,7 @@ namespace EasyDotnet.IDE.TestRunner.Adapters;
 /// VsTestAdapters are kept alive (warm wrapper) until the project is invalidated.
 /// MtpAdapters are stateless and created fresh per call.
 /// </summary>
-public class AdapterResolver(
-  IMsBuildService msBuildService,
-  IEditorService editorService,
-  IDebugStrategyFactory debugStrategyFactory,
-  IDebugOrchestrator debugOrchestrator,
-  ILoggerFactory loggerFactory)
+public class AdapterResolver(MtpAdapter mtpAdapter, VsTestAdapter vsTestAdapter)
 {
   // Keyed by project node ID — one warm VsTestAdapter per project TFM
   private readonly Dictionary<string, VsTestAdapter> _vsTestAdapters = [];
@@ -25,13 +16,13 @@ public class AdapterResolver(
   {
     if (project.IsMTP)
     {
-      return new MtpAdapter(editorService, debugStrategyFactory, debugOrchestrator, loggerFactory.CreateLogger<MtpAdapter>());
+      return mtpAdapter;
     }
 
     if (!_vsTestAdapters.TryGetValue(project.ProjectFullPath, out var adapter))
     {
-      adapter = new VsTestAdapter(msBuildService, editorService, debugStrategyFactory, debugOrchestrator, loggerFactory);
-      _vsTestAdapters[project.ProjectFullPath] = adapter;
+      _vsTestAdapters[project.ProjectFullPath] = vsTestAdapter;
+      return vsTestAdapter;
     }
 
     return adapter;

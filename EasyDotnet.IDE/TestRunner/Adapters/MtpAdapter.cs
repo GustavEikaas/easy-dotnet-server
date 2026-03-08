@@ -21,13 +21,14 @@ public sealed class MtpAdapter(
   IEditorService editorService,
   IDebugStrategyFactory debugStrategyFactory,
   IDebugOrchestrator debugOrchestrator,
-  ILogger<MtpAdapter> logger
+  ILogger<MtpAdapter> logger,
+  MtpClientFactory clientFactory
 ) : ITestAdapter
 {
   public async Task DiscoverAsync(ValidatedDotnetProject project, Func<DiscoveredTest, Task> onDiscovered, CancellationToken ct)
   {
     var exe = TransformDllPath(project.TargetPath);
-    await using var client = await MtpClient.CreateAsync(exe);
+    await using var client = await clientFactory.CreateAsync(exe, ct);
 
     await foreach (var update in client.DiscoverTestsAsync(ct))
     {
@@ -43,7 +44,7 @@ public sealed class MtpAdapter(
       CancellationToken ct)
   {
     var exe = TransformDllPath(project.TargetPath);
-    await using var client = await MtpClient.CreateAsync(exe);
+    await using var client = await clientFactory.CreateAsync(exe, ct);
     var filter = nativeIds
         .Select(id => new RunRequestNode(id, ""))
         .ToArray();
@@ -69,7 +70,8 @@ public sealed class MtpAdapter(
   {
 
     var exe = TransformDllPath(project.TargetPath);
-    await using var client = await MtpClient.CreateAsync(exe);
+
+    await using var client = await clientFactory.CreateAsync(exe, ct);
     var session = await debugOrchestrator.StartClientDebugSessionAsync(
       project.ProjectFullPath,
       new(project.ProjectFullPath, project.TargetFramework, null, null),
