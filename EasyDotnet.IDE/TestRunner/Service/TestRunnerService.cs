@@ -355,7 +355,7 @@ public class TestRunnerService(
     var node = registry.Get(nodeId)
         ?? throw new KeyNotFoundException($"Node {nodeId} not found");
 
-    return node.Type is NodeType.Solution or NodeType.Namespace
+    return node.Type is NodeType.Solution
         ? await ExecuteMultiProjectAsync(nodeId, node, token, debug)
         : await ExecuteSingleProjectAsync(nodeId, node, token, debug);
   }
@@ -445,7 +445,7 @@ public class TestRunnerService(
       await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
           IsLoading: false, CurrentOperation: null,
           OverallStatus: failed > 0 ? OverallStatus.Failed : OverallStatus.Passed,
-          TotalTests: sharedCounter.TotalTests, TotalRunning: 0,
+          TotalTests: registry.GetLeafCount(), TotalRunning: 0,
           TotalPassed: passed, TotalFailed: failed,
           TotalSkipped: skipped, TotalCancelled: cancelled));
 
@@ -500,7 +500,7 @@ public class TestRunnerService(
       await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
           IsLoading: false, CurrentOperation: null,
           OverallStatus: failed > 0 ? OverallStatus.Failed : OverallStatus.Passed,
-          TotalTests: counter.TotalTests, TotalRunning: 0,
+          TotalTests: registry.GetLeafCount(), TotalRunning: 0,
           TotalPassed: passed, TotalFailed: failed,
           TotalSkipped: skipped, TotalCancelled: cancelled));
 
