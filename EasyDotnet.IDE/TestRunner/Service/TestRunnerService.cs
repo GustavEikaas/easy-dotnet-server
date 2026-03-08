@@ -46,10 +46,10 @@ public class TestRunnerService(
     var testProjects = await buildHost.GetTestProjectsFromSolutionAsync(solutionPath, ct: token.Ct);
 
     await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
-           IsLoading: true, CurrentOperation: "Discovering",
-           OverallStatus: OverallStatus.Discovering,
-           TotalTests: 0, TotalRunning: 0,
-           TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
+        IsLoading: true, CurrentOperation: "Discovering",
+        OverallStatus: OverallStatus.Discovering,
+        TotalTests: 0, TotalRunning: 0,
+        TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
 
     var discoverTasks = testProjects.Select(project =>
         executor.DiscoverProjectAsync(project, solutionId, token));
@@ -169,10 +169,15 @@ public class TestRunnerService(
 
           if (result.Success != true)
           {
-            await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.Failed("", []));
+            await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.BuildFailed(), [TestAction.GetBuildErrors]);
+            if (result.Output?.Diagnostics is { } initDiags && initDiags.Length > 0)
+            {
+              buildErrorStore.Set(projectId, initDiags);
+            }
+
             continue;
           }
-
+          buildErrorStore.Clear(projectId);
           discoverTasks.Add(executor.DiscoverProjectAsync(project, solutionId, token));
         }
       }
@@ -279,10 +284,14 @@ public class TestRunnerService(
           var pid = NodeIdBuilder.Project(node.ParentId ?? "", project.ProjectName, project.TargetFramework ?? "");
           if (result.Success != true)
           {
-            await dispatcher.SendStatusAsync(pid, new TestNodeStatus.Failed("", []));
+            await dispatcher.SendStatusAsync(pid, new TestNodeStatus.BuildFailed(), [TestAction.GetBuildErrors]);
+            if (result.Output?.Diagnostics is { } invDiags && invDiags.Length > 0)
+            {
+              buildErrorStore.Set(pid, invDiags);
+            }
             continue;
           }
-
+          buildErrorStore.Clear(pid);
           discoverTasks.Add(executor.DiscoverProjectAsync(project, node.ParentId ?? "", token));
         }
       }
@@ -312,7 +321,7 @@ public class TestRunnerService(
     var errors = buildErrorStore.Get(projectId);
     if (errors is null or { Length: 0 }) return;
 
-    await dispatcher.SendQuickFixAsync(errors);
+    await dispatcher.SendQuickFixAsync(errors.Where(x => x.Severity == BuildDiagnosticSeverity.Error));
   }
 
   public GetResultsResult GetResults(string nodeId)
@@ -422,8 +431,17 @@ public class TestRunnerService(
           var pn = projectNodes.First(n => string.Equals(n.FilePath, p.ProjectFullPath, StringComparison.OrdinalIgnoreCase));
           if (result.Success != true)
           {
-            await dispatcher.SendStatusAsync(pn.Id, new TestNodeStatus.Failed("", []));
+            await dispatcher.SendStatusAsync(pn.Id, new TestNodeStatus.BuildFailed(), [TestAction.GetBuildErrors]);
             failedProjectIds.Add(pn.Id);
+            if (result.Output?.Diagnostics is { } diags && diags.Length > 0)
+            {
+              buildErrorStore.Set(pn.Id, diags);
+            }
+
+          }
+          else
+          {
+            buildErrorStore.Clear(pn.Id);
           }
         }
       }
@@ -503,10 +521,21 @@ public class TestRunnerService(
       await foreach (var result in buildHost.BatchBuildAsync(
           new BatchBuildRequest([project.ProjectFullPath], Configuration: null), token.Ct))
       {
-        if (result.Kind == BatchBuildResultKind.Finished && result.Success != true)
+        if (result.Kind == BatchBuildResultKind.Finished)
         {
-          await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.Failed("", []));
-          buildFailed = true;
+          if (result.Success != true)
+          {
+            await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.BuildFailed(), [TestAction.GetBuildErrors]);
+            buildFailed = true;
+            if (result.Output?.Diagnostics is { } diags && diags.Length > 0)
+            {
+              buildErrorStore.Set(projectId, diags);
+            }
+          }
+          else
+          {
+            buildErrorStore.Clear(projectId);
+          }
         }
       }
 

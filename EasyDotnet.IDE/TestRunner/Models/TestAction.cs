@@ -10,5 +10,6 @@ public enum TestAction
   Debug,
   GoToSource,
   PeekResults,
-  Invalidate
+  Invalidate,
+  GetBuildErrors
 }

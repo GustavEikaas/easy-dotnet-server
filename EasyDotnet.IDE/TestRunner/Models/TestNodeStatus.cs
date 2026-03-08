@@ -14,5 +14,6 @@ public abstract record TestNodeStatus
   public sealed record Cancelled : TestNodeStatus;
   public sealed record Passed(string DurationDisplay) : TestNodeStatus;
   public sealed record Failed(string DurationDisplay, string[] ErrorMessage) : TestNodeStatus;
+  public sealed record BuildFailed : TestNodeStatus;
   public sealed record Skipped(string Reason) : TestNodeStatus;
 }
