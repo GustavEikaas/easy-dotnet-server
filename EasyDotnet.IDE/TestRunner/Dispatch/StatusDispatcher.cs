@@ -1,3 +1,6 @@
+using EasyDotnet.Application.Interfaces;
+using EasyDotnet.BuildServer.Contracts;
+using EasyDotnet.Domain.Models.Client;
 using EasyDotnet.IDE.TestRunner.Models;
 using EasyDotnet.IDE.TestRunner.Registry;
 using StreamJsonRpc;
@@ -9,7 +12,7 @@ namespace EasyDotnet.IDE.TestRunner.Dispatch;
 /// Suppresses duplicate status notifications — if a node's status type hasn't changed,
 /// the notification is dropped to avoid spamming the client.
 /// </summary>
-public class StatusDispatcher(JsonRpc rpc, NodeRegistry registry)
+public class StatusDispatcher(JsonRpc rpc, NodeRegistry registry, IEditorService editorService)
 {
   /// <summary>Notify the client of a node registration or update.</summary>
   public Task SendRegisterTestAsync(TestNode node) =>
@@ -64,4 +67,19 @@ public class StatusDispatcher(JsonRpc rpc, NodeRegistry registry)
   /// <summary>Broadcast global runner status (IsLoading, aggregate counts, etc.).</summary>
   public Task SendRunnerStatusAsync(TestRunnerStatus status) =>
       rpc.NotifyWithParameterObjectAsync("testrunner/statusUpdate", status);
+
+  public Task SendQuickFixAsync(IEnumerable<BuildDiagnostic> diagnostics)
+  {
+    var items = diagnostics.Select(d => new QuickFixItem(
+        FileName: d.File ?? "",
+        LineNumber: d.LineNumber,
+        ColumnNumber: d.ColumnNumber,
+        Text: $"{d.Code}: {d.Message}",
+        Type: d.Severity == BuildDiagnosticSeverity.Error ? QuickFixItemType.Error
+                    : d.Severity == BuildDiagnosticSeverity.Warning ? QuickFixItemType.Warning
+                    : QuickFixItemType.Information
+    )).ToArray();
+
+    return editorService.SetQuickFixList(items);
+  }
 }

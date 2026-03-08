@@ -16,6 +16,7 @@ public class TestRunnerService(
     NodeRegistry registry,
     StatusDispatcher dispatcher,
     DetailStore detailStore,
+    BuildErrorStore buildErrorStore,
     GlobalOperationLock operationLock,
     OperationExecutor executor,
     AdapterResolver adapterResolver,
@@ -300,6 +301,18 @@ public class TestRunnerService(
       await dispatcher.SendRunnerStatusAsync(BuildIdleStatus());
       return new OperationResult(Success: false);
     }
+  }
+
+  public async Task GetBuildErrorsAsync(string nodeId)
+  {
+    var node = registry.Get(nodeId);
+    var projectId = node?.Type is NodeType.Project ? nodeId : node?.ProjectId;
+    if (projectId is null) return;
+
+    var errors = buildErrorStore.Get(projectId);
+    if (errors is null or { Length: 0 }) return;
+
+    await dispatcher.SendQuickFixAsync(errors);
   }
 
   public GetResultsResult GetResults(string nodeId)
