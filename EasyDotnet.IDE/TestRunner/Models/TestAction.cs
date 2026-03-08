@@ -9,6 +9,6 @@ public enum TestAction
   Run,
   Debug,
   GoToSource,
-  PeekResults,  // stdout + stack trace combined — available after any completed run
+  PeekResults,
   Invalidate
 }

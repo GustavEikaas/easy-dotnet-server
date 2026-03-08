@@ -102,11 +102,9 @@ public sealed class ProjectEvaluationCache(ILogger<ProjectEvaluationCache> logge
   /// </summary>
   public void Clear(CacheInvalidationReason reason = CacheInvalidationReason.ClearedAll)
   {
-    var paths = _store.Keys.Select(k => k.Path).ToList();
+    var paths = _store.Keys.Select(k => Path.GetFileNameWithoutExtension(k.Path)).ToList();
     _store.Clear();
-    logger.LogInformation(
-        "Cache cleared ({Reason}) — {Count} entries evicted: {Paths}",
-        reason, paths.Count, string.Join(", ", paths));
+    logger.LogInformation("Cache cleared ({Reason}) — {Count} entries evicted: {Paths}", reason, paths.Count, string.Join(", ", paths));
     if (paths.Count > 0)
     {
       Invalidated?.Invoke(paths, reason);
