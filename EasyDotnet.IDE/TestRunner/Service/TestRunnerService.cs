@@ -44,6 +44,12 @@ public class TestRunnerService(
 
     var testProjects = await buildHost.GetTestProjectsFromSolutionAsync(solutionPath, ct: token.Ct);
 
+    await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
+           IsLoading: true, CurrentOperation: "Discovering",
+           OverallStatus: OverallStatus.Discovering,
+           TotalTests: 0, TotalRunning: 0,
+           TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
+
     var discoverTasks = testProjects.Select(project =>
         executor.DiscoverProjectAsync(project, solutionId, token));
 
