@@ -423,9 +423,12 @@ public class TestRunnerService(
       }
 
       var totalLeafCount = runnableProjects
-          .Sum(p => registry.GetLeafDescendants(nodeId)
-              .Count(n => n.ProjectId == projectNodes
-                  .First(pn => string.Equals(pn.FilePath, p.ProjectFullPath, StringComparison.OrdinalIgnoreCase)).Id));
+          .Sum(p =>
+          {
+            var pn = projectNodes.First(n => string.Equals(
+          n.FilePath, p.ProjectFullPath, StringComparison.OrdinalIgnoreCase));
+            return registry.GetLeafDescendants(pn.Id).Count();
+          });
 
       var sharedCounter = new RunProgressCounter(totalLeafCount);
 
@@ -438,7 +441,11 @@ public class TestRunnerService(
           TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
 
       var runTasks = runnableProjects
-          .Select(p => executor.RunNodeAsync(nodeId, p, token, debug, sharedCounter));
+          .Select(p =>
+          {
+            var pn = projectNodes.First(n => string.Equals(n.FilePath, p.ProjectFullPath, StringComparison.OrdinalIgnoreCase));
+            return executor.RunNodeAsync(pn.Id, p, token, debug, sharedCounter);
+          });
       await Task.WhenAll(runTasks);
 
       var (_, passed, failed, skipped, cancelled) = sharedCounter.Snapshot();
