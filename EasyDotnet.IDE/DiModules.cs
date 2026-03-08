@@ -25,7 +25,6 @@ using EasyDotnet.Infrastructure.Process;
 using EasyDotnet.Infrastructure.Services;
 using EasyDotnet.Infrastructure.Settings;
 using EasyDotnet.Services;
-using Microsoft.Build.Execution;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog;
@@ -75,6 +74,7 @@ public static class DiModules
     services.AddSingleton<BuildHostFactory>();
     services.AddSingleton<IBuildHostManager, BuildHostManager>();
     services.AddSingleton<WorkspaceBuildHostManager>();
+    services.AddSingleton<ProjectEvaluationCache>();
 
     services.AddSingleton<TestRunnerService>();
     services.AddSingleton<NodeRegistry>();

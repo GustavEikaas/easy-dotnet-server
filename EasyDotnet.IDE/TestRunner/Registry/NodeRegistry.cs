@@ -61,6 +61,8 @@ public class NodeRegistry
       _nodes.Values.Where(n => n.ParentId == parentId);
 
   /// <summary>Recursively returns all descendants of a node.</summary>
+  public bool HasDescendants(string rootId) => GetDescendants(rootId).Any();
+
   public IEnumerable<TestNode> GetDescendants(string rootId)
   {
     var queue = new Queue<string>();

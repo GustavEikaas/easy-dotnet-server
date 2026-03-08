@@ -8,113 +8,119 @@ namespace EasyDotnet.BuildServer.Handlers;
 
 public class RestoreHandler
 {
+  private static readonly BuildManager BuildManager = BuildManager.DefaultBuildManager;
+  private static readonly SemaphoreSlim BuildLock = new(1, 1);
+
   [JsonRpcMethod("projects/restore", UseSingleObjectParameterDeserialization = true)]
   public async IAsyncEnumerable<RestoreResult> RestoreNugetPackages(
       RestoreRequest request,
-      [EnumeratorCancellation] CancellationToken cancellationToken)
+      [EnumeratorCancellation] CancellationToken ct)
   {
     ValidateRequest(request);
 
-    foreach (var projectPath in request.ProjectPaths)
+    await BuildLock.WaitAsync(ct);
+    var buildParameters = new BuildParameters
     {
-      if (cancellationToken.IsCancellationRequested)
-      {
-        yield break;
-      }
+      EnableNodeReuse = true,
+      MaxNodeCount = Environment.ProcessorCount,
+    };
 
-      if (!File.Exists(projectPath))
+    BuildManager.BeginBuild(buildParameters);
+    try
+    {
+      foreach (var projectPath in request.ProjectPaths)
       {
-        yield return new RestoreResult(
-            projectPath,
-            false,
-            "Project file not found",
-            new RestoreOutput(TimeSpan.Zero, []));
-        continue;
-      }
+        if (ct.IsCancellationRequested) { yield break; }
 
-      yield return await RestoreProjectAsync(projectPath);
+        if (!File.Exists(projectPath))
+        {
+          yield return new RestoreResult(
+              projectPath,
+              Success: false,
+              ErrorMessage: "Project file not found",
+              Output: new RestoreOutput(TimeSpan.Zero, []));
+          continue;
+        }
+
+        yield return await RestoreProjectAsync(projectPath, ct);
+      }
+    }
+    finally
+    {
+      BuildManager.EndBuild();
+      BuildLock.Release();
     }
   }
 
+  private static Task<RestoreResult> RestoreProjectAsync(string projectPath, CancellationToken ct) =>
+      Task.Run(() =>
+      {
+        var stopwatch = Stopwatch.StartNew();
+        var diagnostics = new List<BuildDiagnostic>();
+
+        try
+        {
+          ct.ThrowIfCancellationRequested();
+
+          var buildRequest = new BuildRequestData(
+                projectPath,
+                globalProperties: new Dictionary<string, string>(),
+                toolsVersion: null,
+                targetsToBuild: ["Restore"],
+                hostServices: null);
+
+          var submission = BuildManager.PendBuildRequest(buildRequest);
+          submission.ExecuteAsync(null, null);
+          var result = submission.WaitHandle.WaitOne()
+                ? submission.BuildResult
+                : throw new InvalidOperationException("Restore submission did not complete");
+
+          stopwatch.Stop();
+
+          var success = result.OverallResult == BuildResultCode.Success;
+          return new RestoreResult(
+                projectPath,
+                Success: success,
+                ErrorMessage: success ? null : "Restore failed",
+                Output: new RestoreOutput(stopwatch.Elapsed, [.. diagnostics]));
+        }
+        catch (OperationCanceledException)
+        {
+          stopwatch.Stop();
+          return new RestoreResult(
+                projectPath,
+                Success: false,
+                ErrorMessage: "Cancelled",
+                Output: new RestoreOutput(stopwatch.Elapsed, [.. diagnostics]));
+        }
+        catch (Exception ex)
+        {
+          stopwatch.Stop();
+          return new RestoreResult(
+                projectPath,
+                Success: false,
+                ErrorMessage: $"Exception during restore: {ex.Message}",
+                Output: new RestoreOutput(stopwatch.Elapsed, [.. diagnostics]));
+        }
+      }, ct);
+
   private static void ValidateRequest(RestoreRequest request)
   {
-    if (request.ProjectPaths == null || request.ProjectPaths.Length == 0)
-    {
+    if (request.ProjectPaths is null || request.ProjectPaths.Length == 0)
       throw new ArgumentException("ProjectPaths cannot be null or empty", nameof(request));
-    }
 
     for (var i = 0; i < request.ProjectPaths.Length; i++)
     {
-      var projectPath = request.ProjectPaths[i];
-
-      if (string.IsNullOrWhiteSpace(projectPath))
+      if (string.IsNullOrWhiteSpace(request.ProjectPaths[i]))
       {
         throw new ArgumentException($"ProjectPaths[{i}] cannot be null or whitespace", nameof(request));
       }
 
-      if (!Path.IsPathRooted(projectPath))
+      if (!Path.IsPathRooted(request.ProjectPaths[i]))
       {
-        throw new ArgumentException($"ProjectPaths[{i}] must be an absolute path: {projectPath}", nameof(request));
+        throw new ArgumentException($"ProjectPaths[{i}] must be an absolute path: {request.ProjectPaths[i]}", nameof(request));
       }
-    }
-  }
 
-  private static async Task<RestoreResult> RestoreProjectAsync(string projectPath)
-  {
-    if (!File.Exists(projectPath))
-    {
-      return new RestoreResult(
-          projectPath,
-          false,
-          $"Project file not found: {projectPath}",
-          null);
-    }
-
-    try
-    {
-      var stopwatch = Stopwatch.StartNew();
-      var diagnostics = new List<BuildDiagnostic>();
-
-      var logger = new DiagnosticLogger(diagnostics);
-
-      var buildParameters = new BuildParameters
-      {
-        Loggers = [logger],
-      };
-
-      var globalProperties = new Dictionary<string, string>();
-
-      var buildRequest = new BuildRequestData(
-          projectPath,
-          globalProperties,
-          toolsVersion: null,
-          ["Restore"],
-          hostServices: null);
-
-      using var buildManager = BuildManager.DefaultBuildManager;
-      var buildResult = buildManager.Build(buildParameters, buildRequest);
-
-      stopwatch.Stop();
-
-      var success = buildResult.OverallResult == BuildResultCode.Success;
-
-      var output = new RestoreOutput(
-          Duration: stopwatch.Elapsed,
-          Diagnostics: [.. diagnostics]);
-
-      return new RestoreResult(
-          projectPath,
-          success,
-          success ? null : "Restore failed",
-          output);
-    }
-    catch (Exception ex)
-    {
-      return new RestoreResult(
-          projectPath,
-          false,
-          $"Exception during restore: {ex.Message}",
-          null);
     }
   }
 }

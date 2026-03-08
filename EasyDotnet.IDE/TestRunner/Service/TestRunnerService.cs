@@ -8,6 +8,7 @@ using EasyDotnet.IDE.TestRunner.Lock;
 using EasyDotnet.IDE.TestRunner.Models;
 using EasyDotnet.IDE.TestRunner.Registry;
 using EasyDotnet.IDE.TestRunner.Store;
+using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.IDE.TestRunner.Service;
 
@@ -18,7 +19,8 @@ public class TestRunnerService(
     GlobalOperationLock operationLock,
     OperationExecutor executor,
     AdapterResolver adapterResolver,
-    WorkspaceBuildHostManager buildHost)
+    WorkspaceBuildHostManager buildHost,
+    ILogger<TestRunnerService> logger)
 {
   public async Task QuickDiscoverAsync(string solutionPath, CancellationToken ct)
   {
@@ -56,38 +58,71 @@ public class TestRunnerService(
 
   public async Task<InitializeResult> InitializeAsync(string solutionPath, CancellationToken ct)
   {
-    using var token = operationLock.TryAcquire("initialize", ct)
-        ?? throw new InvalidOperationException("Operation already in progress");
+    using var token = await operationLock.WaitAcquireAsync("initialize", ct);
+
+    var solutionName = Path.GetFileName(solutionPath);
+    var solutionId = NodeIdBuilder.Solution(solutionName);
+
+    if (!registry.Exists(solutionId))
+    {
+      var solutionNode = new TestNode(
+          Id: solutionId,
+          DisplayName: solutionName,
+          ParentId: null,
+          FilePath: solutionPath,
+          SignatureLine: null, BodyStartLine: null, EndLine: null,
+          Type: new NodeType.Solution(),
+          ProjectId: null,
+          AvailableActions: [TestAction.Run, TestAction.Invalidate]);
+      registry.Register(solutionNode);
+      await dispatcher.SendRegisterTestAsync(solutionNode);
+    }
 
     await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
-        IsLoading: true,
-        CurrentOperation: "Initializing",
+        IsLoading: true, CurrentOperation: "Restoring",
         OverallStatus: OverallStatus.Building,
         TotalTests: registry.GetLeafCount(), TotalRunning: 0,
         TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
 
-    registry.Clear();
-    detailStore.ClearAll();
-    await adapterResolver.InvalidateAllAsync();
-
-    var solutionName = Path.GetFileName(solutionPath);
-    var solutionId = NodeIdBuilder.Solution(solutionName);
-    var solutionNode = new TestNode(
-        Id: solutionId,
-        DisplayName: solutionName,
-        ParentId: null,
-        FilePath: solutionPath,
-        SignatureLine: null,
-        BodyStartLine: null,
-        EndLine: null,
-        Type: new NodeType.Solution(),
-        ProjectId: null,
-        AvailableActions: [TestAction.Run, TestAction.Invalidate]
-    );
-    registry.Register(solutionNode);
-    await dispatcher.SendRegisterTestAsync(solutionNode);
+    try
+    {
+      await foreach (var result in buildHost.RestoreNugetPackagesAsync(
+          new RestoreRequest([solutionPath]), token.Ct))
+      {
+        if (!result.Success)
+          logger.LogWarning("Restore failed for {Path}: {Error}", result.ProjectPath, result.ErrorMessage);
+      }
+    }
+    catch (Exception ex)
+    {
+      logger.LogWarning(ex, "Optimistic restore failed — continuing anyway");
+    }
 
     var testProjects = await buildHost.GetTestProjectsFromSolutionAsync(solutionPath, ct: token.Ct);
+
+    var projectsByPath = testProjects
+        .GroupBy(p => p.ProjectFullPath, StringComparer.OrdinalIgnoreCase)
+        .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+
+    var needsBuild = projectsByPath.Values
+        .SelectMany(variants => variants)
+        .Where(project =>
+        {
+          var projectId = NodeIdBuilder.Project(solutionId, project.ProjectName, project.TargetFramework ?? "");
+          return !registry.HasDescendants(projectId);
+        })
+        .GroupBy(p => p.ProjectFullPath, StringComparer.OrdinalIgnoreCase)
+        .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+
+    if (needsBuild.Count == 0)
+    {
+      await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
+          IsLoading: false, CurrentOperation: null,
+          OverallStatus: OverallStatus.Idle,
+          TotalTests: registry.GetLeafCount(), TotalRunning: 0,
+          TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
+      return new InitializeResult(Success: true);
+    }
 
     await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
         IsLoading: true, CurrentOperation: "Building",
@@ -95,33 +130,10 @@ public class TestRunnerService(
         TotalTests: registry.GetLeafCount(), TotalRunning: 0,
         TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
 
-    var projectsByPath = testProjects
-        .GroupBy(p => p.ProjectFullPath, StringComparer.OrdinalIgnoreCase)
-        .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
-
-    foreach (var variants in projectsByPath.Values)
-    {
-      foreach (var project in variants)
-      {
-        var projectId = NodeIdBuilder.Project(solutionId, project.ProjectName, project.TargetFramework ?? "");
-        var projectNode = new TestNode(
-            Id: projectId,
-            DisplayName: $"{project.ProjectName} ({project.TargetFramework})",
-            ParentId: solutionId,
-            FilePath: project.ProjectFullPath,
-            SignatureLine: null, BodyStartLine: null, EndLine: null,
-            Type: new NodeType.Project(),
-            ProjectId: projectId,
-            AvailableActions: [TestAction.Run, TestAction.Debug, TestAction.Invalidate]
-        );
-        registry.Register(projectNode);
-        await dispatcher.SendRegisterTestAsync(projectNode);
-      }
-    }
-
     var buildRequest = new BatchBuildRequest(
-        ProjectPaths: [.. projectsByPath.Keys],
+        ProjectPaths: [.. needsBuild.Keys],
         Configuration: null);
+
 
     var discoverTasks = new List<Task>();
 
@@ -131,7 +143,7 @@ public class TestRunnerService(
       {
         token.Ct.ThrowIfCancellationRequested();
 
-        var tfmVariants = projectsByPath.GetValueOrDefault(result.ProjectPath);
+        var tfmVariants = needsBuild.GetValueOrDefault(result.ProjectPath);
         if (tfmVariants is null) continue;
 
         if (result.Kind == BatchBuildResultKind.Started)
@@ -154,12 +166,9 @@ public class TestRunnerService(
             continue;
           }
 
-          discoverTasks.Add(
-              executor.DiscoverProjectAsync(project, solutionId, token));
+          discoverTasks.Add(executor.DiscoverProjectAsync(project, solutionId, token));
         }
       }
-
-      token.Ct.ThrowIfCancellationRequested();
 
       token.Ct.ThrowIfCancellationRequested();
 
@@ -327,11 +336,12 @@ public class TestRunnerService(
           node.Id, loc.SignatureLine, loc.BodyStartLine, loc.EndLine);
 
       if (changed)
-        updates.Add(new LineNumberUpdateDto(
-            node.Id, loc.SignatureLine, loc.BodyStartLine, loc.EndLine));
+      {
+        updates.Add(new LineNumberUpdateDto(node.Id, loc.SignatureLine, loc.BodyStartLine, loc.EndLine));
+      }
     }
 
-    return new SyncFileResult(updates.ToArray(), req.Version);
+    return new SyncFileResult([.. updates], req.Version);
   }
 
   private async Task<OperationResult> ExecuteOnNodeAsync(
