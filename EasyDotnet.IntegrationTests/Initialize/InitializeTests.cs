@@ -53,7 +53,7 @@ public class InitializeTests
 
     var ex = await Assert.ThrowsAsync<RemoteMethodNotFoundException>(async () => await server.InvokeWithParameterObjectAsync<RemoteMethodNotFoundException>("initialize", new List<TestInitializeRequest>() { new(new("test", "abc"), new TestProjectInfo(Path.GetTempPath())) }));
 
-    Assert.Contains("Invalid client version format", ex.Message, StringComparison.OrdinalIgnoreCase);
+    Assert.Contains("Unable to find method 'initialize", ex.Message, StringComparison.OrdinalIgnoreCase);
   }
 
   [Fact]
