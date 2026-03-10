@@ -30,10 +30,7 @@ public class InitializeController(
     var assembly = Assembly.GetExecutingAssembly();
     var serverVersion = assembly.GetName().Version ?? throw new NullReferenceException("Server version");
 
-    if (!Version.TryParse(request.ClientInfo.Version, out var clientVersion))
-    {
-      throw new Exception("Invalid client version format");
-    }
+    var clientVersion = request.ClientInfo.Version;
 
     if (clientVersion.Major != serverVersion.Major)
     {

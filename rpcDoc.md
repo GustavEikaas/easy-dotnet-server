@@ -39,6 +39,66 @@
 
 ---
 
+## TestRunnerController
+
+### `testrunner/debug`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | NodeRequest |   |
+
+**Returns:** `Task<OperationResult>`
+
+### `testrunner/getBuildErrors`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | NodeRequest |   |
+
+**Returns:** `Task`
+
+### `testrunner/getResults`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | NodeRequest |   |
+
+**Returns:** `GetResultsResult`
+
+### `testrunner/initialize`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | InitializeRequest |   |
+
+**Returns:** `Task<InitializeResult>`
+
+### `testrunner/invalidate`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | NodeRequest |   |
+
+**Returns:** `Task<OperationResult>`
+
+### `testrunner/quickDiscover`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | InitializeRequest |   |
+
+**Returns:** `Task`
+
+### `testrunner/run`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | NodeRequest |   |
+
+**Returns:** `Task<OperationResult>`
+
+### `testrunner/syncFile`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | SyncFileRequest |   |
+
+**Returns:** `SyncFileResult`
+
+---
+
 ## UserSecretsController
 
 ### `user-secrets/init`
@@ -51,35 +111,6 @@
 ---
 
 ## TestController
-
-### `test/debug`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| projectPath | string |   |
-| configuration | string |   |
-| filter | RunRequestNode[] |   |
-| targetFrameworkMoniker | string | ✅  |
-
-**Returns:** `IAsyncEnumerable<TestRunResult>`
-
-### `test/discover`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| projectPath | string |   |
-| targetFrameworkMoniker | string | ✅  |
-| configuration | string | ✅  |
-
-**Returns:** `Task<IAsyncEnumerable<DiscoveredTest>>`
-
-### `test/run`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| projectPath | string |   |
-| configuration | string |   |
-| filter | RunRequestNode[] |   |
-| targetFrameworkMoniker | string | ✅  |
-
-**Returns:** `IAsyncEnumerable<TestRunResult>`
 
 ### `test/set-project-run-settings`
 | Parameter | Type | Optional |

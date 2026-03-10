@@ -2,10 +2,10 @@ using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.IDE.DebuggerStrategies;
-using EasyDotnet.IDE.VSTest;
+using EasyDotnet.IDE.TestRunner.Adapters;
+using EasyDotnet.IDE.TestRunner.Adapters.VSTest;
+using EasyDotnet.IDE.TestRunner.Models;
 using EasyDotnet.MsBuild;
-using EasyDotnet.Types;
-using EasyDotnet.VSTest;
 using Microsoft.Extensions.Logging;
 using Microsoft.TestPlatform.VsTestConsole.TranslationLayer;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Client;
@@ -114,7 +114,7 @@ public class VsTestService(
       {
         var discoveryHandler = new TestDiscoveryHandler(loggerFactory.CreateLogger<TestDiscoveryHandler>());
         var sessionHandler = new TestSessionHandler();
-        var runHandler = new TestRunHandler(channel.Writer);
+        var runHandler = new TestRunHandler(channel.Writer, loggerFactory.CreateLogger<TestRunHandler>());
 
         testHost.DiscoverTests([project.TargetPath!], null, DefaultOptions, sessionHandler.TestSessionInfo, discoveryHandler);
         var runTests = discoveryHandler.TestCases.Where(x => testIds.Contains(x.Id)).ToList();

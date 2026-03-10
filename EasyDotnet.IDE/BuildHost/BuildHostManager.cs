@@ -55,6 +55,32 @@ public sealed class BuildHostManager(ILogger<BuildHostManager> logger, BuildHost
     }
   }
 
+  public async IAsyncEnumerable<BatchBuildResult> BatchBuildAsync(
+        BatchBuildRequest request,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+  {
+    EnsureNotDisposed();
+    var rpc = await GetRpcClientAsync();
+    IAsyncEnumerable<BatchBuildResult> stream;
+    try
+    {
+      stream = await rpc.InvokeWithParameterObjectAsync<IAsyncEnumerable<BatchBuildResult>>(
+          "projects/batchBuild",
+          request,
+          cancellationToken);
+    }
+    catch (ConnectionLostException)
+    {
+      InvalidateConnection();
+      throw new Exception("BuildServer connection was lost. Please try again.");
+    }
+
+    await foreach (var result in stream.WithCancellation(cancellationToken))
+    {
+      yield return result;
+    }
+  }
+
   public async IAsyncEnumerable<RestoreResult> RestoreNugetPackagesAsync(
       RestoreRequest request,
       [EnumeratorCancellation] CancellationToken cancellationToken)
