@@ -28,7 +28,7 @@ public class EditorService(
 
   public async Task<SelectionOption?> RequestSelection(string prompt, SelectionOption[] choices, string? defaultSelectionId = null)
   {
-    var request = new PromptSelectionRequest(prompt, choices, defaultSelectionId);
+    var request = new PromptSelectionRequest(Guid.NewGuid(), prompt, choices, defaultSelectionId);
     var selectedId = await jsonRpc.InvokeWithParameterObjectAsync<string?>("promptSelection", request);
     return selectedId == null ? null : choices.FirstOrDefault(option => option.Id == selectedId);
   }
