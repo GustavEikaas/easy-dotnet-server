@@ -169,7 +169,7 @@ public class TestRunnerService(
 
           if (result.Success != true)
           {
-            await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.BuildFailed(), [TestAction.GetBuildErrors]);
+            await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.BuildFailed(), [TestAction.GetBuildErrors, TestAction.Invalidate, TestAction.Debug, TestAction.Run]);
             if (result.Output?.Diagnostics is { } initDiags && initDiags.Length > 0)
             {
               buildErrorStore.Set(projectId, initDiags);
@@ -284,7 +284,7 @@ public class TestRunnerService(
           var pid = NodeIdBuilder.Project(node.ParentId ?? "", project.ProjectName, project.TargetFramework ?? "");
           if (result.Success != true)
           {
-            await dispatcher.SendStatusAsync(pid, new TestNodeStatus.BuildFailed(), [TestAction.GetBuildErrors]);
+            await dispatcher.SendStatusAsync(pid, new TestNodeStatus.BuildFailed(), [TestAction.GetBuildErrors, TestAction.Invalidate, TestAction.Debug, TestAction.Run]);
             if (result.Output?.Diagnostics is { } invDiags && invDiags.Length > 0)
             {
               buildErrorStore.Set(pid, invDiags);
@@ -362,13 +362,9 @@ public class TestRunnerService(
           : TestSourceLocator.LookupMethod(parsed.Methods, node.DisplayName);
       if (loc is null) continue;
 
-      var changed = registry.UpdateLineNumbers(
-          node.Id, loc.SignatureLine, loc.BodyStartLine, loc.EndLine);
+      registry.UpdateLineNumbers(node.Id, loc.SignatureLine, loc.BodyStartLine, loc.EndLine);
 
-      if (changed)
-      {
-        updates.Add(new LineNumberUpdateDto(node.Id, loc.SignatureLine, loc.BodyStartLine, loc.EndLine));
-      }
+      updates.Add(new LineNumberUpdateDto(node.Id, loc.SignatureLine, loc.BodyStartLine, loc.EndLine));
     }
 
     return new SyncFileResult([.. updates], req.Version);
@@ -431,7 +427,7 @@ public class TestRunnerService(
           var pn = projectNodes.First(n => string.Equals(n.FilePath, p.ProjectFullPath, StringComparison.OrdinalIgnoreCase));
           if (result.Success != true)
           {
-            await dispatcher.SendStatusAsync(pn.Id, new TestNodeStatus.BuildFailed(), [TestAction.GetBuildErrors]);
+            await dispatcher.SendStatusAsync(pn.Id, new TestNodeStatus.BuildFailed(), [TestAction.GetBuildErrors, TestAction.Invalidate, TestAction.Debug, TestAction.Run]);
             failedProjectIds.Add(pn.Id);
             if (result.Output?.Diagnostics is { } diags && diags.Length > 0)
             {
@@ -525,7 +521,7 @@ public class TestRunnerService(
         {
           if (result.Success != true)
           {
-            await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.BuildFailed(), [TestAction.GetBuildErrors]);
+            await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.BuildFailed(), [TestAction.GetBuildErrors, TestAction.Invalidate, TestAction.Debug, TestAction.Run]);
             buildFailed = true;
             if (result.Output?.Diagnostics is { } diags && diags.Length > 0)
             {
