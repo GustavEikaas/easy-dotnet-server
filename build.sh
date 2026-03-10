@@ -135,7 +135,7 @@ fi
 #
 if $RUN_ALL || [ "$1" = "pack" ]; then
   dotnet pack ./EasyDotnet.IDE \
-    -p:PackageVersion=2.9.9-pre2
+    -p:PackageVersion=3.9.0-pre2
 fi
 
 
