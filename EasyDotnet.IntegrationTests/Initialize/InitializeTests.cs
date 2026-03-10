@@ -51,7 +51,7 @@ public class InitializeTests
   {
     using var server = RpcTestServerInstantiator.GetUninitializedStreamServer();
 
-    var ex = await Assert.ThrowsAsync<RemoteInvocationException>(async () => await server.InvokeWithParameterObjectAsync<RemoteMethodNotFoundException>("initialize", new List<TestInitializeRequest>() { new(new("test", "abc"), new TestProjectInfo(Path.GetTempPath())) }));
+    var ex = await Assert.ThrowsAsync<RemoteMethodNotFoundException>(async () => await server.InvokeWithParameterObjectAsync<RemoteMethodNotFoundException>("initialize", new List<TestInitializeRequest>() { new(new("test", "abc"), new TestProjectInfo(Path.GetTempPath())) }));
 
     Assert.Contains("Invalid client version format", ex.Message, StringComparison.OrdinalIgnoreCase);
   }
