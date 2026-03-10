@@ -17,7 +17,6 @@ public class SettingsService(
     IBuildHostManager buildHostManager,
     ILogger<SettingsService> logger)
 {
-
   #region Solution Settings
 
   public string? GetDefaultBuildProject(string solutionPath)
