@@ -10,6 +10,14 @@ using EasyDotnet.IDE.DebuggerStrategies;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.StartupHook;
 using EasyDotnet.IDE.TemplateEngine.PostActionHandlers;
+using EasyDotnet.IDE.TestRunner.Adapters;
+using EasyDotnet.IDE.TestRunner.Adapters.MTP.RPC;
+using EasyDotnet.IDE.TestRunner.Dispatch;
+using EasyDotnet.IDE.TestRunner.Executor;
+using EasyDotnet.IDE.TestRunner.Lock;
+using EasyDotnet.IDE.TestRunner.Registry;
+using EasyDotnet.IDE.TestRunner.Service;
+using EasyDotnet.IDE.TestRunner.Store;
 using EasyDotnet.IDE.Utils;
 using EasyDotnet.Infrastructure.Aspire;
 using EasyDotnet.Infrastructure.Editor;
@@ -66,6 +74,20 @@ public static class DiModules
     services.AddSingleton<IDebugStrategyFactory, DebugStrategyFactory>();
     services.AddSingleton<BuildHostFactory>();
     services.AddSingleton<IBuildHostManager, BuildHostManager>();
+    services.AddSingleton<WorkspaceBuildHostManager>();
+    services.AddSingleton<ProjectEvaluationCache>();
+
+    services.AddSingleton<TestRunnerService>();
+    services.AddSingleton<NodeRegistry>();
+    services.AddSingleton<StatusDispatcher>();
+    services.AddSingleton<DetailStore>();
+    services.AddSingleton<BuildErrorStore>();
+    services.AddSingleton<GlobalOperationLock>();
+    services.AddSingleton<OperationExecutor>();
+    services.AddSingleton<AdapterResolver>();
+    services.AddSingleton<VsTestAdapter>();
+    services.AddSingleton<MtpAdapter>();
+    services.AddSingleton<MtpClientFactory>();
 
     services.AddTransient<IProgressScopeFactory, ProgressScopeFactory>();
     services.AddTransient<IStartupHookService, StartupHookService>();
@@ -78,7 +100,6 @@ public static class DiModules
     services.AddTransient<INotificationService, NotificationService>();
     services.AddTransient<NugetService>();
     services.AddSingleton<VsTestService>();
-    services.AddTransient<MtpService>();
     services.AddTransient<OutdatedService>();
     services.AddTransient<GlobalJsonService>();
 

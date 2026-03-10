@@ -28,6 +28,7 @@ public static class DiModule
     services.AddTransient<WatchHandler>();
     services.AddTransient<ProjectPropertiesBatchHandler>();
     services.AddTransient<RestoreHandler>();
+    services.AddTransient<BatchBuildHandler>();
 
     services.AddSingleton(instance);
 
@@ -85,6 +86,7 @@ public static class DiModule
       serviceProvider.GetRequiredService<WatchHandler>(),
       serviceProvider.GetRequiredService<ProjectPropertiesBatchHandler>(),
       serviceProvider.GetRequiredService<RestoreHandler>(),
+      serviceProvider.GetRequiredService<BatchBuildHandler>(),
     };
 
     foreach (var handler in handlers)

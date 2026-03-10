@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.BuildServer.Contracts;
 using Microsoft.Extensions.Logging;
@@ -10,8 +11,7 @@ public sealed class BuildHostManager(ILogger<BuildHostManager> logger, BuildHost
 {
   private Process? _serverProcess;
   private JsonRpc? _rpc;
-  private bool _isDisposed;
-
+  private int _isDisposed;
   private readonly SemaphoreSlim _connectionLock = new(1, 1);
 
   public async Task<GetWatchListResponse> GetProjectWatchListAsync(GetWatchListRequest request, CancellationToken cancellationToken)
@@ -24,49 +24,86 @@ public sealed class BuildHostManager(ILogger<BuildHostManager> logger, BuildHost
     }
     catch (ConnectionLostException)
     {
-      await InvalidateConnectionAsync();
+      InvalidateConnection();
       throw new Exception("BuildServer connection was lost. Please try again.");
     }
   }
 
-  public async Task<IAsyncEnumerable<ProjectEvaluationResult>> GetProjectPropertiesBatchAsync(
+  public async IAsyncEnumerable<ProjectEvaluationResult> GetProjectPropertiesBatchAsync(
       GetProjectPropertiesBatchRequest request,
-      CancellationToken cancellationToken)
+      [EnumeratorCancellation] CancellationToken cancellationToken)
   {
     EnsureNotDisposed();
     var rpc = await GetRpcClientAsync();
-
+    IAsyncEnumerable<ProjectEvaluationResult> stream;
     try
     {
-      return await rpc.InvokeWithParameterObjectAsync<IAsyncEnumerable<ProjectEvaluationResult>>(
+      stream = await rpc.InvokeWithParameterObjectAsync<IAsyncEnumerable<ProjectEvaluationResult>>(
           "project/get-properties-batch",
           request,
           cancellationToken);
     }
     catch (ConnectionLostException)
     {
-      await InvalidateConnectionAsync();
+      InvalidateConnection();
       throw new Exception("BuildServer connection was lost. Please try again.");
+    }
+
+    await foreach (var result in stream.WithCancellation(cancellationToken))
+    {
+      yield return result;
     }
   }
 
-  public async Task<IAsyncEnumerable<RestoreResult>> RestoreNugetPackagesAsync(
-      RestoreRequest request,
-      CancellationToken cancellationToken)
+  public async IAsyncEnumerable<BatchBuildResult> BatchBuildAsync(
+        BatchBuildRequest request,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
   {
     EnsureNotDisposed();
     var rpc = await GetRpcClientAsync();
+    IAsyncEnumerable<BatchBuildResult> stream;
     try
     {
-      return await rpc.InvokeWithParameterObjectAsync<IAsyncEnumerable<RestoreResult>>(
+      stream = await rpc.InvokeWithParameterObjectAsync<IAsyncEnumerable<BatchBuildResult>>(
+          "projects/batchBuild",
+          request,
+          cancellationToken);
+    }
+    catch (ConnectionLostException)
+    {
+      InvalidateConnection();
+      throw new Exception("BuildServer connection was lost. Please try again.");
+    }
+
+    await foreach (var result in stream.WithCancellation(cancellationToken))
+    {
+      yield return result;
+    }
+  }
+
+  public async IAsyncEnumerable<RestoreResult> RestoreNugetPackagesAsync(
+      RestoreRequest request,
+      [EnumeratorCancellation] CancellationToken cancellationToken)
+  {
+    EnsureNotDisposed();
+    var rpc = await GetRpcClientAsync();
+    IAsyncEnumerable<RestoreResult> stream;
+    try
+    {
+      stream = await rpc.InvokeWithParameterObjectAsync<IAsyncEnumerable<RestoreResult>>(
           "projects/restore",
           request,
           cancellationToken);
     }
     catch (ConnectionLostException)
     {
-      await InvalidateConnectionAsync();
+      InvalidateConnection();
       throw new Exception("BuildServer connection was lost. Please try again.");
+    }
+
+    await foreach (var result in stream.WithCancellation(cancellationToken))
+    {
+      yield return result;
     }
   }
 
@@ -85,7 +122,7 @@ public sealed class BuildHostManager(ILogger<BuildHostManager> logger, BuildHost
         return _rpc;
       }
 
-      await InvalidateConnectionAsync();
+      InvalidateConnection();
 
       logger.LogInformation("Spawning new BuildServer instance...");
       var (process, rpc) = await factory.StartServerAsync();
@@ -103,7 +140,7 @@ public sealed class BuildHostManager(ILogger<BuildHostManager> logger, BuildHost
     }
   }
 
-  private async Task InvalidateConnectionAsync()
+  private void InvalidateConnection()
   {
     try { _rpc?.Dispose(); } catch { }
     try
@@ -115,24 +152,23 @@ public sealed class BuildHostManager(ILogger<BuildHostManager> logger, BuildHost
 
     _serverProcess = null;
     _rpc = null;
-    await Task.CompletedTask;
   }
 
-  private void EnsureNotDisposed() => ObjectDisposedException.ThrowIf(_isDisposed, this);
+  private void EnsureNotDisposed() =>
+      ObjectDisposedException.ThrowIf(_isDisposed == 1, this);
 
   public void Dispose()
   {
-    if (_isDisposed) return;
-    _isDisposed = true;
+    if (Interlocked.Exchange(ref _isDisposed, 1) != 0) return;
     _connectionLock.Dispose();
-    InvalidateConnectionAsync().GetAwaiter().GetResult();
+    InvalidateConnection();
   }
 
-  public async ValueTask DisposeAsync()
+  public ValueTask DisposeAsync()
   {
-    if (_isDisposed) return;
-    _isDisposed = true;
+    if (Interlocked.Exchange(ref _isDisposed, 1) != 0) return ValueTask.CompletedTask;
     _connectionLock.Dispose();
-    await InvalidateConnectionAsync();
+    InvalidateConnection();
+    return ValueTask.CompletedTask;
   }
 }

@@ -2,9 +2,7 @@ namespace EasyDotnet.BuildServer.Contracts;
 
 public sealed record GetProjectPropertiesBatchRequest(string[] ProjectPaths, string? Configuration);
 
-public sealed record ProjectPropertiesBatchResponse(ProjectEvaluationResult[] Proijects);
-
-public sealed record ProjectEvaluationResult(string ProjectPath, string? Configuration, string? TargetFramework, bool Success, DotnetProject? Project, ProjectEvaluationError? Error);
+public sealed record ProjectEvaluationResult(string ProjectPath, string? Configuration, string? TargetFramework, bool Success, ValidatedDotnetProject? Project, ProjectEvaluationError? Error);
 
 public sealed record ProjectEvaluationError(string Message, string? StackTrace, string? MsBuildErrorCode);
 
@@ -159,3 +157,63 @@ public record DotnetProject
     string? UserProfileRuntimeStorePath,
     string? TargetPlatformIdentifier
 );
+
+public sealed record ValidatedDotnetProject
+{
+  public required string TargetFramework { get; init; }
+  public required string OutputType { get; init; }
+  public required string ProjectPath { get; init; }
+  public required string ProjectFullPath { get; init; }
+  public required string ProjectName { get; init; }
+  public required string AssemblyName { get; init; }
+  public required string TargetPath { get; init; }
+  public required DotnetProject Raw { get; init; }
+
+  public bool IsRunnable =>
+      OutputType.Equals("Exe", StringComparison.OrdinalIgnoreCase)
+      && !Raw.IsTestProject
+      && !Raw.IsTestingPlatformApplication;
+
+  public bool IsMTP => Raw.IsTestingPlatformApplication;
+
+  public bool IsVsTest => !Raw.IsTestingPlatformApplication && Raw.IsTestProject;
+
+  public bool IsPackable => Raw.IsPackable
+      && !string.IsNullOrWhiteSpace(Raw.PackageId);
+
+  public string? LaunchSettingsPath
+  {
+    get
+    {
+      var baseDir = File.Exists(ProjectFullPath)
+          ? Path.GetDirectoryName(ProjectFullPath)
+          : ProjectFullPath;
+      return Path.Combine(baseDir, "Properties", "launchSettings.json");
+    }
+  }
+
+  public static ValidatedDotnetProject? TryCreate(DotnetProject project) =>
+      project switch
+      {
+        {
+          TargetFramework: { } tfm,
+          OutputType: { } outputType,
+          ProjectPath: { } projectPath,
+          MSBuildProjectFullPath: { } fullPath,
+          AssemblyName: { } assemblyName,
+          TargetPath: { } targetPath,
+          MSBuildProjectName: { } projectName
+        } => new ValidatedDotnetProject
+        {
+          TargetFramework = tfm,
+          OutputType = outputType,
+          ProjectPath = projectPath,
+          ProjectFullPath = fullPath,
+          ProjectName = projectName,
+          AssemblyName = assemblyName,
+          TargetPath = targetPath,
+          Raw = project
+        },
+        _ => null
+      };
+}

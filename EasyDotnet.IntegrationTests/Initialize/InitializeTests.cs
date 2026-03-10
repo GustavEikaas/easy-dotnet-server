@@ -17,14 +17,14 @@ public sealed record TestClientInfo(string Name, string? Version);
 
 public class InitializeTests
 {
-  public static readonly TestClientInfo DummyTestInfo = new("test", "2.0.0");
+  public static readonly TestClientInfo DummyTestInfo = new("test", "3.0.0");
 
   [Fact]
   public async Task InitializeShouldPass()
   {
     using var server = RpcTestServerInstantiator.GetUninitializedStreamServer();
 
-    var res = await server.InvokeWithParameterObjectAsync<TestInitializeResponse>("initialize", new List<TestInitializeRequest>() { new(new TestClientInfo("test", "2.0.0"), new TestProjectInfo(Path.GetTempPath())) });
+    var res = await server.InvokeWithParameterObjectAsync<TestInitializeResponse>("initialize", new List<TestInitializeRequest>() { new(new TestClientInfo("test", "3.0.0"), new TestProjectInfo(Path.GetTempPath())) });
 
     Assert.NotNull(res);
     Assert.NotNull(res.ServerInfo);
@@ -51,9 +51,9 @@ public class InitializeTests
   {
     using var server = RpcTestServerInstantiator.GetUninitializedStreamServer();
 
-    var ex = await Assert.ThrowsAsync<RemoteInvocationException>(async () => await server.InvokeWithParameterObjectAsync<TestInitializeResponse>("initialize", new List<TestInitializeRequest>() { new(new("test", "abc"), new TestProjectInfo(Path.GetTempPath())) }));
+    var ex = await Assert.ThrowsAsync<RemoteMethodNotFoundException>(async () => await server.InvokeWithParameterObjectAsync<RemoteMethodNotFoundException>("initialize", new List<TestInitializeRequest>() { new(new("test", "abc"), new TestProjectInfo(Path.GetTempPath())) }));
 
-    Assert.Contains("Invalid client version format", ex.Message, StringComparison.OrdinalIgnoreCase);
+    Assert.Contains("Unable to find method 'initialize", ex.Message, StringComparison.OrdinalIgnoreCase);
   }
 
   [Fact]

@@ -1,10 +1,8 @@
-using System;
 using System.ComponentModel;
 using System.Diagnostics;
-using System.IO;
 using System.IO.Pipes;
-using System.Threading;
-using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
+using Serilog;
 using Spectre.Console.Cli;
 
 namespace EasyDotnet.IDE.Commands;
@@ -51,7 +49,7 @@ public sealed class RunCommand : AsyncCommand<RunCommand.Settings>
 
   private static async Task RespondToRpcRequestsAsync(Stream stream, int clientId, SourceLevels logLevel)
   {
-    var rpc = JsonRpcServerBuilder.Build(stream, stream, null, logLevel);
+    var rpc = JsonRpcServerBuilder.Build(stream, stream, buildServiceProvider: null, logLevel);
     rpc.StartListening();
     await rpc.Completion;
     await Console.Error.WriteLineAsync($"Connection #{clientId} terminated.");

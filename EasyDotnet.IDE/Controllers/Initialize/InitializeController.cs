@@ -1,13 +1,8 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Reflection;
-using System.Threading;
-using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
 using EasyDotnet.Domain.Models.Client;
+using EasyDotnet.IDE.BuildHost;
 using EasyDotnet.IDE.Notifications;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.Utils;
@@ -21,6 +16,8 @@ namespace EasyDotnet.IDE.Controllers.Initialize;
 public class InitializeController(
   IClientService clientService,
   IVisualStudioLocator locator,
+  ISolutionService solutionService,
+  WorkspaceBuildHostManager workspaceBuildHostManager,
   IMsBuildService msBuildService,
   UpdateCheckerService updateCheckerService,
   IProgressScopeFactory progressScopeFactory,
@@ -33,10 +30,7 @@ public class InitializeController(
     var assembly = Assembly.GetExecutingAssembly();
     var serverVersion = assembly.GetName().Version ?? throw new NullReferenceException("Server version");
 
-    if (!Version.TryParse(request.ClientInfo.Version, out var clientVersion))
-    {
-      throw new Exception("Invalid client version format");
-    }
+    var clientVersion = request.ClientInfo.Version;
 
     if (clientVersion.Major != serverVersion.Major)
     {
@@ -52,6 +46,10 @@ public class InitializeController(
     Directory.SetCurrentDirectory(request.ProjectInfo.RootDir);
     clientService.IsInitialized = true;
     clientService.ProjectInfo = request.ProjectInfo;
+    if (clientService.ProjectInfo.SolutionFile is not null)
+    {
+      PreloadSolutionProjects(clientService.ProjectInfo.SolutionFile);
+    }
     clientService.ClientInfo = request.ClientInfo;
 
     clientService.ClientOptions = request.Options ?? new ClientOptions();
@@ -73,6 +71,30 @@ public class InitializeController(
         new ServerCapabilities(GetRpcPaths(), GetRpcNotifications(), supportsSingleFileExecution),
         new ToolPaths(await TryGetMsBuildPath(locator))
         );
+  }
+
+  private void PreloadSolutionProjects(string solutionFile)
+  {
+    _ = Task.Run(async () =>
+        {
+          try
+          {
+            var projects = await solutionService.GetProjectsFromSolutionFile(solutionFile, CancellationToken.None);
+            var projectNames = projects.ConvertAll(x => x.ProjectName);
+            logger.LogInformation("Preloading {Count} projects:\n{Projects}",
+                projectNames.Count,
+                string.Join("\n  - ", projectNames.Prepend("")));
+            await workspaceBuildHostManager.PreloadProjectsAsync([.. projects.Select(x => x.AbsolutePath)]);
+
+            logger.LogInformation("Finished loading projects:\n{Projects}",
+                string.Join("\n  - ", projectNames.Prepend("")));
+          }
+          catch (Exception e)
+          {
+            logger.LogError(e, "Failed to preload projects");
+          }
+
+        });
   }
 
   private static async Task<string?> TryGetMsBuildPath(IVisualStudioLocator locator)
