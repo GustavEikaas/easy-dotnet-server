@@ -1,4 +1,3 @@
-using EasyDotnet.Application.Interfaces;
 using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.IDE.TestRunner.Adapters;
 using EasyDotnet.IDE.TestRunner.Analysis;
@@ -15,7 +14,6 @@ public class OperationExecutor(
     NodeRegistry registry,
     StatusDispatcher dispatcher,
     DetailStore detailStore,
-    IEditorService editorService,
     AdapterResolver adapterResolver,
     ILogger<OperationExecutor> logger)
 {
@@ -193,7 +191,6 @@ public class OperationExecutor(
       {
         await dispatcher.SendRemoveTestAsync(orphanId);
       }
-      await editorService.DisplayError($"Discovery failed for project {project.ProjectName} — ${ex.Message}");
     }
   }
 

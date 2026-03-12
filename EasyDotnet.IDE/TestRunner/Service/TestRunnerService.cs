@@ -357,9 +357,24 @@ public class TestRunnerService(
 
     foreach (var node in registry.GetNodesForFile(req.Path))
     {
-      var loc = node.Type is NodeType.TestClass
-          ? (parsed.Classes.TryGetValue(node.DisplayName, out var clsLoc) ? clsLoc : null)
-          : TestSourceLocator.LookupMethod(parsed.Methods, node.DisplayName);
+      TestMethodLocation? loc;
+
+      if (node.Type is NodeType.TestClass)
+      {
+        loc = parsed.Classes.TryGetValue(node.DisplayName, out var clsLoc) ? clsLoc : null;
+      }
+      else
+      {
+        var lookupName = node.Type switch
+        {
+          NodeType.Subcase => node.ParentId is not null ? registry.Get(node.ParentId)?.DisplayName : null,
+          _ => node.DisplayName
+        };
+
+        lookupName ??= node.DisplayName;
+        loc = TestSourceLocator.LookupMethod(parsed.Methods, lookupName);
+      }
+
       if (loc is null) continue;
 
       registry.UpdateLineNumbers(node.Id, loc.SignatureLine, loc.BodyStartLine, loc.EndLine);
