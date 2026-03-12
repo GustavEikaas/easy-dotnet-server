@@ -69,13 +69,28 @@ public class TestSourceLocator
   public static TestMethodLocation? LookupMethod(
       Dictionary<string, TestMethodLocation> map, string methodName)
   {
-    if (map.TryGetValue(methodName, out var loc)) return loc;
+    var key = NormalizeMethodKey(methodName);
+    return map.TryGetValue(key, out var loc) ? loc : null;
+  }
 
-    var bare = methodName.Contains('(')
-        ? methodName[..methodName.IndexOf('(')]
-        : methodName;
+  private static string NormalizeMethodKey(string name)
+  {
+    name = name.Trim();
 
-    return map.TryGetValue(bare, out loc) ? loc : null;
+    // Handle subcase/value args: "Test(1,2)" → "Test"
+    // Handle signature args: "Test(System.Int32)" → "Test"
+    var parenIdx = name.IndexOf('(');
+    if (parenIdx >= 0) name = name[..parenIdx];
+
+    // Handle generic display: "Test<T>" → "Test"
+    var genericIdx = name.IndexOf('<');
+    if (genericIdx >= 0) name = name[..genericIdx];
+
+    // Handle fully-qualified formats: "Ns.Type.Test" → "Test"
+    var lastDot = name.LastIndexOf('.');
+    if (lastDot >= 0) name = name[(lastDot + 1)..];
+
+    return name.Trim();
   }
 
   // ---------------------------------------------------------------------------
