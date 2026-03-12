@@ -32,6 +32,7 @@ public class OperationExecutor(
     var emittedNamespaces = new HashSet<string>();
     var emittedClasses = new HashSet<string>();
     var emittedTheoryGroups = new HashSet<string>();
+    var subcaseCounters = new Dictionary<string, int>();
     var rootNs = project.Raw.RootNamespace ?? project.ProjectName;
     var rootNamespaceParts = rootNs.Split('.', StringSplitOptions.RemoveEmptyEntries);
 
@@ -114,9 +115,27 @@ public class OperationExecutor(
 
           var shortName = discovered.Arguments ?? shortMethodName;
 
-          var methodNodeId = discovered.Arguments is not null
-              ? NodeIdBuilder.Method(parentId, shortMethodName + discovered.Arguments)
-              : NodeIdBuilder.Method(parentId, discovered.MethodName);
+          string methodNodeId;
+          if (discovered.Arguments is not null)
+          {
+            var baseId = NodeIdBuilder.Method(parentId, shortMethodName + discovered.Arguments);
+            subcaseCounters.TryGetValue(baseId, out var seenCount);
+            subcaseCounters[baseId] = seenCount + 1;
+            if (seenCount > 0)
+            {
+              var suffix = $"[{seenCount}]";
+              methodNodeId = NodeIdBuilder.Method(parentId, shortMethodName + discovered.Arguments + suffix);
+              shortName = discovered.Arguments + suffix;
+            }
+            else
+            {
+              methodNodeId = baseId;
+            }
+          }
+          else
+          {
+            methodNodeId = NodeIdBuilder.Method(parentId, discovered.MethodName);
+          }
           var methodNode = new TestNode(
                   Id: methodNodeId,
                   DisplayName: shortName,
@@ -167,7 +186,11 @@ public class OperationExecutor(
     catch (Exception ex)
     {
       logger.LogWarning(ex, "Discovery failed for project {Project} — DLL may be missing or stale", project.ProjectName);
-      await dispatcher.SendStatusAsync(projectNodeId, null);
+      registry.ClearDescendants(projectNodeId);
+      foreach (var orphanId in preDiscoveryIds)
+      {
+        await dispatcher.SendRemoveTestAsync(orphanId);
+      }
     }
   }
 
