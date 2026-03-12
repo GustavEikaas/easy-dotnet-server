@@ -76,17 +76,10 @@ public class TestSourceLocator
   private static string NormalizeMethodKey(string name)
   {
     name = name.Trim();
-
-    // Handle subcase/value args: "Test(1,2)" → "Test"
-    // Handle signature args: "Test(System.Int32)" → "Test"
     var parenIdx = name.IndexOf('(');
     if (parenIdx >= 0) name = name[..parenIdx];
-
-    // Handle generic display: "Test<T>" → "Test"
     var genericIdx = name.IndexOf('<');
     if (genericIdx >= 0) name = name[..genericIdx];
-
-    // Handle fully-qualified formats: "Ns.Type.Test" → "Test"
     var lastDot = name.LastIndexOf('.');
     if (lastDot >= 0) name = name[(lastDot + 1)..];
 
