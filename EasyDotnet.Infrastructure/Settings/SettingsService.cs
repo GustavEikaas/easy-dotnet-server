@@ -14,7 +14,7 @@ public class SettingsService(
     SettingsSerializer serializer,
     IClientService clientService,
     ILaunchProfileService launchProfileService,
-    IBuildHostManager buildHostManager,
+    WorkspaceBuildHostManager buildHostManager,
     ILogger<SettingsService> logger)
 {
 
@@ -263,4 +263,49 @@ public class SettingsService(
   }
 
   #endregion
+
+  public async Task<StartupProjectResolutionResult> ResolveStartupProjectAsync(
+      List<string> projectPaths,
+      CancellationToken ct)
+  {
+    var allOptions = await buildHostManager
+        .GetProjectPropertiesBatchAsync(new([.. projectPaths], null), ct)
+        .Where(r => r.Success && r.TargetFramework is not null && r.Project?.IsRunnable == true)
+        .Select(r => new StartupProjectSelection(r.ProjectPath, r.TargetFramework!))
+        .ToListAsync(ct);
+
+    var persistedPath = GetDefaultStartupProject();
+
+    if (persistedPath is null)
+      return new StartupProjectResolutionResult.NeedsSelection(allOptions);
+
+    var projectOptions = allOptions
+        .Where(o => o.ProjectPath == persistedPath)
+        .ToList();
+
+    // Project removed from solution entirely
+    if (projectOptions.Count == 0)
+      return new StartupProjectResolutionResult.NeedsSelection(allOptions);
+
+    // GetValidatedProjectSettings clears stale TFM for us, so persistedTfm is either valid or null
+    var projectSettings = await GetValidatedProjectSettings(persistedPath, ct);
+    var persistedTfm = projectSettings?.TargetFramework;
+
+    if (persistedTfm is not null && projectOptions.Any(o => o.TargetFramework == persistedTfm))
+      return new StartupProjectResolutionResult.Resolved(new(persistedPath, persistedTfm));
+
+    if (projectOptions.Count == 1)
+      return new StartupProjectResolutionResult.Resolved(projectOptions[0]);
+
+    // Multi-TFM with no valid saved selection — user must pick TFM
+    return new StartupProjectResolutionResult.NeedsSelection(projectOptions);
+  }
+
+  public void ApplyStartupProjectSelection(StartupProjectSelection selection, int availableTfmCount)
+  {
+    SetDefaultStartupProject(selection.ProjectPath);
+    // Only persist TFM if the project is multi-target — single TFM needs no stored preference
+    if (availableTfmCount > 1)
+      SetProjectTargetFramework(selection.ProjectPath, selection.TargetFramework);
+  }
 }
