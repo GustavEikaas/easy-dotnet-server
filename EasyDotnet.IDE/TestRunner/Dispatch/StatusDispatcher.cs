@@ -1,3 +1,4 @@
+using System.Threading;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.Domain.Models.Client;
@@ -67,6 +68,9 @@ public class StatusDispatcher(JsonRpc rpc, NodeRegistry registry, IEditorService
   /// <summary>Broadcast global runner status (IsLoading, aggregate counts, etc.).</summary>
   public Task SendRunnerStatusAsync(TestRunnerStatus status) =>
       rpc.NotifyWithParameterObjectAsync("testrunner/statusUpdate", status);
+
+  public Task<bool> IsTestRunnerVisibleAsync(CancellationToken ct) =>
+      rpc.InvokeWithParameterObjectAsync<bool>("testrunner/isVisible", new { }, ct);
 
   public Task SendQuickFixAsync(IEnumerable<BuildDiagnostic> diagnostics)
   {
