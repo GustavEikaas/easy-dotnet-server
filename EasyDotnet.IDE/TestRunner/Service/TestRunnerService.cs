@@ -1,3 +1,4 @@
+using EasyDotnet.Application.Interfaces;
 using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.IDE.BuildHost;
 using EasyDotnet.IDE.Notifications;
@@ -22,7 +23,7 @@ public class TestRunnerService(
     OperationExecutor executor,
     AdapterResolver adapterResolver,
     WorkspaceBuildHostManager buildHost,
-    EasyDotnet.Application.Interfaces.IClientService clientService,
+    IClientService clientService,
     ILogger<TestRunnerService> logger)
 {
   public async Task QuickDiscoverAsync(string solutionPath, CancellationToken ct)
