@@ -44,12 +44,9 @@
 ### `testrunner/debug`
 | Parameter | Type | Optional |
 |-----------|------|----------|
-| request.id | string |   |
-| request.source | string | ✅ |
+| request | NodeRequest |   |
 
 **Returns:** `Task<OperationResult>`
-
-> `source` is where the request was initiated from ("testrunner" or "buffer"). Missing/empty is treated as "buffer".
 
 ### `testrunner/getBuildErrors`
 | Parameter | Type | Optional |
@@ -89,12 +86,9 @@
 ### `testrunner/run`
 | Parameter | Type | Optional |
 |-----------|------|----------|
-| request.id | string |   |
-| request.source | string | ✅ |
+| request | NodeRequest |   |
 
 **Returns:** `Task<OperationResult>`
-
-> `source` is where the request was initiated from ("testrunner" or "buffer"). Missing/empty is treated as "buffer".
 
 ### `testrunner/syncFile`
 | Parameter | Type | Optional |
@@ -102,24 +96,6 @@
 | request | SyncFileRequest |   |
 
 **Returns:** `SyncFileResult`
-
----
-
-## Client options
-
-### ClientOptions
-| Field | Type | Default |
-|------|------|---------|
-| enableOsNotifications | bool | false |
-
----
-
-## Reverse RPC (server → client)
-
-### `testrunner/isVisible`
-_No parameters_
-
-**Returns:** `bool`
 
 ---
 
