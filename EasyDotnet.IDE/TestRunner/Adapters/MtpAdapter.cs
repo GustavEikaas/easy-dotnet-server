@@ -5,6 +5,7 @@ using EasyDotnet.IDE.DebuggerStrategies;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.TestRunner.Adapters.MTP;
 using EasyDotnet.IDE.TestRunner.Adapters.MTP.RPC;
+using EasyDotnet.IDE.TestRunner.Lock;
 using EasyDotnet.IDE.TestRunner.Models;
 using Microsoft.Extensions.Logging;
 
@@ -25,10 +26,15 @@ public sealed class MtpAdapter(
   MtpClientFactory clientFactory
 ) : ITestAdapter
 {
-  public async Task DiscoverAsync(ValidatedDotnetProject project, Func<DiscoveredTest, Task> onDiscovered, CancellationToken ct)
+  public async Task DiscoverAsync(
+      ValidatedDotnetProject project,
+      Func<DiscoveredTest, Task> onDiscovered,
+      OperationControl control,
+      CancellationToken ct)
   {
     var exe = TransformDllPath(project.TargetPath);
     await using var client = await clientFactory.CreateAsync(exe, ct);
+    control.RegisterKill(() => client.KillAsync());
 
     await foreach (var update in client.DiscoverTestsAsync(ct))
     {
@@ -41,10 +47,13 @@ public sealed class MtpAdapter(
       ValidatedDotnetProject project,
       IReadOnlyList<string> nativeIds,
       Func<TestRunResult, Task> onResult,
+      OperationControl control,
       CancellationToken ct)
   {
     var exe = TransformDllPath(project.TargetPath);
     await using var client = await clientFactory.CreateAsync(exe, ct);
+    control.RegisterKill(() => client.KillAsync());
+
     var filter = nativeIds
         .Select(id => new RunRequestNode(id, ""))
         .ToArray();
@@ -66,12 +75,14 @@ public sealed class MtpAdapter(
       ValidatedDotnetProject project,
       IReadOnlyList<string> nativeIds,
       Func<TestRunResult, Task> onResult,
+      OperationControl control,
       CancellationToken ct)
   {
 
     var exe = TransformDllPath(project.TargetPath);
 
     await using var client = await clientFactory.CreateAsync(exe, ct);
+    control.RegisterKill(() => client.KillAsync());
     var session = await debugOrchestrator.StartClientDebugSessionAsync(
       project.ProjectFullPath,
       new(project.ProjectFullPath, project.TargetFramework, null, null),

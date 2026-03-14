@@ -4,6 +4,7 @@ using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.IDE.DebuggerStrategies;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.TestRunner.Adapters.VSTest;
+using EasyDotnet.IDE.TestRunner.Lock;
 using EasyDotnet.IDE.TestRunner.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.TestPlatform.VsTestConsole.TranslationLayer;
@@ -32,32 +33,45 @@ public sealed class VsTestAdapter(
 
   private VsTestConsoleWrapper? _wrapper;
 
-  public Task DiscoverAsync(ValidatedDotnetProject project, Func<DiscoveredTest, Task> onDiscovered, CancellationToken ct)
+  public async Task DiscoverAsync(
+      ValidatedDotnetProject project,
+      Func<DiscoveredTest, Task> onDiscovered,
+      OperationControl control,
+      CancellationToken ct)
   {
     var wrapper = EnsureWrapper();
+    control.RegisterKill(() => KillWrapperAsync(wrapper));
+
+    using var _ = ct.Register(() =>
+    {
+      try { wrapper.CancelDiscovery(); } catch { /* best effort */ }
+    });
+
     var handler = new StreamingDiscoveryHandler(onDiscovered, loggerFactory);
     wrapper.DiscoverTests([project.TargetPath], null, DefaultOptions, null, handler);
-    return handler.Completion;
+    await handler.Completion;
   }
 
   public async Task RunAsync(
       ValidatedDotnetProject project,
       IReadOnlyList<string> nativeIds,
       Func<TestRunResult, Task> onResult,
+      OperationControl control,
       CancellationToken ct)
   {
     var nativeGuids = nativeIds.Select(Guid.Parse).ToHashSet();
-    await RunCoreAsync(project, nativeGuids, onResult, attachDebugger: false, ct);
+    await RunCoreAsync(project, nativeGuids, onResult, attachDebugger: false, control, ct);
   }
 
   public async Task DebugAsync(
       ValidatedDotnetProject project,
       IReadOnlyList<string> nativeIds,
       Func<TestRunResult, Task> onResult,
+      OperationControl control,
       CancellationToken ct)
   {
     var nativeGuids = nativeIds.Select(Guid.Parse).ToHashSet();
-    await RunCoreAsync(project, nativeGuids, onResult, attachDebugger: true, ct);
+    await RunCoreAsync(project, nativeGuids, onResult, attachDebugger: true, control, ct);
   }
 
   private async Task RunCoreAsync(
@@ -65,9 +79,12 @@ public sealed class VsTestAdapter(
       HashSet<Guid> nativeGuids,
       Func<TestRunResult, Task> onResult,
       bool attachDebugger,
+      OperationControl control,
       CancellationToken ct)
   {
     var wrapper = EnsureWrapper();
+    control.RegisterKill(() => KillWrapperAsync(wrapper));
+
     var channel = Channel.CreateUnbounded<TestRunResult>();
 
     // Re-discover to get TestCase objects needed by VSTest run API
@@ -148,5 +165,18 @@ public sealed class VsTestAdapter(
   {
     _wrapper = null;
     return ValueTask.CompletedTask;
+  }
+
+  private Task KillWrapperAsync(VsTestConsoleWrapper wrapper)
+  {
+    return Task.Run(() =>
+    {
+      try { wrapper.AbortTestRun(); } catch { /* best effort */ }
+
+      try { wrapper.EndSession(); } catch { /* best effort */ }
+
+      if (ReferenceEquals(_wrapper, wrapper))
+        _wrapper = null;
+    });
   }
 }

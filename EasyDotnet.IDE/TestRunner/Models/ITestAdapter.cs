@@ -1,4 +1,5 @@
 using EasyDotnet.BuildServer.Contracts;
+using EasyDotnet.IDE.TestRunner.Lock;
 using EasyDotnet.IDE.TestRunner.Models;
 
 namespace EasyDotnet.IDE.TestRunner.Adapters;
@@ -6,7 +7,7 @@ namespace EasyDotnet.IDE.TestRunner.Adapters;
 /// <summary>
 /// Seam between framework-agnostic orchestration and framework-specific protocol.
 /// Implementations: VsTestAdapter, MtpAdapter.
-/// 
+///
 /// All methods use callbacks rather than return values so the executor can
 /// stream registerTest / updateStatus notifications in real time.
 /// </summary>
@@ -19,6 +20,7 @@ public interface ITestAdapter
   Task DiscoverAsync(
       ValidatedDotnetProject project,
       Func<DiscoveredTest, Task> onDiscovered,
+      OperationControl control,
       CancellationToken ct);
 
   /// <summary>
@@ -29,6 +31,7 @@ public interface ITestAdapter
       ValidatedDotnetProject project,
       IReadOnlyList<string> nativeIds,
       Func<TestRunResult, Task> onResult,
+      OperationControl control,
       CancellationToken ct);
 
   /// <summary>
@@ -39,5 +42,6 @@ public interface ITestAdapter
       ValidatedDotnetProject project,
       IReadOnlyList<string> nativeIds,
       Func<TestRunResult, Task> onResult,
+      OperationControl control,
       CancellationToken ct);
 }

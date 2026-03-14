@@ -45,6 +45,13 @@ public class TestRunnerController(TestRunnerService service) : BaseController
     { throw new LocalRpcException(ex.Message) { ErrorCode = -32001 }; }
   }
 
+  [JsonRpcMethod("testrunner/cancel")]
+  public async Task CancelAsync(CancellationToken ct)
+  {
+    try { await service.CancelAsync(ct); }
+    catch { }
+  }
+
   // Read-only — no lock, returns immediately from DetailStore
   [JsonRpcMethod("testrunner/getResults", UseSingleObjectParameterDeserialization = true)]
   public GetResultsResult GetResults(NodeRequest request) =>
