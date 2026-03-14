@@ -89,6 +89,17 @@ public sealed class VsTestAdapter(
     var wrapper = EnsureWrapper();
     control.RegisterKill(() => KillWrapperAsync(wrapper));
 
+    using var runCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+    var runToken = runCts.Token;
+
+    var debugStopped = 0;
+    void OnDebugStopped()
+    {
+      if (Interlocked.Exchange(ref debugStopped, 1) == 1) return;
+      try { runCts.Cancel(); } catch { }
+      try { wrapper.CancelTestRun(); } catch { /* best effort */ }
+    }
+
     var channel = Channel.CreateUnbounded<TestRunResult>();
 
     // Re-discover to get TestCase objects needed by VSTest run API
@@ -116,14 +127,20 @@ public sealed class VsTestAdapter(
       loggerFactory.CreateLogger<VsTestAdapter>().LogDebug(ex, "Failed to read runsettings file (ignored)");
     }
 
+
     var runTask = Task.Run(() =>
     {
       try
       {
         if (attachDebugger)
-          wrapper.RunTestsWithCustomTestHost(toRun, runSettings, DefaultOptions, null, runHandler, CreateDebuggerLauncher(project));
+        {
+          var launcher = CreateDebuggerLauncher(project, OnDebugStopped);
+          wrapper.RunTestsWithCustomTestHost(toRun, runSettings, DefaultOptions, null, runHandler, launcher);
+        }
         else
+        {
           wrapper.RunTests(toRun, runSettings, DefaultOptions, null, runHandler);
+        }
       }
       catch (Exception ex)
       {
@@ -133,17 +150,26 @@ public sealed class VsTestAdapter(
       {
         channel.Writer.TryComplete();
       }
-    }, ct);
+    }, runToken);
 
-    await using var _ = ct.Register(() =>
+    await using var registration = runToken.Register(() =>
     {
       try { wrapper.CancelTestRun(); } catch { /* best effort */ }
     });
 
-    await foreach (var result in channel.Reader.ReadAllAsync(ct))
-      await onResult(result);
+    try
+    {
+      await foreach (var result in channel.Reader.ReadAllAsync(runToken))
+      {
+        await onResult(result);
+      }
 
-    await runTask;
+      await runTask;
+    }
+    catch (Exception ex) when (Volatile.Read(ref debugStopped) == 1 && IsVsTestDisconnectOnAbort(ex))
+    {
+      throw new OperationCanceledException("Debug session ended", ex, runToken);
+    }
   }
 
   private VsTestConsoleWrapper EnsureWrapper()
@@ -160,10 +186,20 @@ public sealed class VsTestAdapter(
     return Path.Join(sdk.ToList()[0].MSBuildPath, "vstest.console.dll");
   }
 
-  private DebuggerTestHostLauncher CreateDebuggerLauncher(ValidatedDotnetProject project) =>
+  private DebuggerTestHostLauncher CreateDebuggerLauncher(
+      ValidatedDotnetProject project,
+      Action onStopped) =>
     new(async (pid, ct) =>
     {
-      var session = await debugOrchestrator.StartClientDebugSessionAsync(project.ProjectFullPath, new(project.ProjectFullPath, project.TargetFramework, null, null), debugStrategyFactory.CreateStandardAttachStrategy(pid), ct);
+      var session = await debugOrchestrator.StartClientDebugSessionAsync(
+          project.ProjectFullPath,
+          new(project.ProjectFullPath, project.TargetFramework, null, null),
+          debugStrategyFactory.CreateStandardAttachStrategy(pid),
+          ct);
+
+      session.Stopped += onStopped;
+      if (session.StoppedTask.IsCompleted) onStopped();
+
       await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
       await session.ProcessStarted;
       //We add a delay to ensure the client is ready #gh785
@@ -172,6 +208,28 @@ public sealed class VsTestAdapter(
       // await session.WaitForConfigurationDoneAsync();
       return true;
     });
+
+  private static bool IsVsTestDisconnectOnAbort(Exception ex)
+  {
+    while (true)
+    {
+      if (ex is AggregateException { InnerExceptions.Count: 1 } agg)
+      {
+        ex = agg.InnerExceptions[0];
+        continue;
+      }
+
+      if (ex is ChannelClosedException { InnerException: not null } cc)
+      {
+        ex = cc.InnerException!;
+        continue;
+      }
+
+      break;
+    }
+
+    return ex is OperationCanceledException or ObjectDisposedException or InvalidOperationException;
+  }
 
   public ValueTask DisposeAsync()
   {
