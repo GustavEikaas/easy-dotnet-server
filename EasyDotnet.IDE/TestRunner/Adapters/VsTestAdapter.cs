@@ -1,3 +1,4 @@
+using System.IO.Abstractions;
 using System.Threading.Channels;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.BuildServer.Contracts;
@@ -6,6 +7,7 @@ using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.TestRunner.Adapters.VSTest;
 using EasyDotnet.IDE.TestRunner.Lock;
 using EasyDotnet.IDE.TestRunner.Models;
+using EasyDotnet.Infrastructure.Settings;
 using Microsoft.Extensions.Logging;
 using Microsoft.TestPlatform.VsTestConsole.TranslationLayer;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Client;
@@ -23,6 +25,8 @@ public sealed class VsTestAdapter(
     IEditorService editorService,
     IDebugStrategyFactory debugStrategyFactory,
     IDebugOrchestrator debugOrchestrator,
+    IFileSystem fileSystem,
+    SettingsService settingsService,
     ILoggerFactory loggerFactory) : ITestAdapter, IAsyncDisposable
 {
   private static readonly TestPlatformOptions DefaultOptions = new()
@@ -98,20 +102,28 @@ public sealed class VsTestAdapter(
 
     var runHandler = new TestRunHandler(channel.Writer, loggerFactory.CreateLogger<TestRunHandler>());
 
-    //TODO: add runsettings
-    // var project = await GetProject(projectPath, targetFrameworkMoniker, configuration, token);
-    //
-    // var runSettingsFile = settingsService.GetProjectRunSettings(projectPath!);
-    // var runSettings = runSettingsFile is not null ? fileSystem.File.ReadAllText(runSettingsFile) : null;
+    string? runSettings = null;
+    try
+    {
+      var runSettingsFile = settingsService.GetProjectRunSettings(project.ProjectFullPath);
+      if (!string.IsNullOrWhiteSpace(runSettingsFile) && fileSystem.File.Exists(runSettingsFile))
+      {
+        runSettings = fileSystem.File.ReadAllText(runSettingsFile);
+      }
+    }
+    catch (Exception ex)
+    {
+      loggerFactory.CreateLogger<VsTestAdapter>().LogDebug(ex, "Failed to read runsettings file (ignored)");
+    }
 
     var runTask = Task.Run(() =>
     {
       try
       {
         if (attachDebugger)
-          wrapper.RunTestsWithCustomTestHost(toRun, null, DefaultOptions, null, runHandler, CreateDebuggerLauncher(project));
+          wrapper.RunTestsWithCustomTestHost(toRun, runSettings, DefaultOptions, null, runHandler, CreateDebuggerLauncher(project));
         else
-          wrapper.RunTests(toRun, null, DefaultOptions, null, runHandler);
+          wrapper.RunTests(toRun, runSettings, DefaultOptions, null, runHandler);
       }
       catch (Exception ex)
       {

@@ -30,7 +30,6 @@ public class TestRunnerService(
   private CancellationTokenSource? _operationCts;
   private OperationControl? _operationControl;
   private long _operationId;
-  private string? _operationName;
   private OperationStage _operationStage = OperationStage.Idle;
 
   private enum OperationStage
@@ -270,7 +269,7 @@ public class TestRunnerService(
 
   public async Task CancelAsync(CancellationToken ct)
   {
-    (OperationStage Stage, long Id, string? Name, CancellationTokenSource Cts, OperationControl Control)? snap;
+    (OperationStage Stage, long Id, CancellationTokenSource Cts, OperationControl Control)? snap;
 
     lock (_opSync)
     {
@@ -278,7 +277,7 @@ public class TestRunnerService(
         return;
 
       // Snapshot for use outside the lock.
-      snap = (_operationStage, _operationId, _operationName, _operationCts, _operationControl);
+      snap = (_operationStage, _operationId, _operationCts, _operationControl);
 
       // Transition (1st cancel => cancelling, 2nd => killing)
       _operationStage = _operationStage switch
@@ -289,7 +288,7 @@ public class TestRunnerService(
       };
     }
 
-    var (stage, operationId, operationName, cts, control) = snap!.Value;
+    var (stage, operationId, cts, control) = snap!.Value;
 
     if (stage == OperationStage.Running)
     {
@@ -327,7 +326,6 @@ public class TestRunnerService(
           _operationCts = null;
           _operationControl = null;
           _operationId = 0;
-          _operationName = null;
           _operationStage = OperationStage.Idle;
         }
       }
@@ -845,7 +843,6 @@ public class TestRunnerService(
       _operationCts = opCts;
       _operationControl = control;
       _operationId = token.OperationId;
-      _operationName = token.OperationName;
       _operationStage = OperationStage.Running;
     }
   }
@@ -862,7 +859,6 @@ public class TestRunnerService(
       _operationCts = null;
       _operationControl = null;
       _operationId = 0;
-      _operationName = null;
       _operationStage = OperationStage.Idle;
     }
 
@@ -871,14 +867,11 @@ public class TestRunnerService(
 
   private async Task ResetTransientNodesAsync(long? operationId = null, bool markCancelled = false)
   {
-    var transient = new HashSet<string> { "Building", "Discovering", "Running", "Debugging", "Queued", "Cancelling" };
-    var cancellable = new HashSet<string> { "Running", "Debugging", "Queued", "Cancelling" };
-
     foreach (var node in registry.GetAll())
     {
-      if (registry.GetLastStatus(node.Id) is not { } s || !transient.Contains(s)) continue;
+      if (registry.GetLastStatusKind(node.Id) is not { } kind || !kind.IsTransient()) continue;
 
-      if (markCancelled && cancellable.Contains(s))
+      if (markCancelled && kind.IsCancellable())
       {
         await dispatcher.SendStatusAsync(node.Id, new TestNodeStatus.Cancelled(), node.AvailableActions, operationId: operationId);
       }
@@ -900,19 +893,19 @@ public class TestRunnerService(
     {
       if (node.Type is not (NodeType.TestMethod or NodeType.Subcase)) continue;
 
-      var status = registry.GetLastStatus(node.Id);
+      var status = registry.GetLastStatusKind(node.Id);
       switch (status)
       {
-        case "Passed":
+        case TestNodeStatusKind.Passed:
           passed++;
           break;
-        case "Failed":
+        case TestNodeStatusKind.Failed:
           failed++;
           break;
-        case "Skipped":
+        case TestNodeStatusKind.Skipped:
           skipped++;
           break;
-        case "Cancelled":
+        case TestNodeStatusKind.Cancelled:
           cancelled++;
           break;
       }

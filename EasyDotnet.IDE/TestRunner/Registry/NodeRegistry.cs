@@ -9,9 +9,7 @@ public class NodeRegistry
   private readonly ConcurrentDictionary<string, string> _stableToNative = new();
   private readonly ConcurrentDictionary<string, string> _nativeToStable = new();
 
-  // Last status type string sent for each node — used to suppress duplicate notifications.
-  // Stored as the discriminated union type name, e.g. "Running", "Passed", "Failed".
-  private readonly ConcurrentDictionary<string, string?> _lastStatus = new();
+  private readonly ConcurrentDictionary<string, TestNodeStatusKind?> _lastStatus = new();
 
   /// <summary>
   /// Upserts a node. If nativeId is provided, registers the bidirectional ID mapping.
@@ -33,8 +31,8 @@ public class NodeRegistry
   /// </summary>
   public bool SetLastStatus(string stableId, TestNodeStatus? status)
   {
-    var key = status?.GetType().Name;
-    var previous = _lastStatus.GetOrAdd(stableId, (string?)null);
+    var key = status?.Kind;
+    var previous = _lastStatus.GetOrAdd(stableId, (TestNodeStatusKind?)null);
 
     if (previous == key)
       return false; // unchanged — suppress
@@ -43,7 +41,7 @@ public class NodeRegistry
     return true; // changed — send
   }
 
-  public string? GetLastStatus(string stableId) =>
+  public TestNodeStatusKind? GetLastStatusKind(string stableId) =>
       _lastStatus.TryGetValue(stableId, out var s) ? s : null;
 
   public TestNode? Get(string stableId) =>

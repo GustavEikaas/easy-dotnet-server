@@ -2,13 +2,9 @@ using System.Collections.Concurrent;
 
 namespace EasyDotnet.IDE.TestRunner.Lock;
 
-/// <summary>
-/// Per-operation hook registry so the service can escalate from cancel (CTS) to kill (hard stop).
-/// Adapters register kill actions for any external resources (processes, wrappers, sockets).
-/// </summary>
 public sealed class OperationControl
 {
-  private readonly ConcurrentBag<Func<Task>> _killActions = new();
+  private readonly ConcurrentBag<Func<Task>> _killActions = [];
   private int _killed;
 
   public void RegisterKill(Func<Task> killAction)

@@ -4,11 +4,6 @@ public class GlobalOperationLock
 {
   private readonly SemaphoreSlim _semaphore = new(1, 1);
   private readonly object _sync = new();
-
-  // Monotonic operation id counter.
-  // Used to:
-  // 1) tag every acquired token with a unique id for stale-update gating, and
-  // 2) invalidate any in-flight token on ForceReleaseIfHeld() so it can't double-release.
   private long _operationIdCounter;
   private long _currentOperationId;
 
@@ -35,10 +30,6 @@ public class GlobalOperationLock
   public bool IsLocked => _semaphore.CurrentCount == 0;
   public string? CurrentOperationName { get; private set; }
 
-  /// <summary>
-  /// Best-effort recovery: makes the lock acquirable again even if the current operation is hung.
-  /// Invalidates the current operationId so stale tokens cannot double-release.
-  /// </summary>
   public void ForceReleaseIfHeld()
   {
     lock (_sync)
@@ -66,7 +57,7 @@ public class GlobalOperationLock
       CurrentOperationName = operationName;
     }
 
-    return new OperationToken(opId, operationName, rpcCancellationToken, operationCancellationToken, Release);
+    return new OperationToken(opId, rpcCancellationToken, operationCancellationToken, Release);
   }
 
   private void Release(long operationId)
