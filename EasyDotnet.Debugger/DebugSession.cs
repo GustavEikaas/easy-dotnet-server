@@ -1,3 +1,4 @@
+using System.Threading;
 using EasyDotnet.Debugger.Session;
 
 namespace EasyDotnet.Debugger;
