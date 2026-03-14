@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
+using EasyDotnet.IDE.TestRunner.Adapters.MTP;
 using EasyDotnet.IDE.TestRunner.Adapters.MTP.RPC.Models;
 using EasyDotnet.IDE.TestRunner.Adapters.MTP.RPC.Requests;
 using EasyDotnet.IDE.TestRunner.Adapters.MTP.RPC.Response;
@@ -122,16 +123,19 @@ public sealed class MtpClient : IAsyncDisposable
     var channel = Channel.CreateUnbounded<TestNodeUpdate>();
     _server.RegisterStreamListener(runId, channel.Writer);
 
-#pragma warning disable CA2016
     var rpcTask = Task.Run(async () =>
     {
       try
       {
-        await _jsonRpc.InvokeWithParameterObjectAsync<DiscoveryResponse>(rpcMethod, requestObject, CancellationToken.None);
+        await _jsonRpc.InvokeWithParameterObjectAsync<DiscoveryResponse>(rpcMethod, requestObject, cancellationToken);
       }
       catch (Exception ex) when (ex is not OperationCanceledException)
       {
-        _logger.LogError(ex, "MTP RPC {Method} faulted for run {RunId}", rpcMethod, runId);
+        if (MtpRunHandling.IsDisconnectException(ex))
+          _logger.LogWarning(ex, "MTP RPC {Method} disconnected for run {RunId}", rpcMethod, runId);
+        else
+          _logger.LogError(ex, "MTP RPC {Method} faulted for run {RunId}", rpcMethod, runId);
+
         channel.Writer.TryComplete(ex);
       }
       finally
@@ -140,9 +144,8 @@ public sealed class MtpClient : IAsyncDisposable
         _server.RemoveStreamListener(runId);
       }
     });
-#pragma warning restore CA2016
 
-    await using var _ = cancellationToken.Register(async () =>
+    await using var registration = cancellationToken.Register(async () =>
     {
       try
       {
@@ -162,6 +165,12 @@ public sealed class MtpClient : IAsyncDisposable
 
     await foreach (var node in channel.Reader.ReadAllAsync(CancellationToken.None))
       yield return node;
+
+    if (cancellationToken.IsCancellationRequested)
+    {
+      _ = rpcTask.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
+      yield break;
+    }
 
     try { await rpcTask; }
     catch (OperationCanceledException) { }
