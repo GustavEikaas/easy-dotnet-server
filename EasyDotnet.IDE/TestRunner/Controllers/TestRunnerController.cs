@@ -24,7 +24,7 @@ public class TestRunnerController(TestRunnerService service) : BaseController
   [JsonRpcMethod("testrunner/run", UseSingleObjectParameterDeserialization = true)]
   public async Task<OperationResult> RunAsync(NodeRequest request, CancellationToken ct)
   {
-    try { return await service.RunAsync(request.Id, ct); }
+    try { return await service.RunAsync(request.Id, request.Source, ct); }
     catch (InvalidOperationException ex) when (ex.Message.Contains("already in progress"))
     { throw new LocalRpcException(ex.Message) { ErrorCode = -32001 }; }
   }
@@ -32,7 +32,7 @@ public class TestRunnerController(TestRunnerService service) : BaseController
   [JsonRpcMethod("testrunner/debug", UseSingleObjectParameterDeserialization = true)]
   public async Task<OperationResult> DebugAsync(NodeRequest request, CancellationToken ct)
   {
-    try { return await service.DebugAsync(request.Id, ct); }
+    try { return await service.DebugAsync(request.Id, request.Source, ct); }
     catch (InvalidOperationException ex) when (ex.Message.Contains("already in progress"))
     { throw new LocalRpcException(ex.Message) { ErrorCode = -32001 }; }
   }
@@ -60,4 +60,4 @@ public class TestRunnerController(TestRunnerService service) : BaseController
 }
 
 public record InitializeRequest(string SolutionPath);
-public record NodeRequest(string Id);
+public record NodeRequest(string Id, string? Source = null);

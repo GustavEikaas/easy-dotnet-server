@@ -1,5 +1,7 @@
+using EasyDotnet.Application.Interfaces;
 using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.IDE.BuildHost;
+using EasyDotnet.IDE.Notifications;
 using EasyDotnet.IDE.TestRunner.Adapters;
 using EasyDotnet.IDE.TestRunner.Analysis;
 using EasyDotnet.IDE.TestRunner.Dispatch;
@@ -21,6 +23,7 @@ public class TestRunnerService(
     OperationExecutor executor,
     AdapterResolver adapterResolver,
     WorkspaceBuildHostManager buildHost,
+    IClientService clientService,
     ILogger<TestRunnerService> logger)
 {
   public async Task QuickDiscoverAsync(string solutionPath, CancellationToken ct)
@@ -208,11 +211,11 @@ public class TestRunnerService(
     }
   }
 
-  public async Task<OperationResult> RunAsync(string nodeId, CancellationToken ct)
-      => await ExecuteOnNodeAsync(nodeId, "run", debug: false, ct);
+  public async Task<OperationResult> RunAsync(string nodeId, string? source, CancellationToken ct)
+      => await ExecuteOnNodeAsync(nodeId, "run", debug: false, source, ct);
 
-  public async Task<OperationResult> DebugAsync(string nodeId, CancellationToken ct)
-      => await ExecuteOnNodeAsync(nodeId, "debug", debug: true, ct);
+  public async Task<OperationResult> DebugAsync(string nodeId, string? source, CancellationToken ct)
+      => await ExecuteOnNodeAsync(nodeId, "debug", debug: true, source, ct);
 
   public async Task<OperationResult> InvalidateAsync(string nodeId, CancellationToken ct)
   {
@@ -386,7 +389,7 @@ public class TestRunnerService(
   }
 
   private async Task<OperationResult> ExecuteOnNodeAsync(
-      string nodeId, string opName, bool debug, CancellationToken ct)
+      string nodeId, string opName, bool debug, string? source, CancellationToken ct)
   {
     using var token = operationLock.TryAcquire(opName, ct)
         ?? throw new InvalidOperationException("Operation already in progress");
@@ -395,12 +398,12 @@ public class TestRunnerService(
         ?? throw new KeyNotFoundException($"Node {nodeId} not found");
 
     return node.Type is NodeType.Solution
-        ? await ExecuteMultiProjectAsync(nodeId, node, token, debug)
-        : await ExecuteSingleProjectAsync(nodeId, node, token, debug);
+        ? await ExecuteMultiProjectAsync(nodeId, node, token, debug, source)
+        : await ExecuteSingleProjectAsync(nodeId, node, token, debug, source);
   }
 
   private async Task<OperationResult> ExecuteMultiProjectAsync(
-      string nodeId, TestNode node, OperationToken token, bool debug)
+      string nodeId, TestNode node, OperationToken token, bool debug, string? source)
   {
     try
     {
@@ -504,6 +507,8 @@ public class TestRunnerService(
           TotalPassed: passed, TotalFailed: failed,
           TotalSkipped: skipped, TotalCancelled: cancelled));
 
+      await MaybeNotifyFinishedAsync(source, passed, failed, skipped, cancelled, token.Ct);
+
       return new OperationResult(Success: failed == 0 && failedProjectIds.Count == 0);
     }
     catch (OperationCanceledException)
@@ -515,7 +520,7 @@ public class TestRunnerService(
   }
 
   private async Task<OperationResult> ExecuteSingleProjectAsync(
-      string nodeId, TestNode node, OperationToken token, bool debug)
+      string nodeId, TestNode node, OperationToken token, bool debug, string? source)
   {
     var projectId = node.ProjectId
         ?? throw new InvalidOperationException($"Node {nodeId} has no project");
@@ -570,6 +575,8 @@ public class TestRunnerService(
           TotalPassed: passed, TotalFailed: failed,
           TotalSkipped: skipped, TotalCancelled: cancelled));
 
+      await MaybeNotifyFinishedAsync(source, passed, failed, skipped, cancelled, token.Ct);
+
       return new OperationResult(Success: failed == 0);
     }
     catch (OperationCanceledException)
@@ -593,6 +600,39 @@ public class TestRunnerService(
           OverallStatus: OverallStatus.Running,
           TotalTests: registry.GetLeafCount(), TotalRunning: 0,
           TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0);
+
+  private static string NormalizeSource(string? source) =>
+      string.IsNullOrWhiteSpace(source) ? "buffer" : source;
+
+  private async Task MaybeNotifyFinishedAsync(
+      string? source,
+      int passed,
+      int failed,
+      int skipped,
+      int cancelled,
+      CancellationToken ct)
+  {
+    if (clientService.ClientOptions?.EnableOsNotifications != true) return;
+    if (NormalizeSource(source) == "buffer") return;
+
+    var total = passed + failed + skipped + cancelled;
+    if (total == 0) return;
+
+    bool visible;
+    try
+    {
+      visible = await dispatcher.IsTestRunnerVisibleAsync(ct);
+    }
+    catch (Exception ex)
+    {
+      logger.LogDebug(ex, "Failed to query testrunner/isVisible (ignored)");
+      return;
+    }
+
+    if (visible) return;
+
+    OsNotify.TryNotifyTestRunFinished(logger, passed, failed, skipped, cancelled);
+  }
 
   private TestRunnerStatus BuildIdleStatus() =>
       new(IsLoading: false, CurrentOperation: null,
