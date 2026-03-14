@@ -13,7 +13,8 @@ public enum TestNodeStatusKind
   Passed,
   Failed,
   BuildFailed,
-  Skipped
+  Skipped,
+  Faulted
 }
 
 public static class TestNodeStatusKindExtensions

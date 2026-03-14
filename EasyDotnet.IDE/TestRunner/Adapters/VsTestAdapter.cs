@@ -1,4 +1,5 @@
 using System.IO.Abstractions;
+using System.Threading;
 using System.Threading.Channels;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.BuildServer.Contracts;
@@ -35,6 +36,8 @@ public sealed class VsTestAdapter(
     SkipDefaultAdapters = false
   };
 
+  private readonly SemaphoreSlim _gate = new(1, 1);
+
   private VsTestConsoleWrapper? _wrapper;
 
   public async Task DiscoverAsync(
@@ -43,17 +46,25 @@ public sealed class VsTestAdapter(
       OperationControl control,
       CancellationToken ct)
   {
-    var wrapper = EnsureWrapper();
-    control.RegisterKill(() => KillWrapperAsync(wrapper));
-
-    using var _ = ct.Register(() =>
+    await _gate.WaitAsync(ct);
+    try
     {
-      try { wrapper.CancelDiscovery(); } catch { /* best effort */ }
-    });
+      var wrapper = EnsureWrapper();
+      control.RegisterKill(() => KillWrapperAsync(wrapper));
 
-    var handler = new StreamingDiscoveryHandler(onDiscovered, loggerFactory);
-    wrapper.DiscoverTests([project.TargetPath], null, DefaultOptions, null, handler);
-    await handler.Completion;
+      using var _ = ct.Register(() =>
+      {
+        try { wrapper.CancelDiscovery(); } catch { /* best effort */ }
+      });
+
+      var handler = new StreamingDiscoveryHandler(onDiscovered, loggerFactory);
+      wrapper.DiscoverTests([project.TargetPath], null, DefaultOptions, null, handler);
+      await handler.Completion;
+    }
+    finally
+    {
+      _gate.Release();
+    }
   }
 
   public async Task RunAsync(
@@ -86,89 +97,109 @@ public sealed class VsTestAdapter(
       OperationControl control,
       CancellationToken ct)
   {
-    var wrapper = EnsureWrapper();
-    control.RegisterKill(() => KillWrapperAsync(wrapper));
-
-    using var runCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-    var runToken = runCts.Token;
-
-    var debugStopped = 0;
-    void OnDebugStopped()
-    {
-      if (Interlocked.Exchange(ref debugStopped, 1) == 1) return;
-      try { runCts.Cancel(); } catch { }
-      try { wrapper.CancelTestRun(); } catch { /* best effort */ }
-    }
-
-    var channel = Channel.CreateUnbounded<TestRunResult>();
-
-    // Re-discover to get TestCase objects needed by VSTest run API
-    var discoveryHandler = new TestDiscoveryHandler(loggerFactory.CreateLogger<TestDiscoveryHandler>());
-    wrapper.DiscoverTests([project.TargetPath], null, DefaultOptions, null, discoveryHandler);
-    var toRun = discoveryHandler.TestCases
-        .Where(x => nativeGuids.Contains(x.Id))
-        .ToList();
-
-    if (toRun.Count == 0) return;
-
-    var runHandler = new TestRunHandler(channel.Writer, loggerFactory.CreateLogger<TestRunHandler>());
-
-    string? runSettings = null;
+    await _gate.WaitAsync(ct);
     try
     {
-      var runSettingsFile = settingsService.GetProjectRunSettings(project.ProjectFullPath);
-      if (!string.IsNullOrWhiteSpace(runSettingsFile) && fileSystem.File.Exists(runSettingsFile))
+      var wrapper = EnsureWrapper();
+      control.RegisterKill(() => KillWrapperAsync(wrapper));
+
+      using var runCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+      var runToken = runCts.Token;
+
+      var debugStopped = 0;
+      void OnDebugStopped()
       {
-        runSettings = fileSystem.File.ReadAllText(runSettingsFile);
+        if (Interlocked.Exchange(ref debugStopped, 1) == 1) return;
+        try { runCts.Cancel(); } catch { }
+        try { wrapper.CancelTestRun(); } catch { /* best effort */ }
       }
-    }
-    catch (Exception ex)
-    {
-      loggerFactory.CreateLogger<VsTestAdapter>().LogDebug(ex, "Failed to read runsettings file (ignored)");
-    }
 
+      var channel = Channel.CreateUnbounded<TestRunResult>();
 
-    var runTask = Task.Run(() =>
-    {
+      // Re-discover to get TestCase objects needed by VSTest run API.
+      var discoveryHandler = new TestDiscoveryHandler(loggerFactory.CreateLogger<TestDiscoveryHandler>());
+      wrapper.DiscoverTests([project.TargetPath], null, DefaultOptions, null, discoveryHandler);
+
+      var toRun = discoveryHandler.TestCases
+          .Where(x => nativeGuids.Contains(x.Id))
+          .ToList();
+
+      if (toRun.Count == 0) return;
+
+      var runHandler = new TestRunHandler(channel.Writer, loggerFactory.CreateLogger<TestRunHandler>());
+
+      string? runSettings = null;
       try
       {
-        if (attachDebugger)
+        var runSettingsFile = settingsService.GetProjectRunSettings(project.ProjectFullPath);
+        if (!string.IsNullOrWhiteSpace(runSettingsFile) && fileSystem.File.Exists(runSettingsFile))
         {
-          var launcher = CreateDebuggerLauncher(project, OnDebugStopped);
-          wrapper.RunTestsWithCustomTestHost(toRun, runSettings, DefaultOptions, null, runHandler, launcher);
-        }
-        else
-        {
-          wrapper.RunTests(toRun, runSettings, DefaultOptions, null, runHandler);
+          runSettings = fileSystem.File.ReadAllText(runSettingsFile);
         }
       }
       catch (Exception ex)
       {
-        channel.Writer.TryComplete(ex);
+        loggerFactory.CreateLogger<VsTestAdapter>().LogDebug(ex, "Failed to read runsettings file (ignored)");
+      }
+
+      var runTask = Task.Run(() =>
+      {
+        try
+        {
+          if (attachDebugger)
+          {
+            var launcher = CreateDebuggerLauncher(project, OnDebugStopped);
+            wrapper.RunTestsWithCustomTestHost(toRun, runSettings, DefaultOptions, null, runHandler, launcher);
+          }
+          else
+          {
+            wrapper.RunTests(toRun, runSettings, DefaultOptions, null, runHandler);
+          }
+        }
+        catch (Exception ex)
+        {
+          channel.Writer.TryComplete(ex);
+        }
+        finally
+        {
+          channel.Writer.TryComplete();
+        }
+      }, runToken);
+
+      await using var registration = runToken.Register(() =>
+      {
+        try { wrapper.CancelTestRun(); } catch { /* best effort */ }
+      });
+
+      try
+      {
+        await foreach (var result in channel.Reader.ReadAllAsync(runToken))
+          await onResult(result);
+
+        await runTask;
+      }
+      catch (Exception ex) when (Volatile.Read(ref debugStopped) == 1 && IsVsTestDisconnectOnAbort(ex))
+      {
+        throw new OperationCanceledException("Debug session ended", ex, runToken);
       }
       finally
       {
-        channel.Writer.TryComplete();
+        if (runToken.IsCancellationRequested && !runTask.IsCompleted)
+        {
+          try { wrapper.CancelTestRun(); } catch { }
+
+          var finished = await Task.WhenAny(runTask, Task.Delay(TimeSpan.FromSeconds(2)));
+          if (!ReferenceEquals(finished, runTask))
+          {
+            await KillWrapperAsync(wrapper);
+            _ = await Task.WhenAny(runTask, Task.Delay(TimeSpan.FromSeconds(2)));
+          }
+        }
       }
-    }, runToken);
-
-    await using var registration = runToken.Register(() =>
-    {
-      try { wrapper.CancelTestRun(); } catch { /* best effort */ }
-    });
-
-    try
-    {
-      await foreach (var result in channel.Reader.ReadAllAsync(runToken))
-      {
-        await onResult(result);
-      }
-
-      await runTask;
     }
-    catch (Exception ex) when (Volatile.Read(ref debugStopped) == 1 && IsVsTestDisconnectOnAbort(ex))
+    finally
     {
-      throw new OperationCanceledException("Debug session ended", ex, runToken);
+      _gate.Release();
     }
   }
 

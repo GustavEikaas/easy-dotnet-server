@@ -59,6 +59,11 @@ public abstract record TestNodeStatus
     public override TestNodeStatusKind Kind => TestNodeStatusKind.Failed;
   }
 
+  public sealed record Faulted(string Message) : TestNodeStatus
+  {
+    public override TestNodeStatusKind Kind => TestNodeStatusKind.Faulted;
+  }
+
   public sealed record BuildFailed : TestNodeStatus
   {
     public override TestNodeStatusKind Kind => TestNodeStatusKind.BuildFailed;

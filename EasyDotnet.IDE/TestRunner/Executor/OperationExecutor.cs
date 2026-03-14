@@ -254,6 +254,9 @@ public class OperationExecutor(
     var adapter = adapterResolver.Resolve(project);
     var leafIds = leafNodes.Select(n => n.Id).ToHashSet();
 
+    var expectedNativeIds = nativeIds.ToHashSet(StringComparer.Ordinal);
+    var seenNativeIds = new HashSet<string>(StringComparer.Ordinal);
+
     async Task OnResult(TestRunResult result)
     {
       var stableId = registry.GetStableId(result.NativeId);
@@ -262,6 +265,9 @@ public class OperationExecutor(
         logger.LogWarning("Received result for unknown native ID {NativeId}", result.NativeId);
         return;
       }
+
+      if (!seenNativeIds.Add(result.NativeId)) return;
+      expectedNativeIds.Remove(result.NativeId);
 
       detailStore.Set(stableId, new TestDetail(
           Outcome: result.Outcome,
@@ -293,6 +299,50 @@ public class OperationExecutor(
       await adapter.DebugAsync(project, nativeIds, OnResult, control, token.Ct);
     else
       await adapter.RunAsync(project, nativeIds, OnResult, control, token.Ct);
+
+    if (!token.Ct.IsCancellationRequested && expectedNativeIds.Count > 0)
+    {
+      logger.LogError(
+        "Run completed without reporting all results for {NodeId}. Expected={Expected} Seen={Seen} Missing={Missing}",
+        nodeId,
+        nativeIds.Count,
+        seenNativeIds.Count,
+        expectedNativeIds.Count);
+
+      foreach (var missingNativeId in expectedNativeIds)
+      {
+        var stableId = registry.GetStableId(missingNativeId);
+        if (stableId is null)
+        {
+          logger.LogWarning("Missing native ID {NativeId} has no stable mapping", missingNativeId);
+          continue;
+        }
+
+        detailStore.Set(stableId, new TestDetail(
+            Outcome: "failed",
+            ErrorMessage: ["Test never reported status"],
+            DurationMs: null,
+            Frames: [],
+            FailingFrame: null,
+            Stdout: []));
+
+        counter.Record("failed");
+        var (running, passed, failed, skipped, cancelled) = counter.Snapshot();
+        await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
+            IsLoading: true,
+            CurrentOperation: debug ? "Debugging" : "Running",
+            OverallStatus: debug ? OverallStatus.Debugging : OverallStatus.Running,
+            TotalTests: counter.TotalTests,
+            TotalRunning: running,
+            TotalPassed: passed,
+            TotalFailed: failed,
+            TotalSkipped: skipped,
+            TotalCancelled: cancelled), operationId: token.OperationId);
+
+        await dispatcher.SendStatusAsync(stableId, new TestNodeStatus.Faulted("Test never reported status"), operationId: token.OperationId);
+        await BubbleStatusAsync(stableId, leafIds, token.OperationId);
+      }
+    }
 
     return counter;
   }

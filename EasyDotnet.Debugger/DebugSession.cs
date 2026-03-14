@@ -8,15 +8,10 @@ public class DebugSession : IAsyncDisposable
   private readonly DebugSessionCoordinator _coordinator;
   private int _stoppedRaised;
 
-  /// <summary>
-  /// Fires when the debug session begins shutting down (e.g. DAP client disconnect / dap.exit).
-  /// </summary>
   public event Action? Stopped;
 
   public Task Completion => _coordinator.Completion;
   public Task DisposalStarted => _coordinator.DisposalStarted;
-
-  /// <summary>Alias for <see cref="DisposalStarted"/> with a clearer name for consumers.</summary>
   public Task StoppedTask => _coordinator.DisposalStarted;
 
   public Task ProcessStarted => _coordinator.ProcessStarted;

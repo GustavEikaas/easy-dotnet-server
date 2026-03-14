@@ -98,8 +98,6 @@ public sealed class MtpAdapter(
         .Select(id => new RunRequestNode(id, ""))
         .ToArray();
 
-    // If the editor stops debugging (dap.exit), proactively stop the test run.
-    // We still want already-finished tests to report results.
     var debugSessionEnded = 0;
     using var streamCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
