@@ -235,9 +235,24 @@ public sealed class ProcessHandle : IProcessHandle, IDisposable
     }
 
     KillSafe(_process);
-    _process.WaitForExit();
-    _exitCode = _process.ExitCode;
-    _process.Dispose();
+
+    try
+    {
+      if (!_process.WaitForExit(2000))
+      {
+        KillSafe(_process);
+        _process.WaitForExit(2000);
+      }
+    }
+    catch
+    {
+    }
+
+    try { _exitCode = _process.HasExited ? _process.ExitCode : -1; }
+    catch { _exitCode = -1; }
+
+    try { _process.Dispose(); }
+    catch { }
   }
 
   public async Task WriteInputAsync(string input)

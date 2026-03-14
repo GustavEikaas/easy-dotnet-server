@@ -41,6 +41,12 @@
 
 ## TestRunnerController
 
+### `testrunner/cancel`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+
+**Returns:** `Task`
+
 ### `testrunner/debug`
 | Parameter | Type | Optional |
 |-----------|------|----------|

@@ -26,129 +26,169 @@ public class TestRunnerService(
     IClientService clientService,
     ILogger<TestRunnerService> logger)
 {
-  public async Task QuickDiscoverAsync(string solutionPath, CancellationToken ct)
+  private readonly object _opSync = new();
+  private CancellationTokenSource? _operationCts;
+  private OperationControl? _operationControl;
+  private long _operationId;
+  private OperationStage _operationStage = OperationStage.Idle;
+
+  private enum OperationStage
   {
-    using var token = operationLock.TryAcquire("quickDiscover", ct);
-    if (token is null) return;
-
-    registry.Clear();
-    detailStore.ClearAll();
-    await adapterResolver.InvalidateAllAsync();
-
-    var solutionName = Path.GetFileName(solutionPath);
-    var solutionId = NodeIdBuilder.Solution(solutionName);
-    var solutionNode = new TestNode(
-        Id: solutionId, DisplayName: solutionName,
-        ParentId: null, FilePath: solutionPath,
-        SignatureLine: null, BodyStartLine: null, EndLine: null,
-        Type: new NodeType.Solution(), ProjectId: null,
-        AvailableActions: [TestAction.Run, TestAction.Invalidate]);
-    registry.Register(solutionNode);
-    await dispatcher.SendRegisterTestAsync(solutionNode);
-
-    var testProjects = await buildHost.GetTestProjectsFromSolutionAsync(solutionPath, ct: token.Ct);
-
-    await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
-        IsLoading: true, CurrentOperation: "Discovering",
-        OverallStatus: OverallStatus.Discovering,
-        TotalTests: 0, TotalRunning: 0,
-        TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
-
-    var discoverTasks = testProjects.Select(project =>
-        executor.DiscoverProjectAsync(project, solutionId, token));
-
-    await Task.WhenAll(discoverTasks);
-
-    await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
-        IsLoading: false, CurrentOperation: null,
-        OverallStatus: OverallStatus.Idle,
-        TotalTests: registry.GetLeafCount(), TotalRunning: 0,
-        TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
+    Idle,
+    Running,
+    Cancelling,
+    Killing
   }
 
-  public async Task<InitializeResult> InitializeAsync(string solutionPath, CancellationToken ct)
+  public async Task QuickDiscoverAsync(string solutionPath, CancellationToken ct)
   {
-    using var token = await operationLock.WaitAcquireAsync("initialize", ct);
+    var opCts = new CancellationTokenSource();
+    var control = new OperationControl();
 
-    var solutionName = Path.GetFileName(solutionPath);
-    var solutionId = NodeIdBuilder.Solution(solutionName);
-
-    if (!registry.Exists(solutionId))
+    using var token = operationLock.TryAcquire("quickDiscover", ct, opCts.Token);
+    if (token is null)
     {
-      var solutionNode = new TestNode(
-          Id: solutionId,
-          DisplayName: solutionName,
-          ParentId: null,
-          FilePath: solutionPath,
-          SignatureLine: null, BodyStartLine: null, EndLine: null,
-          Type: new NodeType.Solution(),
-          ProjectId: null,
-          AvailableActions: [TestAction.Run, TestAction.Invalidate]);
-      registry.Register(solutionNode);
-      await dispatcher.SendRegisterTestAsync(solutionNode);
+      opCts.Dispose();
+      return;
     }
 
-    await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
-        IsLoading: true, CurrentOperation: "Restoring",
-        OverallStatus: OverallStatus.Building,
-        TotalTests: registry.GetLeafCount(), TotalRunning: 0,
-        TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
+    TrackOperationStart(token, opCts, control);
 
     try
     {
-      await foreach (var result in buildHost.RestoreNugetPackagesAsync(
-          new RestoreRequest([solutionPath]), token.Ct))
-      {
-        if (!result.Success)
-          logger.LogWarning("Restore failed for {Path}: {Error}", result.ProjectPath, result.ErrorMessage);
-      }
-    }
-    catch (Exception ex)
-    {
-      logger.LogWarning(ex, "Optimistic restore failed — continuing anyway");
-    }
+      registry.Clear();
+      detailStore.ClearAll();
+      await adapterResolver.InvalidateAllAsync();
 
-    var testProjects = await buildHost.GetTestProjectsFromSolutionAsync(solutionPath, ct: token.Ct);
+      var solutionName = Path.GetFileName(solutionPath);
+      var solutionId = NodeIdBuilder.Solution(solutionName);
+      var solutionNode = new TestNode(
+          Id: solutionId, DisplayName: solutionName,
+          ParentId: null, FilePath: solutionPath,
+          SignatureLine: null, BodyStartLine: null, EndLine: null,
+          Type: new NodeType.Solution(), ProjectId: null,
+          AvailableActions: [TestAction.Run, TestAction.Invalidate]);
+      registry.Register(solutionNode);
+      await dispatcher.SendRegisterTestAsync(solutionNode, token.OperationId);
 
-    var projectsByPath = testProjects
-        .GroupBy(p => p.ProjectFullPath, StringComparer.OrdinalIgnoreCase)
-        .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+      var testProjects = await buildHost.GetTestProjectsFromSolutionAsync(solutionPath, ct: token.Ct);
 
-    var needsBuild = projectsByPath.Values
-        .SelectMany(variants => variants)
-        .Where(project =>
-        {
-          var projectId = NodeIdBuilder.Project(solutionId, project.ProjectName, project.TargetFramework ?? "");
-          return !registry.HasDescendants(projectId);
-        })
-        .GroupBy(p => p.ProjectFullPath, StringComparer.OrdinalIgnoreCase)
-        .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+      await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
+          IsLoading: true, CurrentOperation: "Discovering",
+          OverallStatus: OverallStatus.Discovering,
+          TotalTests: 0, TotalRunning: 0,
+          TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0), token.OperationId);
 
-    if (needsBuild.Count == 0)
-    {
+      var discoverTasks = testProjects.Select(project =>
+          executor.DiscoverProjectAsync(project, solutionId, control, token));
+
+      await Task.WhenAll(discoverTasks);
+
+      token.Ct.ThrowIfCancellationRequested();
+
       await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
           IsLoading: false, CurrentOperation: null,
           OverallStatus: OverallStatus.Idle,
           TotalTests: registry.GetLeafCount(), TotalRunning: 0,
-          TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
-      return new InitializeResult(Success: true);
+          TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0), token.OperationId);
     }
+    catch (OperationCanceledException)
+    {
+      await ResetTransientNodesAsync(token.OperationId, markCancelled: true);
+      await dispatcher.SendRunnerStatusAsync(BuildCancelledStatus(), token.OperationId);
+    }
+    finally
+    {
+      TrackOperationEnd(token);
+    }
+  }
 
-    await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
-        IsLoading: true, CurrentOperation: "Building",
-        OverallStatus: OverallStatus.Building,
-        TotalTests: registry.GetLeafCount(), TotalRunning: 0,
-        TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
+  public async Task<InitializeResult> InitializeAsync(string solutionPath, CancellationToken ct)
+  {
+    var opCts = new CancellationTokenSource();
+    var control = new OperationControl();
 
-    var buildRequest = new BatchBuildRequest(
-        ProjectPaths: [.. needsBuild.Keys],
-        Configuration: null);
+    using var token = await operationLock.WaitAcquireAsync("initialize", ct, opCts.Token);
+    TrackOperationStart(token, opCts, control);
 
-
-    var discoverTasks = new List<Task>();
+    var solutionName = Path.GetFileName(solutionPath);
+    var solutionId = NodeIdBuilder.Solution(solutionName);
 
     try
     {
+      if (!registry.Exists(solutionId))
+      {
+        var solutionNode = new TestNode(
+            Id: solutionId,
+            DisplayName: solutionName,
+            ParentId: null,
+            FilePath: solutionPath,
+            SignatureLine: null, BodyStartLine: null, EndLine: null,
+            Type: new NodeType.Solution(),
+            ProjectId: null,
+            AvailableActions: [TestAction.Run, TestAction.Invalidate]);
+        registry.Register(solutionNode);
+        await dispatcher.SendRegisterTestAsync(solutionNode, token.OperationId);
+      }
+
+      await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
+          IsLoading: true, CurrentOperation: "Restoring",
+          OverallStatus: OverallStatus.Building,
+          TotalTests: registry.GetLeafCount(), TotalRunning: 0,
+          TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0), token.OperationId);
+
+      try
+      {
+        await foreach (var result in buildHost.RestoreNugetPackagesAsync(
+            new RestoreRequest([solutionPath]), token.Ct))
+        {
+          if (!result.Success)
+            logger.LogWarning("Restore failed for {Path}: {Error}", result.ProjectPath, result.ErrorMessage);
+        }
+      }
+      catch (Exception ex)
+      {
+        logger.LogWarning(ex, "Optimistic restore failed — continuing anyway");
+      }
+
+      var testProjects = await buildHost.GetTestProjectsFromSolutionAsync(solutionPath, ct: token.Ct);
+
+      var projectsByPath = testProjects
+          .GroupBy(p => p.ProjectFullPath, StringComparer.OrdinalIgnoreCase)
+          .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+
+      var needsBuild = projectsByPath.Values
+          .SelectMany(variants => variants)
+          .Where(project =>
+          {
+            var projectId = NodeIdBuilder.Project(solutionId, project.ProjectName, project.TargetFramework ?? "");
+            return !registry.HasDescendants(projectId);
+          })
+          .GroupBy(p => p.ProjectFullPath, StringComparer.OrdinalIgnoreCase)
+          .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+
+      if (needsBuild.Count == 0)
+      {
+        await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
+            IsLoading: false, CurrentOperation: null,
+            OverallStatus: OverallStatus.Idle,
+            TotalTests: registry.GetLeafCount(), TotalRunning: 0,
+            TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0), token.OperationId);
+        return new InitializeResult(Success: true);
+      }
+
+      await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
+          IsLoading: true, CurrentOperation: "Building",
+          OverallStatus: OverallStatus.Building,
+          TotalTests: registry.GetLeafCount(), TotalRunning: 0,
+          TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0), token.OperationId);
+
+      var buildRequest = new BatchBuildRequest(
+          ProjectPaths: [.. needsBuild.Keys],
+          Configuration: null);
+
+      var discoverTasks = new List<Task>();
+
       await foreach (var result in buildHost.BatchBuildAsync(buildRequest, token.Ct))
       {
         token.Ct.ThrowIfCancellationRequested();
@@ -161,7 +201,7 @@ public class TestRunnerService(
           foreach (var project in tfmVariants)
           {
             var projectId = NodeIdBuilder.Project(solutionId, project.ProjectName, project.TargetFramework ?? "");
-            await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.Building());
+            await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.Building(), operationId: token.OperationId);
           }
           continue;
         }
@@ -172,7 +212,10 @@ public class TestRunnerService(
 
           if (result.Success != true)
           {
-            await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.BuildFailed(), [TestAction.GetBuildErrors, TestAction.Invalidate, TestAction.Debug, TestAction.Run]);
+            await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.BuildFailed(),
+                [TestAction.GetBuildErrors, TestAction.Invalidate, TestAction.Debug, TestAction.Run],
+                token.OperationId);
+
             if (result.Output?.Diagnostics is { } initDiags && initDiags.Length > 0)
             {
               buildErrorStore.Set(projectId, initDiags);
@@ -180,8 +223,9 @@ public class TestRunnerService(
 
             continue;
           }
+
           buildErrorStore.Clear(projectId);
-          discoverTasks.Add(executor.DiscoverProjectAsync(project, solutionId, token));
+          discoverTasks.Add(executor.DiscoverProjectAsync(project, solutionId, control, token));
         }
       }
 
@@ -191,23 +235,29 @@ public class TestRunnerService(
           IsLoading: true, CurrentOperation: "Discovering",
           OverallStatus: OverallStatus.Discovering,
           TotalTests: registry.GetLeafCount(), TotalRunning: 0,
-          TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
+          TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0), token.OperationId);
 
       await Task.WhenAll(discoverTasks);
+
+      token.Ct.ThrowIfCancellationRequested();
 
       await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
           IsLoading: false, CurrentOperation: null,
           OverallStatus: OverallStatus.Idle,
           TotalTests: registry.GetLeafCount(), TotalRunning: 0,
-          TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
+          TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0), token.OperationId);
 
       return new InitializeResult(Success: true);
     }
     catch (OperationCanceledException)
     {
-      await ResetTransientNodesAsync();
-      await dispatcher.SendRunnerStatusAsync(BuildIdleStatus());
+      await ResetTransientNodesAsync(token.OperationId, markCancelled: true);
+      await dispatcher.SendRunnerStatusAsync(BuildCancelledStatus(), token.OperationId);
       return new InitializeResult(Success: false);
+    }
+    finally
+    {
+      TrackOperationEnd(token);
     }
   }
 
@@ -217,26 +267,115 @@ public class TestRunnerService(
   public async Task<OperationResult> DebugAsync(string nodeId, string? source, CancellationToken ct)
       => await ExecuteOnNodeAsync(nodeId, "debug", debug: true, source, ct);
 
+  public async Task CancelAsync(CancellationToken ct)
+  {
+    (OperationStage Stage, long Id, CancellationTokenSource Cts, OperationControl Control)? snap;
+
+    lock (_opSync)
+    {
+      if (_operationCts is null || _operationControl is null || _operationId == 0 || _operationStage == OperationStage.Idle)
+        return;
+
+      // Snapshot for use outside the lock.
+      snap = (_operationStage, _operationId, _operationCts, _operationControl);
+
+      // Transition (1st cancel => cancelling, 2nd => killing)
+      _operationStage = _operationStage switch
+      {
+        OperationStage.Running => OperationStage.Cancelling,
+        OperationStage.Cancelling => OperationStage.Killing,
+        _ => _operationStage
+      };
+    }
+
+    var (stage, operationId, cts, control) = snap!.Value;
+
+    if (stage == OperationStage.Running)
+    {
+      await dispatcher.SendRunnerStatusAsync(BuildCancellingStatus(), operationId);
+      try { cts.Cancel(); } catch { }
+      return;
+    }
+
+    if (stage != OperationStage.Cancelling)
+    {
+      // Already killing — idempotent.
+      return;
+    }
+
+    // Cancelling → escalate to kill.
+    await dispatcher.SendRunnerStatusAsync(BuildKillingStatus(), operationId);
+    try { cts.Cancel(); } catch { }
+
+    // Hard stop external resources (best effort).
+    try { await control.KillAsync(timeout: TimeSpan.FromSeconds(2)); } catch { }
+
+    // Prefer the "normal" path: let the operation unwind and release the semaphore.
+    var released = await WaitForUnlockAsync(operationId, timeout: TimeSpan.FromSeconds(2), ct);
+
+    if (!released)
+    {
+      // Last resort: recover usability even if the underlying operation is stuck.
+      operationLock.ForceReleaseIfHeld();
+
+      // Clear local state so new operations can proceed immediately.
+      lock (_opSync)
+      {
+        if (_operationId == operationId)
+        {
+          _operationCts = null;
+          _operationControl = null;
+          _operationId = 0;
+          _operationStage = OperationStage.Idle;
+        }
+      }
+    }
+
+    // Reset UI regardless of operationId gating.
+    await ResetTransientNodesAsync(operationId: null, markCancelled: true);
+    await dispatcher.SendRunnerStatusAsync(BuildKilledStatus(), operationId: null);
+
+    return;
+  }
+
+  private async Task<bool> WaitForUnlockAsync(long operationId, TimeSpan timeout, CancellationToken ct)
+  {
+    var stopAt = DateTime.UtcNow + timeout;
+    while (DateTime.UtcNow < stopAt)
+    {
+      if (!operationLock.IsLocked) return true;
+      if (operationLock.CurrentOperationId != operationId) return true;
+      await Task.Delay(50, ct);
+    }
+
+    return !operationLock.IsLocked || operationLock.CurrentOperationId != operationId;
+  }
+
   public async Task<OperationResult> InvalidateAsync(string nodeId, CancellationToken ct)
   {
-    using var token = operationLock.TryAcquire("invalidate", ct)
+    var opCts = new CancellationTokenSource();
+    var control = new OperationControl();
+
+    using var token = operationLock.TryAcquire("invalidate", ct, opCts.Token)
         ?? throw new InvalidOperationException("Operation already in progress");
 
-    await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus("Invalidating"));
-    await dispatcher.SendBatchStatusAsync(nodeId, null, registry);
-
-    var node = registry.Get(nodeId)
-        ?? throw new KeyNotFoundException($"Node {nodeId} not found");
-
-    var projectIds = node.Type is NodeType.Project
-        ? [nodeId]
-        : registry.GetDescendants(nodeId)
-            .Where(n => n.Type is NodeType.Project)
-            .Select(n => n.Id)
-            .ToList();
+    TrackOperationStart(token, opCts, control);
 
     try
     {
+      await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus("Invalidating", OverallStatus.Building), token.OperationId);
+      await dispatcher.SendBatchStatusAsync(nodeId, null, registry, operationId: token.OperationId);
+
+      var node = registry.Get(nodeId)
+          ?? throw new KeyNotFoundException($"Node {nodeId} not found");
+
+      var projectIds = node.Type is NodeType.Project
+          ? [nodeId]
+          : registry.GetDescendants(nodeId)
+              .Where(n => n.Type is NodeType.Project)
+              .Select(n => n.Id)
+              .ToList();
+
       var projectsByPath = new Dictionary<string, List<ValidatedDotnetProject>>(
           StringComparer.OrdinalIgnoreCase);
 
@@ -255,7 +394,7 @@ public class TestRunnerService(
 
       if (projectsByPath.Count == 0)
       {
-        await dispatcher.SendRunnerStatusAsync(BuildIdleStatus());
+        await dispatcher.SendRunnerStatusAsync(BuildIdleStatus(), token.OperationId);
         return new OperationResult(Success: true);
       }
 
@@ -277,7 +416,7 @@ public class TestRunnerService(
           foreach (var project in variants)
           {
             var pid = NodeIdBuilder.Project(node.ParentId ?? "", project.ProjectName, project.TargetFramework ?? "");
-            await dispatcher.SendStatusAsync(pid, new TestNodeStatus.Building());
+            await dispatcher.SendStatusAsync(pid, new TestNodeStatus.Building(), operationId: token.OperationId);
           }
           continue;
         }
@@ -287,31 +426,39 @@ public class TestRunnerService(
           var pid = NodeIdBuilder.Project(node.ParentId ?? "", project.ProjectName, project.TargetFramework ?? "");
           if (result.Success != true)
           {
-            await dispatcher.SendStatusAsync(pid, new TestNodeStatus.BuildFailed(), [TestAction.GetBuildErrors, TestAction.Invalidate, TestAction.Debug, TestAction.Run]);
+            await dispatcher.SendStatusAsync(pid, new TestNodeStatus.BuildFailed(),
+                [TestAction.GetBuildErrors, TestAction.Invalidate, TestAction.Debug, TestAction.Run],
+                token.OperationId);
+
             if (result.Output?.Diagnostics is { } invDiags && invDiags.Length > 0)
             {
               buildErrorStore.Set(pid, invDiags);
             }
             continue;
           }
+
           buildErrorStore.Clear(pid);
-          discoverTasks.Add(executor.DiscoverProjectAsync(project, node.ParentId ?? "", token));
+          discoverTasks.Add(executor.DiscoverProjectAsync(project, node.ParentId ?? "", control, token));
         }
       }
 
       token.Ct.ThrowIfCancellationRequested();
+      await Task.WhenAll(discoverTasks);
 
       token.Ct.ThrowIfCancellationRequested();
 
-      await Task.WhenAll(discoverTasks);
-      await dispatcher.SendRunnerStatusAsync(BuildIdleStatus());
+      await dispatcher.SendRunnerStatusAsync(BuildIdleStatus(), token.OperationId);
       return new OperationResult(Success: true);
     }
     catch (OperationCanceledException)
     {
-      await ResetTransientNodesAsync();
-      await dispatcher.SendRunnerStatusAsync(BuildIdleStatus());
+      await ResetTransientNodesAsync(token.OperationId, markCancelled: true);
+      await dispatcher.SendRunnerStatusAsync(BuildCancelledStatus(), token.OperationId);
       return new OperationResult(Success: false);
+    }
+    finally
+    {
+      TrackOperationEnd(token);
     }
   }
 
@@ -391,136 +538,158 @@ public class TestRunnerService(
   private async Task<OperationResult> ExecuteOnNodeAsync(
       string nodeId, string opName, bool debug, string? source, CancellationToken ct)
   {
-    using var token = operationLock.TryAcquire(opName, ct)
+    var opCts = new CancellationTokenSource();
+    var control = new OperationControl();
+
+    using var token = operationLock.TryAcquire(opName, ct, opCts.Token)
         ?? throw new InvalidOperationException("Operation already in progress");
 
-    var node = registry.Get(nodeId)
-        ?? throw new KeyNotFoundException($"Node {nodeId} not found");
+    TrackOperationStart(token, opCts, control);
 
-    return node.Type is NodeType.Solution
-        ? await ExecuteMultiProjectAsync(nodeId, node, token, debug, source)
-        : await ExecuteSingleProjectAsync(nodeId, node, token, debug, source);
-  }
-
-  private async Task<OperationResult> ExecuteMultiProjectAsync(
-      string nodeId, TestNode node, OperationToken token, bool debug, string? source)
-  {
     try
     {
-      var projectNodes = (node.Type is NodeType.Project
-              ? [node]
-              : registry.GetDescendants(nodeId).Where(n => n.Type is NodeType.Project))
-          .ToList();
+      var node = registry.Get(nodeId)
+          ?? throw new KeyNotFoundException($"Node {nodeId} not found");
 
-      if (projectNodes.Count == 0)
-      {
-        await dispatcher.SendRunnerStatusAsync(BuildIdleStatus());
-        return new OperationResult(Success: true);
-      }
-
-      var projects = (await Task.WhenAll(
-              projectNodes.Select(pn => ResolveProjectAsync(pn.Id, token.Ct))))
-          .Where(p => p is not null)
-          .Select(p => p!)
-          .ToList();
-
-      await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus("Building"));
-      foreach (var pn in projectNodes)
-        await dispatcher.SendStatusAsync(pn.Id, new TestNodeStatus.Building());
-
-      var projectsByPath = projects
-          .GroupBy(p => p.ProjectFullPath, StringComparer.OrdinalIgnoreCase)
-          .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
-
-      var failedProjectIds = new HashSet<string>();
-
-      await foreach (var result in buildHost.BatchBuildAsync(
-          new BatchBuildRequest([.. projectsByPath.Keys], Configuration: null), token.Ct))
-      {
-        token.Ct.ThrowIfCancellationRequested();
-        if (result.Kind != BatchBuildResultKind.Finished) { continue; }
-
-        foreach (var p in projectsByPath.GetValueOrDefault(result.ProjectPath) ?? [])
-        {
-          var pn = projectNodes.First(n => string.Equals(n.FilePath, p.ProjectFullPath, StringComparison.OrdinalIgnoreCase));
-          if (result.Success != true)
-          {
-            await dispatcher.SendStatusAsync(pn.Id, new TestNodeStatus.BuildFailed(), [TestAction.GetBuildErrors, TestAction.Invalidate, TestAction.Debug, TestAction.Run]);
-            failedProjectIds.Add(pn.Id);
-            if (result.Output?.Diagnostics is { } diags && diags.Length > 0)
-            {
-              buildErrorStore.Set(pn.Id, diags);
-            }
-
-          }
-          else
-          {
-            buildErrorStore.Clear(pn.Id);
-          }
-        }
-      }
-
-      token.Ct.ThrowIfCancellationRequested();
-
-      var runnableProjects = projects
-          .Where(p => !failedProjectIds.Contains(
-              projectNodes.First(n => string.Equals(n.FilePath, p.ProjectFullPath, StringComparison.OrdinalIgnoreCase)).Id))
-          .ToList();
-
-      if (runnableProjects.Count == 0)
-      {
-        await dispatcher.SendRunnerStatusAsync(BuildIdleStatus());
-        return new OperationResult(Success: failedProjectIds.Count == 0);
-      }
-
-      var totalLeafCount = runnableProjects
-          .Sum(p =>
-          {
-            var pn = projectNodes.First(n => string.Equals(
-          n.FilePath, p.ProjectFullPath, StringComparison.OrdinalIgnoreCase));
-            return registry.GetLeafDescendants(pn.Id).Count();
-          });
-
-      var sharedCounter = new RunProgressCounter(totalLeafCount);
-
-      await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
-          IsLoading: true,
-          CurrentOperation: debug ? "Debugging" : "Running",
-          OverallStatus: OverallStatus.Running,
-          TotalTests: sharedCounter.TotalTests,
-          TotalRunning: sharedCounter.TotalTests,
-          TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
-
-      var runTasks = runnableProjects
-          .Select(p =>
-          {
-            var pn = projectNodes.First(n => string.Equals(n.FilePath, p.ProjectFullPath, StringComparison.OrdinalIgnoreCase));
-            return executor.RunNodeAsync(pn.Id, p, token, debug, sharedCounter);
-          });
-      await Task.WhenAll(runTasks);
-
-      var (_, passed, failed, skipped, cancelled) = sharedCounter.Snapshot();
-      await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
-          IsLoading: false, CurrentOperation: null,
-          OverallStatus: failed > 0 ? OverallStatus.Failed : OverallStatus.Passed,
-          TotalTests: registry.GetLeafCount(), TotalRunning: 0,
-          TotalPassed: passed, TotalFailed: failed,
-          TotalSkipped: skipped, TotalCancelled: cancelled));
-
-      await MaybeNotifyFinishedAsync(source, passed, failed, skipped, cancelled, token.Ct);
-
-      return new OperationResult(Success: failed == 0 && failedProjectIds.Count == 0);
+      return node.Type is NodeType.Solution
+          ? await ExecuteMultiProjectAsync(nodeId, node, control, token, debug, source)
+          : await ExecuteSingleProjectAsync(nodeId, node, control, token, debug, source);
     }
     catch (OperationCanceledException)
     {
-      await ResetTransientNodesAsync();
-      await dispatcher.SendRunnerStatusAsync(BuildIdleStatus());
+      await ResetTransientNodesAsync(token.OperationId, markCancelled: true);
+      await dispatcher.SendRunnerStatusAsync(BuildCancelledStatus(), token.OperationId);
       return new OperationResult(Success: false);
+    }
+    finally
+    {
+      TrackOperationEnd(token);
     }
   }
 
+  private async Task<OperationResult> ExecuteMultiProjectAsync(
+      string nodeId,
+      TestNode node,
+      OperationControl control,
+      OperationToken token,
+      bool debug,
+      string? source)
+  {
+    var projectNodes = (node.Type is NodeType.Project
+            ? [node]
+            : registry.GetDescendants(nodeId).Where(n => n.Type is NodeType.Project))
+        .ToList();
+
+    if (projectNodes.Count == 0)
+    {
+      await dispatcher.SendRunnerStatusAsync(BuildIdleStatus(), token.OperationId);
+      return new OperationResult(Success: true);
+    }
+
+    var projects = (await Task.WhenAll(
+            projectNodes.Select(pn => ResolveProjectAsync(pn.Id, token.Ct))))
+        .Where(p => p is not null)
+        .Select(p => p!)
+        .ToList();
+
+    await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus("Building", OverallStatus.Building), token.OperationId);
+    foreach (var pn in projectNodes)
+      await dispatcher.SendStatusAsync(pn.Id, new TestNodeStatus.Building(), operationId: token.OperationId);
+
+    var projectsByPath = projects
+        .GroupBy(p => p.ProjectFullPath, StringComparer.OrdinalIgnoreCase)
+        .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+
+    var failedProjectIds = new HashSet<string>();
+
+    await foreach (var result in buildHost.BatchBuildAsync(
+        new BatchBuildRequest([.. projectsByPath.Keys], Configuration: null), token.Ct))
+    {
+      token.Ct.ThrowIfCancellationRequested();
+      if (result.Kind != BatchBuildResultKind.Finished) { continue; }
+
+      foreach (var p in projectsByPath.GetValueOrDefault(result.ProjectPath) ?? [])
+      {
+        var pn = projectNodes.First(n => string.Equals(n.FilePath, p.ProjectFullPath, StringComparison.OrdinalIgnoreCase));
+        if (result.Success != true)
+        {
+          await dispatcher.SendStatusAsync(pn.Id, new TestNodeStatus.BuildFailed(),
+              [TestAction.GetBuildErrors, TestAction.Invalidate, TestAction.Debug, TestAction.Run],
+              token.OperationId);
+
+          failedProjectIds.Add(pn.Id);
+          if (result.Output?.Diagnostics is { } diags && diags.Length > 0)
+          {
+            buildErrorStore.Set(pn.Id, diags);
+          }
+        }
+        else
+        {
+          buildErrorStore.Clear(pn.Id);
+        }
+      }
+    }
+
+    token.Ct.ThrowIfCancellationRequested();
+
+    var runnableProjects = projects
+        .Where(p => !failedProjectIds.Contains(
+            projectNodes.First(n => string.Equals(n.FilePath, p.ProjectFullPath, StringComparison.OrdinalIgnoreCase)).Id))
+        .ToList();
+
+    if (runnableProjects.Count == 0)
+    {
+      await dispatcher.SendRunnerStatusAsync(BuildIdleStatus(), token.OperationId);
+      return new OperationResult(Success: failedProjectIds.Count == 0);
+    }
+
+    var totalLeafCount = runnableProjects
+        .Sum(p =>
+        {
+          var pn = projectNodes.First(n => string.Equals(n.FilePath, p.ProjectFullPath, StringComparison.OrdinalIgnoreCase));
+          return registry.GetLeafDescendants(pn.Id).Count();
+        });
+
+    var sharedCounter = new RunProgressCounter(totalLeafCount);
+
+    await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
+        IsLoading: true,
+        CurrentOperation: debug ? "Debugging" : "Running",
+        OverallStatus: debug ? OverallStatus.Debugging : OverallStatus.Running,
+        TotalTests: sharedCounter.TotalTests,
+        TotalRunning: sharedCounter.TotalTests,
+        TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0), token.OperationId);
+
+    var runTasks = runnableProjects
+        .Select(p =>
+        {
+          var pn = projectNodes.First(n => string.Equals(n.FilePath, p.ProjectFullPath, StringComparison.OrdinalIgnoreCase));
+          return executor.RunNodeAsync(pn.Id, p, control, token, debug, sharedCounter);
+        });
+    await Task.WhenAll(runTasks);
+
+    token.Ct.ThrowIfCancellationRequested();
+
+    var (_, passed, failed, skipped, cancelled) = sharedCounter.Snapshot();
+    await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
+        IsLoading: false, CurrentOperation: null,
+        OverallStatus: failed > 0 ? OverallStatus.Failed : OverallStatus.Passed,
+        TotalTests: registry.GetLeafCount(), TotalRunning: 0,
+        TotalPassed: passed, TotalFailed: failed,
+        TotalSkipped: skipped, TotalCancelled: cancelled), token.OperationId);
+
+    await MaybeNotifyFinishedAsync(source, passed, failed, skipped, cancelled, token.Ct);
+
+    return new OperationResult(Success: failed == 0 && failedProjectIds.Count == 0);
+  }
+
   private async Task<OperationResult> ExecuteSingleProjectAsync(
-      string nodeId, TestNode node, OperationToken token, bool debug, string? source)
+      string nodeId,
+      TestNode node,
+      OperationControl control,
+      OperationToken token,
+      bool debug,
+      string? source)
   {
     var projectId = node.ProjectId
         ?? throw new InvalidOperationException($"Node {nodeId} has no project");
@@ -528,63 +697,60 @@ public class TestRunnerService(
     var project = await ResolveProjectAsync(projectId, token.Ct)
         ?? throw new InvalidOperationException($"Project {projectId} not found");
 
-    try
-    {
-      await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus("Building"));
-      await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.Building());
+    await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus("Building", OverallStatus.Building), token.OperationId);
+    await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.Building(), operationId: token.OperationId);
 
-      var buildFailed = false;
-      await foreach (var result in buildHost.BatchBuildAsync(
-          new BatchBuildRequest([project.ProjectFullPath], Configuration: null), token.Ct))
+    var buildFailed = false;
+    await foreach (var result in buildHost.BatchBuildAsync(
+        new BatchBuildRequest([project.ProjectFullPath], Configuration: null), token.Ct))
+    {
+      if (result.Kind == BatchBuildResultKind.Finished)
       {
-        if (result.Kind == BatchBuildResultKind.Finished)
+        if (result.Success != true)
         {
-          if (result.Success != true)
+          await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.BuildFailed(),
+              [TestAction.GetBuildErrors, TestAction.Invalidate, TestAction.Debug, TestAction.Run],
+              token.OperationId);
+
+          buildFailed = true;
+          if (result.Output?.Diagnostics is { } diags && diags.Length > 0)
           {
-            await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.BuildFailed(), [TestAction.GetBuildErrors, TestAction.Invalidate, TestAction.Debug, TestAction.Run]);
-            buildFailed = true;
-            if (result.Output?.Diagnostics is { } diags && diags.Length > 0)
-            {
-              buildErrorStore.Set(projectId, diags);
-            }
-          }
-          else
-          {
-            buildErrorStore.Clear(projectId);
+            buildErrorStore.Set(projectId, diags);
           }
         }
+        else
+        {
+          buildErrorStore.Clear(projectId);
+        }
       }
-
-      token.Ct.ThrowIfCancellationRequested();
-
-      if (buildFailed)
-      {
-        await dispatcher.SendRunnerStatusAsync(BuildIdleStatus());
-        return new OperationResult(Success: false);
-      }
-
-      await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus(debug ? "Debugging" : "Running"));
-
-      var counter = await executor.RunNodeAsync(nodeId, project, token, debug);
-      var (_, passed, failed, skipped, cancelled) = counter.Snapshot();
-
-      await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
-          IsLoading: false, CurrentOperation: null,
-          OverallStatus: failed > 0 ? OverallStatus.Failed : OverallStatus.Passed,
-          TotalTests: registry.GetLeafCount(), TotalRunning: 0,
-          TotalPassed: passed, TotalFailed: failed,
-          TotalSkipped: skipped, TotalCancelled: cancelled));
-
-      await MaybeNotifyFinishedAsync(source, passed, failed, skipped, cancelled, token.Ct);
-
-      return new OperationResult(Success: failed == 0);
     }
-    catch (OperationCanceledException)
+
+    token.Ct.ThrowIfCancellationRequested();
+
+    if (buildFailed)
     {
-      await ResetTransientNodesAsync();
-      await dispatcher.SendRunnerStatusAsync(BuildIdleStatus());
+      await dispatcher.SendRunnerStatusAsync(BuildIdleStatus(), token.OperationId);
       return new OperationResult(Success: false);
     }
+
+    await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus(debug ? "Debugging" : "Running", debug ? OverallStatus.Debugging : OverallStatus.Running), token.OperationId);
+
+    var counter = await executor.RunNodeAsync(nodeId, project, control, token, debug);
+
+    token.Ct.ThrowIfCancellationRequested();
+
+    var (_, passed, failed, skipped, cancelled) = counter.Snapshot();
+
+    await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
+        IsLoading: false, CurrentOperation: null,
+        OverallStatus: failed > 0 ? OverallStatus.Failed : OverallStatus.Passed,
+        TotalTests: registry.GetLeafCount(), TotalRunning: 0,
+        TotalPassed: passed, TotalFailed: failed,
+        TotalSkipped: skipped, TotalCancelled: cancelled), token.OperationId);
+
+    await MaybeNotifyFinishedAsync(source, passed, failed, skipped, cancelled, token.Ct);
+
+    return new OperationResult(Success: failed == 0);
   }
 
   private async Task<ValidatedDotnetProject?> ResolveProjectAsync(
@@ -595,9 +761,9 @@ public class TestRunnerService(
     return await buildHost.GetProjectAsync(node.FilePath, node.TargetFramework, ct: ct);
   }
 
-  private TestRunnerStatus BuildLoadingStatus(string operation) =>
+  private TestRunnerStatus BuildLoadingStatus(string operation, OverallStatus overallStatus) =>
       new(IsLoading: true, CurrentOperation: operation,
-          OverallStatus: OverallStatus.Running,
+          OverallStatus: overallStatus,
           TotalTests: registry.GetLeafCount(), TotalRunning: 0,
           TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0);
 
@@ -640,14 +806,112 @@ public class TestRunnerService(
           TotalTests: registry.GetLeafCount(), TotalRunning: 0,
           TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0);
 
-  private async Task ResetTransientNodesAsync()
+  private TestRunnerStatus BuildCancelledStatus()
   {
-    var transient = new HashSet<string> { "Building", "Discovering", "Running", "Debugging", "Cancelling" };
+    var (passed, failed, skipped, cancelled) = SnapshotLeafTotals();
+    return new TestRunnerStatus(
+        IsLoading: false, CurrentOperation: null,
+        OverallStatus: OverallStatus.Cancelled,
+        TotalTests: registry.GetLeafCount(), TotalRunning: 0,
+        TotalPassed: passed, TotalFailed: failed, TotalSkipped: skipped, TotalCancelled: cancelled);
+  }
+
+  private TestRunnerStatus BuildCancellingStatus() =>
+      new(IsLoading: true,
+          CurrentOperation: null,
+          OverallStatus: OverallStatus.Cancelling,
+          TotalTests: registry.GetLeafCount(), TotalRunning: 0,
+          TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0);
+
+  private TestRunnerStatus BuildKillingStatus() =>
+      new(IsLoading: true,
+          CurrentOperation: null,
+          OverallStatus: OverallStatus.Killing,
+          TotalTests: registry.GetLeafCount(), TotalRunning: 0,
+          TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0);
+
+  private TestRunnerStatus BuildKilledStatus() =>
+      new(IsLoading: false, CurrentOperation: null,
+          OverallStatus: OverallStatus.Killed,
+          TotalTests: registry.GetLeafCount(), TotalRunning: 0,
+          TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0);
+
+  private void TrackOperationStart(OperationToken token, CancellationTokenSource opCts, OperationControl control)
+  {
+    lock (_opSync)
+    {
+      _operationCts = opCts;
+      _operationControl = control;
+      _operationId = token.OperationId;
+      _operationStage = OperationStage.Running;
+    }
+  }
+
+  private void TrackOperationEnd(OperationToken token)
+  {
+    CancellationTokenSource? toDispose = null;
+
+    lock (_opSync)
+    {
+      if (_operationId != token.OperationId) return;
+
+      toDispose = _operationCts;
+      _operationCts = null;
+      _operationControl = null;
+      _operationId = 0;
+      _operationStage = OperationStage.Idle;
+    }
+
+    toDispose?.Dispose();
+  }
+
+  private async Task ResetTransientNodesAsync(long? operationId = null, bool markCancelled = false)
+  {
     foreach (var node in registry.GetAll())
     {
-      if (registry.GetLastStatus(node.Id) is { } s && transient.Contains(s))
-        await dispatcher.SendStatusAsync(node.Id, null);
+      if (registry.GetLastStatusKind(node.Id) is not { } kind || !kind.IsTransient()) continue;
+
+      if (markCancelled && kind.IsCancellable())
+      {
+        await dispatcher.SendStatusAsync(node.Id, new TestNodeStatus.Cancelled(), node.AvailableActions, operationId: operationId);
+      }
+      else
+      {
+        await dispatcher.SendStatusAsync(node.Id, null, node.AvailableActions, operationId: operationId);
+      }
     }
+  }
+
+  private (int Passed, int Failed, int Skipped, int Cancelled) SnapshotLeafTotals()
+  {
+    var passed = 0;
+    var failed = 0;
+    var skipped = 0;
+    var cancelled = 0;
+
+    foreach (var node in registry.GetAll())
+    {
+      if (node.Type is not (NodeType.TestMethod or NodeType.Subcase)) continue;
+
+      var status = registry.GetLastStatusKind(node.Id);
+      switch (status)
+      {
+        case TestNodeStatusKind.Passed:
+          passed++;
+          break;
+        case TestNodeStatusKind.Failed:
+          failed++;
+          break;
+        case TestNodeStatusKind.Skipped:
+          skipped++;
+          break;
+        case TestNodeStatusKind.Cancelled:
+          cancelled++;
+          break;
+      }
+    }
+
+    return (passed, failed, skipped, cancelled);
   }
 
   private static string FormatDuration(long ms) =>

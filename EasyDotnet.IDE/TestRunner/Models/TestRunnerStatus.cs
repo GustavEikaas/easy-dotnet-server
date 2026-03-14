@@ -27,6 +27,10 @@ public enum OverallStatus
   Discovering,
   Running,
   Debugging,
+  Cancelling,
+  Cancelled,
+  Killing,
+  Killed,
   Failed,
   Passed
 }

@@ -20,6 +20,8 @@ public sealed class MtpClient : IAsyncDisposable
   private readonly ILogger<MtpClient> _logger;
   public readonly int DebugeeProcessId;
 
+  private int _killedOrDisposed;
+
   private MtpClient(
       JsonRpc jsonRpc,
       TcpClient tcpClient,
@@ -165,14 +167,29 @@ public sealed class MtpClient : IAsyncDisposable
     catch (OperationCanceledException) { }
   }
 
+  public Task KillAsync()
+  {
+    if (Interlocked.Exchange(ref _killedOrDisposed, 1) == 1) return Task.CompletedTask;
+
+    try { _jsonRpc.Dispose(); } catch { }
+    try { _tcpClient.Dispose(); } catch { }
+    try { _processHandle.Kill(); } catch { }
+
+    return Task.CompletedTask;
+  }
+
   public async ValueTask DisposeAsync()
   {
     try { await _jsonRpc.NotifyWithParameterObjectAsync("exit", new object()); }
     catch (Exception ex) { _logger.LogWarning(ex, "MTP exit notification failed"); }
-    _jsonRpc.Dispose();
-    _tcpClient.Dispose();
-    _processHandle.WaitForExit();
-    _processHandle.Dispose();
+
+    await KillAsync();
+
+    try { await Task.WhenAny(_processHandle.WaitForExitAsync(), Task.Delay(2000)); }
+    catch { }
+
+    try { _processHandle.Dispose(); } catch { }
+
     GC.SuppressFinalize(this);
   }
 }
