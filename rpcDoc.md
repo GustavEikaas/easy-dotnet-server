@@ -42,7 +42,8 @@
 ## TestRunnerController
 
 ### `testrunner/cancel`
-_No parameters_
+| Parameter | Type | Optional |
+|-----------|------|----------|
 
 **Returns:** `Task`
 
