@@ -83,6 +83,7 @@ public sealed class MtpAdapter(
 
     await using var client = await clientFactory.CreateAsync(exe, ct);
     control.RegisterKill(() => client.KillAsync());
+
     var session = await debugOrchestrator.StartClientDebugSessionAsync(
       project.ProjectFullPath,
       new(project.ProjectFullPath, project.TargetFramework, null, null),
@@ -92,21 +93,32 @@ public sealed class MtpAdapter(
     await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
     await session.ProcessStarted;
     await Task.Delay(1000, ct);
+
     var filter = nativeIds
         .Select(id => new RunRequestNode(id, ""))
         .ToArray();
 
-    await foreach (var update in client.RunTestsAsync(filter, ct))
+    var debugSessionEnded = 0;
+    using var streamCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+
+    _ = Task.Run(async () =>
     {
-      TestRunResult? result;
-      try { result = update.ToTestRunResult(); }
-      catch (ArgumentOutOfRangeException ex)
+      try
       {
-        logger.LogError(ex, "Skipping result with unmapped MTP execution state for {Uid}", update.Node.Uid);
-        continue;
+        await Task.WhenAny(session.StoppedTask, session.Completion);
+        Interlocked.Exchange(ref debugSessionEnded, 1);
+        try { streamCts.Cancel(); } catch { }
       }
-      if (result is not null) await onResult(result);
-    }
+      catch { }
+    });
+
+    await MtpRunHandling.ForwardResultsOrCancelAsync(
+        client.RunTestsAsync(filter, streamCts.Token),
+        onResult,
+        logger,
+        abortRequested: () => Volatile.Read(ref debugSessionEnded) == 1,
+        expectedResultCount: nativeIds.Count,
+        ct: streamCts.Token);
   }
 
   private static string TransformDllPath(string dllPath)
