@@ -136,17 +136,24 @@ public class RunInTerminalStrategy(
 
     if (!string.IsNullOrWhiteSpace(launchUrl))
     {
-      try
+      if (Uri.TryCreate(launchUrl, UriKind.Absolute, out var absoluteUri))
       {
-        var uriBuilder = new UriBuilder(baseUrl);
-        var existingPath = uriBuilder.Path.TrimEnd('/');
-        var newPath = launchUrl.TrimStart('/');
-        uriBuilder.Path = $"{existingPath}/{newPath}";
-        fullUrl = uriBuilder.ToString();
+        fullUrl = absoluteUri.ToString();
       }
-      catch (UriFormatException ex)
+      else
       {
-        logger.LogWarning(ex, "Failed to parse the application URL: {Url}", baseUrl);
+        try
+        {
+          var uriBuilder = new UriBuilder(baseUrl);
+          var existingPath = uriBuilder.Path.TrimEnd('/');
+          var newPath = launchUrl.TrimStart('/');
+          uriBuilder.Path = $"{existingPath}/{newPath}";
+          fullUrl = uriBuilder.ToString();
+        }
+        catch (UriFormatException ex)
+        {
+          logger.LogWarning(ex, "Failed to parse the application URL: {Url}", baseUrl);
+        }
       }
     }
 
