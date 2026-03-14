@@ -900,6 +900,7 @@ public class TestRunnerService(
           passed++;
           break;
         case TestNodeStatusKind.Failed:
+        case TestNodeStatusKind.Faulted:
           failed++;
           break;
         case TestNodeStatusKind.Skipped:

@@ -35,6 +35,8 @@ public sealed class VsTestAdapter(
     SkipDefaultAdapters = false
   };
 
+  private readonly SemaphoreSlim _gate = new(1, 1);
+
   private VsTestConsoleWrapper? _wrapper;
 
   public async Task DiscoverAsync(
@@ -43,17 +45,25 @@ public sealed class VsTestAdapter(
       OperationControl control,
       CancellationToken ct)
   {
-    var wrapper = EnsureWrapper();
-    control.RegisterKill(() => KillWrapperAsync(wrapper));
-
-    using var _ = ct.Register(() =>
+    await _gate.WaitAsync(ct);
+    try
     {
-      try { wrapper.CancelDiscovery(); } catch { /* best effort */ }
-    });
+      var wrapper = EnsureWrapper();
+      control.RegisterKill(() => KillWrapperAsync(wrapper));
 
-    var handler = new StreamingDiscoveryHandler(onDiscovered, loggerFactory);
-    wrapper.DiscoverTests([project.TargetPath], null, DefaultOptions, null, handler);
-    await handler.Completion;
+      using var _ = ct.Register(() =>
+      {
+        try { wrapper.CancelDiscovery(); } catch { /* best effort */ }
+      });
+
+      var handler = new StreamingDiscoveryHandler(onDiscovered, loggerFactory);
+      wrapper.DiscoverTests([project.TargetPath], null, DefaultOptions, null, handler);
+      await handler.Completion;
+    }
+    finally
+    {
+      _gate.Release();
+    }
   }
 
   public async Task RunAsync(
@@ -86,64 +96,73 @@ public sealed class VsTestAdapter(
       OperationControl control,
       CancellationToken ct)
   {
-    var wrapper = EnsureWrapper();
-    control.RegisterKill(() => KillWrapperAsync(wrapper));
-
-    var channel = Channel.CreateUnbounded<TestRunResult>();
-
-    // Re-discover to get TestCase objects needed by VSTest run API
-    var discoveryHandler = new TestDiscoveryHandler(loggerFactory.CreateLogger<TestDiscoveryHandler>());
-    wrapper.DiscoverTests([project.TargetPath], null, DefaultOptions, null, discoveryHandler);
-    var toRun = discoveryHandler.TestCases
-        .Where(x => nativeGuids.Contains(x.Id))
-        .ToList();
-
-    if (toRun.Count == 0) return;
-
-    var runHandler = new TestRunHandler(channel.Writer, loggerFactory.CreateLogger<TestRunHandler>());
-
-    string? runSettings = null;
+    await _gate.WaitAsync(ct);
     try
     {
-      var runSettingsFile = settingsService.GetProjectRunSettings(project.ProjectFullPath);
-      if (!string.IsNullOrWhiteSpace(runSettingsFile) && fileSystem.File.Exists(runSettingsFile))
-      {
-        runSettings = fileSystem.File.ReadAllText(runSettingsFile);
-      }
-    }
-    catch (Exception ex)
-    {
-      loggerFactory.CreateLogger<VsTestAdapter>().LogDebug(ex, "Failed to read runsettings file (ignored)");
-    }
+      var wrapper = EnsureWrapper();
+      control.RegisterKill(() => KillWrapperAsync(wrapper));
 
-    var runTask = Task.Run(() =>
-    {
+      var channel = Channel.CreateUnbounded<TestRunResult>();
+
+      // Re-discover to get TestCase objects needed by VSTest run API
+      var discoveryHandler = new TestDiscoveryHandler(loggerFactory.CreateLogger<TestDiscoveryHandler>());
+      wrapper.DiscoverTests([project.TargetPath], null, DefaultOptions, null, discoveryHandler);
+
+      var toRun = discoveryHandler.TestCases
+          .Where(x => nativeGuids.Contains(x.Id))
+          .ToList();
+
+      if (toRun.Count == 0) return;
+
+      var runHandler = new TestRunHandler(channel.Writer, loggerFactory.CreateLogger<TestRunHandler>());
+
+      string? runSettings = null;
       try
       {
-        if (attachDebugger)
-          wrapper.RunTestsWithCustomTestHost(toRun, runSettings, DefaultOptions, null, runHandler, CreateDebuggerLauncher(project));
-        else
-          wrapper.RunTests(toRun, runSettings, DefaultOptions, null, runHandler);
+        var runSettingsFile = settingsService.GetProjectRunSettings(project.ProjectFullPath);
+        if (!string.IsNullOrWhiteSpace(runSettingsFile) && fileSystem.File.Exists(runSettingsFile))
+        {
+          runSettings = fileSystem.File.ReadAllText(runSettingsFile);
+        }
       }
       catch (Exception ex)
       {
-        channel.Writer.TryComplete(ex);
+        loggerFactory.CreateLogger<VsTestAdapter>().LogDebug(ex, "Failed to read runsettings file (ignored)");
       }
-      finally
+
+      var runTask = Task.Run(() =>
       {
-        channel.Writer.TryComplete();
-      }
-    }, ct);
+        try
+        {
+          if (attachDebugger)
+            wrapper.RunTestsWithCustomTestHost(toRun, runSettings, DefaultOptions, null, runHandler, CreateDebuggerLauncher(project));
+          else
+            wrapper.RunTests(toRun, runSettings, DefaultOptions, null, runHandler);
+        }
+        catch (Exception ex)
+        {
+          channel.Writer.TryComplete(ex);
+        }
+        finally
+        {
+          channel.Writer.TryComplete();
+        }
+      }, ct);
 
-    await using var _ = ct.Register(() =>
+      await using var _ = ct.Register(() =>
+      {
+        try { wrapper.CancelTestRun(); } catch { /* best effort */ }
+      });
+
+      await foreach (var result in channel.Reader.ReadAllAsync(ct))
+        await onResult(result);
+
+      await runTask;
+    }
+    finally
     {
-      try { wrapper.CancelTestRun(); } catch { /* best effort */ }
-    });
-
-    await foreach (var result in channel.Reader.ReadAllAsync(ct))
-      await onResult(result);
-
-    await runTask;
+      _gate.Release();
+    }
   }
 
   private VsTestConsoleWrapper EnsureWrapper()
