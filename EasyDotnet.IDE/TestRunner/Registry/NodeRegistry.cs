@@ -100,6 +100,31 @@ public class NodeRegistry
     }
   }
 
+  /// <summary>
+  /// Removes a node and all its descendants from the registry.
+  /// Returns the removed node IDs with descendants first and the root last.
+  /// </summary>
+  public List<string> RemoveSubtree(string rootId)
+  {
+    if (!Exists(rootId)) return [];
+
+    var removedIds = GetDescendants(rootId)
+        .Select(n => n.Id)
+        .ToList();
+
+    removedIds.Add(rootId);
+
+    foreach (var id in removedIds)
+    {
+      _nodes.TryRemove(id, out _);
+      _lastStatus.TryRemove(id, out _);
+      if (_stableToNative.TryRemove(id, out var native))
+        _nativeToStable.TryRemove(native, out _);
+    }
+
+    return removedIds;
+  }
+
   public int GetLeafCount() =>
       _nodes.Values.Count(n => n.Type is NodeType.TestMethod or NodeType.Subcase);
 

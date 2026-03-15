@@ -136,6 +136,24 @@ public class WorkspaceBuildHostManager(
     cache.Clear(CacheInvalidationReason.Restore);
   }
 
+  /// <summary>
+  /// Restores NuGet packages for all projects in a solution.
+  /// </summary>
+  public async IAsyncEnumerable<RestoreResult> RestoreNugetPackagesSolutionAsync(
+      string solutionPath,
+      [EnumeratorCancellation] CancellationToken ct = default)
+  {
+    var solutionProjects = await solutionService.GetProjectsFromSolutionFile(solutionPath, ct);
+    var projectPaths = solutionProjects.ConvertAll(x => x.AbsolutePath);
+
+    if (projectPaths.Count == 0) yield break;
+
+    await foreach (var result in RestoreNugetPackagesAsync(new RestoreRequest([.. projectPaths]), ct))
+    {
+      yield return result;
+    }
+  }
+
   public async IAsyncEnumerable<BatchBuildResult> BatchBuildAsync(
       BatchBuildRequest request,
       [EnumeratorCancellation] CancellationToken ct)
