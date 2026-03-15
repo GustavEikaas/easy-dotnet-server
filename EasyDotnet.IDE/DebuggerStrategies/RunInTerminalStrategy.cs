@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net.Sockets;
 using System.Text.Json;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Debugger;
@@ -16,6 +17,7 @@ public class RunInTerminalStrategy(
   string? launchProfileName,
   ILogger<RunInTerminalStrategy> logger,
   IStartupHookService startupHookService,
+  IHttpClientFactory httpClientFactory,
   ILaunchProfileService launchProfileService) : IDebugSessionStrategy
 {
   private DotnetProject? _project;
@@ -115,16 +117,14 @@ public class RunInTerminalStrategy(
   {
     logger.LogInformation("Resuming runtime via Startup Hook.");
     _hookSession?.Resume();
-    TryOpenBrowser();
+    _ = TryOpenBrowser();
   }
 
-  private void TryOpenBrowser()
+  private async Task TryOpenBrowser()
   {
     if (_activeProfile?.LaunchBrowser != true) return;
-
     var applicationUrls = _activeProfile.ApplicationUrl?.Split(';', StringSplitOptions.RemoveEmptyEntries);
     var baseUrl = applicationUrls?.FirstOrDefault();
-
     if (string.IsNullOrWhiteSpace(baseUrl))
     {
       logger.LogWarning("LaunchBrowser is true, but no ApplicationUrl was found in the active profile.");
@@ -133,7 +133,6 @@ public class RunInTerminalStrategy(
 
     var fullUrl = baseUrl;
     var launchUrl = _activeProfile.LaunchUrl;
-
     if (!string.IsNullOrWhiteSpace(launchUrl))
     {
       if (Uri.TryCreate(launchUrl, UriKind.Absolute, out var absoluteUri))
@@ -154,6 +153,34 @@ public class RunInTerminalStrategy(
         {
           logger.LogWarning(ex, "Failed to parse the application URL: {Url}", baseUrl);
         }
+      }
+    }
+
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    using var client = httpClientFactory.CreateClient();
+
+    while (!cts.Token.IsCancellationRequested)
+    {
+      try
+      {
+        await client.GetAsync(fullUrl, HttpCompletionOption.ResponseHeadersRead, cts.Token);
+        logger.LogInformation("Server at {Url} is live. Opening browser.", fullUrl);
+        break;
+      }
+      catch (OperationCanceledException)
+      {
+        logger.LogWarning("Server at {Url} did not respond within 5 seconds. Opening browser anyway.", fullUrl);
+        break;
+      }
+      catch (HttpRequestException ex) when (ex.InnerException is SocketException { SocketErrorCode: SocketError.ConnectionRefused })
+      {
+        logger.LogDebug("Server at {Url} not yet available, retrying...", fullUrl);
+        await Task.Delay(250, cts.Token).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+      }
+      catch (Exception ex)
+      {
+        logger.LogWarning(ex, "Could not reach {Url} before opening browser.", fullUrl);
+        break;
       }
     }
 
