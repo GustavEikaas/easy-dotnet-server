@@ -27,6 +27,14 @@ public class RunInTerminalStrategy(
   private StartupHookSession? _hookSession;
   private Process? _browserProcess;
 
+  private int _configurationDoneFlag;
+  private int _pidReceivedFlag;
+  private int _processConnectRequestPreparedFlag;
+  private int _resumeInvoked;
+
+  private static void SetFlag(ref int flag) => Interlocked.Exchange(ref flag, 1);
+  private static bool IsSet(ref int flag) => Interlocked.CompareExchange(ref flag, 0, 0) == 1;
+
   private readonly JsonSerializerOptions _jsonSerializerOptions = new()
   {
     WriteIndented = true,
@@ -71,6 +79,7 @@ public class RunInTerminalStrategy(
     logger.LogInformation("runInTerminal response from Neovim");
 
     _pid = await _hookSession.WaitForPidAsync();
+    SetFlag(ref _pidReceivedFlag);
     logger.LogInformation("Received attach PID {Pid} from Startup Hook", _pid);
 
     request.Type = "request";
@@ -81,6 +90,15 @@ public class RunInTerminalStrategy(
     {
       request.Arguments.Cwd = cwd;
     }
+
+    SetFlag(ref _processConnectRequestPreparedFlag);
+
+    logger.LogInformation(
+        "Prepared debug process-connect request (Pid: {Pid}). configurationDoneSeen={ConfigurationDoneSeen}",
+        _pid,
+        IsSet(ref _configurationDoneFlag));
+
+    TryResumeIfReady();
   }
 
   public Task<int>? GetProcessIdAsync() => Task.FromResult(_pid);
@@ -115,9 +133,41 @@ public class RunInTerminalStrategy(
 
   public void OnDebugSessionReady(DebugSession debugSession, IDebuggerProxy proxy)
   {
-    logger.LogInformation("Resuming runtime via Startup Hook.");
-    _hookSession?.Resume();
+    SetFlag(ref _configurationDoneFlag);
+
+    logger.LogInformation(
+        "ConfigurationDone observed. pidReceived={PidReceived}, requestPrepared={RequestPrepared}",
+        IsSet(ref _pidReceivedFlag),
+        IsSet(ref _processConnectRequestPreparedFlag));
+
+    TryResumeIfReady();
     _ = TryOpenBrowser();
+  }
+
+  private void TryResumeIfReady()
+  {
+    if (!IsSet(ref _configurationDoneFlag)
+        || !IsSet(ref _pidReceivedFlag)
+        || !IsSet(ref _processConnectRequestPreparedFlag)
+        || _hookSession is null)
+    {
+      return;
+    }
+
+    if (Interlocked.Exchange(ref _resumeInvoked, 1) == 1)
+    {
+      return;
+    }
+
+    try
+    {
+      logger.LogInformation("Resuming runtime via Startup Hook (Pid: {Pid}).", _pid);
+      _hookSession.Resume();
+    }
+    catch (Exception ex)
+    {
+      logger.LogError(ex, "Failed to resume runtime via Startup Hook.");
+    }
   }
 
   private async Task TryOpenBrowser()

@@ -40,7 +40,16 @@ public class DebuggerProcessHost(ILogger<DebuggerProcessHost> logger) : IDebugge
       Exited?.Invoke(sender, args);
     };
 
+    _process.ErrorDataReceived += (_, e) =>
+    {
+      if (!string.IsNullOrWhiteSpace(e.Data))
+      {
+        logger.LogInformation("netcoredbg stderr: {Line}", e.Data);
+      }
+    };
+
     _process.Start();
+    _process.BeginErrorReadLine();
     logger.LogInformation("Debugger process started (PID: {Pid})", _process.Id);
   }
 
