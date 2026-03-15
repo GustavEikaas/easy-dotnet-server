@@ -369,27 +369,27 @@ public class TestRunnerService(
       var node = registry.Get(nodeId)
           ?? throw new KeyNotFoundException($"Node {nodeId} not found");
 
-      var projectIds = node.Type is NodeType.Project
-          ? [nodeId]
-          : registry.GetDescendants(nodeId)
-              .Where(n => n.Type is NodeType.Project)
-              .Select(n => n.Id)
-              .ToList();
+      if (node.Type is NodeType.Solution)
+      {
+        return await InvalidateSolutionAsync(node, control, token);
+      }
+
+      if (node.Type is not NodeType.Project)
+      {
+        throw new InvalidOperationException($"Invalidate not supported for node type: {node.Type}");
+      }
+
+      var solutionNodeId = node.ParentId ?? throw new InvalidOperationException($"Project node {nodeId} has no parent solution");
 
       var projectsByPath = new Dictionary<string, List<ValidatedDotnetProject>>(
           StringComparer.OrdinalIgnoreCase);
 
-      foreach (var projectId in projectIds)
+      var project = await ResolveProjectAsync(nodeId, token.Ct);
+      if (project is not null)
       {
-        var project = await ResolveProjectAsync(projectId, token.Ct);
-        if (project is null) continue;
-
         await adapterResolver.InvalidateAsync(project.ProjectFullPath);
         buildHost.InvalidateCache(project.ProjectFullPath);
-
-        if (!projectsByPath.TryGetValue(project.ProjectFullPath, out var variants))
-          projectsByPath[project.ProjectFullPath] = variants = [];
-        variants.Add(project);
+        projectsByPath[project.ProjectFullPath] = [project];
       }
 
       if (projectsByPath.Count == 0)
@@ -413,17 +413,17 @@ public class TestRunnerService(
 
         if (result.Kind == BatchBuildResultKind.Started)
         {
-          foreach (var project in variants)
+          foreach (var p in variants)
           {
-            var pid = NodeIdBuilder.Project(node.ParentId ?? "", project.ProjectName, project.TargetFramework ?? "");
+            var pid = NodeIdBuilder.Project(solutionNodeId, p.ProjectName, p.TargetFramework ?? "");
             await dispatcher.SendStatusAsync(pid, new TestNodeStatus.Building(), operationId: token.OperationId);
           }
           continue;
         }
 
-        foreach (var project in variants)
+        foreach (var p in variants)
         {
-          var pid = NodeIdBuilder.Project(node.ParentId ?? "", project.ProjectName, project.TargetFramework ?? "");
+          var pid = NodeIdBuilder.Project(solutionNodeId, p.ProjectName, p.TargetFramework ?? "");
           if (result.Success != true)
           {
             await dispatcher.SendStatusAsync(pid, new TestNodeStatus.BuildFailed(),
@@ -438,7 +438,7 @@ public class TestRunnerService(
           }
 
           buildErrorStore.Clear(pid);
-          discoverTasks.Add(executor.DiscoverProjectAsync(project, node.ParentId ?? "", control, token));
+          discoverTasks.Add(executor.DiscoverProjectAsync(p, solutionNodeId, control, token));
         }
       }
 
@@ -460,6 +460,169 @@ public class TestRunnerService(
     {
       TrackOperationEnd(token);
     }
+  }
+
+  private async Task<OperationResult> InvalidateSolutionAsync(TestNode solutionNode, OperationControl control, OperationToken token)
+  {
+    if (solutionNode.FilePath is null)
+    {
+      throw new InvalidOperationException($"Solution node {solutionNode.Id} has no solution path");
+    }
+
+    var solutionNodeId = solutionNode.Id;
+    var solutionPath = solutionNode.FilePath;
+
+    await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus("Restoring", OverallStatus.Building), token.OperationId);
+
+    try
+    {
+      await foreach (var result in buildHost.RestoreNugetPackagesSolutionAsync(solutionPath, token.Ct))
+      {
+        if (!result.Success)
+        {
+          logger.LogWarning("Restore failed for {Path}: {Error}", result.ProjectPath, result.ErrorMessage);
+        }
+      }
+    }
+    catch (Exception ex)
+    {
+      logger.LogWarning(ex, "Optimistic restore failed — continuing anyway");
+    }
+
+    await adapterResolver.InvalidateAllAsync();
+
+    var testProjects = await buildHost.GetTestProjectsFromSolutionAsync(solutionPath, ct: token.Ct);
+
+    var desiredProjectIds = testProjects
+        .Select(p => NodeIdBuilder.Project(solutionNodeId, p.ProjectName, p.TargetFramework ?? ""))
+        .ToHashSet(StringComparer.Ordinal);
+
+    var existingProjectNodes = registry.GetDescendants(solutionNodeId)
+        .Where(n => n.Type is NodeType.Project)
+        .ToList();
+
+    foreach (var pn in existingProjectNodes)
+    {
+      if (desiredProjectIds.Contains(pn.Id)) continue;
+
+      buildErrorStore.Clear(pn.Id);
+      var removedIds = registry.RemoveSubtree(pn.Id);
+      detailStore.ClearSubtree(removedIds);
+
+      foreach (var id in removedIds)
+      {
+        await dispatcher.SendRemoveTestAsync(id, token.OperationId);
+      }
+    }
+
+    foreach (var p in testProjects)
+    {
+      await EnsureProjectNodeAsync(p, solutionNodeId, token.OperationId);
+    }
+
+    var projectsByPath = testProjects
+        .GroupBy(p => p.ProjectFullPath, StringComparer.OrdinalIgnoreCase)
+        .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+
+    if (projectsByPath.Count == 0)
+    {
+      await dispatcher.SendRunnerStatusAsync(BuildIdleStatus(), token.OperationId);
+      return new OperationResult(Success: true);
+    }
+
+    var buildRequest = new BatchBuildRequest(
+        ProjectPaths: [.. projectsByPath.Keys],
+        Configuration: null);
+
+    var discoverTasks = new List<Task>();
+
+    await foreach (var result in buildHost.BatchBuildAsync(buildRequest, token.Ct))
+    {
+      token.Ct.ThrowIfCancellationRequested();
+
+      var variants = projectsByPath.GetValueOrDefault(result.ProjectPath);
+      if (variants is null) continue;
+
+      if (result.Kind == BatchBuildResultKind.Started)
+      {
+        foreach (var p in variants)
+        {
+          var pid = NodeIdBuilder.Project(solutionNodeId, p.ProjectName, p.TargetFramework ?? "");
+          await dispatcher.SendStatusAsync(pid, new TestNodeStatus.Building(), operationId: token.OperationId);
+        }
+        continue;
+      }
+
+      foreach (var p in variants)
+      {
+        var pid = NodeIdBuilder.Project(solutionNodeId, p.ProjectName, p.TargetFramework ?? "");
+        if (result.Success != true)
+        {
+          await dispatcher.SendStatusAsync(pid, new TestNodeStatus.BuildFailed(),
+              [TestAction.GetBuildErrors, TestAction.Invalidate, TestAction.Debug, TestAction.Run],
+              token.OperationId);
+
+          if (result.Output?.Diagnostics is { } diags && diags.Length > 0)
+          {
+            buildErrorStore.Set(pid, diags);
+          }
+          continue;
+        }
+
+        buildErrorStore.Clear(pid);
+        discoverTasks.Add(executor.DiscoverProjectAsync(p, solutionNodeId, control, token));
+      }
+    }
+
+    token.Ct.ThrowIfCancellationRequested();
+    await Task.WhenAll(discoverTasks);
+
+    token.Ct.ThrowIfCancellationRequested();
+
+    await dispatcher.SendRunnerStatusAsync(BuildIdleStatus(), token.OperationId);
+    return new OperationResult(Success: true);
+  }
+
+  private async Task<string> EnsureProjectNodeAsync(ValidatedDotnetProject project, string solutionNodeId, long operationId)
+  {
+    var projectNodeId = NodeIdBuilder.Project(solutionNodeId, project.ProjectName, project.TargetFramework ?? "");
+
+    var existing = registry.Get(projectNodeId);
+    if (existing is null)
+    {
+      var node = new TestNode(
+          Id: projectNodeId,
+          DisplayName: $"{project.ProjectName} ({project.TargetFramework})",
+          ParentId: solutionNodeId,
+          FilePath: project.ProjectFullPath,
+          SignatureLine: null,
+          BodyStartLine: null,
+          EndLine: null,
+          Type: new NodeType.Project(),
+          ProjectId: projectNodeId,
+          AvailableActions: [TestAction.Run, TestAction.Debug, TestAction.Invalidate],
+          TargetFramework: project.TargetFramework);
+
+      registry.Register(node);
+      await dispatcher.SendRegisterTestAsync(node, operationId);
+      return projectNodeId;
+    }
+
+    var fileChanged = !string.Equals(existing.FilePath, project.ProjectFullPath, StringComparison.OrdinalIgnoreCase);
+
+    if (fileChanged)
+    {
+      var updated = existing with
+      {
+        DisplayName = $"{project.ProjectName} ({project.TargetFramework})",
+        FilePath = project.ProjectFullPath,
+      };
+
+      registry.Register(updated);
+      await dispatcher.SendRegisterTestAsync(updated, operationId);
+    }
+
+    return projectNodeId;
   }
 
   public async Task GetBuildErrorsAsync(string nodeId)
