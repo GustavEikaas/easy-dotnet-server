@@ -134,8 +134,22 @@ public class OperationExecutor(
           }
           else
           {
-            methodNodeId = NodeIdBuilder.Method(parentId, discovered.MethodName);
+            var baseId = NodeIdBuilder.Method(parentId, discovered.MethodName);
+            subcaseCounters.TryGetValue(baseId, out var seenCount);
+            subcaseCounters[baseId] = seenCount + 1;
+            if (seenCount > 0)
+            {
+              var suffix = $"[{seenCount}]";
+              methodNodeId = NodeIdBuilder.Method(parentId, discovered.MethodName + suffix);
+              shortName = shortMethodName + suffix;
+            }
+            else
+            {
+              methodNodeId = baseId;
+              shortName = shortMethodName;
+            }
           }
+
           var methodNode = new TestNode(
                   Id: methodNodeId,
                   DisplayName: shortName,
