@@ -5,6 +5,7 @@ using EasyDotnet.IDE.DebuggerStrategies;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.TestRunner.Adapters.MTP;
 using EasyDotnet.IDE.TestRunner.Adapters.MTP.RPC;
+using EasyDotnet.IDE.TestRunner.Lock;
 using EasyDotnet.IDE.TestRunner.Models;
 using Microsoft.Extensions.Logging;
 
@@ -25,10 +26,15 @@ public sealed class MtpAdapter(
   MtpClientFactory clientFactory
 ) : ITestAdapter
 {
-  public async Task DiscoverAsync(ValidatedDotnetProject project, Func<DiscoveredTest, Task> onDiscovered, CancellationToken ct)
+  public async Task DiscoverAsync(
+      ValidatedDotnetProject project,
+      Func<DiscoveredTest, Task> onDiscovered,
+      OperationControl control,
+      CancellationToken ct)
   {
     var exe = TransformDllPath(project.TargetPath);
     await using var client = await clientFactory.CreateAsync(exe, ct);
+    control.RegisterKill(() => client.KillAsync());
 
     await foreach (var update in client.DiscoverTestsAsync(ct))
     {
@@ -41,10 +47,13 @@ public sealed class MtpAdapter(
       ValidatedDotnetProject project,
       IReadOnlyList<string> nativeIds,
       Func<TestRunResult, Task> onResult,
+      OperationControl control,
       CancellationToken ct)
   {
     var exe = TransformDllPath(project.TargetPath);
     await using var client = await clientFactory.CreateAsync(exe, ct);
+    control.RegisterKill(() => client.KillAsync());
+
     var filter = nativeIds
         .Select(id => new RunRequestNode(id, ""))
         .ToArray();
@@ -66,12 +75,15 @@ public sealed class MtpAdapter(
       ValidatedDotnetProject project,
       IReadOnlyList<string> nativeIds,
       Func<TestRunResult, Task> onResult,
+      OperationControl control,
       CancellationToken ct)
   {
 
     var exe = TransformDllPath(project.TargetPath);
 
     await using var client = await clientFactory.CreateAsync(exe, ct);
+    control.RegisterKill(() => client.KillAsync());
+
     var session = await debugOrchestrator.StartClientDebugSessionAsync(
       project.ProjectFullPath,
       new(project.ProjectFullPath, project.TargetFramework, null, null),
@@ -81,21 +93,32 @@ public sealed class MtpAdapter(
     await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
     await session.ProcessStarted;
     await Task.Delay(1000, ct);
+
     var filter = nativeIds
         .Select(id => new RunRequestNode(id, ""))
         .ToArray();
 
-    await foreach (var update in client.RunTestsAsync(filter, ct))
+    var debugSessionEnded = 0;
+    using var streamCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+
+    _ = Task.Run(async () =>
     {
-      TestRunResult? result;
-      try { result = update.ToTestRunResult(); }
-      catch (ArgumentOutOfRangeException ex)
+      try
       {
-        logger.LogError(ex, "Skipping result with unmapped MTP execution state for {Uid}", update.Node.Uid);
-        continue;
+        await Task.WhenAny(session.StoppedTask, session.Completion);
+        Interlocked.Exchange(ref debugSessionEnded, 1);
+        try { streamCts.Cancel(); } catch { }
       }
-      if (result is not null) await onResult(result);
-    }
+      catch { }
+    });
+
+    await MtpRunHandling.ForwardResultsOrCancelAsync(
+        client.RunTestsAsync(filter, streamCts.Token),
+        onResult,
+        logger,
+        abortRequested: () => Volatile.Read(ref debugSessionEnded) == 1,
+        expectedResultCount: nativeIds.Count,
+        ct: streamCts.Token);
   }
 
   private static string TransformDllPath(string dllPath)

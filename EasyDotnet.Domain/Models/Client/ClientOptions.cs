@@ -4,7 +4,8 @@ public sealed record DebuggerOptions(string? BinaryPath = null, bool ApplyValueC
 public sealed record ClientOptions(
   DebuggerOptions? DebuggerOptions = null,
   bool UseVisualStudio = false,
-  ExternalTerminalOptions? ExternalTerminal = null);
+  ExternalTerminalOptions? ExternalTerminal = null,
+  bool EnableOsNotifications = false);
 
 public sealed record ExternalTerminalOptions(
     string Command = "",

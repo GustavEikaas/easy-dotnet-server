@@ -17,10 +17,10 @@ public class OperationExecutor(
     AdapterResolver adapterResolver,
     ILogger<OperationExecutor> logger)
 {
-  public async Task DiscoverProjectAsync(ValidatedDotnetProject project, string solutionNodeId, OperationToken token)
+  public async Task DiscoverProjectAsync(ValidatedDotnetProject project, string solutionNodeId, OperationControl control, OperationToken token)
   {
-    var projectNodeId = EnsureProjectNode(project, solutionNodeId);
-    await dispatcher.SendStatusAsync(projectNodeId, new TestNodeStatus.Discovering());
+    var projectNodeId = EnsureProjectNode(project, solutionNodeId, token.OperationId);
+    await dispatcher.SendStatusAsync(projectNodeId, new TestNodeStatus.Discovering(), operationId: token.OperationId);
 
     var preDiscoveryIds = registry.GetDescendants(projectNodeId)
         .Select(n => n.Id)
@@ -134,8 +134,22 @@ public class OperationExecutor(
           }
           else
           {
-            methodNodeId = NodeIdBuilder.Method(parentId, discovered.MethodName);
+            var baseId = NodeIdBuilder.Method(parentId, discovered.MethodName);
+            subcaseCounters.TryGetValue(baseId, out var seenCount);
+            subcaseCounters[baseId] = seenCount + 1;
+            if (seenCount > 0)
+            {
+              var suffix = $"[{seenCount}]";
+              methodNodeId = NodeIdBuilder.Method(parentId, discovered.MethodName + suffix);
+              shortName = shortMethodName + suffix;
+            }
+            else
+            {
+              methodNodeId = baseId;
+              shortName = shortMethodName;
+            }
           }
+
           var methodNode = new TestNode(
                   Id: methodNodeId,
                   DisplayName: shortName,
@@ -159,7 +173,7 @@ public class OperationExecutor(
         {
           callbackLock.Release();
         }
-      }, token.Ct);
+      }, control, token.Ct);
 
       await callbackLock.WaitAsync(token.Ct);
       discoveryComplete = true;
@@ -168,16 +182,16 @@ public class OperationExecutor(
       CollapseNamespaces(projectNodeId, pendingEmit);
 
       foreach (var node in pendingEmit.ToList())
-        await dispatcher.SendRegisterTestAsync(node);
+        await dispatcher.SendRegisterTestAsync(node, token.OperationId);
 
       var postDiscoveryIds = pendingEmit.Select(n => n.Id).ToHashSet();
       foreach (var orphanId in preDiscoveryIds)
       {
         if (!postDiscoveryIds.Contains(orphanId))
-          await dispatcher.SendRemoveTestAsync(orphanId);
+          await dispatcher.SendRemoveTestAsync(orphanId, token.OperationId);
       }
 
-      await dispatcher.SendStatusAsync(projectNodeId, new TestNodeStatus.Idle());
+      await dispatcher.SendStatusAsync(projectNodeId, new TestNodeStatus.Idle(), operationId: token.OperationId);
     }
     catch (OperationCanceledException)
     {
@@ -189,7 +203,7 @@ public class OperationExecutor(
       registry.ClearDescendants(projectNodeId);
       foreach (var orphanId in preDiscoveryIds)
       {
-        await dispatcher.SendRemoveTestAsync(orphanId);
+        await dispatcher.SendRemoveTestAsync(orphanId, token.OperationId);
       }
     }
   }
@@ -212,6 +226,7 @@ public class OperationExecutor(
   public async Task<RunProgressCounter> RunNodeAsync(
     string nodeId,
     ValidatedDotnetProject project,
+    OperationControl control,
     OperationToken token,
     bool debug = false,
     RunProgressCounter? sharedCounter = null)
@@ -223,7 +238,7 @@ public class OperationExecutor(
     if (self?.Type is NodeType.TestMethod or NodeType.Subcase) { leafNodes.Add(self); }
 
     var runningStatus = debug ? (TestNodeStatus)new TestNodeStatus.Debugging() : new TestNodeStatus.Running();
-    await dispatcher.SendBatchStatusAsync(nodeId, runningStatus, registry);
+    await dispatcher.SendBatchStatusAsync(nodeId, runningStatus, registry, operationId: token.OperationId);
 
     var nativeIds = leafNodes
         .Select(n => registry.GetNativeId(n.Id))
@@ -244,14 +259,17 @@ public class OperationExecutor(
       await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
           IsLoading: true,
           CurrentOperation: debug ? "Debugging" : "Running",
-          OverallStatus: OverallStatus.Running,
+          OverallStatus: debug ? OverallStatus.Debugging : OverallStatus.Running,
           TotalTests: counter.TotalTests,
           TotalRunning: counter.TotalTests,
-          TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0));
+          TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0), operationId: token.OperationId);
     }
 
     var adapter = adapterResolver.Resolve(project);
     var leafIds = leafNodes.Select(n => n.Id).ToHashSet();
+
+    var expectedNativeIds = nativeIds.ToHashSet(StringComparer.Ordinal);
+    var seenNativeIds = new HashSet<string>(StringComparer.Ordinal);
 
     async Task OnResult(TestRunResult result)
     {
@@ -261,6 +279,9 @@ public class OperationExecutor(
         logger.LogWarning("Received result for unknown native ID {NativeId}", result.NativeId);
         return;
       }
+
+      if (!seenNativeIds.Add(result.NativeId)) return;
+      expectedNativeIds.Remove(result.NativeId);
 
       detailStore.Set(stableId, new TestDetail(
           Outcome: result.Outcome,
@@ -275,28 +296,72 @@ public class OperationExecutor(
       await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
           IsLoading: true,
           CurrentOperation: debug ? "Debugging" : "Running",
-          OverallStatus: OverallStatus.Running,
+          OverallStatus: debug ? OverallStatus.Debugging : OverallStatus.Running,
           TotalTests: counter.TotalTests,
           TotalRunning: running,
           TotalPassed: passed,
           TotalFailed: failed,
           TotalSkipped: skipped,
-          TotalCancelled: cancelled));
+          TotalCancelled: cancelled), operationId: token.OperationId);
 
       var (status, actions) = BuildStatusAndActions(result);
-      await dispatcher.SendStatusAsync(stableId, status, actions);
-      await BubbleStatusAsync(stableId, leafIds);
+      await dispatcher.SendStatusAsync(stableId, status, actions, operationId: token.OperationId);
+      await BubbleStatusAsync(stableId, leafIds, token.OperationId);
     }
 
     if (debug)
-      await adapter.DebugAsync(project, nativeIds, OnResult, token.Ct);
+      await adapter.DebugAsync(project, nativeIds, OnResult, control, token.Ct);
     else
-      await adapter.RunAsync(project, nativeIds, OnResult, token.Ct);
+      await adapter.RunAsync(project, nativeIds, OnResult, control, token.Ct);
+
+    if (!token.Ct.IsCancellationRequested && expectedNativeIds.Count > 0)
+    {
+      logger.LogError(
+        "Run completed without reporting all results for {NodeId}. Expected={Expected} Seen={Seen} Missing={Missing}",
+        nodeId,
+        nativeIds.Count,
+        seenNativeIds.Count,
+        expectedNativeIds.Count);
+
+      foreach (var missingNativeId in expectedNativeIds)
+      {
+        var stableId = registry.GetStableId(missingNativeId);
+        if (stableId is null)
+        {
+          logger.LogWarning("Missing native ID {NativeId} has no stable mapping", missingNativeId);
+          continue;
+        }
+
+        detailStore.Set(stableId, new TestDetail(
+            Outcome: "failed",
+            ErrorMessage: ["Test never reported status"],
+            DurationMs: null,
+            Frames: [],
+            FailingFrame: null,
+            Stdout: []));
+
+        counter.Record("failed");
+        var (running, passed, failed, skipped, cancelled) = counter.Snapshot();
+        await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
+            IsLoading: true,
+            CurrentOperation: debug ? "Debugging" : "Running",
+            OverallStatus: debug ? OverallStatus.Debugging : OverallStatus.Running,
+            TotalTests: counter.TotalTests,
+            TotalRunning: running,
+            TotalPassed: passed,
+            TotalFailed: failed,
+            TotalSkipped: skipped,
+            TotalCancelled: cancelled), operationId: token.OperationId);
+
+        await dispatcher.SendStatusAsync(stableId, new TestNodeStatus.Faulted("Test never reported status"), operationId: token.OperationId);
+        await BubbleStatusAsync(stableId, leafIds, token.OperationId);
+      }
+    }
 
     return counter;
   }
 
-  private string EnsureProjectNode(ValidatedDotnetProject project, string solutionNodeId)
+  private string EnsureProjectNode(ValidatedDotnetProject project, string solutionNodeId, long operationId)
   {
     var projectNodeId = NodeIdBuilder.Project(
         solutionNodeId, project.ProjectName, project.TargetFramework ?? "");
@@ -316,7 +381,7 @@ public class OperationExecutor(
           AvailableActions: [TestAction.Run, TestAction.Debug, TestAction.Invalidate],
           TargetFramework: project.TargetFramework);
       registry.Register(node);
-      _ = dispatcher.SendRegisterTestAsync(node);
+      _ = dispatcher.SendRegisterTestAsync(node, operationId);
     }
 
     return projectNodeId;
@@ -454,7 +519,7 @@ public class OperationExecutor(
     return (status, baseActions);
   }
 
-  private async Task BubbleStatusAsync(string leafId, HashSet<string> runningLeafIds)
+  private async Task BubbleStatusAsync(string leafId, HashSet<string> runningLeafIds, long operationId)
   {
     var node = registry.Get(leafId);
     var parentId = node?.ParentId;
@@ -477,7 +542,7 @@ public class OperationExecutor(
       var allComplete = scopedLeaves.All(n => detailStore.Get(n.Id) is not null);
       if (!allComplete)
       {
-        await dispatcher.SendStatusAsync(parentId, new TestNodeStatus.Running());
+        await dispatcher.SendStatusAsync(parentId, new TestNodeStatus.Running(), operationId: operationId);
         parentId = registry.Get(parentId)?.ParentId;
         continue;
       }
@@ -500,7 +565,7 @@ public class OperationExecutor(
               ? new TestNodeStatus.Skipped("")
               : new TestNodeStatus.Passed(durationDisplay);
 
-      await dispatcher.SendStatusAsync(parentId, aggregateStatus);
+      await dispatcher.SendStatusAsync(parentId, aggregateStatus, operationId: operationId);
       parentId = registry.Get(parentId)?.ParentId;
     }
   }

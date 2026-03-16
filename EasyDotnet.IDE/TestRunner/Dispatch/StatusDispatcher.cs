@@ -1,6 +1,7 @@
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.Domain.Models.Client;
+using EasyDotnet.IDE.TestRunner.Lock;
 using EasyDotnet.IDE.TestRunner.Models;
 using EasyDotnet.IDE.TestRunner.Registry;
 using StreamJsonRpc;
@@ -12,25 +13,43 @@ namespace EasyDotnet.IDE.TestRunner.Dispatch;
 /// Suppresses duplicate status notifications — if a node's status type hasn't changed,
 /// the notification is dropped to avoid spamming the client.
 /// </summary>
-public class StatusDispatcher(JsonRpc rpc, NodeRegistry registry, IEditorService editorService)
+public class StatusDispatcher(
+    JsonRpc rpc,
+    NodeRegistry registry,
+    IEditorService editorService,
+    GlobalOperationLock operationLock)
 {
+  private bool ShouldDispatch(long? operationId)
+  {
+    if (operationId is null) return true;
+    return operationId.Value == operationLock.CurrentOperationId;
+  }
+
   /// <summary>Notify the client of a node registration or update.</summary>
-  public Task SendRegisterTestAsync(TestNode node) =>
-      rpc.NotifyWithParameterObjectAsync("registerTest", new { test = node });
+  public Task SendRegisterTestAsync(TestNode node, long? operationId = null)
+  {
+    if (!ShouldDispatch(operationId)) return Task.CompletedTask;
+    return rpc.NotifyWithParameterObjectAsync("registerTest", new { test = node });
+  }
 
   /// <summary>
   /// Tell the client to remove a node that no longer exists after rediscovery.
   /// Emitted after discovery completes — only for nodes that were not re-registered.
   /// </summary>
-  public Task SendRemoveTestAsync(string nodeId) =>
-      rpc.NotifyWithParameterObjectAsync("removeTest", new { id = nodeId });
+  public Task SendRemoveTestAsync(string nodeId, long? operationId = null)
+  {
+    if (!ShouldDispatch(operationId)) return Task.CompletedTask;
+    return rpc.NotifyWithParameterObjectAsync("removeTest", new { id = nodeId });
+  }
 
   /// <summary>
   /// Send a status update for a single node.
   /// No-ops if the status type is identical to the last sent status for this node.
   /// </summary>
-  public Task SendStatusAsync(string nodeId, TestNodeStatus? status, List<TestAction>? availableActions = null)
+  public Task SendStatusAsync(string nodeId, TestNodeStatus? status, List<TestAction>? availableActions = null, long? operationId = null)
   {
+    if (!ShouldDispatch(operationId)) return Task.CompletedTask;
+
     if (!registry.SetLastStatus(nodeId, status))
     {
       return Task.CompletedTask;
@@ -47,8 +66,11 @@ public class StatusDispatcher(JsonRpc rpc, NodeRegistry registry, IEditorService
       string rootId,
       TestNodeStatus? status,
       NodeRegistry reg,
-      List<TestAction>? availableActions = null)
+      List<TestAction>? availableActions = null,
+      long? operationId = null)
   {
+    if (!ShouldDispatch(operationId)) return Task.CompletedTask;
+
     var updates = reg.GetDescendants(rootId)
         .Select(n => n.Id)
         .Prepend(rootId)
@@ -65,8 +87,14 @@ public class StatusDispatcher(JsonRpc rpc, NodeRegistry registry, IEditorService
   }
 
   /// <summary>Broadcast global runner status (IsLoading, aggregate counts, etc.).</summary>
-  public Task SendRunnerStatusAsync(TestRunnerStatus status) =>
-      rpc.NotifyWithParameterObjectAsync("testrunner/statusUpdate", status);
+  public Task SendRunnerStatusAsync(TestRunnerStatus status, long? operationId = null)
+  {
+    if (!ShouldDispatch(operationId)) return Task.CompletedTask;
+    return rpc.NotifyWithParameterObjectAsync("testrunner/statusUpdate", status);
+  }
+
+  public Task<bool> IsTestRunnerVisibleAsync(CancellationToken ct) =>
+      rpc.InvokeWithParameterObjectAsync<bool>("testrunner/isVisible", new { }, ct);
 
   public Task SendQuickFixAsync(IEnumerable<BuildDiagnostic> diagnostics)
   {

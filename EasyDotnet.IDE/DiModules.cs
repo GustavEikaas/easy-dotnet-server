@@ -51,6 +51,7 @@ public static class DiModules
         });
 
     services.AddMemoryCache();
+    services.AddHttpClient();
     services.AddSingleton(jsonRpc);
     services.AddSingleton<DbContextCache>();
     services.AddSingleton(new CurrentLogLevel(levels, logDir));

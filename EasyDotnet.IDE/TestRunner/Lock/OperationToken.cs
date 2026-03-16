@@ -2,22 +2,23 @@ namespace EasyDotnet.IDE.TestRunner.Lock;
 
 public sealed class OperationToken : IDisposable
 {
-  public string OperationName { get; }
+  public long OperationId { get; }
 
   private readonly CancellationTokenSource _linkedCts;
-  private readonly Action _onDispose;
+  private readonly Action<long> _onDispose;
   private bool _disposed;
 
   public CancellationToken Ct => _linkedCts.Token;
 
   internal OperationToken(
-      string operationName,
+      long operationId,
       CancellationToken rpcCancellationToken,
-      Action onDispose)
+      CancellationToken operationCancellationToken,
+      Action<long> onDispose)
   {
-    OperationName = operationName;
+    OperationId = operationId;
     _onDispose = onDispose;
-    _linkedCts = CancellationTokenSource.CreateLinkedTokenSource(rpcCancellationToken);
+    _linkedCts = CancellationTokenSource.CreateLinkedTokenSource(rpcCancellationToken, operationCancellationToken);
   }
 
   public void Dispose()
@@ -25,6 +26,6 @@ public sealed class OperationToken : IDisposable
     if (_disposed) return;
     _disposed = true;
     _linkedCts.Dispose();
-    _onDispose();
+    _onDispose(OperationId);
   }
 }
