@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO.Pipes;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.IDE.Utils;
 using Microsoft.Extensions.Logging;
@@ -66,6 +67,10 @@ public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService c
 
   private Process SpawnProcess(BuildServerRuntime runtime, string pipeName)
   {
+    var dotnetRoot = Environment.GetEnvironmentVariable("DOTNET_ROOT")
+        ?? Path.GetDirectoryName(Environment.ProcessPath)
+        ?? Path.GetFullPath(Path.Combine(RuntimeEnvironment.GetRuntimeDirectory(), "../../.."));
+
     var coreFolder = Path.GetDirectoryName(BuildHostLocator.GetBuildServerCore());
     var startInfo = new ProcessStartInfo
     {
@@ -75,6 +80,7 @@ public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService c
       RedirectStandardOutput = false,
       WorkingDirectory = coreFolder
     };
+    startInfo.Environment["DOTNET_ROOT"] = dotnetRoot;
     var logDirectory = currentLogLevel.LogDir;
     var logLevel = currentLogLevel.Loglevel.ToString();
 
@@ -85,7 +91,7 @@ public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService c
     }
     else
     {
-      startInfo.FileName = "dotnet";
+      startInfo.FileName = Environment.ProcessPath ?? "dotnet";
 #if DEBUG
       startInfo.Arguments = $"exec \"{BuildHostLocator.GetBuildServerCore()}\" --pipe \"{pipeName}\" --log-level=Verbose --logDirectory \"{logDirectory}\"";
 #else
