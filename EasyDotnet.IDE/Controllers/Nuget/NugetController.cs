@@ -46,7 +46,7 @@ public class NugetController(IClientService clientService, NugetService nugetSer
         includePrerelease,
         sources);
 
-    return versions.OrderBy(v => v.Version).Select(v => v.ToNormalizedString()).ToBatchedAsyncEnumerable(50);
+    return versions.OrderByDescending(v => v.Version).Select(v => v.ToNormalizedString()).ToBatchedAsyncEnumerable(50);
   }
 
   [JsonRpcMethod("nuget/search-packages")]
