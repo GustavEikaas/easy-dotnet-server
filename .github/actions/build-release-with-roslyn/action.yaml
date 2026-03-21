@@ -84,7 +84,7 @@ runs:
         mkdir -p "$OUTPUT_PATH"
 
         curl -L -o artifacts/razorextension/razorextension.nupkg \
-          "https://pkgs.dev.azure.com/azure-public/vside/_packaging/vs-impl/nuget/v3/flat2/microsoft.visualstudiocode.razorextension/${RAZOR_EXTENSION_VERSION}/microsoft.visualstudiocode.razorextension.${RAZOR_EXTENSION_VERSION}.nupkg"
+          "https://pkgs.dev.azure.com/azure-public/vside/_apis/packaging/feeds/vs-impl/nuget/packages/Microsoft.VisualStudioCode.RazorExtension/versions/${RAZOR_EXTENSION_VERSION}/content?api-version=6.0-preview.1"
         unzip -o artifacts/razorextension/razorextension.nupkg -d artifacts/razorextension/extracted
         cp -r artifacts/razorextension/extracted/content/* "$OUTPUT_PATH/"
 
