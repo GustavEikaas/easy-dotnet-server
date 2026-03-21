@@ -10,7 +10,7 @@ inputs:
     required: true
     default: '5.4.0-2.26168.13'
   razorExtensionVersion:
-    description: 'NuGet package version for Microsoft.VisualStudioCode.RazorExtension (must match roslynPackageVersion)'
+    description: 'NuGet package version for Microsoft.VisualStudioCode.RazorExtension'
     required: true
     default: '10.0.0-preview.26168.13'
   roslynOutputPath:
