@@ -1,10 +1,5 @@
-using System;
 using System.ComponentModel;
 using System.Diagnostics;
-using System.IO;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using EasyDotnet.Infrastructure.Services;
 using Microsoft.Build.Locator;
 using Spectre.Console;
@@ -35,14 +30,6 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
     [Description("Full path to the Roslyn dependency used with DevKit (optional).")]
     [CommandOption("--devKitDependencyPath <PATH>")]
     public string? DevKitDependencyPath { get; init; }
-
-    [Description("Full path to the Razor source generator (optional).")]
-    [CommandOption("--razorSourceGenerator <PATH>")]
-    public string? RazorSourceGenerator { get; init; }
-
-    [Description("Full path to the Razor design time target path (optional).")]
-    [CommandOption("--razorDesignTimePath <PATH>")]
-    public string? RazorDesignTimePath { get; init; }
 
     [Description("Full path to the C# design time target path (optional).")]
     [CommandOption("--csharpDesignTimePath <PATH>")]
@@ -107,16 +94,27 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
       startInfo.ArgumentList.Add(settings.DevKitDependencyPath);
     }
 
-    if (!string.IsNullOrWhiteSpace(settings.RazorSourceGenerator))
+    var razorExtensionDir = RoslynLocator.GetRazorExtensionDir();
+    if (razorExtensionDir != null)
     {
-      startInfo.ArgumentList.Add("--razorSourceGenerator");
-      startInfo.ArgumentList.Add(settings.RazorSourceGenerator);
-    }
-
-    if (!string.IsNullOrWhiteSpace(settings.RazorDesignTimePath))
-    {
-      startInfo.ArgumentList.Add("--razorDesignTimePath");
-      startInfo.ArgumentList.Add(settings.RazorDesignTimePath);
+      var sourceGenerator = Path.Combine(razorExtensionDir, "Microsoft.CodeAnalysis.Razor.Compiler.dll");
+      var designTimePath = Path.Combine(razorExtensionDir, "Targets", "Microsoft.NET.Sdk.Razor.DesignTime.targets");
+      var extensionDll = Path.Combine(razorExtensionDir, "Microsoft.VisualStudioCode.RazorExtension.dll");
+      if (File.Exists(sourceGenerator))
+      {
+        startInfo.ArgumentList.Add("--razorSourceGenerator");
+        startInfo.ArgumentList.Add(sourceGenerator);
+      }
+      if (File.Exists(designTimePath))
+      {
+        startInfo.ArgumentList.Add("--razorDesignTimePath");
+        startInfo.ArgumentList.Add(designTimePath);
+      }
+      if (File.Exists(extensionDll))
+      {
+        startInfo.ArgumentList.Add("--extension");
+        startInfo.ArgumentList.Add(extensionDll);
+      }
     }
 
     if (!string.IsNullOrWhiteSpace(settings.CSharpDesignTimePath))

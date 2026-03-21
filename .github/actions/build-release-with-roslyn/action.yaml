@@ -1,6 +1,5 @@
 name: Build Release with Roslyn
 description: "Build .NET tool in Release and inject Roslyn LSP DLLs into Tools folder"
-
 inputs:
   roslynPackageId:
     description: 'NuGet package ID for Roslyn LSP'
@@ -9,7 +8,11 @@ inputs:
   roslynPackageVersion:
     description: 'NuGet package version for Roslyn LSP'
     required: true
-    default: '5.4.0-2.26080.13'
+    default: '5.4.0-2.26168.13'
+  razorExtensionVersion:
+    description: 'NuGet package version for Microsoft.VisualStudioCode.RazorExtension (must match roslynPackageVersion)'
+    required: true
+    default: '10.0.0-preview.26168.13'
   roslynOutputPath:
     description: 'Where to copy Roslyn DLLs inside project output'
     required: true
@@ -42,15 +45,12 @@ runs:
       shell: bash
       run: dotnet build -c Release --no-restore
 
-
     - name: Build and Copy Custom Analyzer
       shell: bash
       run: |
         OUTPUT_PATH="${{ inputs.roslynOutputPath }}/Roslyn/Analyzers"
-
         mkdir -p "$OUTPUT_PATH"
         cp EasyDotnet.RoslynLanguageServices/bin/Release/net8.0/EasyDotnet.RoslynLanguageServices.dll "$OUTPUT_PATH/"
-        
         echo "✓ Custom analyzer copied to $OUTPUT_PATH"
 
     - name: Download and Extract Roslyn DLLs
@@ -63,27 +63,40 @@ runs:
         
         mkdir -p "$OUTPUT_PATH/LanguageServer"
         mkdir -p "$OUTPUT_PATH/Analyzers"
-
         mkdir -p artifacts/roslyn
         curl -L -o artifacts/roslyn/roslyn.nupkg \
           "https://pkgs.dev.azure.com/azure-public/vside/_apis/packaging/feeds/vs-impl/nuget/packages/${ROSLYN_PACKAGE_ID}/versions/${ROSLYN_PACKAGE_VERSION}/content?api-version=6.0-preview.1"
-
         unzip -o artifacts/roslyn/roslyn.nupkg -d artifacts/roslyn/extracted
         cp -r artifacts/roslyn/extracted/content/LanguageServer/neutral/* "$OUTPUT_PATH/LanguageServer/"
-
         mkdir -p artifacts/roslynator
         curl -L -o artifacts/roslynator/roslynator.nupkg \
           "https://www.nuget.org/api/v2/package/Roslynator.Analyzers/${ROSLYNATOR_VERSION}"
-
         unzip -o artifacts/roslynator/roslynator.nupkg -d artifacts/roslynator/extracted
         cp artifacts/roslynator/extracted/analyzers/dotnet/roslyn4.7/cs/*.dll "$OUTPUT_PATH/Analyzers/"
+
+    - name: Download and Extract RazorExtension
+      shell: bash
+      run: |
+        RAZOR_EXTENSION_VERSION="${{ inputs.razorExtensionVersion }}"
+        OUTPUT_PATH="${{ inputs.roslynOutputPath }}/Roslyn/RazorExtension"
+
+        mkdir -p artifacts/razorextension
+        mkdir -p "$OUTPUT_PATH"
+
+        curl -L -o artifacts/razorextension/razorextension.nupkg \
+          "https://pkgs.dev.azure.com/azure-public/vside/_apis/packaging/feeds/vs-impl/nuget/packages/Microsoft.VisualStudioCode.RazorExtension/versions/${RAZOR_EXTENSION_VERSION}/content?api-version=6.0-preview.1"
+        unzip -o artifacts/razorextension/razorextension.nupkg -d artifacts/razorextension/extracted
+        cp -r artifacts/razorextension/extracted/content/* "$OUTPUT_PATH/"
+
+        echo "✓ RazorExtension extracted to $OUTPUT_PATH"
+        echo "Contents:"
+        ls "$OUTPUT_PATH"
 
     - name: Download and Extract netcoredbg
       shell: bash
       run: |
         NETCOREDBG_VERSION="${{ inputs.netcoredbgVersion }}"
         NETCOREDBG_MACOS_ARM_VERSION="${{ inputs.netcoredbgArmVersion }}"
-
         OUTPUT_PATH="${{ inputs.roslynOutputPath }}/netcoredbg"
         ARTIFACTS_DIR="artifacts/netcoredbg"
         
@@ -96,7 +109,6 @@ runs:
           ["osx-amd64"]="osx-x64"
           ["win64"]="win-x64"
         )
-
         # Download Samsung repo platforms
         for platform in "${!platforms[@]}"; do
           target_dir="${platforms[$platform]}"
@@ -117,17 +129,13 @@ runs:
           cp -r "$ARTIFACTS_DIR/${platform}/netcoredbg/"* "$OUTPUT_PATH/${target_dir}/"
           echo "✓ Extracted netcoredbg to $OUTPUT_PATH/${target_dir}"
         done
-
         ARM_PLATFORM="osx-arm64"
         ARM_TARGET_DIR="osx-arm64"
         echo "Downloading netcoredbg (macOS ARM64) from Cliffback..."
-
         DOWNLOAD_URL="https://github.com/Cliffback/netcoredbg-macOS-arm64.nvim/releases/download/${NETCOREDBG_MACOS_ARM_VERSION}/netcoredbg-osx-arm64.tar.gz"
         DOWNLOAD_PATH="$ARTIFACTS_DIR/netcoredbg-${ARM_PLATFORM}.tar.gz"
-
         curl -sSL -o "$DOWNLOAD_PATH" "$DOWNLOAD_URL"
         mkdir -p "$ARTIFACTS_DIR/${ARM_PLATFORM}"
-
         if file "$DOWNLOAD_PATH" | grep -qi 'gzip compressed'; then
           tar -xzf "$DOWNLOAD_PATH" -C "$ARTIFACTS_DIR/${ARM_PLATFORM}"
           mkdir -p "$OUTPUT_PATH/${ARM_TARGET_DIR}"
@@ -137,5 +145,4 @@ runs:
           echo "::error::Downloaded netcoredbg-osx-arm64.tar.gz is not a valid gzipped tarball!"
           exit 1
         fi
-
         echo "All netcoredbg platforms bundled successfully!"
