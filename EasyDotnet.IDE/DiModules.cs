@@ -17,6 +17,7 @@ using EasyDotnet.IDE.TestRunner.Executor;
 using EasyDotnet.IDE.TestRunner.Lock;
 using EasyDotnet.IDE.TestRunner.Registry;
 using EasyDotnet.IDE.TestRunner.Service;
+using EasyDotnet.IDE.Workspace.Services;
 using EasyDotnet.IDE.TestRunner.Store;
 using EasyDotnet.IDE.Utils;
 using EasyDotnet.Infrastructure.Aspire;
@@ -79,6 +80,8 @@ public static class DiModules
     services.AddSingleton<ProjectEvaluationCache>();
 
     services.AddSingleton<TestRunnerService>();
+    services.AddSingleton<WorkspaceService>();
+    services.AddSingleton<WorkspaceSessionManager>();
     services.AddSingleton<NodeRegistry>();
     services.AddSingleton<StatusDispatcher>();
     services.AddSingleton<DetailStore>();

@@ -26,27 +26,33 @@ public class SettingsService(
     return settings?.Defaults?.BuildProject;
   }
 
-  public void SetDefaultBuildProject(string? projectName)
+  public void SetDefaultBuildProject(string? projectPath)
   {
+    if (projectPath is not null && !Path.IsPathRooted(projectPath))
+      throw new ArgumentException("Project path must be an absolute path.", nameof(projectPath));
+
     var sln = clientService.ProjectInfo?.SolutionFile;
     if (sln is null) return;
 
     var settings = GetOrCreateSolutionSettings(sln);
     settings.Defaults ??= new DefaultProjects();
 
-    settings.Defaults.BuildProject = projectName;
+    settings.Defaults.BuildProject = projectPath;
     SaveSolutionSettings(sln, settings);
   }
 
-  public void SetDefaultTestProject(string? projectName)
+  public void SetDefaultTestProject(string? projectPath)
   {
+    if (projectPath is not null && !Path.IsPathRooted(projectPath))
+      throw new ArgumentException("Project path must be an absolute path.", nameof(projectPath));
+
     var sln = clientService.ProjectInfo?.SolutionFile;
     if (sln is null) return;
 
     var settings = GetOrCreateSolutionSettings(sln);
     settings.Defaults ??= new DefaultProjects();
 
-    settings.Defaults.TestProject = projectName;
+    settings.Defaults.TestProject = projectPath;
     SaveSolutionSettings(sln, settings);
   }
 
@@ -59,15 +65,18 @@ public class SettingsService(
     return settings?.Defaults?.TestProject;
   }
 
-  public void SetDefaultStartupProject(string? projectName)
+  public void SetDefaultStartupProject(string? projectPath)
   {
+    if (projectPath is not null && !Path.IsPathRooted(projectPath))
+      throw new ArgumentException("Project path must be an absolute path.", nameof(projectPath));
+
     var sln = clientService.ProjectInfo?.SolutionFile;
     if (sln is null) return;
 
     var settings = GetOrCreateSolutionSettings(sln);
     settings.Defaults ??= new DefaultProjects();
 
-    settings.Defaults.StartupProject = projectName;
+    settings.Defaults.StartupProject = projectPath;
     SaveSolutionSettings(sln, settings);
   }
 
@@ -89,8 +98,10 @@ public class SettingsService(
     return settings?.Defaults?.ViewProject;
   }
 
-  public void SetDefaultViewProject(string? projectName)
+  public void SetDefaultViewProject(string? projectPath)
   {
+    if (projectPath is not null && !Path.IsPathRooted(projectPath))
+      throw new ArgumentException("Project path must be an absolute path.", nameof(projectPath));
 
     var sln = clientService.ProjectInfo?.SolutionFile;
     if (sln is null) return;
@@ -98,7 +109,7 @@ public class SettingsService(
     var settings = GetOrCreateSolutionSettings(sln);
     settings.Defaults ??= new DefaultProjects();
 
-    settings.Defaults.ViewProject = projectName;
+    settings.Defaults.ViewProject = projectPath;
     SaveSolutionSettings(sln, settings);
   }
 
