@@ -262,7 +262,7 @@ public class WorkspaceService(
   {
     var token = Guid.NewGuid().ToString();
 
-    await editorService.SendProgressStart(token, "Restoring...", projectName);
+    await editorService.SendProgressStart(token, "Restoring...", $"Restoring {projectName}");
     var restoreErrors = new List<QuickFixItem>();
     var restoreOk = true;
     try
@@ -288,7 +288,7 @@ public class WorkspaceService(
       return false;
     }
 
-    await editorService.SendProgressStart(token, "Building...", projectName);
+    await editorService.SendProgressStart(token, "Building...", $"Building {projectName}");
     var buildErrors = new List<QuickFixItem>();
     var buildOk = true;
     try
