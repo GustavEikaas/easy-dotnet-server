@@ -52,7 +52,7 @@ public class WorkspaceService(
       launchProfile = await ResolveProfileAsync(project, request.UseDefault, ct);
     }
 
-    await DispatchRunAsync($"{project.ProjectFullPath}:{project.TargetFramework}", project.ProjectName, project.Raw, launchProfile, request.CliArgs, ct);
+    await DispatchRunAsync($"{project.ProjectFullPath}:{project.TargetFramework}", project.ProjectName, project, launchProfile, request.CliArgs, ct);
   }
 
   /// <summary>
@@ -175,7 +175,7 @@ public class WorkspaceService(
       launchProfile = await PickProfileInteractiveAsync(project, ct);
     }
 
-    await DispatchRunAsync($"{project.ProjectFullPath}:{project.TargetFramework}", project.ProjectName, project.Raw, launchProfile, request.CliArgs, ct);
+    await DispatchRunAsync($"{project.ProjectFullPath}:{project.TargetFramework}", project.ProjectName, project, launchProfile, request.CliArgs, ct);
   }
 
   /// <summary>
@@ -217,7 +217,7 @@ public class WorkspaceService(
   private async Task DispatchRunAsync(
     string sessionKey,
     string projectName,
-    DotnetProject project,
+    ValidatedDotnetProject project,
     LaunchProfile? launchProfile,
     string? cliArgs,
     CancellationToken ct)
@@ -232,12 +232,15 @@ public class WorkspaceService(
       ? null
       : new[] { "--" }.Concat(CommandLineParser.SplitCommandLine(cliArgs)).ToArray();
 
-    var runRequest = new RunProjectRequest(project, launchProfile, additionalArgs, null);
+    var runRequest = new RunProjectRequest(project.Raw, launchProfile, additionalArgs, null);
 
     _ = Task.Run(async () =>
     {
       try
       {
+        var ready = await BuildBeforeRunAsync(project, projectName, CancellationToken.None);
+        if (!ready) return;
+
         var exitCode = await editorService.RequestRunProjectAsync(runRequest, CancellationToken.None);
         logger.LogInformation("{ProjectName} exited with code {ExitCode}", projectName, exitCode);
         if (exitCode != 0)
@@ -254,6 +257,75 @@ public class WorkspaceService(
       }
     }, CancellationToken.None);
   }
+
+  private async Task<bool> BuildBeforeRunAsync(ValidatedDotnetProject project, string projectName, CancellationToken ct)
+  {
+    var token = Guid.NewGuid().ToString();
+
+    await editorService.SendProgressStart(token, "Restoring...", projectName);
+    var restoreErrors = new List<QuickFixItem>();
+    var restoreOk = true;
+    try
+    {
+      await foreach (var result in buildHostManager.RestoreNugetPackagesAsync(
+        new RestoreRequest([project.ProjectFullPath]), ct))
+      {
+        if (result.Output?.Diagnostics is { } rd)
+          restoreErrors.AddRange(MapErrors(rd));
+        if (!result.Success)
+          restoreOk = false;
+      }
+    }
+    finally
+    {
+      await editorService.SendProgressEnd(token);
+    }
+
+    if (!restoreOk)
+    {
+      await editorService.SetQuickFixList([.. restoreErrors]);
+      await editorService.DisplayError($"Restore failed for {projectName}");
+      return false;
+    }
+
+    await editorService.SendProgressStart(token, "Building...", projectName);
+    var buildErrors = new List<QuickFixItem>();
+    var buildOk = true;
+    try
+    {
+      await foreach (var result in buildHostManager.BatchBuildAsync(
+        new BatchBuildRequest([project.ProjectFullPath], null, project.TargetFramework), ct))
+      {
+        if (result.Output?.Diagnostics is { } bd)
+          buildErrors.AddRange(MapErrors(bd));
+        if (result.Kind == BatchBuildResultKind.Finished && result.Success == false)
+          buildOk = false;
+      }
+    }
+    finally
+    {
+      await editorService.SendProgressEnd(token);
+    }
+
+    if (!buildOk)
+    {
+      await editorService.SetQuickFixList([.. buildErrors]);
+      await editorService.DisplayError($"Build failed for {projectName}");
+      return false;
+    }
+
+    return true;
+  }
+
+  private static IEnumerable<QuickFixItem> MapErrors(BuildDiagnostic[] diagnostics) =>
+    diagnostics
+      .Where(d => d.Severity == BuildDiagnosticSeverity.Error)
+      .Select(d => new QuickFixItem(
+        FileName: d.File ?? "",
+        LineNumber: d.LineNumber,
+        ColumnNumber: d.ColumnNumber,
+        Text: string.IsNullOrEmpty(d.Code) ? d.Message ?? "" : $"[{d.Code}] {d.Message}",
+        Type: QuickFixItemType.Error));
 
   private async Task RunSingleFileAsync(string filePath, string? cliArgs, CancellationToken ct)
   {
