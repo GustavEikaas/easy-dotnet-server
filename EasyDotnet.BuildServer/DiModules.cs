@@ -29,6 +29,7 @@ public static class DiModule
     services.AddTransient<ProjectPropertiesBatchHandler>();
     services.AddTransient<RestoreHandler>();
     services.AddTransient<BatchBuildHandler>();
+    services.AddTransient<SingleFileConvertHandler>();
 
     services.AddSingleton(instance);
 
@@ -87,6 +88,7 @@ public static class DiModule
       serviceProvider.GetRequiredService<ProjectPropertiesBatchHandler>(),
       serviceProvider.GetRequiredService<RestoreHandler>(),
       serviceProvider.GetRequiredService<BatchBuildHandler>(),
+      serviceProvider.GetRequiredService<SingleFileConvertHandler>(),
     };
 
     foreach (var handler in handlers)

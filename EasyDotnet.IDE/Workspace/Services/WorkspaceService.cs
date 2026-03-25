@@ -3,6 +3,9 @@ using EasyDotnet.Application.Interfaces;
 using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.Domain.Models.Client;
 using EasyDotnet.IDE.BuildHost;
+using EasyDotnet.IDE.Controllers.NetCoreDbg;
+using EasyDotnet.IDE.DebuggerStrategies;
+using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.Workspace.Controllers;
 using EasyDotnet.Infrastructure.Settings;
 using Microsoft.Extensions.Logging;
@@ -17,6 +20,8 @@ public class WorkspaceService(
   IClientService clientService,
   WorkspaceBuildHostManager buildHostManager,
   WorkspaceSessionManager sessionManager,
+  IDebugOrchestrator debugOrchestrator,
+  IDebugStrategyFactory debugStrategyFactory,
   ILogger<WorkspaceService> logger)
 {
   public async Task RunAsync(WorkspaceRunRequest request, CancellationToken ct)
@@ -39,6 +44,122 @@ public class WorkspaceService(
     }
 
     await RunWithSolutionAsync(solutionFile, request, ct);
+  }
+
+  public async Task DebugAsync(WorkspaceDebugRequest request, CancellationToken ct)
+  {
+    try
+    {
+      if (request.FilePath is not null)
+      {
+        if (!Path.IsPathRooted(request.FilePath) || !request.FilePath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+        {
+          await editorService.DisplayError($"Invalid FilePath '{request.FilePath}': must be an absolute path to a .cs file");
+          return;
+        }
+
+        await DebugSingleFileAsync(request, ct);
+        return;
+      }
+
+      var solutionFile = clientService.ProjectInfo?.SolutionFile;
+      if (solutionFile is null)
+      {
+        await editorService.DisplayError("No solution file found");
+        return;
+      }
+
+      await DebugProjectAsync(solutionFile, request, ct);
+    }
+    catch (Exception ex)
+    {
+      logger.LogError(ex, "Error starting debug session");
+      await editorService.DisplayError($"Debug session failed: {ex.Message}");
+    }
+  }
+
+  private async Task DebugProjectAsync(string solutionFile, WorkspaceDebugRequest request, CancellationToken ct)
+  {
+    var runRequest = new WorkspaceRunRequest(request.UseDefault, request.UseLaunchProfile, null, null);
+    var project = await ResolveProjectFromSolutionAsync(solutionFile, runRequest, ct);
+    if (project is null) return;
+
+    string? launchProfileName = null;
+    if (request.UseLaunchProfile)
+    {
+      launchProfileName = await ResolveProfileNameAsync(project, request.UseDefault, ct);
+    }
+
+    if (!await BuildBeforeRunAsync(project, project.ProjectName, ct))
+      return;
+
+    await StartDebugSessionAsync(project, launchProfileName, ct);
+  }
+
+  private async Task DebugSingleFileAsync(WorkspaceDebugRequest request, CancellationToken ct)
+  {
+    var convertResponse = await buildHostManager.ConvertFileToProjectAsync(request.FilePath!, ct);
+    if (!convertResponse.Properties.Success)
+    {
+      var errorMsg = convertResponse.Properties.Error?.Message ?? "Unknown error";
+      await editorService.DisplayError($"Failed to convert {Path.GetFileName(request.FilePath)}: {errorMsg}");
+      return;
+    }
+
+    var project = convertResponse.Properties.Project;
+    if (project is null)
+    {
+      await editorService.DisplayError($"Failed to convert {Path.GetFileName(request.FilePath)}: No project returned");
+      return;
+    }
+
+    if (!await BuildBeforeRunAsync(project, project.ProjectName, ct))
+      return;
+
+    await StartDebugSessionAsync(project, null, ct);
+  }
+
+  private async Task<string?> ResolveProfileNameAsync(ValidatedDotnetProject project, bool useDefault, CancellationToken ct)
+  {
+    if (useDefault)
+    {
+      var settings = await settingsService.GetValidatedProjectSettings(project.ProjectFullPath, ct);
+      return settings?.LaunchProfile;
+    }
+
+    var profiles = launchProfileService.GetLaunchProfiles(project.ProjectFullPath);
+    if (profiles is null || profiles.Count == 0) return null;
+
+    var options = profiles.Keys.Select(name => new SelectionOption(name, name)).ToArray();
+    var selected = await editorService.RequestSelection("Pick launch profile", options);
+    if (selected is null) return null;
+
+    settingsService.SetProjectLaunchProfile(project.ProjectFullPath, selected.Id);
+    return selected.Id;
+  }
+
+  private async Task StartDebugSessionAsync(
+      ValidatedDotnetProject project,
+      string? launchProfileName,
+      CancellationToken ct)
+  {
+    var startRequest = new DebuggerStartRequest(
+        project.ProjectFullPath,
+        project.TargetFramework,
+        "Debug",
+        launchProfileName);
+
+    var strategy = debugStrategyFactory.CreateRunInTerminalStrategy(launchProfileName);
+
+    var session = await debugOrchestrator.StartClientDebugSessionAsync(
+        project.ProjectFullPath,
+        startRequest,
+        strategy,
+        ct);
+
+    await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
+    await session.ProcessStarted;
+    await Task.Delay(1000, ct);
   }
 
   private async Task RunWithSolutionAsync(string solutionFile, WorkspaceRunRequest request, CancellationToken ct)
