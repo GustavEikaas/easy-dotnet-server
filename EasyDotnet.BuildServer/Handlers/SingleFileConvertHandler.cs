@@ -364,7 +364,7 @@ public class SingleFileConvertHandler(
   private static string PathJoin(params string[] paths)
   {
 #if NET5_0_OR_GREATER
-        return Path.Join(paths);
+    return Path.Join(paths);
 #else
     return Path.Combine(paths);
 #endif
@@ -373,7 +373,7 @@ public class SingleFileConvertHandler(
   private static async Task<string> ReadFileAsync(string path, CancellationToken ct)
   {
 #if NET5_0_OR_GREATER
-        return await File.ReadAllTextAsync(path, ct);
+    return await File.ReadAllTextAsync(path, ct);
 #else
     return File.ReadAllText(path);
 #endif
@@ -382,7 +382,7 @@ public class SingleFileConvertHandler(
   private static async Task WriteFileAsync(string path, string content, CancellationToken ct)
   {
 #if NET5_0_OR_GREATER
-        await File.WriteAllTextAsync(path, content, Encoding.UTF8, ct);
+    await File.WriteAllTextAsync(path, content, Encoding.UTF8, ct);
 #else
     await Task.Run(() => File.WriteAllText(path, content, Encoding.UTF8), ct);
 #endif

@@ -39,7 +39,14 @@
 
 ---
 
-## WorkspaceRunController
+## WorkspaceController
+
+### `workspace/debug`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | WorkspaceDebugRequest |   |
+
+**Returns:** `Task`
 
 ### `workspace/run`
 | Parameter | Type | Optional |
