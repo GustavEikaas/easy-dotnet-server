@@ -1,6 +1,7 @@
 using System.CommandLine.Parsing;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Domain.Models.Client;
+using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
 
 namespace EasyDotnet.Infrastructure.Editor;
@@ -10,7 +11,8 @@ public class EditorService(
   IStartupHookService startupHookService,
   IMsBuildService buildService,
   IClientService clientService,
-  JsonRpc jsonRpc) : IEditorService
+  JsonRpc jsonRpc,
+  ILogger<EditorService> logger) : IEditorService
 {
   public async Task DisplayError(string message) =>
       await jsonRpc.NotifyWithParameterObjectAsync("displayError", new DisplayMessage(message));
@@ -162,23 +164,32 @@ public class EditorService(
     return new RunCommand(
         "dotnet",
         [.. args],
-        request.LaunchProfile?.WorkingDirectory ?? request.Project.ProjectDir ?? ".",
+        request.LaunchProfile?.WorkingDirectory ?? Path.GetDirectoryName(request.Project.TargetPath) ?? request.Project.ProjectDir ?? ".",
         env);
   }
 
   private async Task MonitorExternalProcessAsync(int pid, Guid jobId, CancellationToken ct)
   {
+    var exitCode = -1;
     try
     {
       using var process = System.Diagnostics.Process.GetProcessById(pid);
       process.EnableRaisingEvents = true;
       await process.WaitForExitAsync(ct);
-
-      editorProcessManagerService.CompleteJob(jobId, process.ExitCode);
+      exitCode = process.ExitCode;
+      logger.LogInformation("External process (PID {Pid}) exited with code {ExitCode}", pid, exitCode);
     }
     catch (ArgumentException)
     {
-      editorProcessManagerService.CompleteJob(jobId, -1);
+      logger.LogWarning("External process (PID {Pid}) was not found — may have exited before monitoring began", pid);
+    }
+    catch (Exception ex)
+    {
+      logger.LogError(ex, "Unexpected error monitoring external process (PID {Pid})", pid);
+    }
+    finally
+    {
+      editorProcessManagerService.CompleteJob(jobId, exitCode);
     }
   }
 }
