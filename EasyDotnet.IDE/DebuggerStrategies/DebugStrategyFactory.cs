@@ -5,7 +5,7 @@ namespace EasyDotnet.IDE.DebuggerStrategies;
 
 public interface IDebugStrategyFactory
 {
-  RunInTerminalStrategy CreateRunInTerminalStrategy(string? launchProfileName);
+  RunInTerminalStrategy CreateRunInTerminalStrategy(string? launchProfileName, string? cliArgs = null);
   StandardLaunchStrategy CreateStandardLaunchStrategy();
   StandardAttachStrategy CreateStandardAttachStrategy(int pid);
   VsTestStrategy CreateVsTestStrategy();
@@ -17,8 +17,9 @@ public class DebugStrategyFactory(
   ILaunchProfileService launchProfileService,
   IStartupHookService startupHookService) : IDebugStrategyFactory
 {
-  public RunInTerminalStrategy CreateRunInTerminalStrategy(string? launchProfileName) => new(
+  public RunInTerminalStrategy CreateRunInTerminalStrategy(string? launchProfileName, string? cliArgs = null) => new(
     launchProfileName,
+    cliArgs,
     loggerFactory.CreateLogger<RunInTerminalStrategy>(),
     startupHookService,
     httpClientFactory,

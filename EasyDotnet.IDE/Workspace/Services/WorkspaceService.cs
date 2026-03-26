@@ -7,6 +7,7 @@ using EasyDotnet.IDE.Controllers.NetCoreDbg;
 using EasyDotnet.IDE.DebuggerStrategies;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.Workspace.Controllers;
+using EasyDotnet.Infrastructure;
 using EasyDotnet.Infrastructure.Settings;
 using Microsoft.Extensions.Logging;
 using LaunchProfile = EasyDotnet.Domain.Models.LaunchProfile.LaunchProfile;
@@ -62,7 +63,7 @@ public class WorkspaceService(
       var solutionFile = clientService.ProjectInfo?.SolutionFile;
       if (solutionFile is not null)
       {
-        await DebugProjectAsync(solutionFile, request, ct);
+        await DebugWithSolutionAsync(solutionFile, request, ct);
         return;
       }
 
@@ -77,7 +78,7 @@ public class WorkspaceService(
 
   private const string SingleFileOptionId = "__singlefile__";
 
-  private async Task DebugProjectAsync(string solutionFile, WorkspaceDebugRequest request, CancellationToken ct)
+  private async Task DebugWithSolutionAsync(string solutionFile, WorkspaceDebugRequest request, CancellationToken ct)
   {
     var runRequest = new WorkspaceRunRequest(request.UseDefault, request.UseLaunchProfile, request.FilePath, null);
     var (project, runAsSingleFile) = await ResolveProjectFromSolutionAsync(solutionFile, runRequest, ct);
@@ -105,7 +106,7 @@ public class WorkspaceService(
       return;
     }
 
-    await StartDebugSessionAsync(project, launchProfileName, ct);
+    await StartDebugSessionAsync(project, launchProfileName, request.CliArgs, ct);
   }
 
   private async Task DebugSingleFileAsync(WorkspaceDebugRequest request, CancellationToken ct)
@@ -128,7 +129,7 @@ public class WorkspaceService(
     if (!await BuildBeforeRunAsync(project, project.ProjectName, ct))
       return;
 
-    await StartDebugSessionAsync(project, null, ct);
+    await StartDebugSessionAsync(project, null, request.CliArgs, ct);
   }
 
   private async Task DebugNoSolutionAsync(WorkspaceDebugRequest request, CancellationToken ct)
@@ -159,35 +160,11 @@ public class WorkspaceService(
       }
     }
 
-    var csprojFiles = Directory.EnumerateFiles(rootDir, "*.csproj", new EnumerationOptions
-    {
-      MaxRecursionDepth = 3,
-      RecurseSubdirectories = true
-    }).ToList();
-
-    var runnableProjects = new List<ValidatedDotnetProject>();
-    await foreach (var result in buildHostManager.GetProjectPropertiesBatchAsync(
-      new GetProjectPropertiesBatchRequest([.. csprojFiles], null), ct))
-    {
-      if (result.Success && result.Project?.IsRunnable == true)
-        runnableProjects.Add(result.Project);
-    }
-
+    var runnableProjects = await GetRunnableProjectsAsync(rootDir, ct);
     if (runnableProjects.Count > 0)
     {
-      ValidatedDotnetProject picked;
-      if (runnableProjects.Count == 1)
-      {
-        picked = runnableProjects[0];
-      }
-      else
-      {
-        var options = runnableProjects.Select(p => new SelectionOption($"{p.ProjectFullPath}:{p.TargetFramework}", $"{p.ProjectName} ({p.TargetFramework})")).ToArray();
-        var selected = await editorService.RequestSelection("Pick project to debug", options);
-        if (selected is null) return;
-        picked = runnableProjects.First(p => $"{p.ProjectFullPath}:{p.TargetFramework}" == selected.Id);
-      }
-
+      var picked = await PickRunnableProjectAsync(runnableProjects, "Pick project to debug", ct);
+      if (picked is null) return;
       await DebugKnownProjectAsync(picked, request, ct);
       return;
     }
@@ -223,6 +200,7 @@ public class WorkspaceService(
   private async Task StartDebugSessionAsync(
       ValidatedDotnetProject project,
       string? launchProfileName,
+      string? cliArgs,
       CancellationToken ct)
   {
     var startRequest = new DebuggerStartRequest(
@@ -231,7 +209,7 @@ public class WorkspaceService(
         "Debug",
         launchProfileName);
 
-    var strategy = debugStrategyFactory.CreateRunInTerminalStrategy(launchProfileName);
+    var strategy = debugStrategyFactory.CreateRunInTerminalStrategy(launchProfileName, cliArgs);
 
     var session = await debugOrchestrator.StartClientDebugSessionAsync(
         project.ProjectFullPath,
@@ -295,20 +273,22 @@ public class WorkspaceService(
   {
     var projects = await buildHostManager.GetProjectsFromSolutionAsync(solutionFile, p => p.IsRunnable, ct: ct);
 
-    if (projects.Count == 0 && singleFilePath is null)
+    var includeScriptOption = singleFilePath is not null && !HasCsprojInParentDirs(singleFilePath);
+
+    if (projects.Count == 0 && !includeScriptOption)
     {
       await editorService.DisplayError("No runnable projects found in solution");
       return (null, false);
     }
 
-    if (projects.Count == 1 && singleFilePath is null)
+    if (projects.Count == 1 && !includeScriptOption)
     {
       settingsService.SetDefaultStartupProject(projects[0].ProjectFullPath);
       return (projects[0], false);
     }
 
     var options = new List<SelectionOption>();
-    if (singleFilePath is not null)
+    if (includeScriptOption)
       options.Add(new SelectionOption(SingleFileOptionId, $"{Path.GetFileName(singleFilePath)} (script)"));
     options.AddRange(projects.Select(p => new SelectionOption($"{p.ProjectFullPath}:{p.TargetFramework}", $"{p.ProjectName} ({p.TargetFramework})")));
 
@@ -323,11 +303,27 @@ public class WorkspaceService(
     return (picked, false);
   }
 
+  private bool HasCsprojInParentDirs(string filePath)
+  {
+    var rootDir = clientService.RequireRootDir();
+    var dir = Path.GetDirectoryName(filePath);
+    while (dir is not null)
+    {
+      if (Directory.EnumerateFiles(dir, "*.csproj").Any())
+        return true;
+
+      if (string.Equals(dir, rootDir, StringComparison.OrdinalIgnoreCase))
+        break;
+
+      dir = Path.GetDirectoryName(dir);
+    }
+    return false;
+  }
+
   private async Task RunNoSolutionAsync(WorkspaceRunRequest request, CancellationToken ct)
   {
     var rootDir = clientService.RequireRootDir();
 
-    // Walk up from the file's directory to find the nearest owning .csproj
     if (request.FilePath is not null)
     {
       var dir = Path.GetDirectoryName(request.FilePath);
@@ -355,37 +351,11 @@ public class WorkspaceService(
       }
     }
 
-    // Search workspace root for runnable projects
-    var csprojFiles = Directory.EnumerateFiles(rootDir, "*.csproj", new EnumerationOptions
-    {
-      MaxRecursionDepth = 3,
-      RecurseSubdirectories = true
-    }).ToList();
-
-    var runnableProjects = new List<ValidatedDotnetProject>();
-    await foreach (var result in buildHostManager.GetProjectPropertiesBatchAsync(
-      new GetProjectPropertiesBatchRequest([.. csprojFiles], null), ct))
-    {
-      if (result.Success && result.Project?.IsRunnable == true)
-        runnableProjects.Add(result.Project);
-    }
-
+    var runnableProjects = await GetRunnableProjectsAsync(rootDir, ct);
     if (runnableProjects.Count > 0)
     {
-      ValidatedDotnetProject project;
-      if (runnableProjects.Count == 1)
-      {
-        project = runnableProjects[0];
-      }
-      else
-      {
-        var options = runnableProjects
-          .Select(p => new SelectionOption($"{p.ProjectFullPath}:{p.TargetFramework}", $"{p.ProjectName} ({p.TargetFramework})"))
-          .ToArray();
-        var selection = await editorService.RequestSelection("Pick project to run", options);
-        if (selection is null) return;
-        project = runnableProjects.First(p => $"{p.ProjectFullPath}:{p.TargetFramework}" == selection.Id);
-      }
+      var project = await PickRunnableProjectAsync(runnableProjects, "Pick project to run", ct);
+      if (project is null) return;
 
       LaunchProfile? launchProfile = null;
       if (request.UseLaunchProfile)
@@ -395,7 +365,6 @@ public class WorkspaceService(
       return;
     }
 
-    // Last resort: single file
     if (!string.IsNullOrEmpty(request.FilePath))
     {
       await RunSingleFileAsync(request.FilePath, request.CliArgs, ct);
@@ -403,6 +372,32 @@ public class WorkspaceService(
     }
 
     await editorService.DisplayError("No runnable projects found");
+  }
+
+  private async Task<List<ValidatedDotnetProject>> GetRunnableProjectsAsync(string rootDir, CancellationToken ct)
+  {
+    var csprojFiles = Directory.EnumerateFiles(rootDir, "*.csproj", new EnumerationOptions
+    {
+      MaxRecursionDepth = 3,
+      RecurseSubdirectories = true
+    });
+
+    return [.. (await buildHostManager.GetProjectPropertiesBatchAsync(
+        new GetProjectPropertiesBatchRequest([.. csprojFiles], null), ct).ToListAsync(ct))
+      .Where(r => r.Success && r.Project?.IsRunnable == true)
+      .Select(r => r.Project!)];
+  }
+
+  private async Task<ValidatedDotnetProject?> PickRunnableProjectAsync(
+    List<ValidatedDotnetProject> projects, string prompt, CancellationToken ct)
+  {
+    if (projects.Count == 1) return projects[0];
+
+    var options = projects.Select(p => new SelectionOption(
+      $"{p.ProjectFullPath}:{p.TargetFramework}",
+      $"{p.ProjectName} ({p.TargetFramework})")).ToArray();
+    var selected = await editorService.RequestSelection(prompt, options);
+    return selected is null ? null : projects.First(p => $"{p.ProjectFullPath}:{p.TargetFramework}" == selected.Id);
   }
 
   /// <summary>
@@ -490,53 +485,41 @@ public class WorkspaceService(
     var token = Guid.NewGuid().ToString();
 
     await editorService.SendProgressStart(token, "Restoring...", $"Restoring {projectName}");
-    var restoreErrors = new List<QuickFixItem>();
-    var restoreOk = true;
+    List<RestoreResult> restoreResults;
     try
     {
-      await foreach (var result in buildHostManager.RestoreNugetPackagesAsync(
-        new RestoreRequest([project.ProjectFullPath]), ct))
-      {
-        if (result.Output?.Diagnostics is { } rd)
-          restoreErrors.AddRange(MapErrors(rd));
-        if (!result.Success)
-          restoreOk = false;
-      }
+      restoreResults = await buildHostManager.RestoreNugetPackagesAsync(
+        new RestoreRequest([project.ProjectFullPath]), ct).ToListAsync(ct);
     }
     finally
     {
       await editorService.SendProgressEnd(token);
     }
 
-    if (!restoreOk)
+    if (!restoreResults.All(r => r.Success))
     {
-      await editorService.SetQuickFixList([.. restoreErrors]);
+      var errors = restoreResults.SelectMany(r => r.Output?.Diagnostics is { } d ? MapErrors(d) : []);
+      await editorService.SetQuickFixList([.. errors]);
       await editorService.DisplayError($"Restore failed for {projectName}");
       return false;
     }
 
     await editorService.SendProgressStart(token, "Building...", $"Building {projectName}");
-    var buildErrors = new List<QuickFixItem>();
-    var buildOk = true;
+    List<BatchBuildResult> buildResults;
     try
     {
-      await foreach (var result in buildHostManager.BatchBuildAsync(
-        new BatchBuildRequest([project.ProjectFullPath], "Debug"), ct))
-      {
-        if (result.Output?.Diagnostics is { } bd)
-          buildErrors.AddRange(MapErrors(bd));
-        if (result.Kind == BatchBuildResultKind.Finished && result.Success == false)
-          buildOk = false;
-      }
+      buildResults = await buildHostManager.BatchBuildAsync(
+        new BatchBuildRequest([project.ProjectFullPath], "Debug"), ct).ToListAsync(ct);
     }
     finally
     {
       await editorService.SendProgressEnd(token);
     }
 
-    if (!buildOk)
+    if (buildResults.Any(r => r.Kind == BatchBuildResultKind.Finished && r.Success == false))
     {
-      await editorService.SetQuickFixList([.. buildErrors]);
+      var errors = buildResults.SelectMany(r => r.Output?.Diagnostics is { } d ? MapErrors(d) : []);
+      await editorService.SetQuickFixList([.. errors]);
       await editorService.DisplayError($"Build failed for {projectName}");
       return false;
     }
