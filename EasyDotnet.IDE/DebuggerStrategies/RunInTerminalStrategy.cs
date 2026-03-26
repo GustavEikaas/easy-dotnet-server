@@ -15,6 +15,7 @@ namespace EasyDotnet.IDE.DebuggerStrategies;
 
 public class RunInTerminalStrategy(
   string? launchProfileName,
+  string? cliArgs,
   ILogger<RunInTerminalStrategy> logger,
   IStartupHookService startupHookService,
   IHttpClientFactory httpClientFactory,
@@ -254,11 +255,16 @@ public class RunInTerminalStrategy(
 
   private string[] BuildCommandLineArgs()
   {
+    var args = new List<string>();
+
     if (_activeProfile?.CommandLineArgs is not null && _project is not null)
-    {
-      var interpolatedArgs = DebugStrategyUtils.InterpolateVariables(_activeProfile.CommandLineArgs, _project);
-      return DebugStrategyUtils.SplitCommandLineArgs(interpolatedArgs);
-    }
-    return [];
+      args.AddRange(DebugStrategyUtils.SplitCommandLineArgs(
+        DebugStrategyUtils.InterpolateVariables(_activeProfile.CommandLineArgs, _project)));
+
+    if (cliArgs is not null && _project is not null)
+      args.AddRange(DebugStrategyUtils.SplitCommandLineArgs(
+        DebugStrategyUtils.InterpolateVariables(cliArgs, _project)));
+
+    return [.. args];
   }
 }

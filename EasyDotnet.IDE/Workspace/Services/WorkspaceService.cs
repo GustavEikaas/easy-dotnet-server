@@ -3,7 +3,11 @@ using EasyDotnet.Application.Interfaces;
 using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.Domain.Models.Client;
 using EasyDotnet.IDE.BuildHost;
+using EasyDotnet.IDE.Controllers.NetCoreDbg;
+using EasyDotnet.IDE.DebuggerStrategies;
+using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.Workspace.Controllers;
+using EasyDotnet.Infrastructure;
 using EasyDotnet.Infrastructure.Settings;
 using Microsoft.Extensions.Logging;
 using LaunchProfile = EasyDotnet.Domain.Models.LaunchProfile.LaunchProfile;
@@ -17,6 +21,8 @@ public class WorkspaceService(
   IClientService clientService,
   WorkspaceBuildHostManager buildHostManager,
   WorkspaceSessionManager sessionManager,
+  IDebugOrchestrator debugOrchestrator,
+  IDebugStrategyFactory debugStrategyFactory,
   ILogger<WorkspaceService> logger)
 {
   public async Task RunAsync(WorkspaceRunRequest request, CancellationToken ct)
@@ -41,9 +47,191 @@ public class WorkspaceService(
     await RunWithSolutionAsync(solutionFile, request, ct);
   }
 
+  public async Task DebugAsync(WorkspaceDebugRequest request, CancellationToken ct)
+  {
+    try
+    {
+      if (request.FilePath is not null)
+      {
+        if (!Path.IsPathRooted(request.FilePath) || !request.FilePath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+        {
+          await editorService.DisplayError($"Invalid FilePath '{request.FilePath}': must be an absolute path to a .cs file");
+          return;
+        }
+      }
+
+      var solutionFile = clientService.ProjectInfo?.SolutionFile;
+      if (solutionFile is not null)
+      {
+        await DebugWithSolutionAsync(solutionFile, request, ct);
+        return;
+      }
+
+      await DebugNoSolutionAsync(request, ct);
+    }
+    catch (Exception ex)
+    {
+      logger.LogError(ex, "Error starting debug session");
+      await editorService.DisplayError($"Debug session failed: {ex.Message}");
+    }
+  }
+
+  private const string SingleFileOptionId = "__singlefile__";
+
+  private async Task DebugWithSolutionAsync(string solutionFile, WorkspaceDebugRequest request, CancellationToken ct)
+  {
+    var runRequest = new WorkspaceRunRequest(request.UseDefault, request.UseLaunchProfile, request.FilePath, null);
+    var (project, runAsSingleFile) = await ResolveProjectFromSolutionAsync(solutionFile, runRequest, ct);
+
+    if (runAsSingleFile)
+    {
+      await DebugSingleFileAsync(request, ct);
+      return;
+    }
+
+    if (project is null) return;
+    await DebugKnownProjectAsync(project, request, ct);
+  }
+
+  private async Task DebugKnownProjectAsync(ValidatedDotnetProject project, WorkspaceDebugRequest request, CancellationToken ct)
+  {
+    string? launchProfileName = null;
+    if (request.UseLaunchProfile)
+    {
+      launchProfileName = await ResolveProfileNameAsync(project, request.UseDefault, ct);
+    }
+
+    if (!await BuildBeforeRunAsync(project, project.ProjectName, ct))
+    {
+      return;
+    }
+
+    await StartDebugSessionAsync(project, launchProfileName, request.CliArgs, ct);
+  }
+
+  private async Task DebugSingleFileAsync(WorkspaceDebugRequest request, CancellationToken ct)
+  {
+    var convertResponse = await buildHostManager.ConvertFileToProjectAsync(request.FilePath!, ct);
+    if (!convertResponse.Properties.Success)
+    {
+      var errorMsg = convertResponse.Properties.Error?.Message ?? "Unknown error";
+      await editorService.DisplayError($"Failed to convert {Path.GetFileName(request.FilePath)}: {errorMsg}");
+      return;
+    }
+
+    var project = convertResponse.Properties.Project;
+    if (project is null)
+    {
+      await editorService.DisplayError($"Failed to convert {Path.GetFileName(request.FilePath)}: No project returned");
+      return;
+    }
+
+    if (!await BuildBeforeRunAsync(project, project.ProjectName, ct))
+      return;
+
+    await StartDebugSessionAsync(project, null, request.CliArgs, ct);
+  }
+
+  private async Task DebugNoSolutionAsync(WorkspaceDebugRequest request, CancellationToken ct)
+  {
+    var rootDir = clientService.RequireRootDir();
+
+    if (request.FilePath is not null)
+    {
+      var dir = Path.GetDirectoryName(request.FilePath);
+      while (dir is not null)
+      {
+        var csproj = Directory.EnumerateFiles(dir, "*.csproj").FirstOrDefault();
+        if (csproj is not null)
+        {
+          var project = await EvaluateProjectAsync(csproj, ct);
+          if (project is not null)
+          {
+            await DebugKnownProjectAsync(project, request, ct);
+            return;
+          }
+          break;
+        }
+
+        if (string.Equals(dir, rootDir, StringComparison.OrdinalIgnoreCase))
+          break;
+
+        dir = Path.GetDirectoryName(dir);
+      }
+    }
+
+    var runnableProjects = await GetRunnableProjectsAsync(rootDir, ct);
+    if (runnableProjects.Count > 0)
+    {
+      var picked = await PickRunnableProjectAsync(runnableProjects, "Pick project to debug", ct);
+      if (picked is null) return;
+      await DebugKnownProjectAsync(picked, request, ct);
+      return;
+    }
+
+    if (request.FilePath is not null)
+    {
+      await DebugSingleFileAsync(request, ct);
+      return;
+    }
+
+    await editorService.DisplayError("No runnable projects found");
+  }
+
+  private async Task<string?> ResolveProfileNameAsync(ValidatedDotnetProject project, bool useDefault, CancellationToken ct)
+  {
+    if (useDefault)
+    {
+      var settings = await settingsService.GetValidatedProjectSettings(project.ProjectFullPath, ct);
+      return settings?.LaunchProfile;
+    }
+
+    var profiles = launchProfileService.GetLaunchProfiles(project.ProjectFullPath);
+    if (profiles is null || profiles.Count == 0) return null;
+
+    var options = profiles.Keys.Select(name => new SelectionOption(name, name)).ToArray();
+    var selected = await editorService.RequestSelection("Pick launch profile", options);
+    if (selected is null) return null;
+
+    settingsService.SetProjectLaunchProfile(project.ProjectFullPath, selected.Id);
+    return selected.Id;
+  }
+
+  private async Task StartDebugSessionAsync(
+      ValidatedDotnetProject project,
+      string? launchProfileName,
+      string? cliArgs,
+      CancellationToken ct)
+  {
+    var startRequest = new DebuggerStartRequest(
+        project.ProjectFullPath,
+        project.TargetFramework,
+        "Debug",
+        launchProfileName);
+
+    var strategy = debugStrategyFactory.CreateRunInTerminalStrategy(launchProfileName, cliArgs);
+
+    var session = await debugOrchestrator.StartClientDebugSessionAsync(
+        project.ProjectFullPath,
+        startRequest,
+        strategy,
+        ct);
+
+    await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
+    await session.ProcessStarted;
+    await Task.Delay(1000, ct);
+  }
+
   private async Task RunWithSolutionAsync(string solutionFile, WorkspaceRunRequest request, CancellationToken ct)
   {
-    var project = await ResolveProjectFromSolutionAsync(solutionFile, request, ct);
+    var (project, runAsSingleFile) = await ResolveProjectFromSolutionAsync(solutionFile, request, ct);
+
+    if (runAsSingleFile)
+    {
+      await RunSingleFileAsync(request.FilePath!, request.CliArgs, ct);
+      return;
+    }
+
     if (project is null) return;
 
     LaunchProfile? launchProfile = null;
@@ -62,7 +250,7 @@ public class WorkspaceService(
   ///   <item>UseDefault=false: always show picker and persist the selection.</item>
   /// </list>
   /// </summary>
-  private async Task<ValidatedDotnetProject?> ResolveProjectFromSolutionAsync(
+  private async Task<(ValidatedDotnetProject? Project, bool RunAsSingleFile)> ResolveProjectFromSolutionAsync(
     string solutionFile, WorkspaceRunRequest request, CancellationToken ct)
   {
     if (request.UseDefault)
@@ -71,111 +259,145 @@ public class WorkspaceService(
       if (defaultPath is not null && File.Exists(defaultPath))
       {
         var project = await EvaluateProjectAsync(defaultPath, ct);
-        if (project is not null) return project;
+        if (project is not null) return (project, false);
       }
 
       settingsService.SetDefaultStartupProject(null);
     }
 
-    return await PickAndPersistProjectAsync(solutionFile, ct);
+    return await PickAndPersistProjectAsync(solutionFile, request.FilePath, ct);
   }
 
-  private async Task<ValidatedDotnetProject?> PickAndPersistProjectAsync(string solutionFile, CancellationToken ct)
+  private async Task<(ValidatedDotnetProject? Project, bool RunAsSingleFile)> PickAndPersistProjectAsync(
+    string solutionFile, string? singleFilePath, CancellationToken ct)
   {
     var projects = await buildHostManager.GetProjectsFromSolutionAsync(solutionFile, p => p.IsRunnable, ct: ct);
 
-    if (projects.Count == 0)
+    var includeScriptOption = singleFilePath is not null && !HasCsprojInParentDirs(singleFilePath);
+
+    if (projects.Count == 0 && !includeScriptOption)
     {
       await editorService.DisplayError("No runnable projects found in solution");
-      return null;
+      return (null, false);
     }
 
-    ValidatedDotnetProject picked;
-    if (projects.Count == 1)
+    if (projects.Count == 1 && !includeScriptOption)
     {
-      picked = projects[0];
-    }
-    else
-    {
-      var options = projects.Select(p => new SelectionOption(p.ProjectFullPath, p.ProjectName)).ToArray();
-      var selected = await editorService.RequestSelection("Pick project to run", options);
-      if (selected is null) return null;
-      picked = projects.First(p => p.ProjectFullPath == selected.Id);
+      settingsService.SetDefaultStartupProject(projects[0].ProjectFullPath);
+      return (projects[0], false);
     }
 
+    var options = new List<SelectionOption>();
+    if (includeScriptOption)
+      options.Add(new SelectionOption(SingleFileOptionId, $"{Path.GetFileName(singleFilePath)} (script)"));
+    options.AddRange(projects.Select(p => new SelectionOption($"{p.ProjectFullPath}:{p.TargetFramework}", $"{p.ProjectName} ({p.TargetFramework})")));
+
+    var selected = await editorService.RequestSelection("Pick project to run", [.. options]);
+    if (selected is null) return (null, false);
+
+    if (selected.Id == SingleFileOptionId)
+      return (null, true);
+
+    var picked = projects.First(p => $"{p.ProjectFullPath}:{p.TargetFramework}" == selected.Id);
     settingsService.SetDefaultStartupProject(picked.ProjectFullPath);
-    return picked;
+    return (picked, false);
+  }
+
+  private bool HasCsprojInParentDirs(string filePath)
+  {
+    var rootDir = clientService.RequireRootDir();
+    var dir = Path.GetDirectoryName(filePath);
+    while (dir is not null)
+    {
+      if (Directory.EnumerateFiles(dir, "*.csproj").Any())
+        return true;
+
+      if (string.Equals(dir, rootDir, StringComparison.OrdinalIgnoreCase))
+        break;
+
+      dir = Path.GetDirectoryName(dir);
+    }
+    return false;
   }
 
   private async Task RunNoSolutionAsync(WorkspaceRunRequest request, CancellationToken ct)
   {
-    var rootDir = clientService.ProjectInfo?.RootDir;
-    if (rootDir is null)
+    var rootDir = clientService.RequireRootDir();
+
+    if (request.FilePath is not null)
     {
-      await editorService.DisplayError("No workspace root found");
+      var dir = Path.GetDirectoryName(request.FilePath);
+      while (dir is not null)
+      {
+        var csproj = Directory.EnumerateFiles(dir, "*.csproj").FirstOrDefault();
+        if (csproj is not null)
+        {
+          var project = await EvaluateProjectAsync(csproj, ct);
+          if (project is not null)
+          {
+            LaunchProfile? launchProfile = null;
+            if (request.UseLaunchProfile)
+              launchProfile = await PickProfileInteractiveAsync(project, ct);
+            await DispatchRunAsync($"{project.ProjectFullPath}:{project.TargetFramework}", project.ProjectName, project, launchProfile, request.CliArgs, ct);
+            return;
+          }
+          break;
+        }
+
+        if (string.Equals(dir, rootDir, StringComparison.OrdinalIgnoreCase))
+          break;
+
+        dir = Path.GetDirectoryName(dir);
+      }
+    }
+
+    var runnableProjects = await GetRunnableProjectsAsync(rootDir, ct);
+    if (runnableProjects.Count > 0)
+    {
+      var project = await PickRunnableProjectAsync(runnableProjects, "Pick project to run", ct);
+      if (project is null) return;
+
+      LaunchProfile? launchProfile = null;
+      if (request.UseLaunchProfile)
+        launchProfile = await PickProfileInteractiveAsync(project, ct);
+
+      await DispatchRunAsync($"{project.ProjectFullPath}:{project.TargetFramework}", project.ProjectName, project, launchProfile, request.CliArgs, ct);
       return;
     }
 
+    if (!string.IsNullOrEmpty(request.FilePath))
+    {
+      await RunSingleFileAsync(request.FilePath, request.CliArgs, ct);
+      return;
+    }
+
+    await editorService.DisplayError("No runnable projects found");
+  }
+
+  private async Task<List<ValidatedDotnetProject>> GetRunnableProjectsAsync(string rootDir, CancellationToken ct)
+  {
     var csprojFiles = Directory.EnumerateFiles(rootDir, "*.csproj", new EnumerationOptions
     {
       MaxRecursionDepth = 3,
       RecurseSubdirectories = true
-    }).ToList();
+    });
 
-    if (csprojFiles.Count == 0)
-    {
-      if (!string.IsNullOrEmpty(request.FilePath))
-      {
-        await RunSingleFileAsync(request.FilePath, request.CliArgs, ct);
-        return;
-      }
+    return [.. (await buildHostManager.GetProjectPropertiesBatchAsync(
+        new GetProjectPropertiesBatchRequest([.. csprojFiles], null), ct).ToListAsync(ct))
+      .Where(r => r.Success && r.Project?.IsRunnable == true)
+      .Select(r => r.Project!)];
+  }
 
-      await editorService.DisplayError("No runnable projects found");
-      return;
-    }
+  private async Task<ValidatedDotnetProject?> PickRunnableProjectAsync(
+    List<ValidatedDotnetProject> projects, string prompt, CancellationToken ct)
+  {
+    if (projects.Count == 1) return projects[0];
 
-    var runnableProjects = new List<ValidatedDotnetProject>();
-    await foreach (var result in buildHostManager.GetProjectPropertiesBatchAsync(
-      new GetProjectPropertiesBatchRequest([.. csprojFiles], null), ct))
-    {
-      if (result.Success && result.Project?.IsRunnable == true)
-        runnableProjects.Add(result.Project);
-    }
-
-    if (runnableProjects.Count == 0)
-    {
-      if (!string.IsNullOrEmpty(request.FilePath))
-      {
-        await RunSingleFileAsync(request.FilePath, request.CliArgs, ct);
-        return;
-      }
-
-      await editorService.DisplayError("No runnable projects found");
-      return;
-    }
-
-    ValidatedDotnetProject project;
-    if (runnableProjects.Count == 1)
-    {
-      project = runnableProjects[0];
-    }
-    else
-    {
-      var options = runnableProjects
-        .Select(p => new SelectionOption(p.ProjectFullPath, $"{p.ProjectName} ({p.TargetFramework})"))
-        .ToArray();
-      var selection = await editorService.RequestSelection("Pick project to run", options);
-      if (selection is null) return;
-      project = runnableProjects.First(p => p.ProjectFullPath == selection.Id);
-    }
-
-    LaunchProfile? launchProfile = null;
-    if (request.UseLaunchProfile)
-    {
-      launchProfile = await PickProfileInteractiveAsync(project, ct);
-    }
-
-    await DispatchRunAsync($"{project.ProjectFullPath}:{project.TargetFramework}", project.ProjectName, project, launchProfile, request.CliArgs, ct);
+    var options = projects.Select(p => new SelectionOption(
+      $"{p.ProjectFullPath}:{p.TargetFramework}",
+      $"{p.ProjectName} ({p.TargetFramework})")).ToArray();
+    var selected = await editorService.RequestSelection(prompt, options);
+    return selected is null ? null : projects.First(p => $"{p.ProjectFullPath}:{p.TargetFramework}" == selected.Id);
   }
 
   /// <summary>
@@ -263,53 +485,41 @@ public class WorkspaceService(
     var token = Guid.NewGuid().ToString();
 
     await editorService.SendProgressStart(token, "Restoring...", $"Restoring {projectName}");
-    var restoreErrors = new List<QuickFixItem>();
-    var restoreOk = true;
+    List<RestoreResult> restoreResults;
     try
     {
-      await foreach (var result in buildHostManager.RestoreNugetPackagesAsync(
-        new RestoreRequest([project.ProjectFullPath]), ct))
-      {
-        if (result.Output?.Diagnostics is { } rd)
-          restoreErrors.AddRange(MapErrors(rd));
-        if (!result.Success)
-          restoreOk = false;
-      }
+      restoreResults = await buildHostManager.RestoreNugetPackagesAsync(
+        new RestoreRequest([project.ProjectFullPath]), ct).ToListAsync(ct);
     }
     finally
     {
       await editorService.SendProgressEnd(token);
     }
 
-    if (!restoreOk)
+    if (!restoreResults.All(r => r.Success))
     {
-      await editorService.SetQuickFixList([.. restoreErrors]);
+      var errors = restoreResults.SelectMany(r => r.Output?.Diagnostics is { } d ? MapErrors(d) : []);
+      await editorService.SetQuickFixList([.. errors]);
       await editorService.DisplayError($"Restore failed for {projectName}");
       return false;
     }
 
     await editorService.SendProgressStart(token, "Building...", $"Building {projectName}");
-    var buildErrors = new List<QuickFixItem>();
-    var buildOk = true;
+    List<BatchBuildResult> buildResults;
     try
     {
-      await foreach (var result in buildHostManager.BatchBuildAsync(
-        new BatchBuildRequest([project.ProjectFullPath], null, project.TargetFramework), ct))
-      {
-        if (result.Output?.Diagnostics is { } bd)
-          buildErrors.AddRange(MapErrors(bd));
-        if (result.Kind == BatchBuildResultKind.Finished && result.Success == false)
-          buildOk = false;
-      }
+      buildResults = await buildHostManager.BatchBuildAsync(
+        new BatchBuildRequest([project.ProjectFullPath], "Debug"), ct).ToListAsync(ct);
     }
     finally
     {
       await editorService.SendProgressEnd(token);
     }
 
-    if (!buildOk)
+    if (buildResults.Any(r => r.Kind == BatchBuildResultKind.Finished && r.Success == false))
     {
-      await editorService.SetQuickFixList([.. buildErrors]);
+      var errors = buildResults.SelectMany(r => r.Output?.Diagnostics is { } d ? MapErrors(d) : []);
+      await editorService.SetQuickFixList([.. errors]);
       await editorService.DisplayError($"Build failed for {projectName}");
       return false;
     }
