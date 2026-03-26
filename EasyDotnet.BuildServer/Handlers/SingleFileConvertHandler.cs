@@ -10,7 +10,6 @@ namespace EasyDotnet.BuildServer.Handlers;
 
 /// <summary>
 /// Handles singlefile/convert RPC: converts a .cs entry point file to a virtual project.
-/// Orchestrates 4 steps: virtual path → staleness check → write .csproj → restore → evaluate.
 /// </summary>
 public class SingleFileConvertHandler(
     RestoreHandler restoreHandler,
@@ -67,19 +66,15 @@ public class SingleFileConvertHandler(
 
       if (!isCacheValid)
       {
-        // Step 3: Write virtual .csproj
         var sourceContent = await ReadFileAsync(sourceFullPath, cancellationToken);
         var directives = CSharpDirectiveParser.Parse(sourceContent);
 
-        // Write build-start.cache sentinel
         var buildStartFile = PathJoin(virtualDir, "build-start.cache");
         Directory.CreateDirectory(virtualDir);
         await WriteFileAsync(buildStartFile, sourceFullPath, cancellationToken);
 
-        // Write .csproj
         VirtualProjectWriter.Write(virtualDir, sourceName, sourceFullPath, directives);
 
-        // Step 4a: Restore NuGet packages
         var restoreRequest = new RestoreRequest([csprojPath]);
         var restoreErrors = new List<ProjectEvaluationError>();
 
@@ -94,7 +89,6 @@ public class SingleFileConvertHandler(
                 null));
           }
 
-          // Surface restore diagnostics if any
           if (result.Output?.Diagnostics.Length > 0)
           {
             foreach (var diag in result.Output.Diagnostics)
@@ -120,20 +114,17 @@ public class SingleFileConvertHandler(
                   "net10.0",
                   false,
                   null,
-                  restoreErrors[0])); // Return first error
+                  restoreErrors[0]));
         }
 
-        // Record implicit build files for future staleness checks
         var implicitFiles = ScanImplicitBuildFiles(sourceFullPath);
 
-        // Write build-success.cache
         var successCacheEntry = new SingleFileCacheEntry(globalProps, implicitFiles);
         var successCacheFile = PathJoin(virtualDir, "build-success.cache");
         var json = JsonSerializer.Serialize(successCacheEntry, new JsonSerializerOptions { WriteIndented = true });
         await WriteFileAsync(successCacheFile, json, cancellationToken);
       }
 
-      // Step 4b: MSBuild Evaluation
       var evalRequest = new GetProjectPropertiesBatchRequest(
           [csprojPath],
           "Debug");
@@ -143,7 +134,7 @@ public class SingleFileConvertHandler(
           .WithCancellation(cancellationToken))
       {
         evalResult = result;
-        break; // Only need first result
+        break;
       }
 
       if (evalResult == null)
