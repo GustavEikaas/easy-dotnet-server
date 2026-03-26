@@ -39,6 +39,17 @@
 
 ---
 
+## WorkspaceRunController
+
+### `workspace/run`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | WorkspaceRunRequest |   |
+
+**Returns:** `Task`
+
+---
+
 ## TestRunnerController
 
 ### `testrunner/cancel`

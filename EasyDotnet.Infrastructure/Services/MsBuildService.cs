@@ -294,7 +294,7 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
       return "";
     }
 
-    if (project.IsNETCoreOrNETStandard)
+    if (project.IsNETCoreOrNETStandard || !clientService.UseVisualStudio)
     {
       return string.IsNullOrWhiteSpace(project.MSBuildProjectFullPath)
         ? throw new InvalidOperationException("[compat] Missing project path")
