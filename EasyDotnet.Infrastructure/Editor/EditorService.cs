@@ -1,4 +1,3 @@
-using System.CommandLine.Parsing;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Domain.Models.Client;
 using Microsoft.Extensions.Logging;
@@ -141,7 +140,7 @@ public class EditorService(
 
     if (request.LaunchProfile?.CommandLineArgs is not null)
     {
-      args.AddRange(CommandLineParser.SplitCommandLine(request.LaunchProfile.CommandLineArgs));
+      args.AddRange(LaunchProfileUtils.ParseCommandLineArgs(request.LaunchProfile.CommandLineArgs, request.Project));
     }
 
     if (request.AdditionalArguments is { Length: > 0 })
@@ -149,20 +148,13 @@ public class EditorService(
       args.AddRange(request.AdditionalArguments);
     }
 
-    var env = new Dictionary<string, string>(request.EnvironmentVariables ?? [], StringComparer.OrdinalIgnoreCase);
-    foreach (var kvp in request.LaunchProfile?.EnvironmentVariables ?? [])
-      env[kvp.Key] = kvp.Value;
+    var env = LaunchProfileUtils.GetEnvironmentVariables(request.LaunchProfile);
     foreach (var kvp in hookEnv)
+    {
       env[kvp.Key] = kvp.Value;
-    env.TryAdd("ASPNETCORE_ENVIRONMENT", "Development");
+    }
 
-    var cwd = request.LaunchProfile?.WorkingDirectory
-        ?? (string.IsNullOrWhiteSpace(request.Project.RunWorkingDirectory) ? null : request.Project.RunWorkingDirectory)
-        ?? Path.GetDirectoryName(request.Project.TargetPath)
-        ?? request.Project.ProjectDir
-        ?? ".";
-
-    return new RunCommand("dotnet", [.. args], cwd.Replace('\\', '/'), env);
+    return new RunCommand("dotnet", [.. args], LaunchProfileUtils.ResolveCwd(request.LaunchProfile, request.Project), env);
   }
 
   private async Task MonitorExternalProcessAsync(int pid, Guid jobId, CancellationToken ct)

@@ -7,6 +7,7 @@ using EasyDotnet.Debugger.Messages;
 using EasyDotnet.Domain.Models.LaunchProfile;
 using EasyDotnet.IDE.Types;
 using EasyDotnet.IDE.Utils;
+using EasyDotnet.Infrastructure;
 using EasyDotnet.MsBuild;
 using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
@@ -52,7 +53,7 @@ public class RunInTerminalStrategy(
   {
     if (_project == null) throw new InvalidOperationException("Strategy has not been prepared.");
 
-    var profileEnv = DebugStrategyUtils.GetEnvironmentVariables(_activeProfile);
+    var profileEnv = LaunchProfileUtils.GetEnvironmentVariables(_activeProfile);
     _hookSession = startupHookService.CreateSession(profileEnv);
 
     var extraArgs = BuildCommandLineArgs();
@@ -62,7 +63,7 @@ public class RunInTerminalStrategy(
     var terminalKind = ExtractTerminalKind(request.Arguments.Console);
     var runInTerminalReq = RunInTerminalRequest.Create(terminalKind, [.. terminalArgs]);
 
-    var cwd = ResolveCwd(_activeProfile, _project);
+    var cwd = LaunchProfileUtils.ResolveCwd(_activeProfile, _project);
 
     runInTerminalReq.Arguments.Cwd = cwd;
     runInTerminalReq.Arguments.Env = _hookSession.EnvironmentVariables;
@@ -250,35 +251,17 @@ public class RunInTerminalStrategy(
            _ => RunInTerminalKind.Internal
          };
 
-  private static string ResolveCwd(LaunchProfile? profile, DotnetProject project)
-  {
-    if (!string.IsNullOrWhiteSpace(profile?.WorkingDirectory))
-    {
-      return DebugStrategyUtils.NormalizePath(DebugStrategyUtils.InterpolateVariables(profile.WorkingDirectory, project));
-    }
-
-    // RunWorkingDirectory is set by the Web SDK (and potentially others) to express
-    // the intended CWD — exactly what VS reads via GetRunnableProjectInformationAsync.
-    // For console apps it is empty and we fall back to the output dir, matching VS behaviour.
-    if (!string.IsNullOrWhiteSpace(project.RunWorkingDirectory))
-    {
-      return DebugStrategyUtils.NormalizePath(project.RunWorkingDirectory);
-    }
-
-    return DebugStrategyUtils.NormalizePath(Path.GetDirectoryName(project.TargetPath) ?? project.ProjectDir!);
-  }
-
   private string[] BuildCommandLineArgs()
   {
     var args = new List<string>();
-
     if (_activeProfile?.CommandLineArgs is not null && _project is not null)
-      args.AddRange(DebugStrategyUtils.SplitCommandLineArgs(
-        DebugStrategyUtils.InterpolateVariables(_activeProfile.CommandLineArgs, _project)));
-
+    {
+      args.AddRange(LaunchProfileUtils.ParseCommandLineArgs(_activeProfile.CommandLineArgs, _project));
+    }
     if (cliArgs is not null && _project is not null)
-      args.AddRange(DebugStrategyUtils.SplitCommandLineArgs(
-        DebugStrategyUtils.InterpolateVariables(cliArgs, _project)));
+    {
+      args.AddRange(LaunchProfileUtils.ParseCommandLineArgs(cliArgs, _project));
+    }
 
     return [.. args];
   }
