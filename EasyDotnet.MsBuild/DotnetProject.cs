@@ -33,6 +33,7 @@ public record DotnetProject
     bool UseIISExpress,
     string? LangVersion,
     string? RootNamespace,
+    string? RunWorkingDirectory,
     bool IsAspireHost,
     Version? AspireHostingSDKVersion,
     bool IsLegacyAspire,

@@ -418,6 +418,13 @@ public static class MsBuildProperties
           Deserialize: MsBuildValueParsers.AsVersion
       );
 
+  public static readonly MsBuildProperty<string?> RunWorkingDirectory =
+      new(
+          Name: "RunWorkingDirectory",
+          Description: "Working directory for web apps",
+          Deserialize: MsBuildValueParsers.AsString
+      );
+
   public static readonly MsBuildProperty<bool> UsingMicrosoftNETSdkBlazorWebAssembly =
       new(
           Name: "UsingMicrosoftNETSdkBlazorWebAssembly",
