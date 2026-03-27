@@ -257,10 +257,15 @@ public class RunInTerminalStrategy(
       return DebugStrategyUtils.NormalizePath(DebugStrategyUtils.InterpolateVariables(profile.WorkingDirectory, project));
     }
 
-    var isWebProject = project.UsingMicrosoftNETSdkWeb || project.UsingMicrosoftNETSdkStaticWebAssets;
-    return isWebProject && !string.IsNullOrWhiteSpace(project.ProjectDir)
-      ? project.ProjectDir!
-      : Path.GetDirectoryName(project.TargetPath) ?? project.ProjectDir!;
+    // RunWorkingDirectory is set by the Web SDK (and potentially others) to express
+    // the intended CWD — exactly what VS reads via GetRunnableProjectInformationAsync.
+    // For console apps it is empty and we fall back to the output dir, matching VS behaviour.
+    if (!string.IsNullOrWhiteSpace(project.RunWorkingDirectory))
+    {
+      return DebugStrategyUtils.NormalizePath(project.RunWorkingDirectory);
+    }
+
+    return DebugStrategyUtils.NormalizePath(Path.GetDirectoryName(project.TargetPath) ?? project.ProjectDir!);
   }
 
   private string[] BuildCommandLineArgs()
