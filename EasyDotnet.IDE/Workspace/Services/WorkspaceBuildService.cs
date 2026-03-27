@@ -5,7 +5,6 @@ using EasyDotnet.IDE.Workspace.Controllers;
 using EasyDotnet.Infrastructure;
 using EasyDotnet.Infrastructure.Editor;
 using EasyDotnet.Infrastructure.Settings;
-using EasyDotnet.MsBuild;
 
 namespace EasyDotnet.IDE.Workspace.Services;
 
@@ -14,7 +13,7 @@ public class WorkspaceBuildService(
     ISolutionService solutionService,
     IBuildHostManager buildHostManager,
     IEditorService editorService,
-    ProgressScopeFactory progressScopeFactory,
+    IProgressScopeFactory progressScopeFactory,
     SettingsService settingsService)
 {
   public async Task BuildProjectAsync(WorkspaceBuildRequest request, CancellationToken ct)
@@ -136,27 +135,11 @@ public class WorkspaceBuildService(
 
   private async Task RunBuildQuickfixAsync(string targetPath, string name, CancellationToken ct)
   {
-    string[] projectPaths;
-    if (FileTypes.IsAnySolutionFile(targetPath))
-    {
-      var solutionProjects = await solutionService.GetProjectsFromSolutionFile(targetPath, ct);
-      if (solutionProjects.Count == 0)
-      {
-        await editorService.DisplayError($"No projects found in {name}");
-        return;
-      }
-      projectPaths = [.. solutionProjects.Select(p => p.AbsolutePath)];
-    }
-    else
-    {
-      projectPaths = [targetPath];
-    }
-
     List<BatchBuildResult> results;
     using (progressScopeFactory.Create("Building...", $"Building {name}"))
     {
       results = await buildHostManager
-          .BatchBuildAsync(new BatchBuildRequest(projectPaths, "Debug"), ct)
+          .BatchBuildAsync(new BatchBuildRequest([targetPath], "Debug"), ct)
           .ToListAsync(ct);
     }
 
@@ -170,7 +153,6 @@ public class WorkspaceBuildService(
 
     if (succeeded)
     {
-      await editorService.SetQuickFixList([]);
       var successMsg = warningCount > 0
           ? $"Build succeeded — {warningCount} warning(s)"
           : "Build succeeded.";
