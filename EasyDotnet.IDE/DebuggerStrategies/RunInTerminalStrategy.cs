@@ -63,12 +63,12 @@ public class RunInTerminalStrategy(
     var runInTerminalReq = RunInTerminalRequest.Create(terminalKind, [.. terminalArgs]);
 
     var cwd = !string.IsNullOrWhiteSpace(_activeProfile?.WorkingDirectory)
-        ? DebugStrategyUtils.NormalizePath(DebugStrategyUtils.InterpolateVariables(_activeProfile.WorkingDirectory, _project))
-        : _project.ProjectDir;
+        ? DebugStrategyUtils.NormalizePath(
+            DebugStrategyUtils.InterpolateVariables(_activeProfile.WorkingDirectory, _project))
+        : Path.GetDirectoryName(_project.TargetPath) ?? _project.ProjectDir;
 
     runInTerminalReq.Arguments.Cwd = cwd;
     runInTerminalReq.Arguments.Env = _hookSession.EnvironmentVariables;
-
 
     logger.LogInformation("Sending runInTerminal request to Neovim: {payload}", JsonSerializer.Serialize(runInTerminalReq, _jsonSerializerOptions));
     var termResponse = await proxy.RunClientRequestAsync(runInTerminalReq, CancellationToken.None);
