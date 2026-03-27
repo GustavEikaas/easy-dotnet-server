@@ -162,7 +162,7 @@ public class EditorService(
         ?? request.Project.ProjectDir
         ?? ".";
 
-    return new RunCommand("dotnet", [.. args], cwd, env);
+    return new RunCommand("dotnet", [.. args], cwd.Replace('\\', '/'), env);
   }
 
   private async Task MonitorExternalProcessAsync(int pid, Guid jobId, CancellationToken ct)
