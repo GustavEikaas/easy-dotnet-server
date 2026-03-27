@@ -41,7 +41,7 @@ public static partial class DebugStrategyUtils
     {
       env["ASPNETCORE_URLS"] = launchProfile.ApplicationUrl;
     }
-
+    env.TryAdd("ASPNETCORE_ENVIRONMENT", "Development");
     return env;
   }
 

@@ -53,7 +53,6 @@ public class RunInTerminalStrategy(
     if (_project == null) throw new InvalidOperationException("Strategy has not been prepared.");
 
     var profileEnv = DebugStrategyUtils.GetEnvironmentVariables(_activeProfile);
-    ApplyWebProjectContentRoot(profileEnv, _project);
     _hookSession = startupHookService.CreateSession(profileEnv);
 
     var extraArgs = BuildCommandLineArgs();
@@ -63,10 +62,7 @@ public class RunInTerminalStrategy(
     var terminalKind = ExtractTerminalKind(request.Arguments.Console);
     var runInTerminalReq = RunInTerminalRequest.Create(terminalKind, [.. terminalArgs]);
 
-    var cwd = !string.IsNullOrWhiteSpace(_activeProfile?.WorkingDirectory)
-        ? DebugStrategyUtils.NormalizePath(
-            DebugStrategyUtils.InterpolateVariables(_activeProfile.WorkingDirectory, _project))
-        : Path.GetDirectoryName(_project.TargetPath) ?? _project.ProjectDir;
+    var cwd = ResolveCwd(_activeProfile, _project);
 
     runInTerminalReq.Arguments.Cwd = cwd;
     runInTerminalReq.Arguments.Env = _hookSession.EnvironmentVariables;
@@ -254,18 +250,17 @@ public class RunInTerminalStrategy(
            _ => RunInTerminalKind.Internal
          };
 
-  private static void ApplyWebProjectContentRoot(Dictionary<string, string> environment, DotnetProject project)
+  private static string ResolveCwd(LaunchProfile? profile, DotnetProject project)
   {
-    var isWebProject = project.UsingMicrosoftNETSdkWeb || project.UsingMicrosoftNETSdkStaticWebAssets;
-    var hasProjectDirectory = !string.IsNullOrWhiteSpace(project.ProjectDir);
-    var hasExplicitContentRoot = environment.ContainsKey("ASPNETCORE_CONTENTROOT");
-
-    if (!isWebProject || !hasProjectDirectory || hasExplicitContentRoot)
+    if (!string.IsNullOrWhiteSpace(profile?.WorkingDirectory))
     {
-      return;
+      return DebugStrategyUtils.NormalizePath(DebugStrategyUtils.InterpolateVariables(profile.WorkingDirectory, project));
     }
 
-    environment["ASPNETCORE_CONTENTROOT"] = project.ProjectDir!;
+    var isWebProject = project.UsingMicrosoftNETSdkWeb || project.UsingMicrosoftNETSdkStaticWebAssets;
+    return isWebProject && !string.IsNullOrWhiteSpace(project.ProjectDir)
+      ? project.ProjectDir!
+      : Path.GetDirectoryName(project.TargetPath) ?? project.ProjectDir!;
   }
 
   private string[] BuildCommandLineArgs()
