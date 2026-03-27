@@ -37,6 +37,7 @@ public record DotnetProject
     bool UsingMicrosoftNETSdkStaticWebAssets,
     bool UsingMicrosoftNETSdkBlazorWebAssembly,
     bool UseIISExpress,
+    string? RunWorkingDirectory,
     string? LangVersion,
     string? RootNamespace,
     bool IsAspireHost,
