@@ -77,6 +77,7 @@ public class EditorService(
 
     var pid = await session.WaitForPidAsync(ct);
     session.Resume();
+    //TODO: open browser if applicable
 
     if (clientService.HasExternalTerminal)
     {
