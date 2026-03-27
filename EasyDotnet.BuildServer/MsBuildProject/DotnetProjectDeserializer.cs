@@ -34,6 +34,7 @@ public static class DotnetProjectDeserializer
         UsingMicrosoftNETSdkStaticWebAssets: bag.Get(MsBuildProperties.UsingMicrosoftNETSdkStaticWebAssets),
         UsingMicrosoftNETSdkBlazorWebAssembly: bag.Get(MsBuildProperties.UsingMicrosoftNETSdkBlazorWebAssembly),
         UseIISExpress: bag.Get(MsBuildProperties.UseIISExpress),
+        RunWorkingDirectory: bag.Get(MsBuildProperties.RunWorkingDirectory),
         LangVersion: bag.Get(MsBuildProperties.LangVersion),
         RootNamespace: bag.Get(MsBuildProperties.RootNamespace),
         IsAspireHost: bag.Get(MsBuildProperties.IsAspireHost),

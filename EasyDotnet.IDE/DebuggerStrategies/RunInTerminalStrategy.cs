@@ -62,10 +62,7 @@ public class RunInTerminalStrategy(
     var terminalKind = ExtractTerminalKind(request.Arguments.Console);
     var runInTerminalReq = RunInTerminalRequest.Create(terminalKind, [.. terminalArgs]);
 
-    var cwd = !string.IsNullOrWhiteSpace(_activeProfile?.WorkingDirectory)
-        ? DebugStrategyUtils.NormalizePath(
-            DebugStrategyUtils.InterpolateVariables(_activeProfile.WorkingDirectory, _project))
-        : Path.GetDirectoryName(_project.TargetPath) ?? _project.ProjectDir;
+    var cwd = ResolveCwd(_activeProfile, _project);
 
     runInTerminalReq.Arguments.Cwd = cwd;
     runInTerminalReq.Arguments.Env = _hookSession.EnvironmentVariables;
@@ -252,6 +249,24 @@ public class RunInTerminalStrategy(
            "integratedterminal" => RunInTerminalKind.Internal,
            _ => RunInTerminalKind.Internal
          };
+
+  private static string ResolveCwd(LaunchProfile? profile, DotnetProject project)
+  {
+    if (!string.IsNullOrWhiteSpace(profile?.WorkingDirectory))
+    {
+      return DebugStrategyUtils.NormalizePath(DebugStrategyUtils.InterpolateVariables(profile.WorkingDirectory, project));
+    }
+
+    // RunWorkingDirectory is set by the Web SDK (and potentially others) to express
+    // the intended CWD — exactly what VS reads via GetRunnableProjectInformationAsync.
+    // For console apps it is empty and we fall back to the output dir, matching VS behaviour.
+    if (!string.IsNullOrWhiteSpace(project.RunWorkingDirectory))
+    {
+      return DebugStrategyUtils.NormalizePath(project.RunWorkingDirectory);
+    }
+
+    return DebugStrategyUtils.NormalizePath(Path.GetDirectoryName(project.TargetPath) ?? project.ProjectDir!);
+  }
 
   private string[] BuildCommandLineArgs()
   {

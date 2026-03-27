@@ -150,22 +150,19 @@ public class EditorService(
     }
 
     var env = new Dictionary<string, string>(request.EnvironmentVariables ?? [], StringComparer.OrdinalIgnoreCase);
-
     foreach (var kvp in request.LaunchProfile?.EnvironmentVariables ?? [])
-    {
       env[kvp.Key] = kvp.Value;
-    }
-
     foreach (var kvp in hookEnv)
-    {
       env[kvp.Key] = kvp.Value;
-    }
+    env.TryAdd("ASPNETCORE_ENVIRONMENT", "Development");
 
-    return new RunCommand(
-        "dotnet",
-        [.. args],
-        request.LaunchProfile?.WorkingDirectory ?? Path.GetDirectoryName(request.Project.TargetPath) ?? request.Project.ProjectDir ?? ".",
-        env);
+    var cwd = request.LaunchProfile?.WorkingDirectory
+        ?? (string.IsNullOrWhiteSpace(request.Project.RunWorkingDirectory) ? null : request.Project.RunWorkingDirectory)
+        ?? Path.GetDirectoryName(request.Project.TargetPath)
+        ?? request.Project.ProjectDir
+        ?? ".";
+
+    return new RunCommand("dotnet", [.. args], cwd.Replace('\\', '/'), env);
   }
 
   private async Task MonitorExternalProcessAsync(int pid, Guid jobId, CancellationToken ct)
