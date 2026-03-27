@@ -53,6 +53,7 @@ public class RunInTerminalStrategy(
     if (_project == null) throw new InvalidOperationException("Strategy has not been prepared.");
 
     var profileEnv = DebugStrategyUtils.GetEnvironmentVariables(_activeProfile);
+    ApplyWebProjectContentRoot(profileEnv, _project);
     _hookSession = startupHookService.CreateSession(profileEnv);
 
     var extraArgs = BuildCommandLineArgs();
@@ -252,6 +253,20 @@ public class RunInTerminalStrategy(
            "integratedterminal" => RunInTerminalKind.Internal,
            _ => RunInTerminalKind.Internal
          };
+
+  private static void ApplyWebProjectContentRoot(Dictionary<string, string> environment, DotnetProject project)
+  {
+    var isWebProject = project.UsingMicrosoftNETSdkWeb || project.UsingMicrosoftNETSdkStaticWebAssets;
+    var hasProjectDirectory = !string.IsNullOrWhiteSpace(project.ProjectDir);
+    var hasExplicitContentRoot = environment.ContainsKey("ASPNETCORE_CONTENTROOT");
+
+    if (!isWebProject || !hasProjectDirectory || hasExplicitContentRoot)
+    {
+      return;
+    }
+
+    environment["ASPNETCORE_CONTENTROOT"] = project.ProjectDir!;
+  }
 
   private string[] BuildCommandLineArgs()
   {
