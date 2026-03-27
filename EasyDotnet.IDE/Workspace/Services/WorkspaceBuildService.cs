@@ -148,18 +148,6 @@ public class WorkspaceBuildService(
         .SelectMany(r => r.Output?.Diagnostics ?? [])
         .ToList();
 
-    var warningCount = allDiagnostics.Count(d => d.Severity == BuildDiagnosticSeverity.Warning);
-    var succeeded = finishedResults.All(r => r.Success == true);
-
-    if (succeeded)
-    {
-      var successMsg = warningCount > 0
-          ? $"Build succeeded — {warningCount} warning(s)"
-          : "Build succeeded.";
-      await editorService.DisplayMessage(successMsg);
-      return;
-    }
-
     var errors = allDiagnostics
         .Where(d => d.Severity == BuildDiagnosticSeverity.Error)
         .Select(d => new QuickFixItem(
@@ -168,9 +156,33 @@ public class WorkspaceBuildService(
             ColumnNumber: d.ColumnNumber,
             Text: string.IsNullOrEmpty(d.Code) ? d.Message ?? "" : $"[{d.Code}] {d.Message}",
             Type: QuickFixItemType.Error))
-        .ToArray();
+        .ToList();
 
-    await editorService.SetQuickFixList(errors);
-    await editorService.DisplayError($"Build FAILED — {errors.Length} error(s), {warningCount} warning(s)");
+    var warnings = allDiagnostics
+        .Where(d => d.Severity == BuildDiagnosticSeverity.Warning)
+        .Select(d => new QuickFixItem(
+            FileName: d.File ?? "",
+            LineNumber: d.LineNumber,
+            ColumnNumber: d.ColumnNumber,
+            Text: string.IsNullOrEmpty(d.Code) ? d.Message ?? "" : $"[{d.Code}] {d.Message}",
+            Type: QuickFixItemType.Warning))
+        .ToList();
+
+    if (errors.Count == 0 && warnings.Count == 0)
+    {
+      await editorService.DisplayMessage("Build succeeded.");
+      return;
+    }
+
+    if (errors.Count == 0)
+    {
+      await editorService.SetQuickFixListSilent([.. warnings]);
+      await editorService.DisplayMessage($"Build succeeded — {warnings.Count} warning(s)");
+      return;
+    }
+
+    var items = errors.Concat(warnings).ToArray();
+    await editorService.SetQuickFixList(items);
+    await editorService.DisplayError($"Build FAILED — {errors.Count} error(s), {warnings.Count} warning(s)");
   }
 }

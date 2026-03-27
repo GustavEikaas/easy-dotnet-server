@@ -22,5 +22,6 @@ public interface IEditorService
   Task SendProgressStart(string token, string title, string message, int? percentage = null);
   Task SendProgressUpdate(string token, string? message, int? percentage = null);
   Task SetQuickFixList(QuickFixItem[] quickFixItems);
+  Task SetQuickFixListSilent(QuickFixItem[] quickFixItems);
   Task<bool> BuildProject(string projectPath, CancellationToken cancellationToken);
 }
