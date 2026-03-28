@@ -140,7 +140,8 @@ public class WorkspaceTestService(
     if (!await preBuildService.BuildBeforeRunAsync(project.ProjectFullPath, project.ProjectName, ct))
       return;
 
-    var isMtp = globalJsonService.GetGlobalJson().IsMicrosoftTestingPlatformRunner();
+    var projectDir = Path.GetDirectoryName(project.ProjectFullPath) ?? ".";
+    var isMtp = globalJsonService.GetGlobalJson(projectDir).IsMicrosoftTestingPlatformRunner();
 
     var args = new List<string> { "test" };
     if (isMtp)
@@ -161,8 +162,7 @@ public class WorkspaceTestService(
     if (!string.IsNullOrWhiteSpace(request.TestArgs))
       args.Add(request.TestArgs);
 
-    var workingDir = Path.GetDirectoryName(project.ProjectFullPath) ?? ".";
-    var command = new RunCommand("dotnet", [.. args], workingDir, []);
+    var command = new RunCommand("dotnet", [.. args], projectDir, []);
     await editorService.RequestRunCommandAsync(command, ct);
   }
 
@@ -172,7 +172,8 @@ public class WorkspaceTestService(
     if (!await preBuildService.BuildBeforeRunAsync(solutionFile, name, ct))
       return;
 
-    var isMtp = globalJsonService.GetGlobalJson().IsMicrosoftTestingPlatformRunner();
+    var solutionDir = Path.GetDirectoryName(solutionFile) ?? ".";
+    var isMtp = globalJsonService.GetGlobalJson(solutionDir).IsMicrosoftTestingPlatformRunner();
 
     var args = new List<string> { "test" };
     if (isMtp)
@@ -191,8 +192,7 @@ public class WorkspaceTestService(
     if (!string.IsNullOrWhiteSpace(request.TestArgs))
       args.Add(request.TestArgs);
 
-    var workingDir = Path.GetDirectoryName(solutionFile) ?? ".";
-    var command = new RunCommand("dotnet", [.. args], workingDir, []);
+    var command = new RunCommand("dotnet", [.. args], solutionDir, []);
     await editorService.RequestRunCommandAsync(command, ct);
   }
 
