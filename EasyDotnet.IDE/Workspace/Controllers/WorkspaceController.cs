@@ -4,7 +4,7 @@ using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Workspace.Controllers;
 
-public class WorkspaceController(WorkspaceService service, WorkspaceBuildService buildService) : BaseController
+public class WorkspaceController(WorkspaceService service, WorkspaceBuildService buildService, WorkspaceRestoreService restoreService) : BaseController
 {
   [JsonRpcMethod("workspace/run", UseSingleObjectParameterDeserialization = true)]
   public async Task RunAsync(WorkspaceRunRequest request, CancellationToken ct) =>
@@ -21,4 +21,8 @@ public class WorkspaceController(WorkspaceService service, WorkspaceBuildService
   [JsonRpcMethod("workspace/build-solution", UseSingleObjectParameterDeserialization = true)]
   public async Task BuildSolutionAsync(WorkspaceBuildRequest request, CancellationToken ct) =>
       await buildService.BuildSolutionAsync(request, ct);
+
+  [JsonRpcMethod("workspace/restore", UseSingleObjectParameterDeserialization = true)]
+  public async Task RestoreAsync(WorkspaceRestoreRequest request, CancellationToken ct) =>
+      await restoreService.RestoreAsync(request, ct);
 }
