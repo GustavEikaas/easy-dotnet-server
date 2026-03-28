@@ -119,6 +119,8 @@ public class EditorService(
 
   public async Task SetQuickFixList(QuickFixItem[] quickFixItems) => await jsonRpc.NotifyWithParameterObjectAsync("quickfix/set", quickFixItems);
 
+  public async Task SetQuickFixListSilent(QuickFixItem[] quickFixItems) => await jsonRpc.NotifyWithParameterObjectAsync("quickfix/set-silent", quickFixItems);
+
   public async Task CloseQuickFixList() => await jsonRpc.NotifyWithParameterObjectAsync("quickfix/close");
 
   public async Task<bool> BuildProject(string projectPath, CancellationToken cancellationToken)

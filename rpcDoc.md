@@ -41,6 +41,20 @@
 
 ## WorkspaceController
 
+### `workspace/build`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | WorkspaceBuildRequest |   |
+
+**Returns:** `Task`
+
+### `workspace/build-solution`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | WorkspaceBuildRequest |   |
+
+**Returns:** `Task`
+
 ### `workspace/debug`
 | Parameter | Type | Optional |
 |-----------|------|----------|
