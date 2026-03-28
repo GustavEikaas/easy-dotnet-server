@@ -23,6 +23,7 @@ public class WorkspaceService(
   WorkspaceSessionManager sessionManager,
   IDebugOrchestrator debugOrchestrator,
   IDebugStrategyFactory debugStrategyFactory,
+  WorkspacePreBuildService preBuildService,
   ILogger<WorkspaceService> logger)
 {
   public async Task RunAsync(WorkspaceRunRequest request, CancellationToken ct)
@@ -101,7 +102,7 @@ public class WorkspaceService(
       launchProfileName = await ResolveProfileNameAsync(project, request.UseDefault, ct);
     }
 
-    if (!await BuildBeforeRunAsync(project, project.ProjectName, ct))
+    if (!await preBuildService.BuildBeforeRunAsync(project.ProjectFullPath, project.ProjectName, ct))
     {
       return;
     }
@@ -126,7 +127,7 @@ public class WorkspaceService(
       return;
     }
 
-    if (!await BuildBeforeRunAsync(project, project.ProjectName, ct))
+    if (!await preBuildService.BuildBeforeRunAsync(project.ProjectFullPath, project.ProjectName, ct))
       return;
 
     await StartDebugSessionAsync(project, null, request.CliArgs, ct);
@@ -258,7 +259,10 @@ public class WorkspaceService(
       var defaultPath = settingsService.GetDefaultStartupProject();
       if (defaultPath is not null && File.Exists(defaultPath))
       {
-        var project = await EvaluateProjectAsync(defaultPath, ct);
+        var storedTfm = await settingsService.GetProjectTargetFramework(defaultPath, ct);
+        var project = storedTfm is not null
+          ? await buildHostManager.GetProjectAsync(defaultPath, storedTfm, ct: ct)
+          : await EvaluateProjectAsync(defaultPath, ct);
         if (project is not null) return (project, false);
       }
 
@@ -284,6 +288,7 @@ public class WorkspaceService(
     if (projects.Count == 1 && !includeScriptOption)
     {
       settingsService.SetDefaultStartupProject(projects[0].ProjectFullPath);
+      settingsService.SetProjectTargetFramework(projects[0].ProjectFullPath, projects[0].TargetFramework);
       return (projects[0], false);
     }
 
@@ -300,6 +305,7 @@ public class WorkspaceService(
 
     var picked = projects.First(p => $"{p.ProjectFullPath}:{p.TargetFramework}" == selected.Id);
     settingsService.SetDefaultStartupProject(picked.ProjectFullPath);
+    settingsService.SetProjectTargetFramework(picked.ProjectFullPath, picked.TargetFramework);
     return (picked, false);
   }
 
@@ -460,7 +466,7 @@ public class WorkspaceService(
     {
       try
       {
-        var ready = await BuildBeforeRunAsync(project, projectName, CancellationToken.None);
+        var ready = await preBuildService.BuildBeforeRunAsync(project.ProjectFullPath, projectName, CancellationToken.None);
         if (!ready) return;
 
         var exitCode = await editorService.RequestRunProjectAsync(runRequest, CancellationToken.None);
@@ -479,63 +485,6 @@ public class WorkspaceService(
       }
     }, CancellationToken.None);
   }
-
-  private async Task<bool> BuildBeforeRunAsync(ValidatedDotnetProject project, string projectName, CancellationToken ct)
-  {
-    var token = Guid.NewGuid().ToString();
-
-    await editorService.SendProgressStart(token, "Restoring...", $"Restoring {projectName}");
-    List<RestoreResult> restoreResults;
-    try
-    {
-      restoreResults = await buildHostManager.RestoreNugetPackagesAsync(
-        new RestoreRequest([project.ProjectFullPath]), ct).ToListAsync(ct);
-    }
-    finally
-    {
-      await editorService.SendProgressEnd(token);
-    }
-
-    if (!restoreResults.All(r => r.Success))
-    {
-      var errors = restoreResults.SelectMany(r => r.Output?.Diagnostics is { } d ? MapErrors(d) : []);
-      await editorService.SetQuickFixList([.. errors]);
-      await editorService.DisplayError($"Restore failed for {projectName}");
-      return false;
-    }
-
-    await editorService.SendProgressStart(token, "Building...", $"Building {projectName}");
-    List<BatchBuildResult> buildResults;
-    try
-    {
-      buildResults = await buildHostManager.BatchBuildAsync(
-        new BatchBuildRequest([project.ProjectFullPath], "Debug"), ct).ToListAsync(ct);
-    }
-    finally
-    {
-      await editorService.SendProgressEnd(token);
-    }
-
-    if (buildResults.Any(r => r.Kind == BatchBuildResultKind.Finished && r.Success == false))
-    {
-      var errors = buildResults.SelectMany(r => r.Output?.Diagnostics is { } d ? MapErrors(d) : []);
-      await editorService.SetQuickFixList([.. errors]);
-      await editorService.DisplayError($"Build failed for {projectName}");
-      return false;
-    }
-
-    return true;
-  }
-
-  private static IEnumerable<QuickFixItem> MapErrors(BuildDiagnostic[] diagnostics) =>
-    diagnostics
-      .Where(d => d.Severity == BuildDiagnosticSeverity.Error)
-      .Select(d => new QuickFixItem(
-        FileName: d.File ?? "",
-        LineNumber: d.LineNumber,
-        ColumnNumber: d.ColumnNumber,
-        Text: string.IsNullOrEmpty(d.Code) ? d.Message ?? "" : $"[{d.Code}] {d.Message}",
-        Type: QuickFixItemType.Error));
 
   private async Task RunSingleFileAsync(string filePath, string? cliArgs, CancellationToken ct)
   {
