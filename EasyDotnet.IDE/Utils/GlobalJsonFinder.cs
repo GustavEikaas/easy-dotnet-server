@@ -15,7 +15,12 @@ public class GlobalJsonService(IClientService clientService)
   public GlobalJson? GetGlobalJson()
   {
     var rootDir = clientService.RequireRootDir();
-    var directory = new DirectoryInfo(rootDir);
+    return GetGlobalJson(rootDir);
+  }
+
+  public GlobalJson? GetGlobalJson(string startDir)
+  {
+    var directory = new DirectoryInfo(startDir);
 
     while (directory != null)
     {

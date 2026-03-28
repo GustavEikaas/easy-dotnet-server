@@ -76,6 +76,20 @@
 
 **Returns:** `Task`
 
+### `workspace/test`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | WorkspaceTestRequest |   |
+
+**Returns:** `Task`
+
+### `workspace/test-solution`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | WorkspaceTestRequest |   |
+
+**Returns:** `Task`
+
 ---
 
 ## TestRunnerController
@@ -162,11 +176,6 @@
 |-----------|------|----------|
 
 **Returns:** `Task`
-
-### `test/solution-command`
-_No parameters_
-
-**Returns:** `RunCommand`
 
 ---
 
