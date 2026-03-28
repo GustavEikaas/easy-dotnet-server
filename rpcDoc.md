@@ -62,6 +62,13 @@
 
 **Returns:** `Task`
 
+### `workspace/restore`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | WorkspaceRestoreRequest |   |
+
+**Returns:** `Task`
+
 ### `workspace/run`
 | Parameter | Type | Optional |
 |-----------|------|----------|
