@@ -1,16 +1,18 @@
-using System;
 using System.Collections.Concurrent;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Debugger.Interfaces;
-using EasyDotnet.IDE.Controllers.NetCoreDbg;
 using EasyDotnet.IDE.Types;
 using EasyDotnet.MsBuild;
 using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.IDE.Services;
+
+public sealed record DebuggerStartRequest(
+  string TargetPath,
+  string? TargetFramework,
+  string? Configuration,
+  string? LaunchProfileName
+);
 
 public interface IDebugOrchestrator
 {

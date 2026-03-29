@@ -3,7 +3,6 @@ using EasyDotnet.Application.Interfaces;
 using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.Domain.Models.Client;
 using EasyDotnet.IDE.BuildHost;
-using EasyDotnet.IDE.Controllers.NetCoreDbg;
 using EasyDotnet.IDE.DebuggerStrategies;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.Workspace.Controllers;
