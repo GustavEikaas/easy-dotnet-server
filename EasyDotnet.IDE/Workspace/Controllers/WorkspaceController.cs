@@ -14,6 +14,10 @@ public class WorkspaceController(WorkspaceService service, WorkspaceBuildService
   public async Task DebugAsync(WorkspaceDebugRequest request, CancellationToken ct) =>
       await service.DebugAsync(request, ct);
 
+  [JsonRpcMethod("workspace/watch", UseSingleObjectParameterDeserialization = true)]
+  public async Task WatchAsync(WorkspaceWatchRequest request, CancellationToken ct) =>
+      await service.WatchAsync(request, ct);
+
   [JsonRpcMethod("workspace/build", UseSingleObjectParameterDeserialization = true)]
   public async Task BuildAsync(WorkspaceBuildRequest request, CancellationToken ct) =>
       await buildService.BuildProjectAsync(request, ct);

@@ -81,6 +81,7 @@ public static class DiModules
 
     services.AddSingleton<TestRunnerService>();
     services.AddSingleton<WorkspaceService>();
+    services.AddSingleton<WorkspaceProjectResolver>();
     services.AddSingleton<WorkspaceBuildService>();
     services.AddSingleton<WorkspaceRestoreService>();
     services.AddSingleton<WorkspaceTestService>();

@@ -90,6 +90,13 @@
 
 **Returns:** `Task`
 
+### `workspace/watch`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | WorkspaceWatchRequest |   |
+
+**Returns:** `Task`
+
 ---
 
 ## TestRunnerController
