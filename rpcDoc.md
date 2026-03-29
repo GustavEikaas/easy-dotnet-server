@@ -265,17 +265,6 @@ _No parameters_
 
 ---
 
-## NetCoreDbgController
-
-### `debugger/start`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| request | DebuggerStartRequest |   |
-
-**Returns:** `Task<DebuggerStartResponse>`
-
----
-
 ## MsBuildController
 
 ### `msbuild/add-project-reference`
@@ -322,17 +311,6 @@ _No parameters_
 | targetPath | string |   |
 
 **Returns:** `Task<bool>`
-
----
-
-## LaunchProfileController
-
-### `launch-profiles`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| targetPath | string |   |
-
-**Returns:** `IAsyncEnumerable<LaunchProfileResponse>`
 
 ---
 
