@@ -13,7 +13,7 @@ public static class AppWrapperLocator
 #else
         var assemblyDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)
             ?? throw new InvalidOperationException("Unable to determine assembly directory.");
-        var path = Path.Combine(assemblyDir, "Tools", "AppWrapper", "net8.0", "EasyDotnet.AppWrapper.dll");
+        var path = Path.Combine(assemblyDir,"..","..","..","tools", "AppWrapper", "net8.0", "EasyDotnet.AppWrapper.dll");
 #endif
     if (!File.Exists(path))
     {
