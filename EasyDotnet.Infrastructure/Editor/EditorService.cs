@@ -10,8 +10,8 @@ public class EditorService(
   IStartupHookService startupHookService,
   IMsBuildService buildService,
   IClientService clientService,
-  JsonRpc jsonRpc,
-  ILogger<EditorService> logger) : IEditorService
+  IAppWrapperManager appWrapperManager,
+  JsonRpc jsonRpc) : IEditorService
 {
   public async Task DisplayError(string message) =>
       await jsonRpc.NotifyWithParameterObjectAsync("displayError", new DisplayMessage(message));
@@ -63,13 +63,20 @@ public class EditorService(
     await using var session = startupHookService.CreateSession(request.EnvironmentVariables);
 
     var command = BuildRunCommand(request, session.EnvironmentVariables);
-    var rpcMethod = clientService.HasExternalTerminal ? "runCommandExternal" : "runCommandManaged";
 
     try
     {
-      await jsonRpc.InvokeWithParameterObjectAsync(rpcMethod, new TrackedJob(guid, command), ct);
+      if (clientService.HasExternalTerminal)
+      {
+        var wrapper = await appWrapperManager.GetOrSpawnAsync(ct);
+        await wrapper.SendRunCommandAsync(guid, command, ct);
+      }
+      else
+      {
+        await jsonRpc.InvokeWithParameterObjectAsync("runCommandManaged", new TrackedJob(guid, command), ct);
+      }
     }
-    catch (RemoteInvocationException e)
+    catch (Exception e)
     {
       editorProcessManagerService.SetFailedToStart(guid, TerminalSlot.LongRunning, e.Message);
       throw;
@@ -78,11 +85,6 @@ public class EditorService(
     var pid = await session.WaitForPidAsync(ct);
     session.Resume();
     //TODO: open browser if applicable
-
-    if (clientService.HasExternalTerminal)
-    {
-      _ = MonitorExternalProcessAsync(pid, guid, ct);
-    }
 
     return await editorProcessManagerService.WaitForExitAsync(guid, TerminalSlot.LongRunning);
   }
@@ -158,30 +160,5 @@ public class EditorService(
     }
 
     return new RunCommand("dotnet", [.. args], LaunchProfileUtils.ResolveCwd(request.LaunchProfile, request.Project), env);
-  }
-
-  private async Task MonitorExternalProcessAsync(int pid, Guid jobId, CancellationToken ct)
-  {
-    var exitCode = -1;
-    try
-    {
-      using var process = System.Diagnostics.Process.GetProcessById(pid);
-      process.EnableRaisingEvents = true;
-      await process.WaitForExitAsync(ct);
-      exitCode = process.ExitCode;
-      logger.LogInformation("External process (PID {Pid}) exited with code {ExitCode}", pid, exitCode);
-    }
-    catch (ArgumentException)
-    {
-      logger.LogWarning("External process (PID {Pid}) was not found — may have exited before monitoring began", pid);
-    }
-    catch (Exception ex)
-    {
-      logger.LogError(ex, "Unexpected error monitoring external process (PID {Pid})", pid);
-    }
-    finally
-    {
-      editorProcessManagerService.CompleteJob(jobId, exitCode);
-    }
   }
 }

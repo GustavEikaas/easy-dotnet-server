@@ -4,6 +4,7 @@ using System.Text.Json;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Debugger;
 using EasyDotnet.Debugger.Messages;
+using EasyDotnet.Domain.Models.Client;
 using EasyDotnet.Domain.Models.LaunchProfile;
 using EasyDotnet.IDE.Types;
 using EasyDotnet.IDE.Utils;
@@ -20,7 +21,8 @@ public class RunInTerminalStrategy(
   ILogger<RunInTerminalStrategy> logger,
   IStartupHookService startupHookService,
   IHttpClientFactory httpClientFactory,
-  ILaunchProfileService launchProfileService) : IDebugSessionStrategy
+  ILaunchProfileService launchProfileService,
+  IAppWrapperManager appWrapperManager) : IDebugSessionStrategy
 {
   private DotnetProject? _project;
   private int _pid;
@@ -28,6 +30,7 @@ public class RunInTerminalStrategy(
   private LaunchProfile? _activeProfile;
   private StartupHookSession? _hookSession;
   private Process? _browserProcess;
+  private IAppWrapperHandle? _wrapperHandle;
 
   private int _configurationDoneFlag;
   private int _pidReceivedFlag;
@@ -57,25 +60,33 @@ public class RunInTerminalStrategy(
     _hookSession = startupHookService.CreateSession(profileEnv);
 
     var extraArgs = BuildCommandLineArgs();
-    var terminalArgs = new List<string>() { "dotnet", _project.TargetPath! };
+    var terminalArgs = new List<string>() { _project.TargetPath! };
     terminalArgs.AddRange(extraArgs);
 
-    var terminalKind = ExtractTerminalKind(request.Arguments.Console);
-    var runInTerminalReq = RunInTerminalRequest.Create(terminalKind, [.. terminalArgs]);
-
     var cwd = LaunchProfileUtils.ResolveCwd(_activeProfile, _project);
+    var terminalKind = ExtractTerminalKind(request.Arguments.Console);
 
-    runInTerminalReq.Arguments.Cwd = cwd;
-    runInTerminalReq.Arguments.Env = _hookSession.EnvironmentVariables;
-
-    logger.LogInformation("Sending runInTerminal request to Neovim: {payload}", JsonSerializer.Serialize(runInTerminalReq, _jsonSerializerOptions));
-    var termResponse = await proxy.RunClientRequestAsync(runInTerminalReq, CancellationToken.None);
-
-    if (!termResponse.Success)
+    if (terminalKind == RunInTerminalKind.External)
     {
-      throw new InvalidOperationException($"Neovim failed to launch terminal: {termResponse.Message}");
+      var runCommand = new RunCommand("dotnet", terminalArgs, cwd, _hookSession.EnvironmentVariables);
+      _wrapperHandle = await appWrapperManager.GetOrSpawnAsync(CancellationToken.None);
+      await _wrapperHandle.SendRunCommandAsync(Guid.NewGuid(), runCommand, CancellationToken.None);
     }
-    logger.LogInformation("runInTerminal response from Neovim");
+    else
+    {
+      var runInTerminalReq = RunInTerminalRequest.Create(terminalKind, ["dotnet", .. terminalArgs]);
+      runInTerminalReq.Arguments.Cwd = cwd;
+      runInTerminalReq.Arguments.Env = _hookSession.EnvironmentVariables;
+
+      logger.LogInformation("Sending runInTerminal request to Neovim: {payload}", JsonSerializer.Serialize(runInTerminalReq, _jsonSerializerOptions));
+      var termResponse = await proxy.RunClientRequestAsync(runInTerminalReq, CancellationToken.None);
+
+      if (!termResponse.Success)
+      {
+        throw new InvalidOperationException($"Neovim failed to launch terminal: {termResponse.Message}");
+      }
+      logger.LogInformation("runInTerminal response from Neovim");
+    }
 
     _pid = await _hookSession.WaitForPidAsync();
     SetFlag(ref _pidReceivedFlag);
@@ -106,6 +117,12 @@ public class RunInTerminalStrategy(
   {
     _rpc?.Dispose();
     _rpc = null;
+
+    if (_wrapperHandle != null)
+    {
+      await _wrapperHandle.TerminateAsync();
+      _wrapperHandle = null;
+    }
 
     if (_hookSession != null)
     {

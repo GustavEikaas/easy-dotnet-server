@@ -15,7 +15,8 @@ public class DebugStrategyFactory(
   ILoggerFactory loggerFactory,
   IHttpClientFactory httpClientFactory,
   ILaunchProfileService launchProfileService,
-  IStartupHookService startupHookService) : IDebugStrategyFactory
+  IStartupHookService startupHookService,
+  IAppWrapperManager appWrapperManager) : IDebugStrategyFactory
 {
   public RunInTerminalStrategy CreateRunInTerminalStrategy(string? launchProfileName, string? cliArgs = null) => new(
     launchProfileName,
@@ -23,7 +24,8 @@ public class DebugStrategyFactory(
     loggerFactory.CreateLogger<RunInTerminalStrategy>(),
     startupHookService,
     httpClientFactory,
-    launchProfileService);
+    launchProfileService,
+    appWrapperManager);
 
   public StandardLaunchStrategy CreateStandardLaunchStrategy() => new();
 

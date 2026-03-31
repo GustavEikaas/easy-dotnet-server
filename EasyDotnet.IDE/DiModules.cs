@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using DotNetOutdated.Core.Services;
 using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Debugger;
+using EasyDotnet.IDE.AppWrapper;
 using EasyDotnet.IDE.BuildHost;
 using EasyDotnet.IDE.DebuggerStrategies;
 using EasyDotnet.IDE.Services;
@@ -74,6 +75,9 @@ public static class DiModules
     services.AddSingleton<IEditorProcessManagerService, EditorProcessManagerService>();
     services.AddSingleton<IEditorService, EditorService>();
     services.AddSingleton<IDebugStrategyFactory, DebugStrategyFactory>();
+    services.AddSingleton<AppWrapperManager>();
+    services.AddSingleton<IAppWrapperManager>(sp => sp.GetRequiredService<AppWrapperManager>());
+    services.AddSingleton<AppWrapperPipeListener>();
     services.AddSingleton<BuildHostFactory>();
     services.AddSingleton<IBuildHostManager, BuildHostManager>();
     services.AddSingleton<WorkspaceBuildHostManager>();
@@ -140,6 +144,9 @@ public static class DiModules
     jsonRpc.TraceSource.Switch.Level = levels;
     jsonRpc.TraceSource.Listeners.Clear();
     jsonRpc.TraceSource.Listeners.Add(new JsonRpcLogger(logger));
+
+    var appWrapperListener = serviceProvider.GetRequiredService<AppWrapperPipeListener>();
+    _ = appWrapperListener.StartAsync(CancellationToken.None);
 
     return serviceProvider;
   }
