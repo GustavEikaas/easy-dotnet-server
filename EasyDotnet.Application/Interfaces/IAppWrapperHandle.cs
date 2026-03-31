@@ -4,6 +4,6 @@ namespace EasyDotnet.Application.Interfaces;
 
 public interface IAppWrapperHandle
 {
-    Task SendRunCommandAsync(Guid jobId, RunCommand command, CancellationToken ct);
-    Task TerminateAsync();
+  Task SendRunCommandAsync(Guid jobId, RunCommand command, CancellationToken ct);
+  Task TerminateAsync();
 }

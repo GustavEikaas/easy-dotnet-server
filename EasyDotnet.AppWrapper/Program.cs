@@ -14,10 +14,10 @@ Console.Error.WriteLine("[AppWrapper] Connected.");
 
 var formatter = new SystemTextJsonFormatter
 {
-    JsonSerializerOptions = new JsonSerializerOptions
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-    }
+  JsonSerializerOptions = new JsonSerializerOptions
+  {
+    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+  }
 };
 
 var rpc = new JsonRpc(new HeaderDelimitedMessageHandler(pipe, pipe, formatter));
@@ -35,31 +35,31 @@ handler.KillCurrentProcess();
 
 static string? ParsePipe(string[] args)
 {
-    for (var i = 0; i < args.Length - 1; i++)
-    {
-        if (args[i].Equals("--pipe", StringComparison.OrdinalIgnoreCase))
+  for (var i = 0; i < args.Length - 1; i++)
+  {
+    if (args[i].Equals("--pipe", StringComparison.OrdinalIgnoreCase))
     {
       return args[i + 1];
     }
   }
-    return null;
+  return null;
 }
 
 static async Task ConnectWithRetryAsync(NamedPipeClientStream stream, TimeSpan timeout)
 {
-    using var cts = new CancellationTokenSource(timeout);
-    var delayMs = 50;
-    while (!cts.Token.IsCancellationRequested)
+  using var cts = new CancellationTokenSource(timeout);
+  var delayMs = 50;
+  while (!cts.Token.IsCancellationRequested)
+  {
+    try
     {
-        try
-        {
-            await stream.ConnectAsync(500, cts.Token);
-            return;
-        }
-        catch (TimeoutException) { }
-        catch (IOException) { }
-        await Task.Delay(delayMs, cts.Token).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
-        delayMs = Math.Min(delayMs * 2, 500);
+      await stream.ConnectAsync(500, cts.Token);
+      return;
     }
-    throw new TimeoutException($"Could not connect to IDE pipe '{stream.GetType().Name}' within {timeout.TotalSeconds}s.");
+    catch (TimeoutException) { }
+    catch (IOException) { }
+    await Task.Delay(delayMs, cts.Token).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+    delayMs = Math.Min(delayMs * 2, 500);
+  }
+  throw new TimeoutException($"Could not connect to IDE pipe '{stream.GetType().Name}' within {timeout.TotalSeconds}s.");
 }
