@@ -6,7 +6,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>dotnet-easydotnet</ToolCommandName>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
-    <Version>3.0.19</Version>
+    <Version>3.0.20</Version>
     <Authors>Gustav Eikaas</Authors>
     <PackageId>EasyDotnet</PackageId>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
@@ -52,7 +52,20 @@
     <ProjectReference Include="..\EasyDotnet.Application\EasyDotnet.Application.csproj" />
     <ProjectReference Include="..\EasyDotnet.ProjXLanguageServer\EasyDotnet.ProjXLanguageServer.csproj" />
     <ProjectReference Include="..\EasyDotnet.BuildServer.Contracts\EasyDotnet.BuildServer.Contracts.csproj" />
+    <ProjectReference Include="..\EasyDotnet.AppWrapper.Contracts\EasyDotnet.AppWrapper.Contracts.csproj" />
   </ItemGroup>
+
+  <Target Name="PublishAppWrapper" BeforeTargets="Build">
+    <PropertyGroup>
+      <AppWrapperOutputPath>$(OutputPath)Tools\AppWrapper\</AppWrapperOutputPath>
+    </PropertyGroup>
+    <Message Text="Publishing AppWrapper for net8.0..." Importance="high" />
+    <MSBuild
+      Projects="..\EasyDotnet.AppWrapper\EasyDotnet.AppWrapper.csproj"
+      Targets="Publish"
+      Properties="TargetFramework=net8.0;Configuration=$(Configuration);PublishDir=$(MSBuildProjectDirectory)\$(AppWrapperOutputPath)net8.0\;SelfContained=false" />
+    <Message Text="AppWrapper publish complete at $(AppWrapperOutputPath)" Importance="high" />
+  </Target>
 
   <Target Name="PublishBuildServers" BeforeTargets="Build">
     <PropertyGroup>
