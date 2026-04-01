@@ -47,7 +47,7 @@ public class EditorService(
     try
     {
       _ = await jsonRpc.InvokeWithParameterObjectAsync<RunCommandResponse>(
-          "runCommandManaged", new TrackedJob(guid, command), ct);
+          "runCommandManaged", new TrackedJob(guid, command, "default"), ct);
     }
     catch (RemoteInvocationException e)
     {
@@ -73,7 +73,8 @@ public class EditorService(
       }
       else
       {
-        await jsonRpc.InvokeWithParameterObjectAsync("runCommandManaged", new TrackedJob(guid, command), ct);
+        var slotId = $"run:{Path.GetFileNameWithoutExtension(request.Project.TargetPath)}";
+        await jsonRpc.InvokeWithParameterObjectAsync("runCommandManaged", new TrackedJob(guid, command, slotId), ct);
       }
     }
     catch (Exception e)
