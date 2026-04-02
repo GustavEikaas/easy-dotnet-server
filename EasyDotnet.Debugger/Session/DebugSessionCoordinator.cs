@@ -66,7 +66,7 @@ public class DebugSessionCoordinator(
 
         try
         {
-          processHost.Start(debuggerBinaryPath, "--interpreter=vscode");
+          processHost.Start(debuggerBinaryPath);
           _processStartedSource.SetResult(true);
           logger.LogInformation("Debugger process started successfully");
         }
@@ -79,10 +79,23 @@ public class DebugSessionCoordinator(
           throw;
         }
 
+        Stream debuggerStream;
+        try
+        {
+          debuggerStream = await processHost.ConnectAsync(TimeSpan.FromSeconds(10), _cts.Token);
+        }
+        catch (Exception ex)
+        {
+          logger.LogError(ex, "Failed to connect to netcoredbg via TCP");
+          onProcessFailedToStart(ex);
+          await TriggerCleanupAsync();
+          throw;
+        }
+
         var clientDap = new Client(stream, stream,
           async (msg, proxy) => await clientInterceptor.InterceptAsync(msg, proxy, CancellationToken.None));
 
-        var debuggerDap = new Debugger(processHost.StandardInput, processHost.StandardOutput,
+        var debuggerDap = new Debugger(debuggerStream, debuggerStream,
           async (msg, proxy) => await debuggerInterceptor.InterceptAsync(msg, proxy, CancellationToken.None));
 
         Proxy = new DebuggerProxy(clientDap, debuggerDap, proxyLogger);
