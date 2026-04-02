@@ -1,12 +1,12 @@
 using System.Reflection;
-using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.Controllers;
-using EasyDotnet.IDE.Models.Client;
 using EasyDotnet.IDE.BuildHost;
+using EasyDotnet.IDE.Editor;
+using EasyDotnet.IDE.Interfaces;
+using EasyDotnet.IDE.Models.Client;
 using EasyDotnet.IDE.Notifications;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.Utils;
-using EasyDotnet.IDE.Editor;
 using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
 

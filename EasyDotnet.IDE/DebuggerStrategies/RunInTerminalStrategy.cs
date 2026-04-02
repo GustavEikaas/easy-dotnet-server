@@ -1,14 +1,14 @@
 using System.Diagnostics;
 using System.Net.Sockets;
 using System.Text.Json;
-using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.Debugger;
 using EasyDotnet.Debugger.Messages;
+using EasyDotnet.IDE;
+using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Models.Client;
 using EasyDotnet.IDE.Models.LaunchProfile;
 using EasyDotnet.IDE.Types;
 using EasyDotnet.IDE.Utils;
-using EasyDotnet.IDE;
 using EasyDotnet.MsBuild;
 using Microsoft.Extensions.Logging;
 using StreamJsonRpc;

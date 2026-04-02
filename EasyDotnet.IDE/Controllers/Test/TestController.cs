@@ -1,6 +1,6 @@
 using System.IO.Abstractions;
-using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.Controllers;
+using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Models.Client;
 using EasyDotnet.IDE.Models.Client.Prompt;
 using EasyDotnet.IDE.Settings;

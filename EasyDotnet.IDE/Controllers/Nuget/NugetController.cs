@@ -1,6 +1,6 @@
-using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.Controllers;
 using EasyDotnet.Controllers.Nuget;
+using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.Services;
 using StreamJsonRpc;
 

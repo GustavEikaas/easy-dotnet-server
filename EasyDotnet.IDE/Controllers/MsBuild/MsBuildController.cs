@@ -2,9 +2,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.Controllers;
 using EasyDotnet.Controllers.MsBuild;
+using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Models.MsBuild.Project;
 using StreamJsonRpc;
 

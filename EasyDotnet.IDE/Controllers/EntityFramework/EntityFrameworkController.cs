@@ -1,10 +1,10 @@
-using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.Controllers;
+using EasyDotnet.IDE.Editor;
+using EasyDotnet.IDE.EntityFramework;
+using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Models.Client;
 using EasyDotnet.IDE.Models.Client.Prompt;
 using EasyDotnet.IDE.Services;
-using EasyDotnet.IDE.Editor;
-using EasyDotnet.IDE.EntityFramework;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Controllers.EntityFramework;

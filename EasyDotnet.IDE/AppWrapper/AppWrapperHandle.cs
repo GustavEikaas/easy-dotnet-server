@@ -1,5 +1,5 @@
-using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.AppWrapper.Contracts;
+using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Models.Client;
 
 namespace EasyDotnet.IDE.AppWrapper;

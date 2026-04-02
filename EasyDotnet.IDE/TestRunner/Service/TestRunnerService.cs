@@ -1,6 +1,6 @@
-using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.IDE.BuildHost;
+using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Notifications;
 using EasyDotnet.IDE.TestRunner.Adapters;
 using EasyDotnet.IDE.TestRunner.Analysis;

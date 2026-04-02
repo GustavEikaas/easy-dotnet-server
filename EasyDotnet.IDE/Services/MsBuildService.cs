@@ -1,9 +1,9 @@
 using System.Text.Json;
+using EasyDotnet.IDE.Framework;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Models.MsBuild.Build;
 using EasyDotnet.IDE.Models.MsBuild.Project;
 using EasyDotnet.IDE.Models.MsBuild.SDK;
-using EasyDotnet.IDE.Framework;
 using EasyDotnet.MsBuild;
 using Microsoft.Build.Locator;
 using Microsoft.Extensions.Caching.Memory;
