@@ -2,7 +2,7 @@ using System.Diagnostics;
 using EasyDotnet.Debugger;
 using EasyDotnet.Debugger.Messages;
 using EasyDotnet.IDE.Types;
-using EasyDotnet.Infrastructure.Dap;
+using EasyDotnet.IDE.Dap;
 using EasyDotnet.MsBuild;
 using Microsoft.Extensions.Logging;
 

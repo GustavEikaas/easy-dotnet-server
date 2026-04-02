@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using EasyDotnet.Domain.Models.MsBuild.Build;
+using EasyDotnet.IDE.Models.MsBuild.Build;
 
 namespace EasyDotnet.IDE.Controllers.MsBuild;
 

@@ -1,5 +1,5 @@
 using System.Runtime.InteropServices;
-using EasyDotnet.Application.Interfaces;
+using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.IDE.DebuggerStrategies;
 using EasyDotnet.IDE.Services;

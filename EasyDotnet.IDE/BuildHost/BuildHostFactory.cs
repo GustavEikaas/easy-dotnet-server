@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.IO.Pipes;
 using System.Reflection;
-using EasyDotnet.Application.Interfaces;
+using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Utils;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Serialization;

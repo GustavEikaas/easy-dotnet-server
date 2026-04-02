@@ -1,7 +1,7 @@
 using System.IO.Abstractions.TestingHelpers;
-using EasyDotnet.Infrastructure.Settings;
+using EasyDotnet.IDE.Settings;
 
-namespace EasyDotnet.Infrastructure.Tests.Settings;
+namespace EasyDotnet.IDE.Tests.Settings;
 
 public class SettingsFileResolverTests : IDisposable
 {

@@ -1,9 +1,8 @@
 using System.Runtime.InteropServices;
 using EasyDotnet.Controllers.Roslyn;
 using EasyDotnet.IDE.Services;
-using EasyDotnet.Infrastructure.Editor;
-using EasyDotnet.Infrastructure.Process;
-using EasyDotnet.Infrastructure.Services;
+using EasyDotnet.IDE.Editor;
+using EasyDotnet.IDE.ProcessExecution;
 using EasyDotnet.Services;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;

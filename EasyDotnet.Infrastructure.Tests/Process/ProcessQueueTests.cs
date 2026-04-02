@@ -1,10 +1,10 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using EasyDotnet.Application.Interfaces;
-using EasyDotnet.Infrastructure.Process;
+using EasyDotnet.IDE.Interfaces;
+using EasyDotnet.IDE.ProcessExecution;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace EasyDotnet.Infrastructure.Tests.Process;
+namespace EasyDotnet.IDE.Tests.Process;
 
 public class ProcessQueueTests
 {

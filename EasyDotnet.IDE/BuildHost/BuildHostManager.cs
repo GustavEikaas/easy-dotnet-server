@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using EasyDotnet.Application.Interfaces;
+using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.BuildServer.Contracts;
 using Microsoft.Extensions.Logging;
 using StreamJsonRpc;

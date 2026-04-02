@@ -5,7 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
-using EasyDotnet.Application.Interfaces;
+using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.Controllers.Roslyn;
 using EasyDotnet.Extensions;
 using EasyDotnet.MsBuild;

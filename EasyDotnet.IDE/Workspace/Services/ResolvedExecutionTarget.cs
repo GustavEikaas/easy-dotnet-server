@@ -1,5 +1,5 @@
 using EasyDotnet.BuildServer.Contracts;
-using LaunchProfile = EasyDotnet.Domain.Models.LaunchProfile.LaunchProfile;
+using LaunchProfile = EasyDotnet.IDE.Models.LaunchProfile.LaunchProfile;
 
 namespace EasyDotnet.IDE.Workspace.Services;
 

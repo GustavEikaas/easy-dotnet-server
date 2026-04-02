@@ -1,10 +1,12 @@
-using EasyDotnet.Application.Interfaces;
+using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.BuildServer.Contracts;
-using EasyDotnet.Domain.Models.Client;
+using EasyDotnet.IDE.Models.Client;
+using EasyDotnet.IDE.Models.Client.Quickfix;
+using EasyDotnet.IDE.Models.Client.Prompt;
 using EasyDotnet.IDE.Workspace.Controllers;
-using EasyDotnet.Infrastructure;
-using EasyDotnet.Infrastructure.Editor;
-using EasyDotnet.Infrastructure.Settings;
+using EasyDotnet.IDE;
+using EasyDotnet.IDE.Editor;
+using EasyDotnet.IDE.Settings;
 
 namespace EasyDotnet.IDE.Workspace.Services;
 

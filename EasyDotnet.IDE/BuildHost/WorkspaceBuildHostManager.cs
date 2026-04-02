@@ -1,7 +1,7 @@
 using System.Runtime.CompilerServices;
-using EasyDotnet.Application.Interfaces;
+using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.BuildServer.Contracts;
-using EasyDotnet.Infrastructure;
+using EasyDotnet.IDE;
 using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.IDE.BuildHost;

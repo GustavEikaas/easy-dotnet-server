@@ -1,10 +1,10 @@
 using System.IO.Abstractions.TestingHelpers;
 using System.Text.Json;
-using EasyDotnet.Infrastructure.Settings;
+using EasyDotnet.IDE.Settings;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace EasyDotnet.Infrastructure.Tests.Settings;
+namespace EasyDotnet.IDE.Tests.Settings;
 
 public class SettingsSerializerTests
 {

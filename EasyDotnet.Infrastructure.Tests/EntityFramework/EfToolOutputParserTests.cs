@@ -1,6 +1,6 @@
-using EasyDotnet.Infrastructure.EntityFramework;
+using EasyDotnet.IDE.EntityFramework;
 
-namespace EasyDotnet.Infrastructure.Tests.EntityFramework;
+namespace EasyDotnet.IDE.Tests.EntityFramework;
 
 public class EfToolOutputParserTests
 {

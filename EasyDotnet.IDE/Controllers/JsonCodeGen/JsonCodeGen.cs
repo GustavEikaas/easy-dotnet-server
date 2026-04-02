@@ -1,6 +1,6 @@
 using System.IO;
 using System.Threading.Tasks;
-using EasyDotnet.Application.Interfaces;
+using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.Controllers;
 using EasyDotnet.IDE.Controllers.Roslyn;
 using StreamJsonRpc;

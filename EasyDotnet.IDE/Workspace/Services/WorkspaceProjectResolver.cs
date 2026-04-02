@@ -1,10 +1,11 @@
-using EasyDotnet.Application.Interfaces;
+using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.BuildServer.Contracts;
-using EasyDotnet.Domain.Models.Client;
+using EasyDotnet.IDE.Models.Client;
+using EasyDotnet.IDE.Models.Client.Prompt;
 using EasyDotnet.IDE.BuildHost;
-using EasyDotnet.Infrastructure;
-using EasyDotnet.Infrastructure.Settings;
-using LaunchProfile = EasyDotnet.Domain.Models.LaunchProfile.LaunchProfile;
+using EasyDotnet.IDE;
+using EasyDotnet.IDE.Settings;
+using LaunchProfile = EasyDotnet.IDE.Models.LaunchProfile.LaunchProfile;
 
 namespace EasyDotnet.IDE.Workspace.Services;
 

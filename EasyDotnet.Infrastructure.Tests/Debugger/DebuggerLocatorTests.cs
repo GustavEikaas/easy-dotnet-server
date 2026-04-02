@@ -1,6 +1,6 @@
-using EasyDotnet.Infrastructure.Services;
+using EasyDotnet.IDE.Services;
 
-namespace EasyDotnet.Infrastructure.Tests.Debugger;
+namespace EasyDotnet.IDE.Tests.Debugger;
 
 [NotInParallel]
 public class DebuggerLocatorTests

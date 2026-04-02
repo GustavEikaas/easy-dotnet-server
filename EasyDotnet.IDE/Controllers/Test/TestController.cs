@@ -1,8 +1,9 @@
 using System.IO.Abstractions;
-using EasyDotnet.Application.Interfaces;
+using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.Controllers;
-using EasyDotnet.Domain.Models.Client;
-using EasyDotnet.Infrastructure.Settings;
+using EasyDotnet.IDE.Models.Client;
+using EasyDotnet.IDE.Models.Client.Prompt;
+using EasyDotnet.IDE.Settings;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Controllers.Test;

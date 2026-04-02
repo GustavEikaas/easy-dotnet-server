@@ -1,6 +1,6 @@
-using EasyDotnet.Infrastructure.Services;
+using EasyDotnet.IDE.Services;
 
-namespace EasyDotnet.Infrastructure.Tests.Roslyn;
+namespace EasyDotnet.IDE.Tests.Roslyn;
 
 [NotInParallel]
 public class RoslynLocatorTests

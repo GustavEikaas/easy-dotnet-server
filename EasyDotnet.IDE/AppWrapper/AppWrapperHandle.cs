@@ -1,6 +1,6 @@
-using EasyDotnet.Application.Interfaces;
+using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.AppWrapper.Contracts;
-using EasyDotnet.Domain.Models.Client;
+using EasyDotnet.IDE.Models.Client;
 
 namespace EasyDotnet.IDE.AppWrapper;
 
