@@ -23,7 +23,7 @@ public class DebuggerProcessHost(ILogger<DebuggerProcessHost> logger) : IDebugge
       StartInfo = new ProcessStartInfo
       {
         FileName = binaryPath,
-        Arguments = $"--server --port={_tcpPort}",
+        Arguments = $"--interpreter=vscode --server={_tcpPort}",
         RedirectStandardOutput = true,
         RedirectStandardError = true,
         UseShellExecute = false,
