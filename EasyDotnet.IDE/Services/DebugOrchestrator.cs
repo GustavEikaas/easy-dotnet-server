@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
-using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Debugger.Interfaces;
+using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Types;
 using EasyDotnet.MsBuild;
 using Microsoft.Extensions.Logging;

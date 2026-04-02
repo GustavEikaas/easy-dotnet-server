@@ -1,14 +1,14 @@
 using System.IO.Abstractions;
 using System.Threading;
 using System.Threading.Channels;
-using EasyDotnet.Application.Interfaces;
 using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.IDE.DebuggerStrategies;
+using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Services;
+using EasyDotnet.IDE.Settings;
 using EasyDotnet.IDE.TestRunner.Adapters.VSTest;
 using EasyDotnet.IDE.TestRunner.Lock;
 using EasyDotnet.IDE.TestRunner.Models;
-using EasyDotnet.Infrastructure.Settings;
 using Microsoft.Extensions.Logging;
 using Microsoft.TestPlatform.VsTestConsole.TranslationLayer;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Client;

@@ -1,9 +1,9 @@
 using System.CommandLine.Parsing;
-using EasyDotnet.Application.Interfaces;
 using EasyDotnet.BuildServer.Contracts;
-using EasyDotnet.Domain.Models.Client;
 using EasyDotnet.IDE.BuildHost;
 using EasyDotnet.IDE.DebuggerStrategies;
+using EasyDotnet.IDE.Interfaces;
+using EasyDotnet.IDE.Models.Client;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.Workspace.Controllers;
 using Microsoft.Extensions.Logging;
@@ -151,7 +151,7 @@ public class WorkspaceService(
 
   private async Task DispatchRunAsync(
       ValidatedDotnetProject project,
-      Domain.Models.LaunchProfile.LaunchProfile? launchProfile,
+      EasyDotnet.IDE.Models.LaunchProfile.LaunchProfile? launchProfile,
       string? cliArgs,
       CancellationToken ct)
   {

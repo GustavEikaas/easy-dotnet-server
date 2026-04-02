@@ -1,6 +1,6 @@
 using System.IO.Pipes;
 using System.Text.Json;
-using EasyDotnet.Application.Interfaces;
+using EasyDotnet.IDE.Interfaces;
 using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
 

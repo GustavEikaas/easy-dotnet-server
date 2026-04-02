@@ -1,5 +1,5 @@
 using System.Text.Json;
-using EasyDotnet.Application.Interfaces;
+using EasyDotnet.IDE.Interfaces;
 
 namespace EasyDotnet.IDE.Utils;
 

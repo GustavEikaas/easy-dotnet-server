@@ -1,8 +1,8 @@
 using System.IO;
 using System.Threading.Tasks;
-using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
 using EasyDotnet.IDE.Controllers.Roslyn;
+using EasyDotnet.IDE.Interfaces;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Controllers.JsonCodeGen;

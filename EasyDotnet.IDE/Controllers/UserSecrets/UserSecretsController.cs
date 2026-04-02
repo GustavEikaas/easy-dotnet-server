@@ -2,7 +2,7 @@ using System.IO;
 using System.Threading.Tasks;
 using EasyDotnet.Controllers;
 using EasyDotnet.Controllers.UserSecrets;
-using EasyDotnet.Infrastructure.Services;
+using EasyDotnet.IDE.Services;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Controllers.UserSecrets;

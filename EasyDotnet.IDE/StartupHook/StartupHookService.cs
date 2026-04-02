@@ -1,6 +1,6 @@
 using System.IO.Pipes;
-using EasyDotnet.Application.Interfaces;
 using EasyDotnet.IDE.DebuggerStrategies;
+using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Utils;
 
 namespace EasyDotnet.IDE.StartupHook;

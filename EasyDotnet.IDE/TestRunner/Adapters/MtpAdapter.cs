@@ -1,7 +1,7 @@
 using System.Runtime.InteropServices;
-using EasyDotnet.Application.Interfaces;
 using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.IDE.DebuggerStrategies;
+using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.TestRunner.Adapters.MTP;
 using EasyDotnet.IDE.TestRunner.Adapters.MTP.RPC;

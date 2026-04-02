@@ -1,4 +1,4 @@
-using EasyDotnet.Application.Interfaces;
+using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Workspace.Controllers;
 
 namespace EasyDotnet.IDE.Workspace.Services;

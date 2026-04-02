@@ -1,5 +1,5 @@
-using EasyDotnet.Application.Interfaces;
 using EasyDotnet.AppWrapper.Contracts;
+using EasyDotnet.IDE.Interfaces;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.AppWrapper;

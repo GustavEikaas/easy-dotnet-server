@@ -17,10 +17,10 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Restore
-        run: dotnet restore ./EasyDotnet.sln
+        run: dotnet restore ./EasyDotnet.slnx
 
       - name: Check formatting
-        run: dotnet format ./EasyDotnet.sln --verify-no-changes
+        run: dotnet format ./EasyDotnet.slnx --verify-no-changes
 
       - name: Build
         run: dotnet build 

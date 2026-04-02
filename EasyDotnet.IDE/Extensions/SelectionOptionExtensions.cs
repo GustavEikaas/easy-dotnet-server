@@ -1,6 +1,7 @@
 using System;
 using System.IO;
-using EasyDotnet.Domain.Models.Client;
+using EasyDotnet.IDE.Models.Client;
+using EasyDotnet.IDE.Models.Client.Prompt;
 using EasyDotnet.MsBuild;
 
 namespace EasyDotnet.IDE.Extensions;
