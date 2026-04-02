@@ -31,7 +31,9 @@ public class JsonCodeGenService(IMsBuildService msBuildService) : IJsonCodeGenSe
 
     var projectPath = FindCsprojFromFile(filePath);
 
+#pragma warning disable CS0618 // Type or member is obsolete
     var project = await msBuildService.GetOrSetProjectPropertiesAsync(projectPath);
+#pragma warning restore CS0618 // Type or member is obsolete
     var rootNamespace = project.RootNamespace;
 
     var relativePath = Path.GetDirectoryName(filePath)!

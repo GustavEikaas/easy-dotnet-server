@@ -127,8 +127,9 @@ public class RoslynService(IMsBuildService service, ILogger<RoslynService> logSe
   {
     var projectPath = FindCsprojFromFile(filePath);
 
+#pragma warning disable CS0618 // Type or member is obsolete
     var project = await service.GetOrSetProjectPropertiesAsync(projectPath, null, "Debug", cancellationToken);
-
+#pragma warning restore CS0618 // Type or member is obsolete
     var rootNamespace = project.RootNamespace ?? project.MSBuildProjectName ?? Path.GetFileNameWithoutExtension(projectPath);
 
     var supportsFileScopedNamespace =

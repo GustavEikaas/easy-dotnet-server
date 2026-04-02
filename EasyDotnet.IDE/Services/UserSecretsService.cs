@@ -14,8 +14,9 @@ public class UserSecretsService(IMsBuildService msBuildService, IProcessQueue pr
       throw new FileNotFoundException("Project file not found", projectPath);
     }
 
+#pragma warning disable CS0618 // Type or member is obsolete
     var project = await msBuildService.GetOrSetProjectPropertiesAsync(projectPath);
-
+#pragma warning restore CS0618 // Type or member is obsolete
     var currentSecretsId = project.UserSecretsId;
 
     if (!string.IsNullOrEmpty(currentSecretsId))

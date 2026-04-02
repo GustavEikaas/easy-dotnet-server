@@ -5,7 +5,6 @@ using System.Runtime.InteropServices;
 using DotNetOutdated.Core.Services;
 using EasyDotnet.Debugger;
 using EasyDotnet.IDE.AppWrapper;
-using EasyDotnet.IDE.Aspire;
 using EasyDotnet.IDE.BuildHost;
 using EasyDotnet.IDE.DebuggerStrategies;
 using EasyDotnet.IDE.Editor;
@@ -104,7 +103,6 @@ public static class DiModules
     services.AddTransient<IProgressScopeFactory, ProgressScopeFactory>();
     services.AddTransient<IStartupHookService, StartupHookService>();
     services.AddTransient<IMsBuildService, MsBuildService>();
-    services.AddTransient<IAspireService, AspireService>();
     services.AddTransient<IJsonCodeGenService, JsonCodeGenService>();
     services.AddTransient<UserSecretsService>();
     services.AddTransient<EntityFrameworkService>();

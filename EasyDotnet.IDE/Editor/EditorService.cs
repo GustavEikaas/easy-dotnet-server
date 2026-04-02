@@ -1,10 +1,10 @@
+using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Models.Client;
 using EasyDotnet.IDE.Models.Client.Debugger;
 using EasyDotnet.IDE.Models.Client.Progress;
 using EasyDotnet.IDE.Models.Client.Prompt;
 using EasyDotnet.IDE.Models.Client.Quickfix;
-using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Editor;
@@ -12,7 +12,7 @@ namespace EasyDotnet.IDE.Editor;
 public class EditorService(
   IEditorProcessManagerService editorProcessManagerService,
   IStartupHookService startupHookService,
-  IMsBuildService buildService,
+  IBuildHostManager buildHostManager,
   IClientService clientService,
   IAppWrapperManager appWrapperManager,
   JsonRpc jsonRpc) : IEditorService
@@ -131,16 +131,50 @@ public class EditorService(
 
   public async Task<bool> BuildProject(string projectPath, CancellationToken cancellationToken)
   {
-    using var progress = new ProgressScope(this, "Building", $"Building {Path.GetFileNameWithoutExtension(projectPath)}");
-    var res = await buildService.RequestBuildAsync(projectPath, null, null, null, cancellationToken);
-    if (res.Success)
+    var name = Path.GetFileNameWithoutExtension(projectPath);
+    List<BatchBuildResult> results;
+    using (new ProgressScope(this, "Building", $"Building {name}"))
     {
-      return true;
+      results = await buildHostManager
+          .BatchBuildAsync(new BatchBuildRequest([projectPath], "Debug"), cancellationToken)
+          .ToListAsync(cancellationToken);
     }
-    progress.Report("Build failed", 100);
-    var errors = res.Errors.Select(x => new QuickFixItem(x.FilePath, x.LineNumber, x.ColumnNumber, x.Message ?? "ERR", QuickFixItemType.Error));
-    await SetQuickFixList([.. errors]);
-    return false;
+
+    var allDiagnostics = results
+        .Where(r => r.Kind == BatchBuildResultKind.Finished)
+        .SelectMany(r => r.Output?.Diagnostics ?? [])
+        .ToList();
+
+    var errors = allDiagnostics
+        .Where(d => d.Severity == BuildDiagnosticSeverity.Error)
+        .Select(d => new QuickFixItem(
+            FileName: d.File ?? "",
+            LineNumber: d.LineNumber,
+            ColumnNumber: d.ColumnNumber,
+            Text: string.IsNullOrEmpty(d.Code) ? d.Message ?? "" : $"[{d.Code}] {d.Message}",
+            Type: QuickFixItemType.Error))
+        .ToList();
+
+    var warnings = allDiagnostics
+        .Where(d => d.Severity == BuildDiagnosticSeverity.Warning)
+        .Select(d => new QuickFixItem(
+            FileName: d.File ?? "",
+            LineNumber: d.LineNumber,
+            ColumnNumber: d.ColumnNumber,
+            Text: string.IsNullOrEmpty(d.Code) ? d.Message ?? "" : $"[{d.Code}] {d.Message}",
+            Type: QuickFixItemType.Warning))
+        .ToList();
+
+    if (errors.Count > 0)
+    {
+      await SetQuickFixList([.. errors.Concat(warnings)]);
+      return false;
+    }
+
+    if (warnings.Count > 0)
+      await SetQuickFixListSilent([.. warnings]);
+
+    return true;
   }
 
   private static RunCommand BuildRunCommand(RunProjectRequest request, Dictionary<string, string> hookEnv)

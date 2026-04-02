@@ -153,11 +153,14 @@ public class DebugOrchestrator(
 
     try
     {
+      //TODO: replace with WorkspaceBuildHost and require TFM if multi target
+#pragma warning disable CS0618 // Type or member is obsolete
       var project = await msBuildService.GetOrSetProjectPropertiesAsync(
           request.TargetPath,
           request.TargetFramework,
           request.Configuration ?? "Debug",
           cancellationToken);
+#pragma warning restore CS0618 // Type or member is obsolete
 
       var binaryPath = clientService.ClientOptions?.DebuggerOptions?.BinaryPath;
       if (string.IsNullOrEmpty(binaryPath))
