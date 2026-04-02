@@ -12,7 +12,9 @@ public class UserSecretsController(UserSecretsService userSecretsService) : Base
   [JsonRpcMethod("user-secrets/init")]
   public async Task<ProjectUserSecretsInitResponse> InitSecrets(string projectPath)
   {
+#pragma warning disable CS0612 // Type or member is obsolete
     var secret = await userSecretsService.AddUserSecretsId(Path.GetFullPath(projectPath));
+#pragma warning restore CS0612 // Type or member is obsolete
     return new(secret.Id, secret.FilePath);
   }
 

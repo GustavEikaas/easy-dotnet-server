@@ -10,7 +10,6 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace EasyDotnet.IDE.Services;
 
-[Obsolete("Use BuildHostManager instead")]
 public class MsBuildService(IVisualStudioLocator locator, IClientService clientService, IProcessQueue processQueue, IMemoryCache memoryCache, INotificationService notificationService, ISolutionService solutionService) : IMsBuildService
 {
 

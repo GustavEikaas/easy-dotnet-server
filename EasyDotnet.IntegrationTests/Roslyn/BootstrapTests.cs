@@ -131,11 +131,13 @@ public class BootstrapTests
     var mockLogService = NullLogger<RoslynService>.Instance;
     var memoryCache = new MemoryCache(new MemoryCacheOptions());
     var roslynService = new RoslynService(new MsBuildService(new VisualStudioLocator(memoryCache, new ClientService(), new ProcessQueue()), new ClientService(), new ProcessQueue(35, NullLogger<ProcessQueue>.Instance), memoryCache, new TestNotificationService(), new SolutionService()), mockLogService);
+#pragma warning disable CS0612 // Type or member is obsolete
     await roslynService.BootstrapFile(
         controllerFilePath,
         kind,
         preferFileScopedNamespace: preferFileScopedNamespace,
         cancellationToken: CancellationToken.None);
+#pragma warning restore CS0612 // Type or member is obsolete
 
     var code = await File.ReadAllTextAsync(controllerFilePath);
     var syntaxTree = CSharpSyntaxTree.ParseText(code);
