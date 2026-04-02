@@ -46,7 +46,7 @@ public class DebuggerProcessHost(ILogger<DebuggerProcessHost> logger) : IDebugge
       }
     };
 
-    _process.ErrorDataReceived += (_, e)=>
+    _process.ErrorDataReceived += (_, e) =>
     {
       if (!string.IsNullOrWhiteSpace(e.Data))
       {
