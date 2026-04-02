@@ -6,9 +6,7 @@ namespace EasyDotnet.IDE.DebuggerStrategies;
 public interface IDebugStrategyFactory
 {
   RunInTerminalStrategy CreateRunInTerminalStrategy(string? launchProfileName, string? cliArgs = null);
-  StandardLaunchStrategy CreateStandardLaunchStrategy();
   StandardAttachStrategy CreateStandardAttachStrategy(int pid);
-  VsTestStrategy CreateVsTestStrategy();
 }
 
 public class DebugStrategyFactory(
@@ -27,12 +25,8 @@ public class DebugStrategyFactory(
     launchProfileService,
     appWrapperManager);
 
-  public StandardLaunchStrategy CreateStandardLaunchStrategy() => new();
 
   public StandardAttachStrategy CreateStandardAttachStrategy(int pid) => new(
     loggerFactory.CreateLogger<StandardAttachStrategy>(),
     pid);
-
-  public VsTestStrategy CreateVsTestStrategy() => new(
-    loggerFactory.CreateLogger<VsTestStrategy>());
 }
