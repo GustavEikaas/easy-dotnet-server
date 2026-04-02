@@ -1,0 +1,22 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="EasyDotnet.AppWrapper.Contracts/EasyDotnet.AppWrapper.Contracts.csproj" />
+  <Project Path="EasyDotnet.AppWrapper/EasyDotnet.AppWrapper.csproj" />
+  <Project Path="EasyDotnet.BuildServer.Contracts/EasyDotnet.BuildServer.Contracts.csproj" />
+  <Project Path="EasyDotnet.BuildServer/EasyDotnet.BuildServer.csproj" />
+  <Project Path="EasyDotnet.Debugger.Tests/EasyDotnet.Debugger.Tests.csproj" />
+  <Project Path="EasyDotnet.Debugger/EasyDotnet.Debugger.csproj" />
+  <Project Path="EasyDotnet.IDE/EasyDotnet.IDE.csproj" />
+  <Project Path="EasyDotnet.IDE.Tests/EasyDotnet.IDE.Tests.csproj" />
+  <Project Path="EasyDotnet.IntegrationTests/EasyDotnet.IntegrationTests.csproj" />
+  <Project Path="EasyDotnet.MsBuild.Tests/EasyDotnet.MsBuild.Tests.csproj" />
+  <Project Path="EasyDotnet.MsBuild/EasyDotnet.MsBuild.csproj" />
+  <Project Path="EasyDotnet.ProjXLanguageServer/EasyDotnet.ProjXLanguageServer.csproj" />
+  <Project Path="EasyDotnet.RoslynLanguageServices.Tests/EasyDotnet.RoslynLanguageServices.Tests.csproj" />
+  <Project Path="EasyDotnet.RoslynLanguageServices/EasyDotnet.RoslynLanguageServices.csproj" />
+  <Project Path="EasyDotnet.StartupHook/EasyDotnet.StartupHook.csproj" />
+</Solution>
