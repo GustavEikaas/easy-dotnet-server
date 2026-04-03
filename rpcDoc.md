@@ -1,16 +1,5 @@
 ## RoslynController
 
-### `roslyn/bootstrap-file-v2`
-> **Breaking change** from `roslyn/bootstrap-file`. Namespace is now resolved via the BuildServer (`IBuildHostManager`). Content is applied to the editor buffer via the `applyWorkspaceEdit` client-side handler rather than written directly to disk.
-
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| filePath | string |   |
-| kind | Kind |   |
-| preferFileScopedNamespace | bool |   |
-
-**Returns:** `Task<BootstrapFileResultResponse>`
-
 ### `roslyn/get-workspace-diagnostics`
 | Parameter | Type | Optional |
 |-----------|------|----------|
@@ -167,6 +156,28 @@
 
 ---
 
+## NewFileController
+
+### `json-code-gen-v2`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| jsonData | string |   |
+| filePath | string |   |
+| preferFileScopedNamespace | bool |   |
+
+**Returns:** `Task<BootstrapFileResultResponse>`
+
+### `roslyn/bootstrap-file-v2`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| filePath | string |   |
+| kind | Kind |   |
+| preferFileScopedNamespace | bool |   |
+
+**Returns:** `Task<BootstrapFileResultResponse>`
+
+---
+
 ## UserSecretsController
 
 ### `user-secrets/init`
@@ -313,21 +324,6 @@ _No parameters_
 | targetPath | string |   |
 
 **Returns:** `Task<bool>`
-
----
-
-## JsonCodeGen
-
-### `json-code-gen-v2`
-> **Breaking change** from `json-code-gen`. Namespace is now resolved via the BuildServer (`IBuildHostManager`). Content is applied to the editor buffer via the `applyWorkspaceEdit` client-side handler rather than written directly to disk.
-
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| jsonData | string |   |
-| filePath | string |   |
-| preferFileScopedNamespace | bool |   |
-
-**Returns:** `Task<BootstrapFileResultResponse>`
 
 ---
 
