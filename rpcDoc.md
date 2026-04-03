@@ -1,14 +1,5 @@
 ## RoslynController
 
-### `roslyn/bootstrap-file`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| filePath | string |   |
-| kind | Kind |   |
-| preferFileScopedNamespace | bool |   |
-
-**Returns:** `Task<BootstrapFileResultResponse>`
-
 ### `roslyn/get-workspace-diagnostics`
 | Parameter | Type | Optional |
 |-----------|------|----------|
@@ -165,6 +156,28 @@
 
 ---
 
+## NewFileController
+
+### `json-code-gen-v2`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| jsonData | string |   |
+| filePath | string |   |
+| preferFileScopedNamespace | bool |   |
+
+**Returns:** `Task<BootstrapFileResultResponse>`
+
+### `roslyn/bootstrap-file-v2`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| filePath | string |   |
+| kind | Kind |   |
+| preferFileScopedNamespace | bool |   |
+
+**Returns:** `Task<BootstrapFileResultResponse>`
+
+---
+
 ## UserSecretsController
 
 ### `user-secrets/init`
@@ -311,19 +324,6 @@ _No parameters_
 | targetPath | string |   |
 
 **Returns:** `Task<bool>`
-
----
-
-## JsonCodeGen
-
-### `json-code-gen`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| jsonData | string |   |
-| filePath | string |   |
-| preferFileScopedNamespace | bool |   |
-
-**Returns:** `Task<BootstrapFileResultResponse>`
 
 ---
 

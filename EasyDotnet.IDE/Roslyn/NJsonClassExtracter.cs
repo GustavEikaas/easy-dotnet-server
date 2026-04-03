@@ -37,7 +37,7 @@ public static class NJsonClassExtractor
         .WithUsings(SyntaxFactory.SingletonList(usingDirective))
         .WithMembers(SyntaxFactory.SingletonList(namespaceDecl));
 
-    return compilationUnit.NormalizeWhitespace().ToFullString();
+    return compilationUnit.NormalizeWhitespace(eol: "\n").ToFullString();
   }
 
   private static bool IsAdditionalPropertiesField(PropertyDeclarationSyntax prop)

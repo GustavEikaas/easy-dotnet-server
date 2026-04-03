@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using EasyDotnet.IDE.Controllers.Roslyn;
 using EasyDotnet.Services;
 using StreamJsonRpc;
 
@@ -10,16 +9,6 @@ namespace EasyDotnet.Controllers.Roslyn;
 
 public class RoslynController(RoslynService roslynService) : BaseController
 {
-
-  [JsonRpcMethod("roslyn/bootstrap-file")]
-  public async Task<BootstrapFileResultResponse> BootstrapFile(string filePath, Kind kind, bool preferFileScopedNamespace)
-  {
-#pragma warning disable CS0612 // Type or member is obsolete
-    var success = await roslynService.BootstrapFile(filePath, kind, preferFileScopedNamespace, new CancellationToken());
-#pragma warning restore CS0612 // Type or member is obsolete
-    return new(success);
-  }
-
   [JsonRpcMethod("roslyn/scope-variables")]
   public async Task<IAsyncEnumerable<VariableResultResponse>> GetVariablesFromScopes(string sourceFilePath, int lineNumber)
   {

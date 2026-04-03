@@ -10,6 +10,7 @@ using EasyDotnet.IDE.DebuggerStrategies;
 using EasyDotnet.IDE.Editor;
 using EasyDotnet.IDE.EntityFramework;
 using EasyDotnet.IDE.Interfaces;
+using EasyDotnet.IDE.NewFile;
 using EasyDotnet.IDE.ProcessExecution;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.Settings;
@@ -103,7 +104,7 @@ public static class DiModules
     services.AddTransient<IProgressScopeFactory, ProgressScopeFactory>();
     services.AddTransient<IStartupHookService, StartupHookService>();
     services.AddTransient<IMsBuildService, MsBuildService>();
-    services.AddTransient<IJsonCodeGenService, JsonCodeGenService>();
+    services.AddTransient<NewFileService>();
     services.AddTransient<UserSecretsService>();
     services.AddTransient<EntityFrameworkService>();
     services.AddTransient<ILaunchProfileService, LaunchProfileService>();

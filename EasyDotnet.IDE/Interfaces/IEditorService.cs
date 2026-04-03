@@ -26,4 +26,5 @@ public interface IEditorService
   Task SetQuickFixList(QuickFixItem[] quickFixItems);
   Task SetQuickFixListSilent(QuickFixItem[] quickFixItems);
   Task<bool> BuildProject(string projectPath, CancellationToken cancellationToken);
+  Task<bool> ApplyWorkspaceEdit(WorkspaceEdit edit);
 }
