@@ -98,7 +98,8 @@ A wrapper executable that sits around the user's running process to reuse extern
 - **Microsoft NuGet packages** (e.g. `NuGet.ProjectModel`) — for NuGet/package-related features
 - **`EasyDotnet.BuildServer`** — for anything requiring MSBuild APIs
 - **Microsoft.CodeAnalysis** (Roslyn) — code analysis
-- **xUnit** — testing
+- **xUnit** — integration testing
+- **TUnit** — unit testing
 
 **Test:**
 ```bash
