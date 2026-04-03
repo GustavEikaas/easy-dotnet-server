@@ -129,6 +129,9 @@ public class EditorService(
 
   public async Task CloseQuickFixList() => await jsonRpc.NotifyWithParameterObjectAsync("quickfix/close");
 
+  public async Task<bool> ApplyWorkspaceEdit(WorkspaceEdit edit) =>
+      await jsonRpc.InvokeWithParameterObjectAsync<bool>("applyWorkspaceEdit", edit);
+
   public async Task<bool> BuildProject(string projectPath, CancellationToken cancellationToken)
   {
     var name = Path.GetFileNameWithoutExtension(projectPath);

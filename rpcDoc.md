@@ -1,6 +1,8 @@
 ## RoslynController
 
-### `roslyn/bootstrap-file`
+### `roslyn/bootstrap-file-v2`
+> **Breaking change** from `roslyn/bootstrap-file`. Namespace is now resolved via the BuildServer (`IBuildHostManager`). Content is applied to the editor buffer via the `applyWorkspaceEdit` client-side handler rather than written directly to disk.
+
 | Parameter | Type | Optional |
 |-----------|------|----------|
 | filePath | string |   |
@@ -316,7 +318,9 @@ _No parameters_
 
 ## JsonCodeGen
 
-### `json-code-gen`
+### `json-code-gen-v2`
+> **Breaking change** from `json-code-gen`. Namespace is now resolved via the BuildServer (`IBuildHostManager`). Content is applied to the editor buffer via the `applyWorkspaceEdit` client-side handler rather than written directly to disk.
+
 | Parameter | Type | Optional |
 |-----------|------|----------|
 | jsonData | string |   |
