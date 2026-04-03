@@ -116,7 +116,7 @@ dotnet test ./EasyDotnet.slnx
 - One service class per domain, following the pattern in `EditorService.cs`. The RPC layer is just wiring.
 - Every async method takes a `CancellationToken`. Long-running operations (restore, build, analysis) must be cancellable.
 - Use **immutable DTOs** for everything crossing the RPC boundary. Never expose internal model objects.
-- Never use `Console.WriteLine` except on the JSON-RPC transport stream itself. Use the structured logging infrastructure for diagnostics.
+- Never use `Console.WriteLine`. Use the structured logging infrastructure for diagnostics.
 
 ### Coding Style
 
