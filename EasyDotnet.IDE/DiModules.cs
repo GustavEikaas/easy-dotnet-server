@@ -14,6 +14,7 @@ using EasyDotnet.IDE.NewFile;
 using EasyDotnet.IDE.ProcessExecution;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.Settings;
+using EasyDotnet.IDE.ProjectReference.Services;
 using EasyDotnet.IDE.Solution.Services;
 using EasyDotnet.IDE.StartupHook;
 using EasyDotnet.IDE.TemplateEngine.PostActionHandlers;
@@ -115,6 +116,7 @@ public static class DiModules
     services.AddTransient<OutdatedService>();
     services.AddTransient<GlobalJsonService>();
 
+    services.AddTransient<ProjectReferenceService>();
     services.AddTransient<SolutionManagementService>();
     services.AddTransient<PostActionProcessor>();
     services.AddTransient<IPostActionHandler, RunScriptPostActionHandler>();
