@@ -26,6 +26,7 @@ using EasyDotnet.IDE.TestRunner.Service;
 using EasyDotnet.IDE.TestRunner.Store;
 using EasyDotnet.IDE.Utils;
 using EasyDotnet.IDE.Workspace.Services;
+using EasyDotnet.IDE.Solution.Services;
 using EasyDotnet.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -114,6 +115,7 @@ public static class DiModules
     services.AddTransient<OutdatedService>();
     services.AddTransient<GlobalJsonService>();
 
+    services.AddTransient<SolutionManagementService>();
     services.AddTransient<PostActionProcessor>();
     services.AddTransient<IPostActionHandler, RunScriptPostActionHandler>();
     services.AddTransient<IPostActionHandler, OpenFilePostActionHandler>();
