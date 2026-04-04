@@ -45,4 +45,27 @@ public class SolutionService : ISolutionService
 
     return true;
   }
+
+  public async Task<bool> RemoveProjectFromSolutionAsync(string solutionFilePath, string projectPath, CancellationToken cancellationToken)
+  {
+    var fullSolutionPath = Path.GetFullPath(solutionFilePath);
+    var serializer = SolutionSerializers.GetSerializerByMoniker(fullSolutionPath);
+    if (serializer == null) return false;
+
+    var solutionModel = await serializer.OpenAsync(fullSolutionPath, cancellationToken);
+    var solutionDirectory = Path.GetDirectoryName(fullSolutionPath) ?? throw new Exception("Solution dir cannot be null");
+
+    var project = solutionModel.SolutionProjects
+        .FirstOrDefault(p => string.Equals(
+            Path.GetFullPath(Path.Combine(solutionDirectory, p.FilePath)),
+            Path.GetFullPath(projectPath),
+            StringComparison.OrdinalIgnoreCase));
+
+    if (project == null) return false;
+
+    solutionModel.RemoveProject(project);
+    await serializer.SaveAsync(fullSolutionPath, solutionModel, cancellationToken);
+
+    return true;
+  }
 }

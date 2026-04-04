@@ -156,6 +156,22 @@
 
 ---
 
+## SolutionManagementController
+
+### `solution/add-project`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+
+**Returns:** `Task`
+
+### `solution/remove-project`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+
+**Returns:** `Task`
+
+---
+
 ## NewFileController
 
 ### `json-code-gen-v2`
