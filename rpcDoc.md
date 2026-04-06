@@ -172,6 +172,24 @@
 
 ---
 
+## ProjectReferenceController
+
+### `msbuild/add-project-reference-interactive`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | ProjectReferenceRequest |   |
+
+**Returns:** `Task`
+
+### `msbuild/remove-project-reference-interactive`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | ProjectReferenceRequest |   |
+
+**Returns:** `Task`
+
+---
+
 ## NewFileController
 
 ### `json-code-gen-v2`
