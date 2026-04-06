@@ -1,5 +1,4 @@
 ﻿using System.Reflection;
-using System.Threading.Tasks;
 using EasyDotnet.IDE.Commands;
 using Spectre.Console.Cli;
 

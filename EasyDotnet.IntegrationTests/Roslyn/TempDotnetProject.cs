@@ -1,5 +1,3 @@
-using Microsoft.Build.Construction;
-
 namespace EasyDotnet.IntegrationTests.Roslyn;
 
 public class TempDotNetProject : IDisposable
@@ -19,24 +17,28 @@ public class TempDotNetProject : IDisposable
 
   private void CreateProject()
   {
-    var project = ProjectRootElement.Create();
-    project.Sdk = "Microsoft.NET.Sdk";
+    var csprojContent = """
+        <Project Sdk="Microsoft.NET.Sdk">
+          <PropertyGroup>
+            <OutputType>Exe</OutputType>
+            <TargetFramework>net8.0</TargetFramework>
+          </PropertyGroup>
+        </Project>
+        """;
 
-    var propertyGroup = project.AddPropertyGroup();
-    propertyGroup.AddProperty("OutputType", "Exe");
-    propertyGroup.AddProperty("TargetFramework", "net8.0");
+    File.WriteAllText(CsprojPath, csprojContent);
 
-    project.Save(CsprojPath);
+    var programCode = """
+        using System;
+        class Program
+        {
+            static void Main(string[] args)
+            {
+                Console.WriteLine("Hello, World!");
+            }
+        }
+        """;
 
-    var programCode = @"using System;
-
-class Program
-{
-    static void Main(string[] args)
-    {
-        Console.WriteLine(""Hello, World!"");
-    }
-}";
     File.WriteAllText(ProgramCsPath, programCode);
   }
 
