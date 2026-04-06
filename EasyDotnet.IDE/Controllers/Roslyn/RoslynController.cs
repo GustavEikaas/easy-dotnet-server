@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using EasyDotnet.Services;
+using EasyDotnet.IDE.Services;
 using StreamJsonRpc;
 
 namespace EasyDotnet.Controllers.Roslyn;

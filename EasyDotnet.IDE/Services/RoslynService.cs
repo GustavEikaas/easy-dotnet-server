@@ -1,20 +1,13 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Threading;
 using System.Threading.Channels;
-using System.Threading.Tasks;
 using EasyDotnet.Controllers.Roslyn;
-using EasyDotnet.IDE;
+using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.MsBuild;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.MSBuild;
 using Microsoft.Extensions.Logging;
 
-namespace EasyDotnet.Services;
+namespace EasyDotnet.IDE.Services;
 
 public sealed record VariableResult(string Identifier, int LineStart, int LineEnd, int ColumnStart, int ColumnEnd);
 
@@ -134,7 +127,7 @@ public class RoslynService(ILogger<RoslynService> logService)
 
     using var workspace = MSBuildWorkspace.Create();
 
-    Solution solution;
+    Microsoft.CodeAnalysis.Solution solution;
 
     try
     {
