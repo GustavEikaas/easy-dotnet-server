@@ -178,13 +178,14 @@ public class WorkspaceBuildService(
 
     if (errors.Count == 0)
     {
-      await editorService.SetQuickFixListSilent([.. warnings]);
+
+      await editorService.SetQuickFixList(new SetQuickFixRequest(QuickFixRequestType.MsBuildDiagnostic, [.. warnings]));
       await editorService.DisplayMessage($"Build succeeded — {warnings.Count} warning(s)");
       return;
     }
 
     var items = errors.Concat(warnings).ToArray();
-    await editorService.SetQuickFixList(items);
+    await editorService.SetQuickFixList(new SetQuickFixRequest(QuickFixRequestType.MsBuildDiagnostic, [.. items]));
     await editorService.DisplayError($"Build FAILED — {errors.Count} error(s), {warnings.Count} warning(s)");
   }
 }

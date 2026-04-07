@@ -30,7 +30,7 @@ public class WorkspacePreBuildService(
     if (!restoreResults.All(r => r.Success))
     {
       var errors = restoreResults.SelectMany(r => r.Output?.Diagnostics is { } d ? MapErrors(d) : []);
-      await editorService.SetQuickFixList([.. errors]);
+      await editorService.SetQuickFixList(new SetQuickFixRequest(QuickFixRequestType.MsBuildDiagnostic, [.. errors]));
       await editorService.DisplayError($"Restore failed for {name}");
       return false;
     }
@@ -50,7 +50,7 @@ public class WorkspacePreBuildService(
     if (buildResults.Any(r => r.Kind == BatchBuildResultKind.Finished && r.Success == false))
     {
       var errors = buildResults.SelectMany(r => r.Output?.Diagnostics is { } d ? MapErrors(d) : []);
-      await editorService.SetQuickFixList([.. errors]);
+      await editorService.SetQuickFixList(new SetQuickFixRequest(QuickFixRequestType.MsBuildDiagnostic, [.. errors]));
       await editorService.DisplayError($"Build failed for {name}");
       return false;
     }
