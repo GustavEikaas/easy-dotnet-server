@@ -109,6 +109,6 @@ public class StatusDispatcher(
                     : QuickFixItemType.Information
     )).ToArray();
 
-    return editorService.SetQuickFixList(items);
+    return editorService.SetQuickFixList(new SetQuickFixRequest(QuickFixRequestType.MsBuildDiagnostic, [.. items]));
   }
 }

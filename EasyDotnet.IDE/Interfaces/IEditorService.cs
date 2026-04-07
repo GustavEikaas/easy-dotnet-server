@@ -23,8 +23,8 @@ public interface IEditorService
   Task SendProgressEnd(string token);
   Task SendProgressStart(string token, string title, string message, int? percentage = null);
   Task SendProgressUpdate(string token, string? message, int? percentage = null);
-  Task SetQuickFixList(QuickFixItem[] quickFixItems);
-  Task SetQuickFixListSilent(QuickFixItem[] quickFixItems);
+  Task SetQuickFixList(SetQuickFixRequest request);
+  Task SetQuickFixListSilent(SetQuickFixRequest request);
   Task<bool> BuildProject(string projectPath, CancellationToken cancellationToken);
   Task<bool> ApplyWorkspaceEdit(WorkspaceEdit edit);
 }

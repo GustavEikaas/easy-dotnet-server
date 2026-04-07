@@ -123,9 +123,9 @@ public class EditorService(
     await jsonRpc.NotifyWithParameterObjectAsync("$/progress", progress);
   }
 
-  public async Task SetQuickFixList(QuickFixItem[] quickFixItems) => await jsonRpc.NotifyWithParameterObjectAsync("quickfix/set", quickFixItems);
+  public async Task SetQuickFixList(SetQuickFixRequest request) => await jsonRpc.NotifyWithParameterObjectAsync("quickfix/set", request);
 
-  public async Task SetQuickFixListSilent(QuickFixItem[] quickFixItems) => await jsonRpc.NotifyWithParameterObjectAsync("quickfix/set-silent", quickFixItems);
+  public async Task SetQuickFixListSilent(SetQuickFixRequest request) => await jsonRpc.NotifyWithParameterObjectAsync("quickfix/set-silent", request);
 
   public async Task CloseQuickFixList() => await jsonRpc.NotifyWithParameterObjectAsync("quickfix/close");
 
@@ -170,12 +170,13 @@ public class EditorService(
 
     if (errors.Count > 0)
     {
-      await SetQuickFixList([.. errors.Concat(warnings)]);
+
+      await SetQuickFixListSilent(new SetQuickFixRequest(QuickFixRequestType.MsBuildDiagnostic, [.. errors.Concat(warnings)]));
       return false;
     }
 
     if (warnings.Count > 0)
-      await SetQuickFixListSilent([.. warnings]);
+      await SetQuickFixListSilent(new SetQuickFixRequest(QuickFixRequestType.MsBuildDiagnostic, [.. warnings]));
 
     return true;
   }
