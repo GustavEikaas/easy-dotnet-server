@@ -38,7 +38,6 @@ public class AppWrapperPipeListener(
     var rpc = new JsonRpc(new HeaderDelimitedMessageHandler(pipe, pipe, CreateJsonMessageFormatter()));
     var handler = new AppWrapperConnectionHandler(manager, editorProcessManagerService, rpc);
     rpc.TraceSource.Switch.Level = currentLogLevel.Loglevel;
-    rpc.TraceSource.Switch.Level = System.Diagnostics.SourceLevels.Verbose;
     rpc.TraceSource.Listeners.Clear();
     rpc.TraceSource.Listeners.Add(new JsonRpcLogger(logger, "AppWrapper"));
     rpc.AddLocalRpcTarget(handler);
