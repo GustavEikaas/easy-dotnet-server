@@ -2,12 +2,14 @@ using System.IO.Pipes;
 using System.Text.Json;
 using EasyDotnet.IDE.Interfaces;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json.Serialization;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.AppWrapper;
 
 public class AppWrapperPipeListener(
     AppWrapperManager manager,
+    CurrentLogLevel currentLogLevel,
     IEditorProcessManagerService editorProcessManagerService,
     ILogger<AppWrapperPipeListener> logger)
 {
@@ -33,21 +35,26 @@ public class AppWrapperPipeListener(
 
   private Task HandleConnectionAsync(NamedPipeServerStream pipe)
   {
-    var formatter = new SystemTextJsonFormatter
-    {
-      JsonSerializerOptions = new JsonSerializerOptions
-      {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-      }
-    };
-
-    var rpc = new JsonRpc(new HeaderDelimitedMessageHandler(pipe, pipe, formatter));
+    var rpc = new JsonRpc(new HeaderDelimitedMessageHandler(pipe, pipe, CreateJsonMessageFormatter()));
     var handler = new AppWrapperConnectionHandler(manager, editorProcessManagerService, rpc);
+    rpc.TraceSource.Switch.Level = currentLogLevel.Loglevel;
+    rpc.TraceSource.Switch.Level = System.Diagnostics.SourceLevels.Verbose;
+    rpc.TraceSource.Listeners.Clear();
+    rpc.TraceSource.Listeners.Add(new JsonRpcLogger(logger, "AppWrapper"));
     rpc.AddLocalRpcTarget(handler);
     rpc.StartListening();
 
     return rpc.Completion.ContinueWith(
         _ => logger.LogDebug("AppWrapper connection closed."),
         TaskScheduler.Default);
+
   }
+
+  private static JsonMessageFormatter CreateJsonMessageFormatter() => new()
+  {
+    JsonSerializer = { ContractResolver = new DefaultContractResolver
+            {
+                NamingStrategy = new CamelCaseNamingStrategy()
+            }}
+  };
 }
