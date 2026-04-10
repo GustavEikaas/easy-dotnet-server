@@ -53,8 +53,7 @@ public class WorkspaceService(
         return;
       }
 
-      var target = await resolver.ResolveAsync(
-          request.FilePath, request.UseDefault, request.UseLaunchProfile, "debug", ct);
+      var target = await resolver.ResolveAsync(request.FilePath, request.UseDefault, request.UseLaunchProfile, "debug", ct);
       if (target is null)
       {
         return;

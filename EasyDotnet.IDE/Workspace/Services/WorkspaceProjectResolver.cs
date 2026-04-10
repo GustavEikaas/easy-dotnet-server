@@ -1,8 +1,6 @@
 using EasyDotnet.BuildServer.Contracts;
-using EasyDotnet.IDE;
 using EasyDotnet.IDE.BuildHost;
 using EasyDotnet.IDE.Interfaces;
-using EasyDotnet.IDE.Models.Client;
 using EasyDotnet.IDE.Models.Client.Prompt;
 using EasyDotnet.IDE.Settings;
 using LaunchProfile = EasyDotnet.IDE.Models.LaunchProfile.LaunchProfile;
@@ -38,8 +36,7 @@ public class WorkspaceProjectResolver(
     return target with { LaunchProfileName = profileName, LaunchProfile = profile };
   }
 
-  private async Task<ResolvedExecutionTarget?> ResolveFromSolutionAsync(
-      string solutionFile, string? filePath, bool useDefault, string operationLabel, CancellationToken ct)
+  private async Task<ResolvedExecutionTarget?> ResolveFromSolutionAsync(string solutionFile, string? filePath, bool useDefault, string operationLabel, CancellationToken ct)
   {
     if (useDefault)
     {
@@ -134,7 +131,6 @@ public class WorkspaceProjectResolver(
         var profile = launchProfileService.GetLaunchProfile(project.ProjectFullPath, settings.LaunchProfile);
         return (settings.LaunchProfile, profile);
       }
-      return (null, null);
     }
 
     var profiles = launchProfileService.GetLaunchProfiles(project.ProjectFullPath);
