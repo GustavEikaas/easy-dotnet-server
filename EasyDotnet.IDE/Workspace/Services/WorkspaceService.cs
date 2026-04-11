@@ -15,6 +15,7 @@ public class WorkspaceService(
     WorkspaceSessionManager sessionManager,
     WorkspacePreBuildService preBuildService,
     IEditorService editorService,
+    IEditorProcessManagerService editorProcessManagerService,
     WorkspaceBuildHostManager buildHostManager,
     IDebugOrchestrator debugOrchestrator,
     IDebugStrategyFactory debugStrategyFactory,
@@ -117,7 +118,7 @@ public class WorkspaceService(
       sessionKey = $"watch:{project.ProjectFullPath}";
     }
 
-    if (!sessionManager.TryRegister(sessionKey))
+    if (!TryClaimSession(sessionKey, TerminalSlot.Managed))
     {
       await editorService.DisplayError($"{project.ProjectName} is already being watched");
       return;
@@ -155,7 +156,7 @@ public class WorkspaceService(
       CancellationToken ct)
   {
     var sessionKey = $"{project.ProjectFullPath}:{project.TargetFramework}";
-    if (!sessionManager.TryRegister(sessionKey))
+    if (!TryClaimSession(sessionKey, TerminalSlot.LongRunning))
     {
       await editorService.DisplayError($"{project.ProjectName} is already running");
       return;
@@ -177,6 +178,7 @@ public class WorkspaceService(
           return;
         }
 
+        //make sure we actually catch if external terminal is closed or program ctrl + c
         var exitCode = await editorService.RequestRunProjectAsync(runRequest, CancellationToken.None);
         logger.LogInformation("{ProjectName} exited with code {ExitCode}", project.ProjectName, exitCode);
         if (exitCode != 0)
@@ -201,7 +203,7 @@ public class WorkspaceService(
     filePath = Path.GetFullPath(filePath);
     var fileName = Path.GetFileName(filePath);
 
-    if (!sessionManager.TryRegister(filePath))
+    if (!TryClaimSession(filePath, TerminalSlot.Managed))
     {
       await editorService.DisplayError($"{fileName} is already running");
       return;
@@ -294,5 +296,18 @@ public class WorkspaceService(
 
     _ = editorService.DisplayError($"Invalid FilePath '{filePath}': must be an absolute path to a .cs file");
     return false;
+  }
+
+  private bool TryClaimSession(string key, TerminalSlot slot)
+  {
+    if (sessionManager.TryRegister(key))
+      return true;
+
+    if (editorProcessManagerService.IsSlotBusy(slot))
+      return false;
+
+    logger.LogWarning("Session {Key} was stale (slot {Slot} is free). Reclaiming.", key, slot);
+    sessionManager.Unregister(key);
+    return sessionManager.TryRegister(key);
   }
 }

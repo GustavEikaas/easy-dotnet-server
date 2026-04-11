@@ -79,16 +79,15 @@ public class EditorService(
       {
         await jsonRpc.InvokeWithParameterObjectAsync("runCommandManaged", new TrackedJob(guid, command), ct);
       }
+
+      var pid = await session.WaitForPidAsync(ct);
+      session.Resume();
     }
     catch (Exception e)
     {
       editorProcessManagerService.SetFailedToStart(guid, TerminalSlot.LongRunning, e.Message);
       throw;
     }
-
-    var pid = await session.WaitForPidAsync(ct);
-    session.Resume();
-    //TODO: open browser if applicable
 
     return await editorProcessManagerService.WaitForExitAsync(guid, TerminalSlot.LongRunning);
   }
