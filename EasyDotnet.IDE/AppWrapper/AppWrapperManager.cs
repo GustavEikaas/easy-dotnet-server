@@ -9,6 +9,7 @@ namespace EasyDotnet.IDE.AppWrapper;
 
 public class AppWrapperManager(
     IClientService clientService,
+    IEditorProcessManagerService editorProcessManagerService,
     ILogger<AppWrapperManager> logger) : IAppWrapperManager
 {
   private readonly ConcurrentDictionary<int, AppWrapperEntry> _wrappers = new();
@@ -102,6 +103,11 @@ public class AppWrapperManager(
     if (_wrappers.TryRemove(pid, out var entry))
     {
       logger.LogWarning("AppWrapper (PID {Pid}) disconnected and removed.", pid);
+      if (entry.CurrentJobId is { } jobId)
+      {
+        logger.LogWarning("AppWrapper (PID {Pid}) disconnected with active job {JobId}, completing with exit code -1.", pid, jobId);
+        editorProcessManagerService.CompleteJob(jobId, -1);
+      }
     }
   }
 }

@@ -34,7 +34,14 @@ public class AppWrapperHandler(JsonRpc rpc)
     process.Start();
     Console.Error.WriteLine($"[AppWrapper] Child process started (PID {process.Id}).");
 
-    await process.WaitForExitAsync(ct);
+    try
+    {
+      await process.WaitForExitAsync(ct);
+    }
+    catch (OperationCanceledException)
+    {
+      await process.WaitForExitAsync(CancellationToken.None);
+    }
 
     var exitCode = process.ExitCode;
     _currentProcess = null;

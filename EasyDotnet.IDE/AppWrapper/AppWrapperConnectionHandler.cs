@@ -21,6 +21,7 @@ public class AppWrapperConnectionHandler(
   [JsonRpcMethod("appWrapper/exited", UseSingleObjectParameterDeserialization = true)]
   public Task ExitedAsync(AppExitedNotification notification)
   {
+    _entry?.ClearJob();
     _entry?.SetIdle();
     editorProcessManagerService.CompleteJob(notification.JobId, notification.ExitCode);
     return Task.CompletedTask;

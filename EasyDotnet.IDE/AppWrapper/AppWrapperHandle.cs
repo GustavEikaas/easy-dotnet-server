@@ -18,10 +18,10 @@ public class AppWrapperHandle(AppWrapperEntry entry) : IAppWrapperHandle
     try
     {
       await entry.Rpc.NotifyWithParameterObjectAsync("appWrapper/run", runAppCommand);
+      entry.SetJob(jobId);
     }
     catch
     {
-      // Connection dropped — entry will be removed by the Disconnected handler
       entry.SetIdle();
       throw;
     }
