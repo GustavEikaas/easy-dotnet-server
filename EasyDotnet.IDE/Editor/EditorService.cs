@@ -5,6 +5,8 @@ using EasyDotnet.IDE.Models.Client.Debugger;
 using EasyDotnet.IDE.Models.Client.Progress;
 using EasyDotnet.IDE.Models.Client.Prompt;
 using EasyDotnet.IDE.Models.Client.Quickfix;
+using EasyDotnet.IDE.Picker;
+using EasyDotnet.IDE.Picker.Models;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Editor;
@@ -178,6 +180,30 @@ public class EditorService(
 
     return true;
   }
+
+  public Task<T?> RequestPickerAsync<T>(
+    string prompt,
+    PickerChoice<T>[] choices,
+    Func<T, CancellationToken, Task<PreviewResult>>? previewFactory = null,
+    CancellationToken ct = default) => throw new NotImplementedException();
+
+  public Task<T[]?> RequestMultiPickerAsync<T>(
+    string prompt,
+    PickerChoice<T>[] choices,
+    Func<T, CancellationToken, Task<PreviewResult>>? previewFactory = null,
+    CancellationToken ct = default) => throw new NotImplementedException();
+
+  public Task<T?> RequestLivePickerAsync<T>(
+    string prompt,
+    Func<string, CancellationToken, Task<PickerChoice<T>[]>> queryFactory,
+    Func<T, CancellationToken, Task<PreviewResult>>? previewFactory = null,
+    CancellationToken ct = default) => throw new NotImplementedException();
+
+  public Task<T[]?> RequestMultiLivePickerAsync<T>(
+    string prompt,
+    Func<string, CancellationToken, Task<PickerChoice<T>[]>> queryFactory,
+    Func<T, CancellationToken, Task<PreviewResult>>? previewFactory = null,
+    CancellationToken ct = default) => throw new NotImplementedException();
 
   private static RunCommand BuildRunCommand(RunProjectRequest request, Dictionary<string, string> hookEnv)
   {

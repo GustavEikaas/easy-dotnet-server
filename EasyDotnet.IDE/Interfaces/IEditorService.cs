@@ -1,6 +1,8 @@
 using EasyDotnet.IDE.Models.Client;
 using EasyDotnet.IDE.Models.Client.Prompt;
 using EasyDotnet.IDE.Models.Client.Quickfix;
+using EasyDotnet.IDE.Picker;
+using EasyDotnet.IDE.Picker.Models;
 
 namespace EasyDotnet.IDE.Interfaces;
 
@@ -27,4 +29,28 @@ public interface IEditorService
   Task SetQuickFixListSilent(QuickFixItem[] quickFixItems);
   Task<bool> BuildProject(string projectPath, CancellationToken cancellationToken);
   Task<bool> ApplyWorkspaceEdit(WorkspaceEdit edit);
+
+  Task<T?> RequestPickerAsync<T>(
+    string prompt,
+    PickerChoice<T>[] choices,
+    Func<T, CancellationToken, Task<PreviewResult>>? previewFactory = null,
+    CancellationToken ct = default);
+
+  Task<T[]?> RequestMultiPickerAsync<T>(
+    string prompt,
+    PickerChoice<T>[] choices,
+    Func<T, CancellationToken, Task<PreviewResult>>? previewFactory = null,
+    CancellationToken ct = default);
+
+  Task<T?> RequestLivePickerAsync<T>(
+    string prompt,
+    Func<string, CancellationToken, Task<PickerChoice<T>[]>> queryFactory,
+    Func<T, CancellationToken, Task<PreviewResult>>? previewFactory = null,
+    CancellationToken ct = default);
+
+  Task<T[]?> RequestMultiLivePickerAsync<T>(
+    string prompt,
+    Func<string, CancellationToken, Task<PickerChoice<T>[]>> queryFactory,
+    Func<T, CancellationToken, Task<PreviewResult>>? previewFactory = null,
+    CancellationToken ct = default);
 }
