@@ -14,10 +14,7 @@ public sealed class LivePickerScope<T> : PickerScope<T>, ILivePickerScope
       Func<string, CancellationToken, Task<PickerChoice<T>[]>> queryFactory,
       Func<T, CancellationToken, Task<PreviewResult>>? previewFactory,
       IPickerScopeRegistry registry)
-      : base(new ConcurrentDictionary<string, T>(), previewFactory, registry)
-  {
-    _queryFactory = queryFactory;
-  }
+      : base(new ConcurrentDictionary<string, T>(), previewFactory, registry) => _queryFactory = queryFactory;
 
   public async Task<PickerChoice[]> QueryAsync(string query, CancellationToken ct)
   {
