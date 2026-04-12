@@ -190,6 +190,26 @@
 
 ---
 
+## PickerController
+
+### `picker/preview`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| guid | Guid |   |
+| itemId | string |   |
+
+**Returns:** `Task<PreviewResult>`
+
+### `picker/query`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| guid | Guid |   |
+| query | string |   |
+
+**Returns:** `Task<PickerChoice[]>`
+
+---
+
 ## NewFileController
 
 ### `json-code-gen-v2`

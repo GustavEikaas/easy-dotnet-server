@@ -11,6 +11,7 @@ using EasyDotnet.IDE.Editor;
 using EasyDotnet.IDE.EntityFramework;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.NewFile;
+using EasyDotnet.IDE.Picker;
 using EasyDotnet.IDE.ProcessExecution;
 using EasyDotnet.IDE.ProjectReference.Services;
 using EasyDotnet.IDE.Services;
@@ -75,6 +76,9 @@ public static class DiModules
     services.AddSingleton<SettingsGarbageCollector>();
     services.AddSingleton<IEditorProcessManagerService, EditorProcessManagerService>();
     services.AddSingleton<IEditorService, EditorService>();
+    services.AddSingleton<IPickerScopeRegistry, PickerScopeRegistry>();
+    services.AddSingleton<PickerScopeFactory>();
+    services.AddSingleton<IPickerService, PickerService>();
     services.AddSingleton<IDebugStrategyFactory, DebugStrategyFactory>();
     services.AddSingleton<AppWrapperManager>();
     services.AddSingleton<IAppWrapperManager>(sp => sp.GetRequiredService<AppWrapperManager>());

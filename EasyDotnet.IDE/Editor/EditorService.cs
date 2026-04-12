@@ -5,6 +5,8 @@ using EasyDotnet.IDE.Models.Client.Debugger;
 using EasyDotnet.IDE.Models.Client.Progress;
 using EasyDotnet.IDE.Models.Client.Prompt;
 using EasyDotnet.IDE.Models.Client.Quickfix;
+using EasyDotnet.IDE.Picker;
+using EasyDotnet.IDE.Picker.Models;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Editor;
@@ -15,6 +17,7 @@ public class EditorService(
   IBuildHostManager buildHostManager,
   IClientService clientService,
   IAppWrapperManager appWrapperManager,
+  IPickerService pickerService,
   JsonRpc jsonRpc) : IEditorService
 {
   public async Task DisplayError(string message) =>
@@ -178,6 +181,30 @@ public class EditorService(
 
     return true;
   }
+
+  public Task<T?> RequestPickerAsync<T>(
+    string prompt,
+    PickerChoice<T>[] choices,
+    Func<T, CancellationToken, Task<PreviewResult>>? previewFactory = null,
+    CancellationToken ct = default) => pickerService.RequestPickerAsync(prompt, choices, previewFactory, ct);
+
+  public Task<T[]?> RequestMultiPickerAsync<T>(
+    string prompt,
+    PickerChoice<T>[] choices,
+    Func<T, CancellationToken, Task<PreviewResult>>? previewFactory = null,
+    CancellationToken ct = default) => pickerService.RequestMultiPickerAsync(prompt, choices, previewFactory, ct);
+
+  public Task<T?> RequestLivePickerAsync<T>(
+    string prompt,
+    Func<string, CancellationToken, Task<PickerChoice<T>[]>> queryFactory,
+    Func<T, CancellationToken, Task<PreviewResult>>? previewFactory = null,
+    CancellationToken ct = default) => pickerService.RequestLivePickerAsync(prompt, queryFactory, previewFactory, ct);
+
+  public Task<T[]?> RequestMultiLivePickerAsync<T>(
+    string prompt,
+    Func<string, CancellationToken, Task<PickerChoice<T>[]>> queryFactory,
+    Func<T, CancellationToken, Task<PreviewResult>>? previewFactory = null,
+    CancellationToken ct = default) => pickerService.RequestMultiLivePickerAsync(prompt, queryFactory, previewFactory, ct);
 
   private static RunCommand BuildRunCommand(RunProjectRequest request, Dictionary<string, string> hookEnv)
   {
