@@ -663,6 +663,61 @@ public class TestRunnerService(
     );
   }
 
+  public List<NeotestPositionDto> GetNeotestPositions(string filePath)
+  {
+    var fileNodes = registry.GetNodesForFile(filePath).ToList();
+    if (fileNodes.Count == 0) return [];
+
+    var group = fileNodes
+        .Where(n => n.ProjectId is not null)
+        .GroupBy(n => n.ProjectId!)
+        .FirstOrDefault();
+    if (group is null) return [];
+
+    var nodes = group.ToList();
+    var nodeIdSet = nodes.Select(n => n.Id).ToHashSet(StringComparer.Ordinal);
+
+    return nodes
+        .Select(n =>
+        {
+          var type = n.Type switch
+          {
+            NodeType.Namespace => "namespace",
+            NodeType.TestClass => "namespace",
+            NodeType.TheoryGroup => "test",
+            NodeType.TestMethod => "test",
+            _ => null
+          };
+          if (type is null) return null;
+
+          var parentId = nodeIdSet.Contains(n.ParentId ?? "") ? n.ParentId : filePath;
+
+          return new NeotestPositionDto(
+              Id: n.Id,
+              Name: n.DisplayName,
+              Type: type,
+              ParentId: parentId,
+              StartLine: n.SignatureLine,
+              EndLine: n.EndLine);
+        })
+        .OfType<NeotestPositionDto>()
+        .ToList();
+  }
+
+  public Dictionary<string, NeotestBatchResultDto> GetNeotestBatchResults(string[] ids) =>
+      ids
+          .Select(id => (id, detail: detailStore.Get(id)))
+          .Where(x => x.detail is not null)
+          .ToDictionary(
+              x => x.id,
+              x => new NeotestBatchResultDto(
+                  Outcome: x.detail!.Outcome,
+                  ErrorMessage: x.detail.ErrorMessage.Length > 0 ? x.detail.ErrorMessage : null,
+                  FailingFrame: x.detail.FailingFrame is { } ff
+                      ? new StackFrameDto(ff.OriginalText, ff.File, ff.Line, ff.IsUserCode)
+                      : null,
+                  Stdout: x.detail.Stdout.Length > 0 ? x.detail.Stdout : null));
+
   public SyncFileResult SyncFile(SyncFileRequest req)
   {
     var parsed = TestSourceLocator.ParseContent(req.Content);
@@ -1101,3 +1156,8 @@ public record StackFrameDto(string OriginalText, string? File, int? Line, bool I
 public record SyncFileRequest(string Path, string Content, int Version);
 public record SyncFileResult(LineNumberUpdateDto[] Updates, int Version);
 public record LineNumberUpdateDto(string Id, int SignatureLine, int BodyStartLine, int EndLine);
+
+public record NeotestPositionsRequest(string FilePath);
+public record NeotestPositionDto(string Id, string Name, string Type, string? ParentId, int? StartLine, int? EndLine);
+public record NeotestBatchResultsRequest(string[] Ids);
+public record NeotestBatchResultDto(string Outcome, string[]? ErrorMessage, StackFrameDto? FailingFrame, string[]? Stdout);
