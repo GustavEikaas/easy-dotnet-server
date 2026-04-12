@@ -56,15 +56,44 @@ public sealed class PickerService(
       CancellationToken ct = default) =>
       await RequestCoreAsync(prompt, choices, true, previewFactory, ct);
 
-  public Task<T?> RequestLivePickerAsync<T>(
+  public async Task<T?> RequestLivePickerAsync<T>(
       string prompt,
       Func<string, CancellationToken, Task<PickerChoice<T>[]>> queryFactory,
       Func<T, CancellationToken, Task<PreviewResult>>? previewFactory = null,
-      CancellationToken ct = default) => throw new NotImplementedException();
+      CancellationToken ct = default)
+  {
+    var results = await RequestLiveCoreAsync(prompt, queryFactory, false, previewFactory, ct);
+    return results is { Length: > 0 } ? results[0] : default;
+  }
 
   public Task<T[]?> RequestMultiLivePickerAsync<T>(
       string prompt,
       Func<string, CancellationToken, Task<PickerChoice<T>[]>> queryFactory,
       Func<T, CancellationToken, Task<PreviewResult>>? previewFactory = null,
-      CancellationToken ct = default) => throw new NotImplementedException();
+      CancellationToken ct = default) =>
+      RequestLiveCoreAsync(prompt, queryFactory, true, previewFactory, ct);
+
+  private async Task<T[]?> RequestLiveCoreAsync<T>(
+      string prompt,
+      Func<string, CancellationToken, Task<PickerChoice<T>[]>> queryFactory,
+      bool multi,
+      Func<T, CancellationToken, Task<PreviewResult>>? previewFactory,
+      CancellationToken ct)
+  {
+    using var scope = scopeFactory.CreateLivePicker(queryFactory, previewFactory);
+
+    var request = new LivePickerRequest(scope.Guid, prompt, multi, previewFactory is not null);
+    var result = await jsonRpc.InvokeWithParameterObjectAsync<PickerResult?>("picker/live", request, ct);
+
+    if (result?.SelectedIds is null)
+    {
+      logger.LogDebug("User cancelled live picker");
+      return null;
+    }
+
+    return result.SelectedIds
+        .Select(id => scope.GetMetadata(id))
+        .OfType<T>()
+        .ToArray();
+  }
 }

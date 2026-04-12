@@ -1,10 +1,11 @@
+using System.Collections.Concurrent;
 using EasyDotnet.IDE.Picker.Models;
 
 namespace EasyDotnet.IDE.Picker;
 
-public sealed class PickerScope<T> : IPickerScope
+public class PickerScope<T> : IPickerScope
 {
-  private readonly Dictionary<string, T> _metadataDict;
+  protected readonly ConcurrentDictionary<string, T> _metadataDict;
   private readonly Func<T, CancellationToken, Task<PreviewResult>>? _previewFactory;
   private readonly IPickerScopeRegistry _registry;
   private readonly TaskCompletionSource<string[]?> _tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -14,7 +15,7 @@ public sealed class PickerScope<T> : IPickerScope
   public bool HasPreview => _previewFactory is not null;
 
   internal PickerScope(
-      Dictionary<string, T> metadataDict,
+      ConcurrentDictionary<string, T> metadataDict,
       Func<T, CancellationToken, Task<PreviewResult>>? previewFactory,
       IPickerScopeRegistry registry)
   {
@@ -26,7 +27,9 @@ public sealed class PickerScope<T> : IPickerScope
   public Task<PreviewResult?> GetPreviewAsync(string itemId, CancellationToken ct)
   {
     if (_previewFactory is null || !_metadataDict.TryGetValue(itemId, out var meta))
+    {
       return Task.FromResult<PreviewResult?>(null);
+    }
 
     return _previewFactory(meta, ct)!;
   }
@@ -38,7 +41,7 @@ public sealed class PickerScope<T> : IPickerScope
 
   internal Task<string[]?> WaitAsync(CancellationToken ct) => _tcs.Task.WaitAsync(ct);
 
-  public void Dispose()
+  public virtual void Dispose()
   {
     if (_disposed) return;
     _disposed = true;

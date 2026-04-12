@@ -3,13 +3,15 @@
 // ============================================================
 
 using EasyDotnet.Controllers;
+using EasyDotnet.Controllers.Nuget;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Picker.Models;
+using EasyDotnet.Services;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Picker;
 
-public sealed class PickerTestController(IEditorService editor) : BaseController
+public sealed class PickerTestController(IEditorService editor, NugetService nugetService) : BaseController
 {
     private static readonly PickerChoice<string>[] FruitChoices =
     [
@@ -87,5 +89,48 @@ public sealed class PickerTestController(IEditorService editor) : BaseController
 
         var msg = selected is null ? "Cancelled" : $"Selected: {selected}";
         await editor.DisplayMessage($"[TestLivePreview] {msg}");
+    }
+
+    [JsonRpcMethod("_test/nuget-search")]
+    public async Task TestNugetSearch(CancellationToken ct)
+    {
+        var selected = await editor.RequestMultiLivePickerAsync<NugetPackageMetadata>(
+            "Search NuGet packages",
+            async (query, token) =>
+            {
+                if (string.IsNullOrWhiteSpace(query)) return [];
+                var results = await nugetService.SearchAllSourcesByNameAsync(query, token, take: 10);
+                return results
+                    .SelectMany(kvp => kvp.Value.Select(m => NugetPackageMetadata.From(m, kvp.Key)))
+                    .Select(m => new PickerChoice<NugetPackageMetadata>(m.Id, $"{m.Id}  {m.Version}", m))
+                    .ToArray();
+            },
+            (pkg, token) => Task.FromResult<PreviewResult>(new PreviewResult.Text(FormatPackagePreview(pkg), "markdown")),
+            ct);
+
+        var msg = selected is null
+            ? "Cancelled"
+            : selected.Length == 0
+                ? "None selected"
+                : $"Selected: {string.Join(", ", selected.Select(p => $"{p.Id} {p.Version}"))}";
+        await editor.DisplayMessage($"[TestNugetSearch] {msg}");
+    }
+
+    private static string[] FormatPackagePreview(NugetPackageMetadata pkg)
+    {
+        var lines = new List<string> { $"# {pkg.Id}", "" };
+        if (!string.IsNullOrWhiteSpace(pkg.Description))
+        {
+            foreach (var descLine in pkg.Description.Split('\n'))
+                lines.Add(descLine.TrimEnd('\r'));
+            lines.Add("");
+        }
+        if (pkg.DownloadCount.HasValue) lines.Add($"Downloads: {pkg.DownloadCount:N0}");
+        if (!string.IsNullOrWhiteSpace(pkg.Authors)) lines.Add($"Authors:   {pkg.Authors}");
+        lines.Add($"Version:   {pkg.Version}");
+        if (pkg.Tags?.Count > 0) lines.Add($"Tags:      {string.Join(", ", pkg.Tags)}");
+        if (pkg.ProjectUrl is not null) lines.Add($"Project:   {pkg.ProjectUrl}");
+        if (pkg.LicenseUrl is not null) lines.Add($"License:   {pkg.LicenseUrl}");
+        return [.. lines];
     }
 }
