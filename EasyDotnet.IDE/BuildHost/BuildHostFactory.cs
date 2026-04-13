@@ -136,7 +136,8 @@ public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService c
   {
     try
     {
-      var globalJson = globalJsonService.GetGlobalJson();
+      var slnDir = clientService.ProjectInfo?.SolutionFile != null ? Path.GetDirectoryName(clientService.ProjectInfo?.SolutionFile) : null;
+      var globalJson = slnDir != null ? globalJsonService.GetGlobalJson(slnDir) : globalJsonService.GetGlobalJson();
       var versionStr = globalJson?.Sdk?.Version;
       if (string.IsNullOrEmpty(versionStr))
         return "";
