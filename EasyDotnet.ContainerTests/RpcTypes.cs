@@ -14,15 +14,9 @@ public sealed record TestPromptSelectionRequest(
   TestSelectionOption[] Choices,
   string? DefaultSelectionId);
 
-// Settings file shapes (for reading /tmp/.local/share/easy-dotnet/solution_*.json)
-public sealed class TestDefaultProjects
-{
-  public string? StartupProject { get; set; }
-  public string? BuildProject { get; set; }
-  public string? TestProject { get; set; }
-}
+public sealed record TestRunCommand(
+  string Executable,
+  List<string> Arguments,
+  string WorkingDirectory);
 
-public sealed class TestSolutionSettings
-{
-  public TestDefaultProjects? Defaults { get; set; }
-}
+public sealed record TestTrackedJob(Guid JobId, TestRunCommand Command);
