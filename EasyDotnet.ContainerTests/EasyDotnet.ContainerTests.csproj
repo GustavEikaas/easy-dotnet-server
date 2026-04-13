@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>$(LowestNetCoreTfm)</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.2" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="Nerdbank.Streams" Version="2.12.87" />
+    <PackageReference Include="StreamJsonRpc" Version="2.22.11" />
+    <PackageReference Include="Testcontainers" Version="4.11.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\EasyDotnet.IDE\EasyDotnet.IDE.csproj" />
+  </ItemGroup>
+
+  <Target Name="PackServerForContainerTests" AfterTargets="Build">
+    <PropertyGroup>
+      <NugetFeedDir>$(MSBuildThisFileDirectory)nuget-feed\</NugetFeedDir>
+    </PropertyGroup>
+    <Message Text="Packing EasyDotnet.IDE as NuGet tool for container tests..." Importance="high" />
+    <RemoveDir Directories="$(NugetFeedDir)" />
+    <MakeDir Directories="$(NugetFeedDir)" />
+    <MSBuild
+      Projects="../EasyDotnet.IDE/EasyDotnet.IDE.csproj"
+      Targets="Pack"
+      Properties="Configuration=Release;PackageOutputPath=$(NugetFeedDir)" />
+  </Target>
+
+</Project>
