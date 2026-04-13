@@ -55,14 +55,14 @@ public class VisualStudioLocator(IMemoryCache cache, IClientService clientServic
         return null;
       }
 
-      var (success, stdout, stderr) = await processQueue.RunProcessAsync(vswhere, "-latest -property installationPath", new ProcessOptions(true));
-      if (!success)
-      {
-        var message = $"Failed to find Visual Studio installation path.\nStdOut: {stdout}\nStdErr: {stderr}";
-        throw new InvalidOperationException(message);
-      }
+      var (success, stdout, _) = await processQueue.RunProcessAsync(vswhere, "-latest -property installationPath", new ProcessOptions(true));
+      var basePath = success ? stdout.Trim('\r', '\n', ' ') : string.Empty;
 
-      var basePath = stdout.Trim(Environment.NewLine.ToCharArray());
+      if (!success || string.IsNullOrEmpty(basePath) || !Directory.Exists(basePath))
+      {
+        (success, stdout, _) = await processQueue.RunProcessAsync(vswhere, "-latest -prerelease -property installationPath", new ProcessOptions(true));
+        basePath = success ? stdout.Trim('\r', '\n', ' ') : string.Empty;
+      }
 
       if (string.IsNullOrEmpty(basePath) || !Directory.Exists(basePath))
       {
