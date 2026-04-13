@@ -90,8 +90,25 @@ public abstract class ServerContainer : IAsyncDisposable
     Rpc.TraceSource.Switch.Level = SourceLevels.All;
     Rpc.TraceSource.Listeners.Clear();
     Rpc.TraceSource.Listeners.Add(new ConsoleTraceListener());
+    OnConfigureRpc(Rpc);
     Rpc.StartListening();
   }
+
+  /// <summary>
+  /// Called with the <see cref="JsonRpc"/> instance immediately before <see cref="JsonRpc.StartListening"/>.
+  /// Override to register local RPC method handlers for server-initiated reverse requests
+  /// (e.g. <c>promptSelection</c>, <c>runCommandManaged</c>) via
+  /// <see cref="JsonRpc.AddLocalRpcMethod"/>.
+  /// Alternatively, set <see cref="RpcConfigurator"/> before calling <see cref="StartAsync"/>.
+  /// </summary>
+  protected virtual void OnConfigureRpc(JsonRpc rpc) => RpcConfigurator?.Invoke(rpc);
+
+  /// <summary>
+  /// Optional delegate invoked by <see cref="OnConfigureRpc"/>.
+  /// Set this before calling <see cref="StartAsync"/> to register reverse-request handlers
+  /// without subclassing.
+  /// </summary>
+  public Action<JsonRpc>? RpcConfigurator { get; set; }
 
   private static JsonMessageFormatter CreateFormatter() => new()
   {
