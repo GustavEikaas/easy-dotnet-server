@@ -16,7 +16,7 @@ public enum BuildServerRuntime
   Net80
 }
 
-public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService clientService, CurrentLogLevel currentLogLevel)
+public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService clientService, CurrentLogLevel currentLogLevel, GlobalJsonService globalJsonService)
 {
   public async Task<(Process, JsonRpc)> StartServerAsync()
   {
@@ -136,17 +136,21 @@ public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService c
   {
     try
     {
-      var rootDir = clientService.RequireRootDir();
-      if (!GlobalJsonReader.TryReadSdkMajorVersion(rootDir, out var major))
-      {
+      var globalJson = globalJsonService.GetGlobalJson();
+      var versionStr = globalJson?.Sdk?.Version;
+      if (string.IsNullOrEmpty(versionStr))
         return "";
-      }
+
+      var dotIndex = versionStr.IndexOf('.');
+      if (dotIndex < 0 || !int.TryParse(versionStr[..dotIndex], out var major) || major <= 0)
+        return "";
 
       MSBuildLocator.AllowQueryAllRuntimeVersions = true;
       var sdkInstance = MSBuildLocator.QueryVisualStudioInstances()
           .Where(i => i.DiscoveryType == DiscoveryType.DotNetSdk && i.Version.Major == major)
           .OrderByDescending(i => i.Version)
-          .FirstOrDefault() ?? throw new InvalidOperationException($"global.json requires .NET {major} SDK but no matching SDK installation was found. Install the .NET {major} SDK and try again.");
+          .FirstOrDefault()
+          ?? throw new InvalidOperationException($"global.json requires .NET {major} SDK but no matching SDK installation was found. Install the .NET {major} SDK and try again.");
 
       var dotnetRoot = DeriveDotnetRoot(sdkInstance.MSBuildPath);
       var runtimeDir = Path.Combine(dotnetRoot, "shared", "Microsoft.NETCore.App");
@@ -157,8 +161,10 @@ public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService c
               .OfType<Version>()
               .Where(v => v.Major == major)
               .MaxBy(v => v)
-          : null) ?? throw new InvalidOperationException($"global.json requires .NET {major} but no matching runtime was found under '{runtimeDir}'. Install the .NET {major} runtime and try again."); logger.LogInformation("global.json requires .NET {Major}; pinning BuildServer to --fx-version {Version}", major, best);
+          : null)
+          ?? throw new InvalidOperationException($"global.json requires .NET {major} but no matching runtime was found under '{runtimeDir}'. Install the .NET {major} runtime and try again.");
 
+      logger.LogInformation("global.json requires .NET {Major}; pinning BuildServer to --fx-version {Version}", major, best);
       return $"--fx-version {best} ";
     }
     catch (InvalidOperationException)
