@@ -29,6 +29,17 @@ public abstract class LinuxServerContainer(string image) : ServerContainer
   }
 }
 
-public sealed class Sdk8LinuxContainer() : LinuxServerContainer("mcr.microsoft.com/dotnet/sdk:8.0");
-public sealed class Sdk9LinuxContainer() : LinuxServerContainer("mcr.microsoft.com/dotnet/sdk:9.0");
-public sealed class Sdk10LinuxContainer() : LinuxServerContainer("mcr.microsoft.com/dotnet/sdk:10.0");
+public sealed class Sdk8LinuxContainer() : LinuxServerContainer("mcr.microsoft.com/dotnet/sdk:8.0")
+{
+  public override int SdkMajorVersion => 8;
+}
+
+public sealed class Sdk9LinuxContainer() : LinuxServerContainer("mcr.microsoft.com/dotnet/sdk:9.0")
+{
+  public override int SdkMajorVersion => 9;
+}
+
+public sealed class Sdk10LinuxContainer() : LinuxServerContainer("mcr.microsoft.com/dotnet/sdk:10.0")
+{
+  public override int SdkMajorVersion => 10;
+}

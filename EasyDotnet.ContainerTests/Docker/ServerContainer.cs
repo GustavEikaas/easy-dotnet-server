@@ -21,7 +21,7 @@ public abstract class ServerContainer : IAsyncDisposable
   // Unique per instance so parallel containers don't share the tool install directory.
   private readonly string _toolInstallPath = $"/tmp/tool-{Guid.NewGuid():N}";
   private string ToolExe => $"{_toolInstallPath}/dotnet-easydotnet";
-
+  public abstract int SdkMajorVersion { get; }
   private IContainer _container = null!;
   private NamedPipeClientStream _pipe = null!;
 

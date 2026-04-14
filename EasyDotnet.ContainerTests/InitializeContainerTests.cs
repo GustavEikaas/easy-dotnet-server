@@ -25,7 +25,14 @@ public abstract class InitializeContainerTests<TContainer> : IAsyncLifetime
         Path.GetDirectoryName(solution.SolutionPath)!,
         solution.SolutionPath))
       });
-
+    if (Container.SdkMajorVersion == 10)
+    {
+      Assert.True(response.Capabilities.SupportsSingleFileExecution);
+    }
+    else
+    {
+      Assert.False(response.Capabilities.SupportsSingleFileExecution);
+    }
     Assert.NotNull(response);
     Assert.NotNull(response.ServerInfo);
     Assert.False(string.IsNullOrWhiteSpace(response.ServerInfo.Name));
