@@ -32,7 +32,7 @@ public sealed class TempContainerSolution : IDisposable
 
   private static void WriteProject(string dir, string name)
   {
-    File.WriteAllText(Path.Combine(dir, $"{name}.csproj"), $"""
+    File.WriteAllText(Path.Combine(dir, $"{name}.csproj"), """
       <Project Sdk="Microsoft.NET.Sdk">
         <PropertyGroup>
           <OutputType>Exe</OutputType>
@@ -73,6 +73,8 @@ public sealed class TempContainerSolution : IDisposable
   public void Dispose()
   {
     if (Directory.Exists(_root))
+    {
       Directory.Delete(_root, recursive: true);
+    }
   }
 }
