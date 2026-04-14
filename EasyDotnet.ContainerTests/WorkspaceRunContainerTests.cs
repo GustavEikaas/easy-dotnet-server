@@ -22,9 +22,7 @@ public abstract class WorkspaceRunContainerTests<TContainer> : IAsyncLifetime
 
   public Task InitializeAsync()
   {
-    Container.RpcConfigurator = rpc =>
-      rpc.AddLocalRpcTarget(new TestClientHandlers(this),
-        new JsonRpcTargetOptions { DisposeOnDisconnect = false });
+    Container.RpcConfigurator = rpc => rpc.AddLocalRpcTarget(new TestClientHandlers(this), new JsonRpcTargetOptions { DisposeOnDisconnect = false });
 
     return Container.StartAsync();
   }
@@ -71,8 +69,7 @@ public abstract class WorkspaceRunContainerTests<TContainer> : IAsyncLifetime
     }
 
     [JsonRpcMethod("runCommandManaged", UseSingleObjectParameterDeserialization = true)]
-    public Task<object> RunCommandManaged(object? _ = null) =>
-      Task.FromResult<object>(new { processId = 0 });
+    public Task<object> RunCommandManaged(object? _ = null) => Task.FromResult<object>(new { processId = 0 });
   }
 }
 
