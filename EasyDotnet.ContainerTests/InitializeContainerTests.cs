@@ -26,14 +26,6 @@ public abstract class InitializeContainerTests<TContainer> : IAsyncLifetime
         solution.SolutionPath))
       });
 
-    if (Container.SdkMajorVersion == 10)
-    {
-      Assert.True(response.Capabilities.SupportsSingleFileExecution);
-    }
-    else
-    {
-      Assert.False(response.Capabilities.SupportsSingleFileExecution);
-    }
 
     Assert.NotNull(response);
     Assert.NotNull(response.ServerInfo);
@@ -42,6 +34,15 @@ public abstract class InitializeContainerTests<TContainer> : IAsyncLifetime
       $"ServerInfo.Version '{response.ServerInfo.Version}' is not a valid version string");
     Assert.NotEmpty(response.Capabilities.Routes);
     Assert.NotEmpty(response.Capabilities.ServerSentNotifications);
+
+    if (Container.SdkMajorVersion == 10)
+    {
+      Assert.True(response.Capabilities.SupportsSingleFileExecution);
+    }
+    else
+    {
+      Assert.False(response.Capabilities.SupportsSingleFileExecution);
+    }
   }
 }
 
