@@ -41,7 +41,8 @@ public sealed class TempContainerSolution : IDisposable
     WriteSolution();
   }
 
-  private static void WriteProject(string dir, string name)  {
+  private static void WriteProject(string dir, string name)
+  {
     File.WriteAllText(Path.Combine(dir, $"{name}.csproj"), """
       <Project Sdk="Microsoft.NET.Sdk">
         <PropertyGroup>
