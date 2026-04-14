@@ -75,7 +75,8 @@ public class SettingsFileResolver
   private string GetDefaultSettingsDirectory()
   {
     var dataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-    if (string.IsNullOrEmpty(dataPath)){
+    if (string.IsNullOrEmpty(dataPath))
+    {
       //should only happen in ContainerTests
       dataPath = Path.Combine(Path.GetTempPath(), ".local", "share");
     }
