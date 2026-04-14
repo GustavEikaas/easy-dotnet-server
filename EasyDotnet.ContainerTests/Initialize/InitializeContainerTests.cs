@@ -1,30 +1,17 @@
 using EasyDotnet.ContainerTests.Docker;
 using EasyDotnet.ContainerTests.Scaffold;
 
-namespace EasyDotnet.ContainerTests;
+namespace EasyDotnet.ContainerTests.Initialize;
 
-public abstract class InitializeContainerTests<TContainer> : IAsyncLifetime
+public abstract class InitializeContainerTests<TContainer> : ContainerTestBase<TContainer>
   where TContainer : ServerContainer, new()
 {
-  private static readonly TestClientInfo ClientInfo = new("test", "3.0.0");
-  protected TContainer Container { get; } = new TContainer();
-
-  public Task InitializeAsync() => Container.StartAsync();
-  public async Task DisposeAsync() => await Container.DisposeAsync();
-
   [Fact]
   public async Task Initialize_WithScaffoldedSolution_ReturnsCapabilities()
   {
     using var solution = new TempContainerSolution();
 
-    var response = await Container.Rpc.InvokeWithParameterObjectAsync<TestInitializeResponse>(
-      "initialize",
-      new List<TestInitializeRequest>
-      {
-      new(ClientInfo, new TestProjectInfo(
-        Path.GetDirectoryName(solution.SolutionPath)!,
-        solution.SolutionPath))
-      });
+    var response = await InitializeWorkspaceAsync(solution);
 
 
     Assert.NotNull(response);

@@ -17,6 +17,7 @@ public sealed record TestPromptSelectionRequest(
 public sealed record TestRunCommand(
   string Executable,
   List<string> Arguments,
-  string WorkingDirectory);
+  string WorkingDirectory,
+  Dictionary<string, string> EnvironmentVariables);
 
 public sealed record TestTrackedJob(Guid JobId, TestRunCommand Command);

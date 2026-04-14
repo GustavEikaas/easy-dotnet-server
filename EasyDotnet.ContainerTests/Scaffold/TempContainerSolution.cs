@@ -13,6 +13,12 @@ public sealed class TempContainerSolution : IDisposable
   public string Project1Dir { get; }
   public string Project2Dir { get; }
 
+  /// <summary>
+  /// A standalone .cs file placed in a Scripts/ folder outside any project directory.
+  /// Used to verify that workspace/run includes it as a script option in the picker.
+  /// </summary>
+  public string StandaloneFilePath { get; }
+
   public TempContainerSolution()
   {
     _root = Path.Combine(Path.GetTempPath(), $"ContainerTest_{Guid.NewGuid():N}");
@@ -25,13 +31,17 @@ public sealed class TempContainerSolution : IDisposable
 
     SolutionPath = Path.Combine(_root, "TestSolution.slnx");
 
+    var scriptsDir = Path.Combine(_root, "Scripts");
+    Directory.CreateDirectory(scriptsDir);
+    StandaloneFilePath = Path.Combine(scriptsDir, "Hello.cs");
+
     WriteProject(Project1Dir, "ProjectAlpha");
     WriteProject(Project2Dir, "ProjectBeta");
+    WriteStandaloneFile(StandaloneFilePath);
     WriteSolution();
   }
 
-  private static void WriteProject(string dir, string name)
-  {
+  private static void WriteProject(string dir, string name)  {
     File.WriteAllText(Path.Combine(dir, $"{name}.csproj"), """
       <Project Sdk="Microsoft.NET.Sdk">
         <PropertyGroup>
@@ -56,6 +66,9 @@ public sealed class TempContainerSolution : IDisposable
       }
       """);
   }
+
+  private static void WriteStandaloneFile(string path) =>
+    File.WriteAllText(path, """Console.WriteLine("Hello from standalone script!");""");
 
   private void WriteSolution()
   {
