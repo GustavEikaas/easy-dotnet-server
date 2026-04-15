@@ -9,6 +9,9 @@ namespace EasyDotnet.ContainerTests.Workspace.Run;
 ///   2. The picked project is persisted — proven by a second call with useDefault=true:
 ///      a. No promptSelection is sent (picker bypassed).
 ///      b. runCommandManaged receives an identical RunCommand, confirming the same project was run.
+///   3. A solution with exactly 1 runnable project skips the picker entirely (auto-selects).
+///   4. A persisted project removed from the solution is treated as stale — the server falls
+///      back to auto-selecting the remaining project without showing a picker.
 /// </summary>
 public abstract class WorkspaceRunProjectTests<TContainer> : WorkspaceRunTestBase<TContainer>
   where TContainer : ServerContainer, new()
@@ -35,6 +38,25 @@ public abstract class WorkspaceRunProjectTests<TContainer> : WorkspaceRunTestBas
     Assert.Equal(job1.Command.Executable, job2.Command.Executable);
     Assert.Equal(job1.Command.WorkingDirectory, job2.Command.WorkingDirectory);
     Assert.Equal(job1.Command.Arguments, job2.Command.Arguments);
+  }
+
+  [Fact]
+  public async Task Run_WithExactlyOneRunnableProject_AutoSelectsWithoutShowingPicker()
+  {
+    using var solution = new TempContainerSolution();
+
+    // Remove one project from the solution before the server ever sees it so that
+    // the solution contains exactly one runnable project from the start.
+    solution.RemoveProjectFromSolution(solution.Project2Dir);
+
+    await InitializeWorkspaceAsync(solution);
+
+    // No picker must appear — the single project is auto-selected.
+    await Container.Rpc.WorkspaceRunAsync();
+    var job = await ReceiveRunCommandAsync();
+
+    Assert.Equal(0, SelectionCallCount);
+    Assert.Contains("ProjectAlpha", job.Command.WorkingDirectory);
   }
 
   [Fact]
