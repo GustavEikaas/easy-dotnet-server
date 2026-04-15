@@ -97,6 +97,17 @@ public sealed class TempContainerSolution : IDisposable
       """);
   }
 
+  /// <summary>
+  /// Writes a <c>Properties/launchSettings.json</c> file inside the given project directory.
+  /// Creates the <c>Properties/</c> subdirectory if it does not exist.
+  /// </summary>
+  public static void WriteProjectLaunchSettings(string projectDir, string launchSettingsJson)
+  {
+    var propertiesDir = Path.Combine(projectDir, "Properties");
+    Directory.CreateDirectory(propertiesDir);
+    File.WriteAllText(Path.Combine(propertiesDir, "launchSettings.json"), launchSettingsJson);
+  }
+
   public void Dispose()
   {
     if (Directory.Exists(_root))

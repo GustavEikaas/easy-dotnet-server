@@ -134,8 +134,14 @@ public class WorkspaceProjectResolver(
       }
     }
 
-    var profiles = launchProfileService.GetLaunchProfiles(project.ProjectFullPath);
-    if (profiles is null || profiles.Count == 0) return (null, null);
+    var allProfiles = launchProfileService.GetLaunchProfiles(project.ProjectFullPath);
+    if (allProfiles is null || allProfiles.Count == 0) return (null, null);
+
+    // Only "Project" commandName profiles are runnable via dotnet; exclude IIS/IISExpress/Executable etc.
+    var profiles = allProfiles
+        .Where(kvp => kvp.Value.CommandName is null or "Project")
+        .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+    if (profiles.Count == 0) return (null, null);
 
     var options = profiles.Keys.Select(name => new SelectionOption(name, name)).ToArray();
     var selected = await editorService.RequestSelection("Pick launch profile", options);
