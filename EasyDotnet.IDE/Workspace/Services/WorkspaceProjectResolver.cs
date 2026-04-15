@@ -63,6 +63,7 @@ public class WorkspaceProjectResolver(
         solutionFile, p => p.IsRunnable, ct: ct);
 
     var includeScriptOption = singleFilePath is not null
+        && clientService.SupportsSingleFileExecution
         && FindCsprojForFile(singleFilePath) is null;
 
     if (projects.Count == 0 && !includeScriptOption)
@@ -114,7 +115,7 @@ public class WorkspaceProjectResolver(
       return picked is null ? null : ProjectTarget(picked);
     }
 
-    if (filePath is not null) return SingleFileTarget(filePath);
+    if (filePath is not null && clientService.SupportsSingleFileExecution) return SingleFileTarget(filePath);
 
     await editorService.DisplayError("No runnable projects found");
     return null;
