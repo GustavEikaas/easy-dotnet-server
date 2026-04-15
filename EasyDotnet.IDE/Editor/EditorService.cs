@@ -90,9 +90,6 @@ public class EditorService(
       throw;
     }
 
-    // For regular runs the startup hook emits the PID and continues immediately without pausing.
-    // Resume is a no-op in run mode but still needed so the hook can clean up its pipe.
-    // Fire and forget — must not block workspace/run from returning to the client.
     _ = Task.Run(async () =>
     {
       await using (session)
@@ -102,7 +99,7 @@ public class EditorService(
           await session.WaitForPidAsync(CancellationToken.None);
           session.Resume();
         }
-        catch { /* 5-second timeout or pipe disconnected — acceptable in run mode and test environments */ }
+        catch { }
       }
     }, CancellationToken.None);
 

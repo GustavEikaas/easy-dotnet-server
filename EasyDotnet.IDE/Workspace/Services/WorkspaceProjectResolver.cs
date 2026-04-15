@@ -144,7 +144,6 @@ public class WorkspaceProjectResolver(
     var allProfiles = launchProfileService.GetLaunchProfiles(project.ProjectFullPath);
     if (allProfiles is null || allProfiles.Count == 0) return (null, null);
 
-    // Only "Project" commandName profiles are runnable via dotnet; exclude IIS/IISExpress/Executable etc.
     var profiles = allProfiles
         .Where(kvp => kvp.Value.CommandName is null or "Project")
         .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
