@@ -26,23 +26,25 @@ public abstract class WorkspaceRunLaunchProfileTests<TContainer> : WorkspaceRunT
   [Fact]
   public async Task Run_WithMixedCommandNameProfiles_OnlyShowsProjectTypeAndAppliesEnvVars()
   {
-    using var solution = new TempContainerSolution();
-
-    TempContainerSolution.WriteProjectLaunchSettings(solution.Project1Dir, """
-      {
-        "profiles": {
-          "MyProfile": {
-            "commandName": "Project",
-            "environmentVariables": { "MY_VAR": "hello_from_lp" }
-          },
-          "IISProfile": {
-            "commandName": "IISExpress"
+    using var ws = new TempWorkspaceBuilder()
+      .WithSolutionX()
+      .WithProject("ProjectAlpha", p => p.WithLaunchSettings("""
+        {
+          "profiles": {
+            "MyProfile": {
+              "commandName": "Project",
+              "environmentVariables": { "MY_VAR": "hello_from_lp" }
+            },
+            "IISProfile": {
+              "commandName": "IISExpress"
+            }
           }
         }
-      }
-      """);
+        """))
+      .WithProject("ProjectBeta")
+      .Build();
 
-    await InitializeWorkspaceAsync(solution);
+    await InitializeWorkspaceAsync(ws);
 
     var runTask = Container.Rpc.WorkspaceRunAsync(useLaunchProfile: true);
 
@@ -64,21 +66,23 @@ public abstract class WorkspaceRunLaunchProfileTests<TContainer> : WorkspaceRunT
   [Fact]
   public async Task Run_WithWorkingDirInterpolation_ResolvesMsBuildVariables()
   {
-    using var solution = new TempContainerSolution();
-
-    TempContainerSolution.WriteProjectLaunchSettings(solution.Project1Dir, """
-      {
-        "profiles": {
-          "DevProfile": {
-            "commandName": "Project",
-            "workingDirectory": "$(ProjectDir)run-here",
-            "environmentVariables": { "INTERP_VAR": "ok" }
+    using var ws = new TempWorkspaceBuilder()
+      .WithSolutionX()
+      .WithProject("ProjectAlpha", p => p.WithLaunchSettings("""
+        {
+          "profiles": {
+            "DevProfile": {
+              "commandName": "Project",
+              "workingDirectory": "$(ProjectDir)run-here",
+              "environmentVariables": { "INTERP_VAR": "ok" }
+            }
           }
         }
-      }
-      """);
+        """))
+      .WithProject("ProjectBeta")
+      .Build();
 
-    await InitializeWorkspaceAsync(solution);
+    await InitializeWorkspaceAsync(ws);
 
     var runTask = Container.Rpc.WorkspaceRunAsync(useLaunchProfile: true);
 
@@ -100,20 +104,22 @@ public abstract class WorkspaceRunLaunchProfileTests<TContainer> : WorkspaceRunT
   [Fact]
   public async Task Run_WithLaunchProfile_PersistsProfileAndBypassesBothPickersOnSecondCall()
   {
-    using var solution = new TempContainerSolution();
-
-    TempContainerSolution.WriteProjectLaunchSettings(solution.Project1Dir, """
-      {
-        "profiles": {
-          "MyProfile": {
-            "commandName": "Project",
-            "environmentVariables": { "MY_VAR": "hello_from_lp" }
+    using var ws = new TempWorkspaceBuilder()
+      .WithSolutionX()
+      .WithProject("ProjectAlpha", p => p.WithLaunchSettings("""
+        {
+          "profiles": {
+            "MyProfile": {
+              "commandName": "Project",
+              "environmentVariables": { "MY_VAR": "hello_from_lp" }
+            }
           }
         }
-      }
-      """);
+        """))
+      .WithProject("ProjectBeta")
+      .Build();
 
-    await InitializeWorkspaceAsync(solution);
+    await InitializeWorkspaceAsync(ws);
 
     var runTask1 = Container.Rpc.WorkspaceRunAsync(useLaunchProfile: true);
 
@@ -146,20 +152,22 @@ public abstract class WorkspaceRunLaunchProfileTests<TContainer> : WorkspaceRunT
   [Fact]
   public async Task Run_WithLaunchProfileArgsAndCliArgs_LpArgsPrecedeCliArgsSeparatedByDashDash()
   {
-    using var solution = new TempContainerSolution();
-
-    TempContainerSolution.WriteProjectLaunchSettings(solution.Project1Dir, """
-      {
-        "profiles": {
-          "ArgsProfile": {
-            "commandName": "Project",
-            "commandLineArgs": "--lp-flag lp-value"
+    using var ws = new TempWorkspaceBuilder()
+      .WithSolutionX()
+      .WithProject("ProjectAlpha", p => p.WithLaunchSettings("""
+        {
+          "profiles": {
+            "ArgsProfile": {
+              "commandName": "Project",
+              "commandLineArgs": "--lp-flag lp-value"
+            }
           }
         }
-      }
-      """);
+        """))
+      .WithProject("ProjectBeta")
+      .Build();
 
-    await InitializeWorkspaceAsync(solution);
+    await InitializeWorkspaceAsync(ws);
 
     var runTask = Container.Rpc.WorkspaceRunAsync(useLaunchProfile: true, cliArgs: "user-arg");
 
@@ -186,20 +194,22 @@ public abstract class WorkspaceRunLaunchProfileTests<TContainer> : WorkspaceRunT
   [Fact]
   public async Task Run_WithPersistedLaunchProfileRemovedFromLaunchSettings_ClearsProfileAndShowsPickerAgain()
   {
-    using var solution = new TempContainerSolution();
-
-    TempContainerSolution.WriteProjectLaunchSettings(solution.Project1Dir, """
-      {
-        "profiles": {
-          "MyProfile": {
-            "commandName": "Project",
-            "environmentVariables": { "MY_VAR": "hello_from_lp" }
+    using var ws = new TempWorkspaceBuilder()
+      .WithSolutionX()
+      .WithProject("ProjectAlpha", p => p.WithLaunchSettings("""
+        {
+          "profiles": {
+            "MyProfile": {
+              "commandName": "Project",
+              "environmentVariables": { "MY_VAR": "hello_from_lp" }
+            }
           }
         }
-      }
-      """);
+        """))
+      .WithProject("ProjectBeta")
+      .Build();
 
-    await InitializeWorkspaceAsync(solution);
+    await InitializeWorkspaceAsync(ws);
 
     // First run: pick ProjectAlpha and MyProfile, both persisted.
     var runTask1 = Container.Rpc.WorkspaceRunAsync(useLaunchProfile: true);
@@ -211,7 +221,7 @@ public abstract class WorkspaceRunLaunchProfileTests<TContainer> : WorkspaceRunT
     Assert.Equal(2, SelectionCallCount);
 
     // Remove MyProfile from launchSettings without removing the file itself.
-    TempContainerSolution.WriteProjectLaunchSettings(solution.Project1Dir, """
+    ws.Project("ProjectAlpha").WriteLaunchSettings("""
       {
         "profiles": {
           "OtherProfile": {

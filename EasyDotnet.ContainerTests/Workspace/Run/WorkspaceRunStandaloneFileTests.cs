@@ -14,11 +14,16 @@ public abstract class WorkspaceRunStandaloneFileTests<TContainer> : WorkspaceRun
   [Fact]
   public async Task Run_WithStandaloneFileOutsideProject_IncludesFileOptionAlongsideRunnableProjects()
   {
-    using var solution = new TempContainerSolution();
-    await InitializeWorkspaceAsync(solution);
+    using var ws = new TempWorkspaceBuilder()
+      .WithSolutionX()
+      .WithProject("ProjectAlpha")
+      .WithProject("ProjectBeta")
+      .SingleFileProject("Scripts/Hello.cs")
+      .Build();
+    await InitializeWorkspaceAsync(ws);
 
     // Return null — no choice made, we only want to inspect the picker contents.
-    var runTask = Container.Rpc.WorkspaceRunAsync(filePath: solution.StandaloneFilePath);
+    var runTask = Container.Rpc.WorkspaceRunAsync(filePath: ws.SingleFilePath);
 
     var selection = await ReceiveSelectionAsync(_ => null);
     await runTask;

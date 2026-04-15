@@ -19,8 +19,12 @@ public abstract class WorkspaceRunProjectTests<TContainer> : WorkspaceRunTestBas
   [Fact]
   public async Task Run_WithTwoRunnableProjects_PersistsDefaultAndBypassesPickerOnSecondCall()
   {
-    using var solution = new TempContainerSolution();
-    await InitializeWorkspaceAsync(solution);
+    using var ws = new TempWorkspaceBuilder()
+      .WithSolutionX()
+      .WithProject("ProjectAlpha")
+      .WithProject("ProjectBeta")
+      .Build();
+    await InitializeWorkspaceAsync(ws);
 
     var runTask1 = Container.Rpc.WorkspaceRunAsync();
 
@@ -43,13 +47,12 @@ public abstract class WorkspaceRunProjectTests<TContainer> : WorkspaceRunTestBas
   [Fact]
   public async Task Run_WithExactlyOneRunnableProject_AutoSelectsWithoutShowingPicker()
   {
-    using var solution = new TempContainerSolution();
+    using var ws = new TempWorkspaceBuilder()
+      .WithSolutionX()
+      .WithProject("ProjectAlpha")
+      .Build();
 
-    // Remove one project from the solution before the server ever sees it so that
-    // the solution contains exactly one runnable project from the start.
-    solution.RemoveProjectFromSolution(solution.Project2Dir);
-
-    await InitializeWorkspaceAsync(solution);
+    await InitializeWorkspaceAsync(ws);
 
     // No picker must appear — the single project is auto-selected.
     await Container.Rpc.WorkspaceRunAsync();
@@ -62,8 +65,12 @@ public abstract class WorkspaceRunProjectTests<TContainer> : WorkspaceRunTestBas
   [Fact]
   public async Task Run_WithPersistedProjectRemovedFromSolution_ClearsDefaultAndAutoSelectsRemainingProject()
   {
-    using var solution = new TempContainerSolution();
-    await InitializeWorkspaceAsync(solution);
+    using var ws = new TempWorkspaceBuilder()
+      .WithSolutionX()
+      .WithProject("ProjectAlpha")
+      .WithProject("ProjectBeta")
+      .Build();
+    await InitializeWorkspaceAsync(ws);
 
     // First run: pick ProjectAlpha and persist it as the default.
     var runTask1 = Container.Rpc.WorkspaceRunAsync();
@@ -76,7 +83,7 @@ public abstract class WorkspaceRunProjectTests<TContainer> : WorkspaceRunTestBas
     Assert.Equal(1, SelectionCallCount);
 
     // Remove ProjectAlpha from the solution without deleting it from disk.
-    solution.RemoveProjectFromSolution(solution.Project1Dir);
+    ws.RemoveFromSolution("ProjectAlpha");
 
     // Second run with useDefault=true: ProjectAlpha is no longer in the solution so the
     // stale default must be cleared. Only ProjectBeta remains — it is auto-selected without

@@ -34,11 +34,14 @@ public sealed class GlobalJsonBuildServerTests : ContainerTestBase<MultiSdkLinux
   [Fact]
   public async Task BuildServer_WithGlobalJsonPinningNet8_RunsOnNet8Runtime()
   {
-    using var solution = new TempContainerSolution(
-      globalJsonSdkVersion: "8.0.0",
-      globalJsonRollForward: "latestFeature");
+    using var ws = new TempWorkspaceBuilder()
+      .WithSolutionX()
+      .WithProject("ProjectAlpha")
+      .WithProject("ProjectBeta")
+      .WithGlobalJson("8.0.0", "latestFeature")
+      .Build();
 
-    await InitializeWorkspaceAsync(solution);
+    await InitializeWorkspaceAsync(ws);
 
     var diagnostics = await Container.Rpc
       .InvokeAsync<BuildServerDiagnosticsResponse>("diagnostics/buildserver")

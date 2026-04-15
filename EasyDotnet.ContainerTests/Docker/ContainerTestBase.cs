@@ -26,25 +26,18 @@ public abstract class ContainerTestBase<TContainer> : IAsyncLifetime
   /// <summary>Override to register reverse-request handlers on the RPC connection.</summary>
   protected virtual void ConfigureRpc(JsonRpc rpc) { }
 
-  protected Task<TestInitializeResponse> InitializeWorkspaceAsync(TempContainerSolution solution) =>
-    Container.Rpc.InvokeWithParameterObjectAsync<TestInitializeResponse>(
-      "initialize",
-      new List<TestInitializeRequest>
-      {
-        new(DefaultClientInfo, new TestProjectInfo(
-          Path.GetDirectoryName(solution.SolutionPath)!,
-          solution.SolutionPath))
-      });
-
   /// <summary>
-  /// Initializes the workspace without a solution file, triggering the server's
-  /// heuristic project-discovery (csproj scan) and single-file execution paths.
+  /// Initializes the server with the given workspace.
+  /// When <see cref="TempWorkspace.SolutionPath"/> is non-null the server is pointed at that solution;
+  /// otherwise heuristic project discovery is used (no solution file).
   /// </summary>
-  protected Task<TestInitializeResponse> InitializeWorkspaceAsync(TempContainerWorkspace workspace) =>
+  protected Task<TestInitializeResponse> InitializeWorkspaceAsync(TempWorkspace ws) =>
     Container.Rpc.InvokeWithParameterObjectAsync<TestInitializeResponse>(
       "initialize",
       new List<TestInitializeRequest>
       {
-        new(DefaultClientInfo, new TestProjectInfo(workspace.RootDir))
+        new(DefaultClientInfo, ws.SolutionPath is { } solutionPath
+          ? new TestProjectInfo(Path.GetDirectoryName(solutionPath)!, solutionPath)
+          : new TestProjectInfo(ws.RootDir))
       });
 }

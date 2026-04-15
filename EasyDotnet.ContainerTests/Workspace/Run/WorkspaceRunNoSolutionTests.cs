@@ -14,11 +14,12 @@ public abstract class WorkspaceRunNoSolutionProjectTests<TContainer> : Workspace
   [Fact]
   public async Task Run_WithCsprojFilesAndNoSolution_DiscoversBothProjectsInPicker()
   {
-    using var workspace = new TempContainerWorkspace();
-    workspace.AddProject("AppAlpha");
-    workspace.AddProject("AppBeta");
+    using var ws = new TempWorkspaceBuilder()
+      .WithProject("AppAlpha")
+      .WithProject("AppBeta")
+      .Build();
 
-    await InitializeWorkspaceAsync(workspace);
+    await InitializeWorkspaceAsync(ws);
 
     // Dismiss the picker — we only want to inspect its contents.
     var runTask = Container.Rpc.WorkspaceRunAsync();
@@ -40,20 +41,21 @@ public abstract class WorkspaceRunNoSolutionSingleFileTests<TContainer> : Worksp
   [Fact]
   public async Task Run_WithStandaloneCsFileAndNoProjectsOrSolution_RunsAsScript()
   {
-    using var workspace = new TempContainerWorkspace();
-    var csFile = workspace.AddStandaloneFile("Hello.cs");
+    using var ws = new TempWorkspaceBuilder()
+      .SingleFileProject("Hello.cs")
+      .Build();
 
-    await InitializeWorkspaceAsync(workspace);
+    await InitializeWorkspaceAsync(ws);
 
     // No picker is shown — the server resolves directly to a SingleFileTarget and
     // issues runCommandManaged. workspace/run returns before runCommandManaged arrives
     // (it's dispatched from a background task), so we await them independently.
-    await Container.Rpc.WorkspaceRunAsync(filePath: csFile);
+    await Container.Rpc.WorkspaceRunAsync(filePath: ws.SingleFilePath);
 
     var job = await ReceiveRunCommandAsync();
 
     Assert.Equal("dotnet", job.Command.Executable);
-    Assert.Contains(csFile, job.Command.Arguments);
+    Assert.Contains(ws.SingleFilePath, job.Command.Arguments);
   }
 }
 
@@ -67,12 +69,13 @@ public abstract class WorkspaceRunNoSolutionSingleFileLegacySdkTests<TContainer>
   [Fact]
   public async Task Run_WithStandaloneCsFileAndNoProjectsOrSolution_DisplaysErrorOnLegacySdk()
   {
-    using var workspace = new TempContainerWorkspace();
-    var csFile = workspace.AddStandaloneFile("Hello.cs");
+    using var ws = new TempWorkspaceBuilder()
+      .SingleFileProject("Hello.cs")
+      .Build();
 
-    await InitializeWorkspaceAsync(workspace);
+    await InitializeWorkspaceAsync(ws);
 
-    await Container.Rpc.WorkspaceRunAsync(filePath: csFile);
+    await Container.Rpc.WorkspaceRunAsync(filePath: ws.SingleFilePath);
 
     var errorMessage = await ReceiveDisplayErrorAsync();
     Assert.False(string.IsNullOrWhiteSpace(errorMessage));
