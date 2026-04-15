@@ -1,0 +1,6 @@
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS sdk8
+
+FROM mcr.microsoft.com/dotnet/sdk:10.0
+COPY --from=sdk8 /usr/share/dotnet/shared/ /usr/share/dotnet/shared/
+COPY --from=sdk8 /usr/share/dotnet/sdk/ /usr/share/dotnet/sdk/
+COPY --from=sdk8 /usr/share/dotnet/sdk-manifests/ /usr/share/dotnet/sdk-manifests/

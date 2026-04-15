@@ -125,6 +125,21 @@ public sealed class BuildHostManager(ILogger<BuildHostManager> logger, BuildHost
     }
   }
 
+  public async Task<BuildServerDiagnosticsResponse> GetBuildServerDiagnosticsAsync(CancellationToken cancellationToken)
+  {
+    EnsureNotDisposed();
+    var rpc = await GetRpcClientAsync();
+    try
+    {
+      return await rpc.InvokeAsync<BuildServerDiagnosticsResponse>("diagnostics/buildserver").WaitAsync(cancellationToken);
+    }
+    catch (ConnectionLostException)
+    {
+      InvalidateConnection();
+      throw new Exception("BuildServer connection was lost. Please try again.");
+    }
+  }
+
   private async Task<JsonRpc> GetRpcClientAsync()
   {
     if (_rpc?.IsDisposed == false && _serverProcess?.HasExited == false)

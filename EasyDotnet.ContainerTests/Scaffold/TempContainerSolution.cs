@@ -19,7 +19,7 @@ public sealed class TempContainerSolution : IDisposable
   /// </summary>
   public string StandaloneFilePath { get; }
 
-  public TempContainerSolution()
+  public TempContainerSolution(string? globalJsonSdkVersion = null, string? globalJsonRollForward = null)
   {
     _root = Path.Combine(Path.GetTempPath(), $"ContainerTest_{Guid.NewGuid():N}");
     Directory.CreateDirectory(_root);
@@ -39,6 +39,9 @@ public sealed class TempContainerSolution : IDisposable
     WriteProject(Project2Dir, "ProjectBeta");
     WriteStandaloneFile(StandaloneFilePath);
     WriteSolution();
+
+    if (globalJsonSdkVersion is not null)
+      WriteGlobalJson(globalJsonSdkVersion, globalJsonRollForward ?? "latestFeature");
   }
 
   private static void WriteProject(string dir, string name)
@@ -70,6 +73,16 @@ public sealed class TempContainerSolution : IDisposable
 
   private static void WriteStandaloneFile(string path) =>
     File.WriteAllText(path, """Console.WriteLine("Hello from standalone script!");""");
+
+  private void WriteGlobalJson(string sdkVersion, string rollForward) =>
+    File.WriteAllText(Path.Combine(_root, "global.json"), $$"""
+      {
+        "sdk": {
+          "version": "{{sdkVersion}}",
+          "rollForward": "{{rollForward}}"
+        }
+      }
+      """);
 
   private void WriteSolution()
   {

@@ -53,6 +53,7 @@ public abstract class ServerContainer : IAsyncDisposable
 
   public async Task StartAsync(CancellationToken ct = default)
   {
+    await OnBeforeStartAsync(ct);
     var (feedPath, version) = GetNugetFeed();
 
     var installAndRun =
@@ -93,6 +94,12 @@ public abstract class ServerContainer : IAsyncDisposable
     OnConfigureRpc(Rpc);
     Rpc.StartListening();
   }
+
+  /// <summary>
+  /// Called at the start of <see cref="StartAsync"/> before the container is built.
+  /// Override to perform async setup (e.g. building a custom Docker image).
+  /// </summary>
+  protected virtual Task OnBeforeStartAsync(CancellationToken ct) => Task.CompletedTask;
 
   /// <summary>
   /// Called with the <see cref="JsonRpc"/> instance immediately before <see cref="JsonRpc.StartListening"/>.

@@ -11,4 +11,5 @@ public interface IBuildHostManager
   IAsyncEnumerable<RestoreResult> RestoreNugetPackagesAsync(RestoreRequest request, CancellationToken cancellationToken);
   IAsyncEnumerable<BatchBuildResult> BatchBuildAsync(BatchBuildRequest request, CancellationToken cancellationToken);
   Task<ConvertSingleFileResponse> ConvertFileToProjectAsync(string entryPointFilePath, CancellationToken cancellationToken);
+  Task<BuildServerDiagnosticsResponse> GetBuildServerDiagnosticsAsync(CancellationToken cancellationToken);
 }
