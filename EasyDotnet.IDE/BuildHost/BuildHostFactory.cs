@@ -3,6 +3,7 @@ using System.IO.Pipes;
 using System.Reflection;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Utils;
+using Microsoft.Build.Locator;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Serialization;
 using StreamJsonRpc;
@@ -15,7 +16,7 @@ public enum BuildServerRuntime
   Net80
 }
 
-public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService clientService, CurrentLogLevel currentLogLevel)
+public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService clientService, CurrentLogLevel currentLogLevel, GlobalJsonService globalJsonService)
 {
   public async Task<(Process, JsonRpc)> StartServerAsync()
   {
@@ -86,10 +87,11 @@ public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService c
     else
     {
       startInfo.FileName = "dotnet";
+      var fxVersionArg = ResolveFxVersionArg();
 #if DEBUG
-      startInfo.Arguments = $"exec \"{BuildHostLocator.GetBuildServerCore()}\" --pipe \"{pipeName}\" --log-level=Verbose --logDirectory \"{logDirectory}\"";
+      startInfo.Arguments = $"exec {fxVersionArg}\"{BuildHostLocator.GetBuildServerCore()}\" --pipe \"{pipeName}\" --log-level=Verbose --logDirectory \"{logDirectory}\"";
 #else
-      startInfo.Arguments = $"exec \"{BuildHostLocator.GetBuildServerCore()}\" --pipe \"{pipeName}\" --log-level={logLevel} --logDirectory \"{logDirectory}\"";
+      startInfo.Arguments = $"exec {fxVersionArg}\"{BuildHostLocator.GetBuildServerCore()}\" --pipe \"{pipeName}\" --log-level={logLevel} --logDirectory \"{logDirectory}\"";
 #endif
     }
 
@@ -100,7 +102,9 @@ public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService c
     process.ErrorDataReceived += (s, e) =>
     {
       if (!string.IsNullOrEmpty(e.Data))
+      {
         logger.LogDebug("[BuildServer-STDERR] {Msg}", e.Data);
+      }
     };
 
     process.Start();
@@ -126,6 +130,64 @@ public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService c
       retryDelayMs = Math.Min(retryDelayMs * 2, 500);
     }
     throw new TimeoutException("Timed out waiting for BuildServer pipe.");
+  }
+
+  private string ResolveFxVersionArg()
+  {
+    try
+    {
+      var slnDir = clientService.ProjectInfo?.SolutionFile != null ? Path.GetDirectoryName(clientService.ProjectInfo?.SolutionFile) : null;
+      var globalJson = slnDir != null ? globalJsonService.GetGlobalJson(slnDir) : globalJsonService.GetGlobalJson();
+      var versionStr = globalJson?.Sdk?.Version;
+      if (string.IsNullOrEmpty(versionStr))
+        return "";
+
+      var dotIndex = versionStr.IndexOf('.');
+      if (dotIndex < 0 || !int.TryParse(versionStr[..dotIndex], out var major) || major <= 0)
+        return "";
+
+      MSBuildLocator.AllowQueryAllRuntimeVersions = true;
+      var sdkInstance = MSBuildLocator.QueryVisualStudioInstances()
+          .Where(i => i.DiscoveryType == DiscoveryType.DotNetSdk && i.Version.Major == major)
+          .OrderByDescending(i => i.Version)
+          .FirstOrDefault()
+          ?? throw new InvalidOperationException($"global.json requires .NET {major} SDK but no matching SDK installation was found. Install the .NET {major} SDK and try again.");
+
+      var dotnetRoot = DeriveDotnetRoot(sdkInstance.MSBuildPath);
+      var runtimeDir = Path.Combine(dotnetRoot, "shared", "Microsoft.NETCore.App");
+
+      var best = (Directory.Exists(runtimeDir)
+          ? Directory.EnumerateDirectories(runtimeDir)
+              .Select(d => Version.TryParse(Path.GetFileName(d), out var v) ? v : null)
+              .OfType<Version>()
+              .Where(v => v.Major == major)
+              .MaxBy(v => v)
+          : null)
+          ?? throw new InvalidOperationException($"global.json requires .NET {major} but no matching runtime was found under '{runtimeDir}'. Install the .NET {major} runtime and try again.");
+
+      logger.LogInformation("global.json requires .NET {Major}; pinning BuildServer to --fx-version {Version}", major, best);
+      return $"--fx-version {best} ";
+    }
+    catch (InvalidOperationException)
+    {
+      throw;
+    }
+    catch (Exception ex)
+    {
+      logger.LogWarning(ex, "Failed to resolve --fx-version from global.json; falling back to default rollForward");
+      return "";
+    }
+  }
+
+  /// <summary>
+  /// Derives the dotnet install root from an MSBuildPath such as
+  /// /usr/share/dotnet/sdk/8.0.415/ → /usr/share/dotnet/
+  /// </summary>
+  private static string DeriveDotnetRoot(string msBuildPath)
+  {
+    var normalized = msBuildPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+    var sdkVersionDir = Path.GetDirectoryName(normalized) ?? normalized;
+    return Path.GetDirectoryName(sdkVersionDir) ?? sdkVersionDir;
   }
 
   private static class BuildHostLocator

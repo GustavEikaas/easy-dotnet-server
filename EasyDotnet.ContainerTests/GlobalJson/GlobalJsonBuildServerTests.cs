@@ -18,6 +18,9 @@ namespace EasyDotnet.ContainerTests.GlobalJson;
 /// The diagnostics/buildserver endpoint directly exposes Environment.Version.Major
 /// from inside the BuildServer process, making the mismatch immediately observable.
 ///
+/// #GustavEikaas/easy-dotnet.nvim#901
+/// #GustavEikaas/easy-dotnet-server#357
+///
 /// WITHOUT FIX: BuildServer runs on .NET 10 → RuntimeVersionMajor == 10 → assertion fails.
 /// WITH FIX   : BuildServer is spawned with --fx-version pinned to .NET 8 → RuntimeVersionMajor == 8 → passes.
 /// </summary>
