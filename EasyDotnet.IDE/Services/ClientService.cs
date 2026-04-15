@@ -8,6 +8,7 @@ public class ClientService : IClientService
   public bool IsInitialized { get; set; }
   public bool UseVisualStudio { get; set; }
   public bool HasExternalTerminal => !string.IsNullOrEmpty(ClientOptions?.ExternalTerminal?.Command);
+  public bool SupportsSingleFileExecution { get; set; }
   public ProjectInfo? ProjectInfo { get; set; }
   public ClientInfo? ClientInfo { get; set; }
   public ClientOptions? ClientOptions { get; set; }

@@ -25,6 +25,9 @@ jobs:
       - name: Build
         run: dotnet build 
 
+      - name: ContainerTests
+        run: dotnet test EasyDotnet.ContainerTests 
+
       - name: Generate RPC docs
         run: dotnet run --project ./EasyDotnet.IDE/EasyDotnet.IDE.csproj -- generate-rpc-docs --format markdown
 

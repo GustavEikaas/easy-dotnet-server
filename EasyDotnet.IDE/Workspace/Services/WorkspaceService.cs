@@ -4,6 +4,7 @@ using EasyDotnet.IDE.BuildHost;
 using EasyDotnet.IDE.DebuggerStrategies;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Models.Client;
+using EasyDotnet.IDE.Models.LaunchProfile;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.Workspace.Controllers;
 using Microsoft.Extensions.Logging;
@@ -151,7 +152,7 @@ public class WorkspaceService(
 
   private async Task DispatchRunAsync(
       ValidatedDotnetProject project,
-      EasyDotnet.IDE.Models.LaunchProfile.LaunchProfile? launchProfile,
+      LaunchProfile? launchProfile,
       string? cliArgs,
       CancellationToken ct)
   {
@@ -168,18 +169,30 @@ public class WorkspaceService(
 
     var runRequest = new RunProjectRequest(project.Raw, launchProfile, additionalArgs, null);
 
+    if (!await preBuildService.BuildBeforeRunAsync(project.ProjectFullPath, project.ProjectName, ct))
+    {
+      sessionManager.Unregister(sessionKey);
+      return;
+    }
+
+    Guid guid;
+    try
+    {
+      guid = await editorService.StartRunProjectAsync(runRequest, ct);
+    }
+    catch (Exception ex)
+    {
+      logger.LogError(ex, "Unexpected error while starting {ProjectName}", project.ProjectName);
+      await editorService.DisplayError($"Failed to run {project.ProjectName}: {ex.Message}");
+      sessionManager.Unregister(sessionKey);
+      return;
+    }
+
     _ = Task.Run(async () =>
     {
       try
       {
-        if (!await preBuildService.BuildBeforeRunAsync(
-                project.ProjectFullPath, project.ProjectName, CancellationToken.None))
-        {
-          return;
-        }
-
-        //make sure we actually catch if external terminal is closed or program ctrl + c
-        var exitCode = await editorService.RequestRunProjectAsync(runRequest, CancellationToken.None);
+        var exitCode = await editorProcessManagerService.WaitForExitAsync(guid, TerminalSlot.LongRunning);
         logger.LogInformation("{ProjectName} exited with code {ExitCode}", project.ProjectName, exitCode);
         if (exitCode != 0)
         {
@@ -188,8 +201,7 @@ public class WorkspaceService(
       }
       catch (Exception ex)
       {
-        logger.LogError(ex, "Unexpected error while running {ProjectName}", project.ProjectName);
-        await editorService.DisplayError($"Failed to run {project.ProjectName}: {ex.Message}");
+        logger.LogError(ex, "Unexpected error while monitoring {ProjectName}", project.ProjectName);
       }
       finally
       {
@@ -203,7 +215,7 @@ public class WorkspaceService(
     filePath = Path.GetFullPath(filePath);
     var fileName = Path.GetFileName(filePath);
 
-    if (!TryClaimSession(filePath, TerminalSlot.Managed))
+    if (!TryClaimSession(filePath, TerminalSlot.LongRunning))
     {
       await editorService.DisplayError($"{fileName} is already running");
       return;
@@ -221,9 +233,22 @@ public class WorkspaceService(
         Path.GetDirectoryName(filePath) ?? ".",
         []);
 
+    Guid guid;
+    try
+    {
+      guid = await editorService.StartRunCommandAsync(command, ct);
+    }
+    catch (Exception ex)
+    {
+      logger.LogError(ex, "Unexpected error while starting {FileName}", fileName);
+      await editorService.DisplayError($"Failed to run {fileName}: {ex.Message}");
+      sessionManager.Unregister(filePath);
+      return;
+    }
+
     _ = Task.Run(async () =>
     {
-      try { await editorService.RequestRunCommandAsync(command, CancellationToken.None); }
+      try { await editorProcessManagerService.WaitForExitAsync(guid, TerminalSlot.LongRunning); }
       finally { sessionManager.Unregister(filePath); }
     }, CancellationToken.None);
   }

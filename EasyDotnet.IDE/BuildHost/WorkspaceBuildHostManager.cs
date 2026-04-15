@@ -172,6 +172,9 @@ public class WorkspaceBuildHostManager(
   public Task<ConvertSingleFileResponse> ConvertFileToProjectAsync(string entryPointFilePath, CancellationToken cancellationToken) =>
       innerManager.ConvertFileToProjectAsync(entryPointFilePath, cancellationToken);
 
+  public Task<BuildServerDiagnosticsResponse> GetBuildServerDiagnosticsAsync(CancellationToken cancellationToken) =>
+      innerManager.GetBuildServerDiagnosticsAsync(cancellationToken);
+
   public void InvalidateCache(string projectPath, string config = "Debug") => cache.Invalidate(projectPath, config);
 
   public void ClearCache() => cache.Clear(CacheInvalidationReason.ClearedAll);

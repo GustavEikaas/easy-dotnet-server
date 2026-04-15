@@ -12,7 +12,8 @@ public class WorkspaceProjectResolver(
     ILaunchProfileService launchProfileService,
     IEditorService editorService,
     IClientService clientService,
-    WorkspaceBuildHostManager buildHostManager)
+    WorkspaceBuildHostManager buildHostManager,
+    ISolutionService solutionService)
 {
   private const string SingleFileOptionId = "__singlefile__";
   private const int ProjectSearchDepth = 3;
@@ -41,7 +42,7 @@ public class WorkspaceProjectResolver(
     if (useDefault)
     {
       var defaultPath = settingsService.GetDefaultStartupProject();
-      if (defaultPath is not null && File.Exists(defaultPath))
+      if (defaultPath is not null && File.Exists(defaultPath) && await IsInSolutionAsync(solutionFile, defaultPath, ct))
       {
         var storedTfm = await settingsService.GetProjectTargetFramework(defaultPath, ct);
         var project = storedTfm is not null
@@ -56,6 +57,12 @@ public class WorkspaceProjectResolver(
     return await PickAndPersistFromSolutionAsync(solutionFile, filePath, operationLabel, ct);
   }
 
+  private async Task<bool> IsInSolutionAsync(string solutionFile, string projectPath, CancellationToken ct)
+  {
+    var solutionProjects = await solutionService.GetProjectsFromSolutionFile(solutionFile, ct);
+    return solutionProjects.Any(p => string.Equals(p.AbsolutePath, projectPath, StringComparison.OrdinalIgnoreCase));
+  }
+
   private async Task<ResolvedExecutionTarget?> PickAndPersistFromSolutionAsync(
       string solutionFile, string? singleFilePath, string operationLabel, CancellationToken ct)
   {
@@ -63,6 +70,7 @@ public class WorkspaceProjectResolver(
         solutionFile, p => p.IsRunnable, ct: ct);
 
     var includeScriptOption = singleFilePath is not null
+        && clientService.SupportsSingleFileExecution
         && FindCsprojForFile(singleFilePath) is null;
 
     if (projects.Count == 0 && !includeScriptOption)
@@ -114,7 +122,7 @@ public class WorkspaceProjectResolver(
       return picked is null ? null : ProjectTarget(picked);
     }
 
-    if (filePath is not null) return SingleFileTarget(filePath);
+    if (filePath is not null && clientService.SupportsSingleFileExecution) return SingleFileTarget(filePath);
 
     await editorService.DisplayError("No runnable projects found");
     return null;
@@ -133,8 +141,13 @@ public class WorkspaceProjectResolver(
       }
     }
 
-    var profiles = launchProfileService.GetLaunchProfiles(project.ProjectFullPath);
-    if (profiles is null || profiles.Count == 0) return (null, null);
+    var allProfiles = launchProfileService.GetLaunchProfiles(project.ProjectFullPath);
+    if (allProfiles is null || allProfiles.Count == 0) return (null, null);
+
+    var profiles = allProfiles
+        .Where(kvp => kvp.Value.CommandName is null or "Project")
+        .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+    if (profiles.Count == 0) return (null, null);
 
     var options = profiles.Keys.Select(name => new SelectionOption(name, name)).ToArray();
     var selected = await editorService.RequestSelection("Pick launch profile", options);

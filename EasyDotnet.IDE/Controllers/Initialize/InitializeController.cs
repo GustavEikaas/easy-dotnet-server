@@ -63,6 +63,7 @@ public class InitializeController(
     };
 
     var supportsSingleFileExecution = msBuildService.QuerySdkInstallations().Any(x => x.Version.Major >= 10);
+    clientService.SupportsSingleFileExecution = supportsSingleFileExecution;
     _ = updateCheckerService.CheckForUpdates(CancellationToken.None);
     progress.Report("Initialized", 100);
     return new InitializeResponse(
