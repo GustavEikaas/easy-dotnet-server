@@ -46,7 +46,7 @@ public abstract class WorkspaceRunLaunchProfileTests<TContainer> : WorkspaceRunT
 
     await InitializeWorkspaceAsync(ws);
 
-    var runTask = Container.Rpc.WorkspaceRunAsync(useLaunchProfile: true);
+    var runTask = BeginRun(useLaunchProfile: true);
 
     await ReceiveSelectionAsync(PickAlpha);
     var lpPicker = await ReceiveSelectionAsync(req => req.Choices[0].Id);
@@ -84,7 +84,7 @@ public abstract class WorkspaceRunLaunchProfileTests<TContainer> : WorkspaceRunT
 
     await InitializeWorkspaceAsync(ws);
 
-    var runTask = Container.Rpc.WorkspaceRunAsync(useLaunchProfile: true);
+    var runTask = BeginRun(useLaunchProfile: true);
 
     await ReceiveSelectionAsync(PickAlpha);
     await ReceiveSelectionAsync(req => req.Choices[0].Id);
@@ -121,7 +121,7 @@ public abstract class WorkspaceRunLaunchProfileTests<TContainer> : WorkspaceRunT
 
     await InitializeWorkspaceAsync(ws);
 
-    var runTask1 = Container.Rpc.WorkspaceRunAsync(useLaunchProfile: true);
+    var runTask1 = BeginRun(useLaunchProfile: true);
 
     await ReceiveSelectionAsync(PickAlpha);
     await ReceiveSelectionAsync(req => req.Choices[0].Id);
@@ -130,7 +130,7 @@ public abstract class WorkspaceRunLaunchProfileTests<TContainer> : WorkspaceRunT
 
     Assert.Equal(2, SelectionCallCount);
 
-    await Container.Rpc.WorkspaceRunAsync(useDefault: true, useLaunchProfile: true);
+    await BeginRun(useDefault: true, useLaunchProfile: true);
 
     var job2 = await ReceiveRunCommandAsync();
 
@@ -169,7 +169,7 @@ public abstract class WorkspaceRunLaunchProfileTests<TContainer> : WorkspaceRunT
 
     await InitializeWorkspaceAsync(ws);
 
-    var runTask = Container.Rpc.WorkspaceRunAsync(useLaunchProfile: true, cliArgs: "user-arg");
+    var runTask = BeginRun(useLaunchProfile: true, cliArgs: "user-arg");
 
     await ReceiveSelectionAsync(PickAlpha);
     await ReceiveSelectionAsync(req => req.Choices[0].Id);
@@ -212,7 +212,7 @@ public abstract class WorkspaceRunLaunchProfileTests<TContainer> : WorkspaceRunT
     await InitializeWorkspaceAsync(ws);
 
     // First run: pick ProjectAlpha and MyProfile, both persisted.
-    var runTask1 = Container.Rpc.WorkspaceRunAsync(useLaunchProfile: true);
+    var runTask1 = BeginRun(useLaunchProfile: true);
     await ReceiveSelectionAsync(PickAlpha);
     await ReceiveSelectionAsync(req => req.Choices[0].Id);
     await runTask1;
@@ -233,7 +233,7 @@ public abstract class WorkspaceRunLaunchProfileTests<TContainer> : WorkspaceRunT
 
     // Second run: project is still in solution so project picker is bypassed,
     // but the persisted LP no longer exists — LP picker must be shown again.
-    var runTask2 = Container.Rpc.WorkspaceRunAsync(useDefault: true, useLaunchProfile: true);
+    var runTask2 = BeginRun(useDefault: true, useLaunchProfile: true);
     await ReceiveSelectionAsync(req => req.Choices[0].Id);
     await runTask2;
     await ReceiveRunCommandAsync();

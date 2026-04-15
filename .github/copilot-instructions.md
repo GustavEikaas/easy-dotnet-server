@@ -136,6 +136,14 @@ All MSBuild work goes through `EasyDotnet.BuildServer` via `BuildHost`/`BuildHos
 - `GetProjectPropertiesBatchAsync` flattens multi-targeted projects into a list across all TFMs. **Always default to `Debug` configuration** unless the operation specifically requires otherwise (e.g. `pack`).
 - Consult `$HOME/repo/sdk` before implementing anything that touches target resolution, implicit usings, or SDK imports.
 
+
+### Libs 
+If you need to look inside external libs never look in .nuget folder, ask the user to download the source code or tell you where it is. It is likely located in $home/repo. never decompile DLL's without explicit permission
+
+
+### Git 
+You should never commit or push anything to github ever
+
 ---
 
 ## Key Files

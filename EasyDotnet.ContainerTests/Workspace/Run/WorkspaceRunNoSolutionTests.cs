@@ -22,7 +22,7 @@ public abstract class WorkspaceRunNoSolutionProjectTests<TContainer> : Workspace
     await InitializeWorkspaceAsync(ws);
 
     // Dismiss the picker — we only want to inspect its contents.
-    var runTask = Container.Rpc.WorkspaceRunAsync();
+    var runTask = BeginRun();
     var selection = await ReceiveSelectionAsync(_ => null);
     await runTask;
 
@@ -50,7 +50,7 @@ public abstract class WorkspaceRunNoSolutionSingleFileTests<TContainer> : Worksp
     // No picker is shown — the server resolves directly to a SingleFileTarget and
     // issues runCommandManaged. workspace/run returns before runCommandManaged arrives
     // (it's dispatched from a background task), so we await them independently.
-    await Container.Rpc.WorkspaceRunAsync(filePath: ws.SingleFilePath);
+    await BeginRun(filePath: ws.SingleFilePath);
 
     var job = await ReceiveRunCommandAsync();
 
@@ -75,7 +75,7 @@ public abstract class WorkspaceRunNoSolutionSingleFileLegacySdkTests<TContainer>
 
     await InitializeWorkspaceAsync(ws);
 
-    await Container.Rpc.WorkspaceRunAsync(filePath: ws.SingleFilePath);
+    await BeginRun(filePath: ws.SingleFilePath);
 
     var errorMessage = await ReceiveDisplayErrorAsync();
     Assert.False(string.IsNullOrWhiteSpace(errorMessage));

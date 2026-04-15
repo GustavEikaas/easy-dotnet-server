@@ -28,7 +28,7 @@ public abstract class WorkspaceRunProjectTests<TContainer> : WorkspaceRunTestBas
       .Build();
     await InitializeWorkspaceAsync(ws);
 
-    var runTask1 = Container.Rpc.WorkspaceRunAsync();
+    var runTask1 = BeginRun();
 
     await ReceiveSelectionAsync(req => req.Choices[0].Id);
     await runTask1;
@@ -36,7 +36,7 @@ public abstract class WorkspaceRunProjectTests<TContainer> : WorkspaceRunTestBas
 
     Assert.Equal(1, SelectionCallCount);
 
-    await Container.Rpc.WorkspaceRunAsync(useDefault: true);
+    await BeginRun(useDefault: true);
 
     var job2 = await ReceiveRunCommandAsync();
 
@@ -57,7 +57,7 @@ public abstract class WorkspaceRunProjectTests<TContainer> : WorkspaceRunTestBas
     await InitializeWorkspaceAsync(ws);
 
     // No picker must appear — the single project is auto-selected.
-    await Container.Rpc.WorkspaceRunAsync();
+    await BeginRun();
     var job = await ReceiveRunCommandAsync();
 
     Assert.Equal(0, SelectionCallCount);
@@ -75,7 +75,7 @@ public abstract class WorkspaceRunProjectTests<TContainer> : WorkspaceRunTestBas
     await InitializeWorkspaceAsync(ws);
 
     // First run: pick ProjectAlpha and persist it as the default.
-    var runTask1 = Container.Rpc.WorkspaceRunAsync();
+    var runTask1 = BeginRun();
     await ReceiveSelectionAsync(req =>
       Array.Find(req.Choices, c => c.Display.Contains("ProjectAlpha"))?.Id ?? req.Choices[0].Id);
     await runTask1;
@@ -90,7 +90,7 @@ public abstract class WorkspaceRunProjectTests<TContainer> : WorkspaceRunTestBas
     // Second run with useDefault=true: ProjectAlpha is no longer in the solution so the
     // stale default must be cleared. Only ProjectBeta remains — it is auto-selected without
     // showing a picker (single-project fast path in PickAndPersistFromSolutionAsync).
-    await Container.Rpc.WorkspaceRunAsync(useDefault: true);
+    await BeginRun(useDefault: true);
     var job2 = await ReceiveRunCommandAsync();
 
     // No new picker — selection count must remain at 1.
@@ -110,7 +110,7 @@ public abstract class WorkspaceRunProjectTests<TContainer> : WorkspaceRunTestBas
     await InitializeWorkspaceAsync(ws);
 
     // Dismiss the picker by returning null.
-    var runTask = Container.Rpc.WorkspaceRunAsync();
+    var runTask = BeginRun();
     await ReceiveSelectionAsync(_ => null);
     await runTask;
 

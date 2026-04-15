@@ -27,6 +27,24 @@ public abstract class ContainerTestBase<TContainer> : IAsyncLifetime
   protected virtual void ConfigureRpc(JsonRpc rpc) { }
 
   /// <summary>
+  /// Tracks the active RPC call so that <c>ReceiveXxx</c> helpers in derived classes can race
+  /// against it. If the scope task completes before an expected reverse request arrives, those
+  /// helpers throw immediately instead of waiting for their full timeout.
+  /// Set by calling <see cref="BeginCall"/>.
+  /// </summary>
+  protected Task? _rpcScope;
+
+  /// <summary>
+  /// Starts an RPC call, stores it as the active scope, and returns the task.
+  /// Derived classes expose typed wrappers (e.g. <c>BeginRun</c>) that call this.
+  /// </summary>
+  protected Task BeginCall(Task task)
+  {
+    _rpcScope = task;
+    return task;
+  }
+
+  /// <summary>
   /// Initializes the server with the given workspace.
   /// When <see cref="TempWorkspace.SolutionPath"/> is non-null the server is pointed at that solution;
   /// otherwise heuristic project discovery is used (no solution file).

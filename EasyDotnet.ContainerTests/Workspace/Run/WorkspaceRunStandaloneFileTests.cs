@@ -23,7 +23,7 @@ public abstract class WorkspaceRunStandaloneFileTests<TContainer> : WorkspaceRun
     await InitializeWorkspaceAsync(ws);
 
     // Return null — no choice made, we only want to inspect the picker contents.
-    var runTask = Container.Rpc.WorkspaceRunAsync(filePath: ws.SingleFilePath);
+    var runTask = BeginRun(filePath: ws.SingleFilePath);
 
     var selection = await ReceiveSelectionAsync(_ => null);
     await runTask;
