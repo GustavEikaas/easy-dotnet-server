@@ -232,6 +232,16 @@
 
 ---
 
+## DiagnosticsController
+
+### `diagnostics/buildserver`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+
+**Returns:** `Task<BuildServerDiagnosticsResponse>`
+
+---
+
 ## UserSecretsController
 
 ### `user-secrets/init`
