@@ -684,8 +684,9 @@ public class TestRunnerService(
           {
             NodeType.Namespace => "namespace",
             NodeType.TestClass => "namespace",
-            NodeType.TheoryGroup => "test",
+            NodeType.TheoryGroup => "namespace",
             NodeType.TestMethod => "test",
+            NodeType.Subcase => "test",
             _ => null
           };
           if (type is null) return null;
