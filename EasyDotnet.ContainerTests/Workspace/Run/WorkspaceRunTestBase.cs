@@ -41,6 +41,9 @@ public abstract class WorkspaceRunTestBase<TContainer> : ContainerTestBase<TCont
   private readonly Channel<TestTrackedJob> _runCommands =
     Channel.CreateUnbounded<TestTrackedJob>();
 
+  private readonly Channel<string> _displayErrors =
+    Channel.CreateUnbounded<string>();
+
   /// <summary>Total number of <c>promptSelection</c> calls received from the server so far.</summary>
   protected int SelectionCallCount => Volatile.Read(ref _selectionCallCount);
 
@@ -67,6 +70,20 @@ public abstract class WorkspaceRunTestBase<TContainer> : ContainerTestBase<TCont
   protected async Task<TestTrackedJob> ReceiveRunCommandAsync() =>
     await _runCommands.Reader.ReadAsync().AsTask().WaitAsync(RunCommandTimeout);
 
+  /// <summary>
+  /// Waits for the next <c>displayError</c> notification and returns the message.
+  /// </summary>
+  protected async Task<string> ReceiveDisplayErrorAsync() =>
+    await _displayErrors.Reader.ReadAsync().AsTask().WaitAsync(SelectionTimeout);
+
+  /// <summary>
+  /// Returns true if no <c>runCommandManaged</c> call is already queued in the channel.
+  /// Call this only after the <c>workspace/run</c> RPC task has completed — at that point
+  /// the server is done and no further reverse requests will arrive.
+  /// </summary>
+  protected bool RunCommandNotReceived() =>
+    !_runCommands.Reader.TryRead(out _);
+
   private sealed class RpcHandlers(WorkspaceRunTestBase<TContainer> test)
   {
     [JsonRpcMethod("promptSelection", UseSingleObjectParameterDeserialization = true)]
@@ -89,5 +106,9 @@ public abstract class WorkspaceRunTestBase<TContainer> : ContainerTestBase<TCont
       return Task.FromException<object>(
         new InvalidOperationException("Test cancelled run — no process spawning in container tests"));
     }
+
+    [JsonRpcMethod("displayError", UseSingleObjectParameterDeserialization = true)]
+    public void DisplayError(TestDisplayMessage message) =>
+      test._displayErrors.Writer.TryWrite(message.Message);
   }
 }

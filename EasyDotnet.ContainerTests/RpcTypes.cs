@@ -21,3 +21,5 @@ public sealed record TestRunCommand(
   Dictionary<string, string> EnvironmentVariables);
 
 public sealed record TestTrackedJob(Guid JobId, TestRunCommand Command);
+
+public sealed record TestDisplayMessage(string Message);

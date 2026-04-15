@@ -35,4 +35,16 @@ public abstract class ContainerTestBase<TContainer> : IAsyncLifetime
           Path.GetDirectoryName(solution.SolutionPath)!,
           solution.SolutionPath))
       });
+
+  /// <summary>
+  /// Initializes the workspace without a solution file, triggering the server's
+  /// heuristic project-discovery (csproj scan) and single-file execution paths.
+  /// </summary>
+  protected Task<TestInitializeResponse> InitializeWorkspaceAsync(TempContainerWorkspace workspace) =>
+    Container.Rpc.InvokeWithParameterObjectAsync<TestInitializeResponse>(
+      "initialize",
+      new List<TestInitializeRequest>
+      {
+        new(DefaultClientInfo, new TestProjectInfo(workspace.RootDir))
+      });
 }
