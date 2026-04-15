@@ -1,6 +1,7 @@
 using System.Text;
 using System.Threading.Channels;
 using EasyDotnet.ContainerTests.Docker;
+using EasyDotnet.IDE.Models.Client;
 using StreamJsonRpc;
 using Xunit.Sdk;
 
@@ -12,15 +13,26 @@ namespace EasyDotnet.ContainerTests.Workspace.Run;
 /// Uses <see cref="Channel{T}"/> to capture server-initiated reverse requests in order:
 ///   - <c>promptSelection</c> calls are captured and held until the test calls
 ///     <see cref="ReceiveSelectionAsync"/>, which supplies the chosen id and unblocks the server.
-///   - <c>runCommandManaged</c> calls are captured and immediately rejected so the server
-///     releases the LongRunning slot cleanly without spawning a real process.
+///   - <c>runCommandManaged</c> calls are captured and acknowledged with a fake success response.
+///     After the test reads the job via <see cref="ReceiveRunCommandAsync"/>, a <c>processExited</c>
+///     notification is automatically sent to the server to release the terminal slot.
+///
+/// <para>
+/// Architecture note — two distinct patterns for reverse requests:
+///
+/// Both <c>promptSelection</c> and <c>runCommandManaged</c> are now dispatched within the
+/// <c>workspace/run</c> scope (i.e. before <c>workspace/run</c> returns). This means
+/// <see cref="ReceiveSelectionAsync"/> and <see cref="ReceiveRunCommandAsync"/> both race
+/// against the scope task: if the scope completes before the expected reverse request arrives,
+/// something went wrong and both methods throw immediately with pending <c>displayError</c>
+/// messages as context.
+/// </para>
 ///
 /// <para>
 /// IMPORTANT — test pattern for workspace/run with pickers:
-/// Do NOT await the workspace/run RPC task before calling <see cref="ReceiveSelectionAsync"/>.
 /// Use <see cref="BeginRun"/> instead of calling WorkspaceRunAsync directly — this stores the
-/// task as the active RPC scope so that all <c>ReceiveXxx</c> helpers can race against it and
-/// fail immediately (with context) instead of waiting for their full timeout.
+/// task as the active RPC scope so that <see cref="ReceiveSelectionAsync"/> and
+/// <see cref="ReceiveRunCommandAsync"/> can race against it.
 /// <code>
 ///   var runTask = BeginRun(useLaunchProfile: true);
 ///   await ReceiveSelectionAsync(req => req.Choices[0].Id);
@@ -100,42 +112,64 @@ public abstract class WorkspaceRunTestBase<TContainer> : ContainerTestBase<TCont
   /// <summary>
   /// Waits for the next <c>runCommandManaged</c> call and returns the captured job.
   /// The server has already been told to fail so no real process is started.
-  /// Races against the active RPC scope — if the scope is already complete (or completes
-  /// before the command arrives) and nothing is in the channel, throws immediately instead
-  /// of waiting for the full <see cref="RunCommandTimeout"/>.
+  /// Now that <c>workspace/run</c> dispatches <c>runCommandManaged</c> before returning,
+  /// the RPC scope races are fully applicable: if the scope completes without the item
+  /// being in the channel, the call-path took a different route (e.g. build failed or
+  /// picker was dismissed) and we fail immediately instead of waiting.
   /// </summary>
   protected async Task<TestTrackedJob> ReceiveRunCommandAsync()
   {
     var scope = _rpcScope;
 
-    if (scope?.IsCompleted == true)
+    if (scope is not null)
     {
-      if (_runCommands.Reader.TryRead(out var immediate))
-        return immediate;
+      // Fast path: scope already complete. The item must already be in the channel
+      // (server fix guarantees runCommandManaged is dispatched before workspace/run returns).
+      // Use TryRead directly — do NOT start ReadAsync first, as it would eagerly consume
+      // the item from the channel and leave TryRead with nothing to read.
+      if (scope.IsCompleted)
+      {
+        if (_runCommands.Reader.TryRead(out var immediate))
+          return await CompleteJobAsync(immediate);
+        await scope; // surface any server-side exception first
+        throw new XunitException(
+          $"RPC scope completed without sending runCommandManaged.{CollectPendingErrors()}");
+      }
+
+      // Scope still running: race the channel read against the scope completing.
+      var readTask = _runCommands.Reader.ReadAsync().AsTask();
+      var winner = await Task.WhenAny(readTask, scope);
+      if (winner == readTask)
+        return await CompleteJobAsync(await readTask);
+
+      // Scope won — item may have arrived at the same instant; try one last TryRead.
+      if (_runCommands.Reader.TryRead(out var buffered))
+        return await CompleteJobAsync(buffered);
+      await scope;
       throw new XunitException(
         $"RPC scope completed without sending runCommandManaged.{CollectPendingErrors()}");
     }
 
-    var readTask = _runCommands.Reader.ReadAsync().AsTask();
-
-    if (scope is not null)
+    try
     {
-      var winner = await Task.WhenAny(readTask, scope);
-      if (winner == scope)
-      {
-        if (_runCommands.Reader.TryRead(out var raced))
-          return raced;
-        await scope;
-        throw new XunitException(
-          $"RPC scope completed without sending runCommandManaged.{CollectPendingErrors()}");
-      }
+      var job = await _runCommands.Reader.ReadAsync().AsTask().WaitAsync(RunCommandTimeout);
+      return await CompleteJobAsync(job);
     }
-    else
+    catch (TimeoutException)
     {
-      await readTask.WaitAsync(RunCommandTimeout);
+      throw new XunitException(
+        $"runCommandManaged not received within {RunCommandTimeout.TotalMinutes:0} minutes.{CollectPendingErrors()}");
     }
+  }
 
-    return await readTask;
+  /// <summary>
+  /// Signals the server that the tracked job's process has exited, releasing the terminal slot
+  /// so subsequent runs in the same test can claim it. Returns the job unchanged.
+  /// </summary>
+  private async Task<TestTrackedJob> CompleteJobAsync(TestTrackedJob job)
+  {
+    await Container.Rpc.NotifyWithParameterObjectAsync("processExited", new { job.JobId, exitCode = 0 });
+    return job;
   }
 
   /// <summary>
@@ -176,15 +210,16 @@ public abstract class WorkspaceRunTestBase<TContainer> : ContainerTestBase<TCont
     }
 
     /// <summary>
-    /// Captures the job then rejects the request — same pattern used across all run tests.
-    /// Rejecting causes SetFailedToStart on the server which releases the LongRunning slot cleanly.
+    /// Captures the job then returns a successful response.
+    /// The test infrastructure sends <c>processExited</c> automatically via
+    /// <see cref="WorkspaceRunTestBase{TContainer}.ReceiveRunCommandAsync"/> to release the
+    /// terminal slot so subsequent runs in the same test can proceed.
     /// </summary>
     [JsonRpcMethod("runCommandManaged", UseSingleObjectParameterDeserialization = true)]
-    public Task<object> RunCommandManaged(TestTrackedJob job)
+    public Task<RunCommandResponse> RunCommandManaged(TestTrackedJob job)
     {
       test._runCommands.Writer.TryWrite(job);
-      return Task.FromException<object>(
-        new InvalidOperationException("Test cancelled run — no process spawning in container tests"));
+      return Task.FromResult(new RunCommandResponse(0));
     }
 
     [JsonRpcMethod("displayError", UseSingleObjectParameterDeserialization = true)]
