@@ -14,6 +14,8 @@ namespace EasyDotnet.ContainerTests.Workspace.Run;
 ///      back to auto-selecting the remaining project without showing a picker.
 ///   5. When the user dismisses the project picker (returns null), workspace/run completes
 ///      cleanly without dispatching runCommandManaged or displaying an error.
+///   6. A solution with only non-runnable projects (class libraries) displays an error and
+///      never dispatches runCommandManaged or shows a picker.
 /// </summary>
 public abstract class WorkspaceRunProjectTests<TContainer> : WorkspaceRunTestBase<TContainer>
   where TContainer : ServerContainer, new()
@@ -117,6 +119,23 @@ public abstract class WorkspaceRunProjectTests<TContainer> : WorkspaceRunTestBas
     // workspace/run must complete without dispatching a run command or displaying an error.
     Assert.True(RunCommandNotReceived(), "runCommandManaged must not be called when picker is dismissed");
     Assert.Equal(1, SelectionCallCount);
+  }
+
+  [Fact]
+  public async Task Run_SolutionWithNoRunnableProjects_DisplaysErrorAndDoesNotDispatchRunCommand()
+  {
+    using var ws = new TempWorkspaceBuilder()
+      .WithSolutionX()
+      .WithProject("ClassLibraryAlpha", p => p.AsLibrary())
+      .Build();
+    await InitializeWorkspaceAsync(ws);
+
+    await BeginRun();
+
+    var error = await ReceiveDisplayErrorAsync();
+    Assert.Equal("No runnable projects found in solution", error);
+    Assert.True(RunCommandNotReceived(), "runCommandManaged must not be called when no runnable projects exist");
+    Assert.Equal(0, SelectionCallCount);
   }
 }
 

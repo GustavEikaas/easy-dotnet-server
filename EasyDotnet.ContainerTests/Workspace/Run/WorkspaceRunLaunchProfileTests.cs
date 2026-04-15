@@ -12,6 +12,12 @@ namespace EasyDotnet.ContainerTests.Workspace.Run;
 ///      interpolated before the RunCommand is sent to the client.
 ///   4. Both the project and the launch profile are persisted — a second call with
 ///      useDefault=true bypasses both pickers and applies the same profile.
+///   5. A profile that omits commandName entirely is treated as "Project" and appears
+///      in the picker — matching the default Visual Studio profile shape.
+///   6. applicationUrl in a launch profile is mapped to ASPNETCORE_URLS in RunCommand env vars.
+///   7. An explicit ASPNETCORE_ENVIRONMENT in the profile is not overwritten by the Development fallback.
+///   8. Env vars with blank values are excluded from RunCommand env vars.
+///   9. MSBuild variables in commandLineArgs are interpolated before the args are split.
 /// </summary>
 public abstract class WorkspaceRunLaunchProfileTests<TContainer> : WorkspaceRunTestBase<TContainer>
   where TContainer : ServerContainer, new()
@@ -239,6 +245,188 @@ public abstract class WorkspaceRunLaunchProfileTests<TContainer> : WorkspaceRunT
     await ReceiveRunCommandAsync();
 
     Assert.Equal(3, SelectionCallCount);
+  }
+  [Fact]
+  public async Task Run_WithOmittedCommandNameProfile_TreatsItAsProjectAndShowsInPicker()
+  {
+    using var ws = new TempWorkspaceBuilder()
+      .WithSolutionX()
+      .WithProject("ProjectAlpha", p => p.WithLaunchSettings("""
+        {
+          "profiles": {
+            "DefaultProfile": {
+              "environmentVariables": { "OMITTED_CMD_VAR": "from_default" }
+            },
+            "IISProfile": {
+              "commandName": "IISExpress"
+            }
+          }
+        }
+        """))
+      .Build();
+
+    await InitializeWorkspaceAsync(ws);
+
+    var runTask = BeginRun(useLaunchProfile: true);
+
+    // Single project — no project picker. LP picker must appear.
+    var lpPicker = await ReceiveSelectionAsync(req => req.Choices[0].Id);
+
+    Assert.Contains(lpPicker.Choices, c => c.Id == "DefaultProfile");
+    Assert.DoesNotContain(lpPicker.Choices, c => c.Id == "IISProfile");
+
+    await runTask;
+    var job = await ReceiveRunCommandAsync();
+
+    Assert.True(
+      job.Command.EnvironmentVariables.TryGetValue("OMITTED_CMD_VAR", out var val),
+      "Expected OMITTED_CMD_VAR from the profile with omitted commandName");
+    Assert.Equal("from_default", val);
+  }
+
+  [Fact]
+  public async Task Run_WithApplicationUrlInProfile_MapsToAspNetCoreUrls()
+  {
+    using var ws = new TempWorkspaceBuilder()
+      .WithSolutionX()
+      .WithProject("ProjectAlpha", p => p.WithLaunchSettings("""
+        {
+          "profiles": {
+            "WebProfile": {
+              "commandName": "Project",
+              "applicationUrl": "https://localhost:5001;http://localhost:5000"
+            }
+          }
+        }
+        """))
+      .Build();
+
+    await InitializeWorkspaceAsync(ws);
+
+    var runTask = BeginRun(useLaunchProfile: true);
+    await ReceiveSelectionAsync(req => req.Choices[0].Id);
+    await runTask;
+    var job = await ReceiveRunCommandAsync();
+
+    Assert.True(
+      job.Command.EnvironmentVariables.TryGetValue("ASPNETCORE_URLS", out var urls),
+      "Expected ASPNETCORE_URLS from applicationUrl");
+    Assert.Equal("https://localhost:5001;http://localhost:5000", urls);
+
+    // ASPNETCORE_ENVIRONMENT fallback must also be injected.
+    Assert.True(
+      job.Command.EnvironmentVariables.TryGetValue("ASPNETCORE_ENVIRONMENT", out var env),
+      "Expected ASPNETCORE_ENVIRONMENT fallback");
+    Assert.Equal("Development", env);
+  }
+
+  [Fact]
+  public async Task Run_WithExplicitAspNetCoreEnvironment_DoesNotOverwriteWithDevelopmentFallback()
+  {
+    using var ws = new TempWorkspaceBuilder()
+      .WithSolutionX()
+      .WithProject("ProjectAlpha", p => p.WithLaunchSettings("""
+        {
+          "profiles": {
+            "StagingProfile": {
+              "commandName": "Project",
+              "environmentVariables": { "ASPNETCORE_ENVIRONMENT": "Staging" }
+            }
+          }
+        }
+        """))
+      .Build();
+
+    await InitializeWorkspaceAsync(ws);
+
+    var runTask = BeginRun(useLaunchProfile: true);
+    await ReceiveSelectionAsync(req => req.Choices[0].Id);
+    await runTask;
+    var job = await ReceiveRunCommandAsync();
+
+    Assert.True(
+      job.Command.EnvironmentVariables.TryGetValue("ASPNETCORE_ENVIRONMENT", out var env),
+      "Expected ASPNETCORE_ENVIRONMENT in RunCommand env");
+    Assert.Equal("Staging", env);
+  }
+
+  [Fact]
+  public async Task Run_WithBlankEnvVarInProfile_ExcludesItFromRunCommand()
+  {
+    using var ws = new TempWorkspaceBuilder()
+      .WithSolutionX()
+      .WithProject("ProjectAlpha", p => p.WithLaunchSettings("""
+        {
+          "profiles": {
+            "MyProfile": {
+              "commandName": "Project",
+              "environmentVariables": {
+                "REAL_VAR": "present",
+                "EMPTY_VAR": "",
+                "WHITESPACE_VAR": "   "
+              }
+            }
+          }
+        }
+        """))
+      .Build();
+
+    await InitializeWorkspaceAsync(ws);
+
+    var runTask = BeginRun(useLaunchProfile: true);
+    await ReceiveSelectionAsync(req => req.Choices[0].Id);
+    await runTask;
+    var job = await ReceiveRunCommandAsync();
+
+    Assert.True(
+      job.Command.EnvironmentVariables.TryGetValue("REAL_VAR", out var real),
+      "Expected REAL_VAR in RunCommand env");
+    Assert.Equal("present", real);
+
+    Assert.False(
+      job.Command.EnvironmentVariables.ContainsKey("EMPTY_VAR"),
+      "EMPTY_VAR must be excluded — blank env vars must not reach the RunCommand");
+    Assert.False(
+      job.Command.EnvironmentVariables.ContainsKey("WHITESPACE_VAR"),
+      "WHITESPACE_VAR must be excluded — whitespace-only env vars must not reach the RunCommand");
+  }
+
+  [Fact]
+  public async Task Run_WithMsBuildVarInCommandLineArgs_InterpolatesBeforeSplitting()
+  {
+    using var ws = new TempWorkspaceBuilder()
+      .WithSolutionX()
+      .WithProject("ProjectAlpha", p => p.WithLaunchSettings("""
+        {
+          "profiles": {
+            "ArgsProfile": {
+              "commandName": "Project",
+              "commandLineArgs": "--root $(ProjectDir)"
+            }
+          }
+        }
+        """))
+      .Build();
+
+    await InitializeWorkspaceAsync(ws);
+
+    var runTask = BeginRun(useLaunchProfile: true);
+    await ReceiveSelectionAsync(req => req.Choices[0].Id);
+    await runTask;
+    var job = await ReceiveRunCommandAsync();
+
+    var args = job.Command.Arguments;
+
+    // $(ProjectDir) must have been resolved — no raw MSBuild variable token in any arg.
+    Assert.DoesNotContain(args, a => a.Contains("$(ProjectDir)"));
+
+    // The interpolated value must be the actual project directory on disk.
+    var rootFlagIndex = args.IndexOf("--root");
+    Assert.True(rootFlagIndex >= 0, "Expected --root flag from commandLineArgs");
+    var interpolatedDir = args[rootFlagIndex + 1];
+    Assert.True(
+      interpolatedDir.StartsWith(ws.Project("ProjectAlpha").Dir, StringComparison.OrdinalIgnoreCase),
+      $"Expected interpolated ProjectDir to start with '{ws.Project("ProjectAlpha").Dir}', got '{interpolatedDir}'");
   }
 }
 

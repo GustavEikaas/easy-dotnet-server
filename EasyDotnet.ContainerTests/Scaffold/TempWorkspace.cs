@@ -104,7 +104,7 @@ public sealed class TempWorkspaceBuilder
     {
       var dir = Path.Combine(root, spec.RelativePath);
       Directory.CreateDirectory(dir);
-      WriteProject(dir, spec.Name);
+      WriteProject(dir, spec.Name, spec.Builder.OutputType);
       if (spec.Builder.LaunchSettingsJson is not null)
         TempProject.WriteLaunchSettingsTo(dir, spec.Builder.LaunchSettingsJson);
       projectMap[spec.Name] = new TempProject(dir, spec.Name);
@@ -141,12 +141,12 @@ public sealed class TempWorkspaceBuilder
     return new TempWorkspace(root, solutionPaths, projectMap, singleFilePath);
   }
 
-  private static void WriteProject(string dir, string name)
+  private static void WriteProject(string dir, string name, string outputType = "Exe")
   {
-    File.WriteAllText(Path.Combine(dir, $"{name}.csproj"), """
+    File.WriteAllText(Path.Combine(dir, $"{name}.csproj"), $"""
       <Project Sdk="Microsoft.NET.Sdk">
         <PropertyGroup>
-          <OutputType>Exe</OutputType>
+          <OutputType>{outputType}</OutputType>
           <TargetFramework>net8.0</TargetFramework>
           <Nullable>enable</Nullable>
           <ImplicitUsings>enable</ImplicitUsings>
@@ -267,10 +267,21 @@ public sealed class TempWorkspace : IDisposable
 public sealed class TempProjectBuilder
 {
   internal string? LaunchSettingsJson { get; private set; }
+  internal string OutputType { get; private set; } = "Exe";
 
   public TempProjectBuilder WithLaunchSettings(string json)
   {
     LaunchSettingsJson = json;
+    return this;
+  }
+
+  /// <summary>
+  /// Marks the project as a class library (<c>OutputType=Library</c>).
+  /// Libraries are not runnable and will be filtered out of project pickers.
+  /// </summary>
+  public TempProjectBuilder AsLibrary()
+  {
+    OutputType = "Library";
     return this;
   }
 }

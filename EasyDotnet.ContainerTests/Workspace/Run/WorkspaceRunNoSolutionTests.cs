@@ -84,12 +84,51 @@ public abstract class WorkspaceRunNoSolutionSingleFileLegacySdkTests<TContainer>
   }
 }
 
+/// <summary>
+/// Verifies that cliArgs are passed through to the run command with the correct argument
+/// ordering: <c>["run", filePath, "--", ...cliArgs]</c>. The separator must appear between
+/// the file path and the passthrough args — matching SDK 10 single-file execution semantics.
+/// </summary>
+public abstract class WorkspaceRunNoSolutionSingleFileWithArgsTests<TContainer> : WorkspaceRunTestBase<TContainer>
+  where TContainer : ServerContainer, new()
+{
+  [Fact]
+  public async Task Run_WithStandaloneCsFileAndCliArgs_PassesThroughArgsSeparatedByDashDash()
+  {
+    using var ws = new TempWorkspaceBuilder()
+      .SingleFileProject("Hello.cs")
+      .Build();
+
+    await InitializeWorkspaceAsync(ws);
+
+    await BeginRun(filePath: ws.SingleFilePath, cliArgs: "user-arg1 user-arg2");
+
+    var job = await ReceiveRunCommandAsync();
+    var args = job.Command.Arguments;
+
+    var fileArgIndex = args.IndexOf(ws.SingleFilePath!);
+    var separatorIndex = args.IndexOf("--");
+    var arg1Index = args.IndexOf("user-arg1");
+    var arg2Index = args.IndexOf("user-arg2");
+
+    Assert.True(fileArgIndex >= 0, "Expected filePath in Arguments");
+    Assert.True(separatorIndex >= 0, "Expected -- separator before cliArgs");
+    Assert.True(arg1Index >= 0, "Expected user-arg1 in Arguments");
+    Assert.True(arg2Index >= 0, "Expected user-arg2 in Arguments");
+
+    Assert.True(fileArgIndex < separatorIndex, "filePath must precede the -- separator");
+    Assert.True(separatorIndex < arg1Index, "cliArgs must follow the -- separator");
+    Assert.Equal(arg1Index + 1, arg2Index);
+  }
+}
+
 public sealed class WorkspaceRunNoSolutionProjectSdk8Linux : WorkspaceRunNoSolutionProjectTests<Sdk8LinuxContainer>;
 public sealed class WorkspaceRunNoSolutionProjectSdk9Linux : WorkspaceRunNoSolutionProjectTests<Sdk9LinuxContainer>;
 public sealed class WorkspaceRunNoSolutionProjectSdk10Linux : WorkspaceRunNoSolutionProjectTests<Sdk10LinuxContainer>;
 
 // Single-file execution requires SDK 10+.
 public sealed class WorkspaceRunNoSolutionSingleFileSdk10Linux : WorkspaceRunNoSolutionSingleFileTests<Sdk10LinuxContainer>;
+public sealed class WorkspaceRunNoSolutionSingleFileWithArgsSdk10Linux : WorkspaceRunNoSolutionSingleFileWithArgsTests<Sdk10LinuxContainer>;
 
 // On SDK 8/9 the server must display an error and not attempt to run the file.
 public sealed class WorkspaceRunNoSolutionSingleFileLegacySdk8Linux : WorkspaceRunNoSolutionSingleFileLegacySdkTests<Sdk8LinuxContainer>;
