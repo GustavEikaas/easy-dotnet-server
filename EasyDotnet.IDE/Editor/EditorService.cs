@@ -64,10 +64,10 @@ public class EditorService(
     return await editorProcessManagerService.WaitForExitAsync(guid, TerminalSlot.Managed);
   }
 
-  public async Task<int> RequestRunProjectAsync(RunProjectRequest request, CancellationToken ct = default)
+  public async Task<Guid> StartRunProjectAsync(RunProjectRequest request, CancellationToken ct = default)
   {
     var guid = editorProcessManagerService.RegisterJob(TerminalSlot.LongRunning);
-    await using var session = startupHookService.CreateSession(request.EnvironmentVariables);
+    var session = startupHookService.CreateSession(request.EnvironmentVariables);
 
     var command = BuildRunCommand(request, session.EnvironmentVariables);
 
@@ -82,17 +82,44 @@ public class EditorService(
       {
         await jsonRpc.InvokeWithParameterObjectAsync("runCommandManaged", new TrackedJob(guid, command), ct);
       }
-
-      var pid = await session.WaitForPidAsync(ct);
-      session.Resume();
     }
     catch (Exception e)
     {
+      await session.DisposeAsync();
       editorProcessManagerService.SetFailedToStart(guid, TerminalSlot.LongRunning, e.Message);
       throw;
     }
 
-    return await editorProcessManagerService.WaitForExitAsync(guid, TerminalSlot.LongRunning);
+    _ = Task.Run(async () =>
+    {
+      await using (session)
+      {
+        try
+        {
+          await session.WaitForPidAsync(CancellationToken.None);
+          session.Resume();
+        }
+        catch { }
+      }
+    }, CancellationToken.None);
+
+    return guid;
+  }
+
+  public async Task<Guid> StartRunCommandAsync(RunCommand command, CancellationToken ct = default)
+  {
+    var guid = editorProcessManagerService.RegisterJob(TerminalSlot.Managed);
+    try
+    {
+      _ = await jsonRpc.InvokeWithParameterObjectAsync<RunCommandResponse>(
+          "runCommandManaged", new TrackedJob(guid, command), ct);
+    }
+    catch (RemoteInvocationException e)
+    {
+      editorProcessManagerService.SetFailedToStart(guid, TerminalSlot.Managed, e.Message);
+      throw;
+    }
+    return guid;
   }
 
   public async Task<int> RequestStartDebugSession(string host, int port)

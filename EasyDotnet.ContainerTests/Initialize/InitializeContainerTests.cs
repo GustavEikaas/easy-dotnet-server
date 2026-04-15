@@ -9,9 +9,13 @@ public abstract class InitializeContainerTests<TContainer> : ContainerTestBase<T
   [Fact]
   public async Task Initialize_WithScaffoldedSolution_ReturnsCapabilities()
   {
-    using var solution = new TempContainerSolution();
+    using var ws = new TempWorkspaceBuilder()
+      .WithSolutionX()
+      .WithProject("ProjectAlpha")
+      .WithProject("ProjectBeta")
+      .Build();
 
-    var response = await InitializeWorkspaceAsync(solution);
+    var response = await InitializeWorkspaceAsync(ws);
 
 
     Assert.NotNull(response);

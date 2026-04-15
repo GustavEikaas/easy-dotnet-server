@@ -54,6 +54,37 @@ public abstract class ServerContainer : IAsyncDisposable
   public async Task StartAsync(CancellationToken ct = default)
   {
     await OnBeforeStartAsync(ct);
+
+    const int maxAttempts = 3;
+    Exception? lastException = null;
+
+    for (var attempt = 1; attempt <= maxAttempts; attempt++)
+    {
+      try
+      {
+        await StartContainerCoreAsync(ct);
+        return;
+      }
+      catch (Exception ex) when (IsSegfault(ex) && attempt < maxAttempts)
+      {
+        // Intermittent SIGSEGV (exit 139) under resource pressure — clean up and retry.
+        lastException = ex;
+        await TryDisposeContainerAsync();
+
+        // Back off briefly so concurrent containers have time to release resources.
+        await Task.Delay(TimeSpan.FromSeconds(attempt * 2), ct);
+      }
+    }
+
+    throw new InvalidOperationException(
+      $"Container segfaulted on all {maxAttempts} attempts.", lastException);
+  }
+
+  private static bool IsSegfault(Exception ex) =>
+    ex is ContainerNotRunningException && ex.Message.Contains("139");
+
+  private async Task StartContainerCoreAsync(CancellationToken ct)
+  {
     var (feedPath, version) = GetNugetFeed();
 
     var installAndRun =
@@ -95,6 +126,19 @@ public abstract class ServerContainer : IAsyncDisposable
     Rpc.StartListening();
   }
 
+  private async Task TryDisposeContainerAsync()
+  {
+    try
+    {
+      if (_container is not null)
+        await _container.DisposeAsync();
+    }
+    catch
+    {
+      // Best-effort cleanup before retry.
+    }
+  }
+
   /// <summary>
   /// Called at the start of <see cref="StartAsync"/> before the container is built.
   /// Override to perform async setup (e.g. building a custom Docker image).
@@ -133,5 +177,8 @@ public abstract class ServerContainer : IAsyncDisposable
     Rpc?.Dispose();
     _pipe?.Dispose();
     await _container.DisposeAsync();
+
+    if (Directory.Exists(_toolInstallPath))
+      Directory.Delete(_toolInstallPath, recursive: true);
   }
 }

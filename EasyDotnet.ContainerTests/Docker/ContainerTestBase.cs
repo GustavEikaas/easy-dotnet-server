@@ -26,13 +26,36 @@ public abstract class ContainerTestBase<TContainer> : IAsyncLifetime
   /// <summary>Override to register reverse-request handlers on the RPC connection.</summary>
   protected virtual void ConfigureRpc(JsonRpc rpc) { }
 
-  protected Task<TestInitializeResponse> InitializeWorkspaceAsync(TempContainerSolution solution) =>
+  /// <summary>
+  /// Tracks the active RPC call so that <c>ReceiveXxx</c> helpers in derived classes can race
+  /// against it. If the scope task completes before an expected reverse request arrives, those
+  /// helpers throw immediately instead of waiting for their full timeout.
+  /// Set by calling <see cref="BeginCall"/>.
+  /// </summary>
+  protected Task? _rpcScope;
+
+  /// <summary>
+  /// Starts an RPC call, stores it as the active scope, and returns the task.
+  /// Derived classes expose typed wrappers (e.g. <c>BeginRun</c>) that call this.
+  /// </summary>
+  protected Task BeginCall(Task task)
+  {
+    _rpcScope = task;
+    return task;
+  }
+
+  /// <summary>
+  /// Initializes the server with the given workspace.
+  /// When <see cref="TempWorkspace.SolutionPath"/> is non-null the server is pointed at that solution;
+  /// otherwise heuristic project discovery is used (no solution file).
+  /// </summary>
+  protected Task<TestInitializeResponse> InitializeWorkspaceAsync(TempWorkspace ws) =>
     Container.Rpc.InvokeWithParameterObjectAsync<TestInitializeResponse>(
       "initialize",
       new List<TestInitializeRequest>
       {
-        new(DefaultClientInfo, new TestProjectInfo(
-          Path.GetDirectoryName(solution.SolutionPath)!,
-          solution.SolutionPath))
+        new(DefaultClientInfo, ws.SolutionPath is { } solutionPath
+          ? new TestProjectInfo(Path.GetDirectoryName(solutionPath)!, solutionPath)
+          : new TestProjectInfo(ws.RootDir))
       });
 }
