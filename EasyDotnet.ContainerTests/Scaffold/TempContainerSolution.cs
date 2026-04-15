@@ -108,6 +108,26 @@ public sealed class TempContainerSolution : IDisposable
     File.WriteAllText(Path.Combine(propertiesDir, "launchSettings.json"), launchSettingsJson);
   }
 
+  /// <summary>
+  /// Rewrites the solution file to remove <paramref name="projectDir"/>'s project entry.
+  /// The project files on disk are left intact — simulating a project removed from the
+  /// solution without being deleted, which is the canonical "stale persisted default" scenario.
+  /// </summary>
+  public void RemoveProjectFromSolution(string projectDir)
+  {
+    var csproj = Directory.EnumerateFiles(projectDir, "*.csproj").First();
+    var otherProjects = new[] { Project1Dir, Project2Dir }
+        .Where(d => !string.Equals(d, projectDir, StringComparison.OrdinalIgnoreCase))
+        .Select(d => Directory.EnumerateFiles(d, "*.csproj").First())
+        .ToList();
+
+    File.WriteAllText(SolutionPath, $"""
+      <Solution>
+      {string.Join(Environment.NewLine, otherProjects.Select(p => $"  <Project Path=\"{p}\" />"))}
+      </Solution>
+      """);
+  }
+
   public void Dispose()
   {
     if (Directory.Exists(_root))

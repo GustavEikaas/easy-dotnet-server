@@ -12,7 +12,8 @@ public class WorkspaceProjectResolver(
     ILaunchProfileService launchProfileService,
     IEditorService editorService,
     IClientService clientService,
-    WorkspaceBuildHostManager buildHostManager)
+    WorkspaceBuildHostManager buildHostManager,
+    ISolutionService solutionService)
 {
   private const string SingleFileOptionId = "__singlefile__";
   private const int ProjectSearchDepth = 3;
@@ -41,7 +42,7 @@ public class WorkspaceProjectResolver(
     if (useDefault)
     {
       var defaultPath = settingsService.GetDefaultStartupProject();
-      if (defaultPath is not null && File.Exists(defaultPath))
+      if (defaultPath is not null && File.Exists(defaultPath) && await IsInSolutionAsync(solutionFile, defaultPath, ct))
       {
         var storedTfm = await settingsService.GetProjectTargetFramework(defaultPath, ct);
         var project = storedTfm is not null
@@ -54,6 +55,12 @@ public class WorkspaceProjectResolver(
     }
 
     return await PickAndPersistFromSolutionAsync(solutionFile, filePath, operationLabel, ct);
+  }
+
+  private async Task<bool> IsInSolutionAsync(string solutionFile, string projectPath, CancellationToken ct)
+  {
+    var solutionProjects = await solutionService.GetProjectsFromSolutionFile(solutionFile, ct);
+    return solutionProjects.Any(p => string.Equals(p.AbsolutePath, projectPath, StringComparison.OrdinalIgnoreCase));
   }
 
   private async Task<ResolvedExecutionTarget?> PickAndPersistFromSolutionAsync(

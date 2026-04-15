@@ -182,6 +182,54 @@ public abstract class WorkspaceRunLaunchProfileTests<TContainer> : WorkspaceRunT
     Assert.True(separatorIndex < userArgIndex, "cliArgs must follow the -- separator");
     Assert.Equal(lpFlagIndex + 1, args.IndexOf("lp-value")); // lp-value immediately follows --lp-flag
   }
+
+  [Fact]
+  public async Task Run_WithPersistedLaunchProfileRemovedFromLaunchSettings_ClearsProfileAndShowsPickerAgain()
+  {
+    using var solution = new TempContainerSolution();
+
+    TempContainerSolution.WriteProjectLaunchSettings(solution.Project1Dir, """
+      {
+        "profiles": {
+          "MyProfile": {
+            "commandName": "Project",
+            "environmentVariables": { "MY_VAR": "hello_from_lp" }
+          }
+        }
+      }
+      """);
+
+    await InitializeWorkspaceAsync(solution);
+
+    // First run: pick ProjectAlpha and MyProfile, both persisted.
+    var runTask1 = Container.Rpc.WorkspaceRunAsync(useLaunchProfile: true);
+    await ReceiveSelectionAsync(PickAlpha);
+    await ReceiveSelectionAsync(req => req.Choices[0].Id);
+    await runTask1;
+    await ReceiveRunCommandAsync();
+
+    Assert.Equal(2, SelectionCallCount);
+
+    // Remove MyProfile from launchSettings without removing the file itself.
+    TempContainerSolution.WriteProjectLaunchSettings(solution.Project1Dir, """
+      {
+        "profiles": {
+          "OtherProfile": {
+            "commandName": "Project"
+          }
+        }
+      }
+      """);
+
+    // Second run: project is still in solution so project picker is bypassed,
+    // but the persisted LP no longer exists — LP picker must be shown again.
+    var runTask2 = Container.Rpc.WorkspaceRunAsync(useDefault: true, useLaunchProfile: true);
+    await ReceiveSelectionAsync(req => req.Choices[0].Id);
+    await runTask2;
+    await ReceiveRunCommandAsync();
+
+    Assert.Equal(3, SelectionCallCount);
+  }
 }
 
 public sealed class WorkspaceRunLaunchProfileSdk8Linux : WorkspaceRunLaunchProfileTests<Sdk8LinuxContainer>;
