@@ -8,7 +8,6 @@ namespace EasyDotnet.BuildServer.Handlers;
 
 public class RestoreHandler
 {
-  private static readonly BuildManager BuildManager = BuildManager.DefaultBuildManager;
   private static readonly SemaphoreSlim BuildLock = new(1, 1);
 
   [JsonRpcMethod("projects/restore", UseSingleObjectParameterDeserialization = true)]
@@ -19,13 +18,6 @@ public class RestoreHandler
     ValidateRequest(request);
 
     await BuildLock.WaitAsync(ct);
-    var buildParameters = new BuildParameters
-    {
-      EnableNodeReuse = true,
-      MaxNodeCount = Environment.ProcessorCount,
-    };
-
-    BuildManager.BeginBuild(buildParameters);
     try
     {
       foreach (var projectPath in request.ProjectPaths)
@@ -47,7 +39,6 @@ public class RestoreHandler
     }
     finally
     {
-      BuildManager.EndBuild();
       BuildLock.Release();
     }
   }
@@ -62,6 +53,14 @@ public class RestoreHandler
         {
           ct.ThrowIfCancellationRequested();
 
+          var logger = new DiagnosticLogger(diagnostics);
+          var buildParameters = new BuildParameters
+          {
+            EnableNodeReuse = true,
+            MaxNodeCount = Environment.ProcessorCount,
+            Loggers = [logger],
+          };
+
           var buildRequest = new BuildRequestData(
                 projectPath,
                 globalProperties: new Dictionary<string, string>(),
@@ -69,11 +68,8 @@ public class RestoreHandler
                 targetsToBuild: ["Restore"],
                 hostServices: null);
 
-          var submission = BuildManager.PendBuildRequest(buildRequest);
-          submission.ExecuteAsync(null, null);
-          var result = submission.WaitHandle.WaitOne()
-                ? submission.BuildResult
-                : throw new InvalidOperationException("Restore submission did not complete");
+          using var buildManager = new BuildManager();
+          var result = buildManager.Build(buildParameters, buildRequest);
 
           stopwatch.Stop();
 
