@@ -12,6 +12,8 @@ namespace EasyDotnet.ContainerTests.Workspace.Run;
 ///   3. A solution with exactly 1 runnable project skips the picker entirely (auto-selects).
 ///   4. A persisted project removed from the solution is treated as stale — the server falls
 ///      back to auto-selecting the remaining project without showing a picker.
+///   5. When the user dismisses the project picker (returns null), workspace/run completes
+///      cleanly without dispatching runCommandManaged or displaying an error.
 /// </summary>
 public abstract class WorkspaceRunProjectTests<TContainer> : WorkspaceRunTestBase<TContainer>
   where TContainer : ServerContainer, new()
@@ -96,6 +98,25 @@ public abstract class WorkspaceRunProjectTests<TContainer> : WorkspaceRunTestBas
 
     // The run must target ProjectBeta, proving the stale ProjectAlpha default was discarded.
     Assert.Contains("ProjectBeta", job2.Command.WorkingDirectory);
+  }
+  [Fact]
+  public async Task Run_WhenUserDismissesProjectPicker_CompletesCleanlyWithoutRunningAnything()
+  {
+    using var ws = new TempWorkspaceBuilder()
+      .WithSolutionX()
+      .WithProject("ProjectAlpha")
+      .WithProject("ProjectBeta")
+      .Build();
+    await InitializeWorkspaceAsync(ws);
+
+    // Dismiss the picker by returning null.
+    var runTask = Container.Rpc.WorkspaceRunAsync();
+    await ReceiveSelectionAsync(_ => null);
+    await runTask;
+
+    // workspace/run must complete without dispatching a run command or displaying an error.
+    Assert.True(RunCommandNotReceived(), "runCommandManaged must not be called when picker is dismissed");
+    Assert.Equal(1, SelectionCallCount);
   }
 }
 
