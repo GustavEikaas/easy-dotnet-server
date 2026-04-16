@@ -26,6 +26,7 @@ public abstract class WorkspaceBuildTestBase<TContainer> : ContainerTestBase<TCo
   private static readonly TimeSpan SelectionTimeout = TimeSpan.FromSeconds(30);
   private static readonly TimeSpan RunCommandTimeout = TimeSpan.FromMinutes(3);
   private static readonly TimeSpan NotificationTimeout = TimeSpan.FromMinutes(3);
+  private static readonly TimeSpan NotificationAfterScopeTimeout = TimeSpan.FromSeconds(15);
 
   private int _selectionCallCount;
 
@@ -150,19 +151,19 @@ public abstract class WorkspaceBuildTestBase<TContainer> : ContainerTestBase<TCo
 
   /// <summary>Waits for the next <c>displayError</c> notification and returns the message.</summary>
   protected async Task<string> ReceiveDisplayErrorAsync() =>
-    await _displayErrors.Reader.ReadAsync().AsTask().WaitAsync(NotificationTimeout);
+    await ReceiveNotificationAsync(_displayErrors.Reader, "displayError");
 
   /// <summary>Waits for the next <c>displayMessage</c> notification and returns the message.</summary>
   protected async Task<string> ReceiveDisplayMessageAsync() =>
-    await _displayMessages.Reader.ReadAsync().AsTask().WaitAsync(NotificationTimeout);
+    await ReceiveNotificationAsync(_displayMessages.Reader, "displayMessage");
 
   /// <summary>Waits for the next <c>quickfix/set</c> notification and returns all items.</summary>
   protected async Task<TestQuickFixItem[]> ReceiveQuickFixSetAsync() =>
-    await _quickFixSets.Reader.ReadAsync().AsTask().WaitAsync(NotificationTimeout);
+    await ReceiveNotificationAsync(_quickFixSets.Reader, "quickfix/set");
 
   /// <summary>Waits for the next <c>quickfix/set-silent</c> notification and returns all items.</summary>
   protected async Task<TestQuickFixItem[]> ReceiveQuickFixSetSilentAsync() =>
-    await _quickFixSetsSilent.Reader.ReadAsync().AsTask().WaitAsync(NotificationTimeout);
+    await ReceiveNotificationAsync(_quickFixSetsSilent.Reader, "quickfix/set-silent");
 
   /// <summary>
   /// Returns true if no <c>runCommandManaged</c> call is already queued in the channel.
@@ -189,6 +190,61 @@ public abstract class WorkspaceBuildTestBase<TContainer> : ContainerTestBase<TCo
   {
     await Container.Rpc.NotifyWithParameterObjectAsync("processExited", new { job.JobId, exitCode });
     return job;
+  }
+
+  private async Task<T> ReceiveNotificationAsync<T>(ChannelReader<T> reader, string notificationName)
+  {
+    var scope = _rpcScope;
+
+    if (scope is not null)
+    {
+      if (scope.IsCompleted)
+      {
+        if (reader.TryRead(out var immediate))
+          return immediate;
+
+        try
+        {
+          return await reader.ReadAsync().AsTask().WaitAsync(NotificationAfterScopeTimeout);
+        }
+        catch (TimeoutException)
+        {
+          await scope;
+          throw new XunitException(
+            $"RPC scope completed without sending {notificationName}.{CollectPendingNotifications()}");
+        }
+      }
+
+      var readTask = reader.ReadAsync().AsTask();
+      var winner = await Task.WhenAny(readTask, scope);
+      if (winner == readTask)
+        return await readTask;
+
+      // Scope may complete at the same instant the notification is delivered.
+      if (readTask.IsCompletedSuccessfully)
+        return readTask.Result;
+
+      try
+      {
+        return await readTask.WaitAsync(NotificationAfterScopeTimeout);
+      }
+      catch (TimeoutException)
+      {
+        await scope;
+        throw new XunitException(
+          $"RPC scope completed without sending {notificationName}.{CollectPendingNotifications()}");
+      }
+    }
+
+    try
+    {
+      return await reader.ReadAsync().AsTask().WaitAsync(NotificationTimeout);
+    }
+    catch (TimeoutException)
+    {
+      throw new XunitException(
+        $"{notificationName} not received within {NotificationTimeout.TotalMinutes:0} minutes.{CollectPendingNotifications()}");
+    }
   }
 
   private string CollectPendingNotifications()
@@ -233,12 +289,12 @@ public abstract class WorkspaceBuildTestBase<TContainer> : ContainerTestBase<TCo
     public void DisplayMessage(TestDisplayMessage message) =>
       test._displayMessages.Writer.TryWrite(message.Message);
 
-    [JsonRpcMethod("quickfix/set", UseSingleObjectParameterDeserialization = true)]
-    public void SetQuickFix(TestQuickFixItem[] quickFixItems) =>
-      test._quickFixSets.Writer.TryWrite(quickFixItems);
+    [JsonRpcMethod("quickfix/set")]
+    public void SetQuickFix(TestQuickFixItem quickFixItem) =>
+      test._quickFixSets.Writer.TryWrite([quickFixItem]);
 
-    [JsonRpcMethod("quickfix/set-silent", UseSingleObjectParameterDeserialization = true)]
-    public void SetQuickFixSilent(TestQuickFixItem[] quickFixItems) =>
-      test._quickFixSetsSilent.Writer.TryWrite(quickFixItems);
+    [JsonRpcMethod("quickfix/set-silent")]
+    public void SetQuickFixSilent(TestQuickFixItem quickFixItem) =>
+      test._quickFixSetsSilent.Writer.TryWrite([quickFixItem]);
   }
 }

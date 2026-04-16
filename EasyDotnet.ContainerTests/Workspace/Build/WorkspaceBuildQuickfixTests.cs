@@ -36,8 +36,8 @@ public abstract class WorkspaceBuildQuickfixTests<TContainer> : WorkspaceBuildTe
     using var ws = new TempWorkspaceBuilder()
       .WithProject("AppAlpha")
       .Build();
-    ws.Project("AppAlpha").WriteBuildWarningFixture();
     await InitializeWorkspaceAsync(ws);
+    ws.Project("AppAlpha").WriteBuildWarningFixture();
 
     var buildTask = BeginBuild();
     var warnings = await ReceiveQuickFixSetSilentAsync();
@@ -59,8 +59,8 @@ public abstract class WorkspaceBuildQuickfixTests<TContainer> : WorkspaceBuildTe
     using var ws = new TempWorkspaceBuilder()
       .WithProject("AppAlpha")
       .Build();
-    ws.Project("AppAlpha").WriteBuildErrorFixture();
     await InitializeWorkspaceAsync(ws);
+    ws.Project("AppAlpha").WriteBuildErrorFixture();
 
     var buildTask = BeginBuild();
     var items = await ReceiveQuickFixSetAsync();
