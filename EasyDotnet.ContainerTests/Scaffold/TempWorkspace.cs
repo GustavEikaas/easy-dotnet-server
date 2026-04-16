@@ -450,6 +450,39 @@ public sealed class TempProject
   public void WriteLaunchSettings(string launchSettingsJson) =>
     WriteLaunchSettingsTo(Dir, launchSettingsJson);
 
+  /// <summary>Writes (or overwrites) <c>Program.cs</c> for this project.</summary>
+  public void WriteProgram(string source) => WriteFile("Program.cs", source);
+
+  /// <summary>
+  /// Writes (or overwrites) a file under this project directory.
+  /// Relative paths are resolved from <see cref="Dir"/>.
+  /// </summary>
+  public void WriteFile(string relativePath, string content)
+  {
+    var absolutePath = Path.Combine(Dir, relativePath);
+    var fileDir = Path.GetDirectoryName(absolutePath);
+    if (fileDir is not null)
+      Directory.CreateDirectory(fileDir);
+    File.WriteAllText(absolutePath, content);
+  }
+
+  /// <summary>
+  /// Writes a deterministic warning-only fixture to <c>Program.cs</c>.
+  /// This triggers CS0219 (assigned but never used) on default compiler settings.
+  /// </summary>
+  public void WriteBuildWarningFixture() => WriteProgram("""
+    var assignedButUnused = 42;
+    Console.WriteLine("warning fixture");
+    """);
+
+  /// <summary>
+  /// Writes a deterministic compile-error fixture to <c>Program.cs</c>.
+  /// This triggers CS0103 (name does not exist in current context).
+  /// </summary>
+  public void WriteBuildErrorFixture() => WriteProgram("""
+    Console.WriteLine(DoesNotExist);
+    """);
+
   internal static void WriteLaunchSettingsTo(string projectDir, string launchSettingsJson)
   {
     var propertiesDir = Path.Combine(projectDir, "Properties");

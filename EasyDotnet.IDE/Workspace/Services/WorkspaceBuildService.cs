@@ -39,19 +39,27 @@ public class WorkspaceBuildService(
 
   private async Task BuildProjectWithSolutionAsync(string solutionFile, WorkspaceBuildRequest request, CancellationToken ct)
   {
+    var projects = await solutionService.GetProjectsFromSolutionFile(solutionFile, ct);
+
     if (request.UseDefault)
     {
       var defaultPath = settingsService.GetDefaultBuildProject(solutionFile);
-      if (defaultPath is not null && File.Exists(defaultPath))
+      var isValidDefaultTarget =
+          defaultPath is not null &&
+          File.Exists(defaultPath) &&
+          (
+              string.Equals(defaultPath, solutionFile, StringComparison.OrdinalIgnoreCase) ||
+              projects.Any(p => string.Equals(p.AbsolutePath, defaultPath, StringComparison.OrdinalIgnoreCase))
+          );
+
+      if (isValidDefaultTarget)
       {
-        await ExecuteBuildAsync(defaultPath, request, ct);
+        await ExecuteBuildAsync(defaultPath!, request, ct);
         return;
       }
 
       settingsService.SetDefaultBuildProject(null);
     }
-
-    var projects = await solutionService.GetProjectsFromSolutionFile(solutionFile, ct);
 
     if (projects.Count == 0)
     {
