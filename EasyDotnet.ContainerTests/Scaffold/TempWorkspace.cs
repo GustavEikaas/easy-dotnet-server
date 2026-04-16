@@ -42,6 +42,7 @@ public sealed class TempWorkspaceBuilder
   private string? _singleFileRelativePath;
   private string? _globalJsonSdkVersion;
   private string? _globalJsonRollForward;
+  private bool _mtpRunnerGlobalJson;
 
   /// <summary>Declares a <c>.slnx</c> solution file at <paramref name="relativePath"/> (relative to workspace root).</summary>
   public TempWorkspaceBuilder WithSolutionX(string relativePath = "Solution")
@@ -93,6 +94,49 @@ public sealed class TempWorkspaceBuilder
     return this;
   }
 
+  /// <summary>
+  /// Writes a <c>global.json</c> at the workspace root that sets the MTP test runner.
+  /// This does NOT pin the SDK version — it only affects <c>dotnet test</c> argument shape.
+  /// </summary>
+  public TempWorkspaceBuilder WithMtpRunnerGlobalJson()
+  {
+    _mtpRunnerGlobalJson = true;
+    return this;
+  }
+
+  /// <summary>
+  /// Adds a fully scaffolded xunit test project (real NuGet packages + one passing <c>[Fact]</c>).
+  /// Use this when you need a project that can actually be discovered and executed by the test runner.
+  /// For workspace/test RPC argument-shape tests use <see cref="TempProjectBuilder.AsVsTestProject"/> instead.
+  /// </summary>
+  public TempWorkspaceBuilder WithVsTestProject(string relativePath)
+  {
+    var builder = new TempProjectBuilder();
+    builder.AsVsTestProject();
+    var spec = new ProjectSpec(relativePath, builder, isFullTestProject: true, isMtp: false);
+    _projects.Add(spec);
+    if (_solutions.Count > 0)
+      _solutions[^1].Projects.Add(spec);
+    return this;
+  }
+
+  /// <summary>
+  /// Adds a fully scaffolded TUnit test project (real NuGet packages + one passing <c>[Test]</c>).
+  /// TUnit sets <c>IsTestingPlatformApplication=true</c> automatically via its SDK.
+  /// Use this when you need a project that can actually be discovered and executed by the MTP test runner.
+  /// For workspace/test RPC argument-shape tests use <see cref="TempProjectBuilder.AsMtpTestProject"/> instead.
+  /// </summary>
+  public TempWorkspaceBuilder WithMtpProject(string relativePath)
+  {
+    var builder = new TempProjectBuilder();
+    builder.AsMtpTestProject();
+    var spec = new ProjectSpec(relativePath, builder, isFullTestProject: true, isMtp: true);
+    _projects.Add(spec);
+    if (_solutions.Count > 0)
+      _solutions[^1].Projects.Add(spec);
+    return this;
+  }
+
   /// <summary>Materialises the workspace to disk and returns a <see cref="TempWorkspace"/> handle.</summary>
   public TempWorkspace Build()
   {
@@ -104,7 +148,10 @@ public sealed class TempWorkspaceBuilder
     {
       var dir = Path.Combine(root, spec.RelativePath);
       Directory.CreateDirectory(dir);
-      WriteProject(dir, spec.Name, spec.Builder.OutputType);
+      if (spec.IsFullTestProject)
+        WriteFullTestProject(dir, spec.Name, spec.IsMtp);
+      else
+        WriteProject(dir, spec.Name, spec.Builder.OutputType, spec.Builder.ExtraProperties);
       if (spec.Builder.LaunchSettingsJson is not null)
         TempProject.WriteLaunchSettingsTo(dir, spec.Builder.LaunchSettingsJson);
       projectMap[spec.Name] = new TempProject(dir, spec.Name);
@@ -138,18 +185,28 @@ public sealed class TempWorkspaceBuilder
         }
         """);
 
+    if (_mtpRunnerGlobalJson)
+      File.WriteAllText(Path.Combine(root, "global.json"), """
+        {
+          "test": {
+            "runner": "Microsoft.Testing.Platform"
+          }
+        }
+        """);
+
     return new TempWorkspace(root, solutionPaths, projectMap, singleFilePath);
   }
 
-  private static void WriteProject(string dir, string name, string outputType = "Exe")
+  private static void WriteProject(string dir, string name, string outputType = "Exe", string? extraProperties = null)
   {
+    var extra = extraProperties is not null ? $"\n          {extraProperties}" : string.Empty;
     File.WriteAllText(Path.Combine(dir, $"{name}.csproj"), $"""
       <Project Sdk="Microsoft.NET.Sdk">
         <PropertyGroup>
           <OutputType>{outputType}</OutputType>
           <TargetFramework>net8.0</TargetFramework>
           <Nullable>enable</Nullable>
-          <ImplicitUsings>enable</ImplicitUsings>
+          <ImplicitUsings>enable</ImplicitUsings>{extra}
         </PropertyGroup>
       </Project>
       """);
@@ -166,6 +223,70 @@ public sealed class TempWorkspaceBuilder
           internal static string Greet(string name) => $"Hello, {name}!";
       }
       """);
+  }
+
+  private static void WriteFullTestProject(string dir, string name, bool isMtp)
+  {
+    if (isMtp)
+    {
+      File.WriteAllText(Path.Combine(dir, $"{name}.csproj"), """
+        <Project Sdk="Microsoft.NET.Sdk">
+          <PropertyGroup>
+            <OutputType>Exe</OutputType>
+            <TargetFramework>net8.0</TargetFramework>
+            <Nullable>enable</Nullable>
+            <ImplicitUsings>enable</ImplicitUsings>
+            <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+          </PropertyGroup>
+          <ItemGroup>
+            <PackageReference Include="TUnit" Version="1.13.56" />
+          </ItemGroup>
+        </Project>
+        """);
+
+      File.WriteAllText(Path.Combine(dir, "Tests.cs"), $$"""
+        namespace {{name}};
+
+        public class Tests
+        {
+            [Test]
+            public async Task PassingTest()
+            {
+                await Assert.That(1 + 1).IsEqualTo(2);
+            }
+        }
+        """);
+    }
+    else
+    {
+      File.WriteAllText(Path.Combine(dir, $"{name}.csproj"), """
+        <Project Sdk="Microsoft.NET.Sdk">
+          <PropertyGroup>
+            <TargetFramework>net8.0</TargetFramework>
+            <Nullable>enable</Nullable>
+            <ImplicitUsings>enable</ImplicitUsings>
+          </PropertyGroup>
+          <ItemGroup>
+            <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+            <PackageReference Include="xunit" Version="2.9.2" />
+            <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+          </ItemGroup>
+        </Project>
+        """);
+
+      File.WriteAllText(Path.Combine(dir, "Tests.cs"), $$"""
+        namespace {{name}};
+
+        public class Tests
+        {
+            [Fact]
+            public void PassingTest()
+            {
+                Assert.True(1 + 1 == 2);
+            }
+        }
+        """);
+    }
   }
 
   private static void WriteSolution(string solutionPath, SolutionSpec sol, string root)
@@ -190,11 +311,13 @@ public sealed class TempWorkspaceBuilder
     public List<ProjectSpec> Projects { get; } = [];
   }
 
-  private sealed class ProjectSpec(string relativePath, TempProjectBuilder builder)
+  private sealed class ProjectSpec(string relativePath, TempProjectBuilder builder, bool isFullTestProject = false, bool isMtp = false)
   {
     public string RelativePath { get; } = relativePath;
     public string Name { get; } = Path.GetFileName(relativePath.TrimEnd(Path.DirectorySeparatorChar, '/'));
     public TempProjectBuilder Builder { get; } = builder;
+    public bool IsFullTestProject { get; } = isFullTestProject;
+    public bool IsMtp { get; } = isMtp;
   }
 }
 
@@ -268,6 +391,7 @@ public sealed class TempProjectBuilder
 {
   internal string? LaunchSettingsJson { get; private set; }
   internal string OutputType { get; private set; } = "Exe";
+  internal string? ExtraProperties { get; private set; }
 
   public TempProjectBuilder WithLaunchSettings(string json)
   {
@@ -282,6 +406,30 @@ public sealed class TempProjectBuilder
   public TempProjectBuilder AsLibrary()
   {
     OutputType = "Library";
+    return this;
+  }
+
+  /// <summary>
+  /// Marks the project as a VsTest project by setting <c>IsTestProject=true</c> in the MSBuild properties.
+  /// The project still builds as a plain console app — no NuGet packages are added.
+  /// Use this for workspace/test RPC argument-shape tests where only MSBuild detection is needed.
+  /// For a project that can actually run tests use <see cref="TempWorkspaceBuilder.WithVsTestProject"/>.
+  /// </summary>
+  public TempProjectBuilder AsVsTestProject()
+  {
+    ExtraProperties = "<IsTestProject>true</IsTestProject>";
+    return this;
+  }
+
+  /// <summary>
+  /// Marks the project as an MTP test project by setting <c>IsTestingPlatformApplication=true</c> in the MSBuild properties.
+  /// The project still builds as a plain console app — no NuGet packages are added.
+  /// Use this for workspace/test RPC argument-shape tests where only MSBuild detection is needed.
+  /// For a project that can actually run tests use <see cref="TempWorkspaceBuilder.WithMtpProject"/>.
+  /// </summary>
+  public TempProjectBuilder AsMtpTestProject()
+  {
+    ExtraProperties = "<IsTestingPlatformApplication>true</IsTestingPlatformApplication>";
     return this;
   }
 }

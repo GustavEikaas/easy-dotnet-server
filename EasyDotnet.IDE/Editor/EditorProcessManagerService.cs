@@ -25,8 +25,8 @@ public class EditorProcessManagerService : IEditorProcessManagerService
 
   public void CompleteJob(Guid jobId, int exitCode)
   {
-    if (_pendingJobs.TryRemove(jobId, out var tcs))
-      tcs.SetResult(exitCode);
+    if (_pendingJobs.TryGetValue(jobId, out var tcs))
+      tcs.TrySetResult(exitCode);
   }
 
   public void SetFailedToStart(Guid jobId, TerminalSlot slot, string message)
@@ -42,10 +42,13 @@ public class EditorProcessManagerService : IEditorProcessManagerService
   {
     try
     {
-      return await _pendingJobs[jobId].Task;
+      if (!_pendingJobs.TryGetValue(jobId, out var tcs))
+        throw new InvalidOperationException($"No pending job registered for {jobId}");
+      return await tcs.Task;
     }
     finally
     {
+      _pendingJobs.TryRemove(jobId, out _);
       GetSlot(slot).Release();
     }
   }
