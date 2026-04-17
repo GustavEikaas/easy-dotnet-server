@@ -31,6 +31,7 @@ public class TestRunnerService(
   private OperationControl? _operationControl;
   private long _operationId;
   private OperationStage _operationStage = OperationStage.Idle;
+  private volatile bool _isInitialized = false;
 
   private enum OperationStage
   {
@@ -56,6 +57,7 @@ public class TestRunnerService(
 
     try
     {
+      _isInitialized = false;
       registry.Clear();
       detailStore.ClearAll();
       await adapterResolver.InvalidateAllAsync();
@@ -105,11 +107,21 @@ public class TestRunnerService(
 
   public async Task<InitializeResult> InitializeAsync(string solutionPath, CancellationToken ct)
   {
+    // Fast path: already initialized, avoid MSBuild entirely.
+    if (_isInitialized) return new InitializeResult(Success: true);
+
     var opCts = new CancellationTokenSource();
     var control = new OperationControl();
 
     using var token = await operationLock.WaitAcquireAsync("initialize", ct, opCts.Token);
     TrackOperationStart(token, opCts, control);
+
+    // Double-check after acquiring the lock: another caller may have initialized while we waited.
+    if (_isInitialized)
+    {
+      TrackOperationEnd(token);
+      return new InitializeResult(Success: true);
+    }
 
     var solutionName = Path.GetFileName(solutionPath);
     var solutionId = NodeIdBuilder.Solution(solutionName);
@@ -174,6 +186,7 @@ public class TestRunnerService(
             OverallStatus: OverallStatus.Idle,
             TotalTests: registry.GetLeafCount(), TotalRunning: 0,
             TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0), token.OperationId);
+        _isInitialized = true;
         return new InitializeResult(Success: true);
       }
 
@@ -247,6 +260,7 @@ public class TestRunnerService(
           TotalTests: registry.GetLeafCount(), TotalRunning: 0,
           TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0), token.OperationId);
 
+      _isInitialized = true;
       return new InitializeResult(Success: true);
     }
     catch (OperationCanceledException)
@@ -702,6 +716,7 @@ public class TestRunnerService(
               EndLine: n.EndLine);
         })
         .OfType<NeotestPositionDto>()
+        .OrderBy(dto => dto.StartLine ?? int.MaxValue)
         .ToList();
   }
 
