@@ -79,7 +79,13 @@ public class WorkspaceService(
         return;
       }
 
-      await StartDebugSessionAsync(project, target.LaunchProfileName, request.CliArgs, ct);
+      var refreshedProject = await RefreshProjectAfterBuildAsync(project, ct);
+      if (refreshedProject is null)
+      {
+        return;
+      }
+
+      await StartDebugSessionAsync(refreshedProject, target.LaunchProfileName, request.CliArgs, ct);
     }
     catch (Exception ex)
     {
@@ -173,8 +179,21 @@ public class WorkspaceService(
         ? null
         : new[] { "--" }.Concat(CommandLineParser.SplitCommandLine(cliArgs)).ToArray();
 
+    if (!await preBuildService.BuildBeforeRunAsync(project.ProjectFullPath, project.ProjectName, ct))
+    {
+      sessionRegistry.Release(sessionKey);
+      return;
+    }
+
+    var refreshedProject = await RefreshProjectAfterBuildAsync(project, ct);
+    if (refreshedProject is null)
+    {
+      sessionRegistry.Release(sessionKey);
+      return;
+    }
+
     var runRequest = new RunProjectRequest(
-        project.Raw,
+        refreshedProject.Raw,
         launchProfile,
         additionalArgs,
         null,
@@ -182,18 +201,12 @@ public class WorkspaceService(
         {
           sessionRegistry.SetProcessInfo(sessionKey, new RunningProcessEntry(
               sessionKey,
-              project.ProjectName,
-              project.ProjectFullPath,
-              project.TargetFramework,
+              refreshedProject.ProjectName,
+              refreshedProject.ProjectFullPath,
+              refreshedProject.TargetFramework,
               pid));
-          logger.LogInformation("Registered running process {ProjectName} (PID {Pid})", project.ProjectName, pid);
+          logger.LogInformation("Registered running process {ProjectName} (PID {Pid})", refreshedProject.ProjectName, pid);
         });
-
-    if (!await preBuildService.BuildBeforeRunAsync(project.ProjectFullPath, project.ProjectName, ct))
-    {
-      sessionRegistry.Release(sessionKey);
-      return;
-    }
 
     Guid guid;
     try
@@ -243,7 +256,13 @@ public class WorkspaceService(
       return;
     }
 
-    await StartDebugSessionAsync(project, null, cliArgs, ct);
+    var refreshedProject = await RefreshProjectAfterBuildAsync(project, ct);
+    if (refreshedProject is null)
+    {
+      return;
+    }
+
+    await StartDebugSessionAsync(refreshedProject, null, cliArgs, ct);
   }
 
   private async Task<ValidatedDotnetProject?> ConvertSingleFileToProjectAsync(string filePath, CancellationToken ct)
@@ -282,6 +301,29 @@ public class WorkspaceService(
     await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
     await session.ProcessStarted;
     await Task.Delay(1000, ct);
+  }
+
+  private async Task<ValidatedDotnetProject?> RefreshProjectAfterBuildAsync(
+      ValidatedDotnetProject project,
+      CancellationToken ct)
+  {
+    var request = new GetProjectPropertiesBatchRequest([project.ProjectFullPath], "Debug");
+    var results = await buildHostManager.GetProjectPropertiesBatchAsync(request, ct).ToListAsync(ct);
+
+    var candidates = results
+        .Where(r => r.Success && r.Project is not null)
+        .Select(r => r.Project!)
+        .ToList();
+
+    if (candidates.Count == 0)
+    {
+      await editorService.DisplayError($"Failed to evaluate project after build: {project.ProjectName}");
+      return null;
+    }
+
+    return candidates.FirstOrDefault(p =>
+        string.Equals(p.TargetFramework, project.TargetFramework, StringComparison.OrdinalIgnoreCase))
+        ?? candidates[0];
   }
 
   private bool ValidateFilePath(string? filePath)
