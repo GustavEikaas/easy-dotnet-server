@@ -3,26 +3,21 @@ using EasyDotnet.Debugger;
 using EasyDotnet.Debugger.Messages;
 using EasyDotnet.IDE.Dap;
 using EasyDotnet.IDE.Types;
-using EasyDotnet.MsBuild;
 using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.IDE.DebuggerStrategies;
 
-public class VsTestStrategy(ILogger<VsTestStrategy> logger) : IDebugSessionStrategy
+public class VsTestStrategy(string targetPath, string? projectDir, ILogger<VsTestStrategy> logger) : IDebugSessionStrategy
 {
   private Process? _vsTestWrapperProcess;
   private int _testHostPid;
-  private DotnetProject? _project;
   private readonly TaskCompletionSource<int> _processIdTcs = new();
 
-  public Task PrepareAsync(DotnetProject project, CancellationToken ct)
+  public Task PrepareAsync(CancellationToken ct)
   {
-    _project = project;
+    logger.LogInformation("Starting VsTest host for {TargetPath}", targetPath);
 
-
-    logger.LogInformation("Starting VsTest host for {Project}", project.ProjectName);
-
-    var (process, pid) = VsTestHelper.StartTestProcess(project.TargetPath!);
+    var (process, pid) = VsTestHelper.StartTestProcess(targetPath);
 
     _vsTestWrapperProcess = process;
     _testHostPid = pid;
@@ -43,17 +38,14 @@ public class VsTestStrategy(ILogger<VsTestStrategy> logger) : IDebugSessionStrat
 
   public Task TransformRequestAsync(InterceptableAttachRequest request, IDebuggerProxy proxy)
   {
-    if (_vsTestWrapperProcess is null || _project is null)
-    {
+    if (_vsTestWrapperProcess is null)
       throw new InvalidOperationException("Strategy has not been prepared.");
-    }
 
     request.Type = "request";
     request.Command = "attach";
     request.Arguments.Request = "attach";
     request.Arguments.ProcessId = _testHostPid;
-
-    request.Arguments.Cwd = _project.ProjectDir;
+    request.Arguments.Cwd = projectDir;
 
     return Task.CompletedTask;
   }

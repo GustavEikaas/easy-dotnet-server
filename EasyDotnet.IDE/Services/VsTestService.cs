@@ -156,7 +156,7 @@ public class VsTestService(
   private DebuggerTestHostLauncher CreateDebuggerLauncher(DotnetProject project) =>
     new(async (pid, ct) =>
     {
-      var session = await debugOrchestrator.StartClientDebugSessionAsync(project.MSBuildProjectFullPath!, new(project.MSBuildProjectFullPath!, null, null, null), debugStrategyFactory.CreateStandardAttachStrategy(pid), ct);
+      var session = await debugOrchestrator.StartClientDebugSessionAsync(project.MSBuildProjectFullPath!, debugStrategyFactory.CreateStandardAttachStrategy(pid), ct);
       await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
       await session.ProcessStarted;
       //We add a delay to ensure the client is ready #gh785
