@@ -38,7 +38,13 @@ public class WorkspaceService(
 
     if (target.Kind == ExecutionTargetKind.SingleFile)
     {
-      await RunSingleFileAsync(target.SingleFilePath!, request.CliArgs, ct);
+      var converted = await ConvertSingleFileToProjectAsync(target.SingleFilePath!, ct);
+      if (converted is null)
+      {
+        await editorService.DisplayError("Failed to convert single file app to project");
+        return;
+      }
+      await DispatchRunAsync(converted, null, request.CliArgs, ct);
       return;
     }
 
@@ -207,49 +213,6 @@ public class WorkspaceService(
       {
         sessionManager.Unregister(sessionKey);
       }
-    }, CancellationToken.None);
-  }
-
-  private async Task RunSingleFileAsync(string filePath, string? cliArgs, CancellationToken ct)
-  {
-    filePath = Path.GetFullPath(filePath);
-    var fileName = Path.GetFileName(filePath);
-
-    if (!TryClaimSession(filePath, TerminalSlot.LongRunning))
-    {
-      await editorService.DisplayError($"{fileName} is already running");
-      return;
-    }
-
-    var args = new List<string> { "run", filePath };
-    if (!string.IsNullOrEmpty(cliArgs))
-    {
-      args.Add("--");
-      args.AddRange(CommandLineParser.SplitCommandLine(cliArgs));
-    }
-
-    var command = new RunCommand(
-        "dotnet", [.. args],
-        Path.GetDirectoryName(filePath) ?? ".",
-        []);
-
-    Guid guid;
-    try
-    {
-      guid = await editorService.StartRunCommandAsync(command, ct);
-    }
-    catch (Exception ex)
-    {
-      logger.LogError(ex, "Unexpected error while starting {FileName}", fileName);
-      await editorService.DisplayError($"Failed to run {fileName}: {ex.Message}");
-      sessionManager.Unregister(filePath);
-      return;
-    }
-
-    _ = Task.Run(async () =>
-    {
-      try { await editorProcessManagerService.WaitForExitAsync(guid, TerminalSlot.LongRunning); }
-      finally { sessionManager.Unregister(filePath); }
     }, CancellationToken.None);
   }
 

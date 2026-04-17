@@ -33,7 +33,8 @@ public abstract class WorkspaceRunNoSolutionProjectTests<TContainer> : Workspace
 
 /// <summary>
 /// Verifies workspace/run heuristics when no solution file and no .csproj files are present —
-/// only a standalone .cs file. On SDK 10+ the file must be run directly as a script.
+/// only a standalone .cs file. On SDK 10+ the file is converted to a virtual project, compiled,
+/// and the resulting binary is run — identical to a normal project run.
 /// </summary>
 public abstract class WorkspaceRunNoSolutionSingleFileTests<TContainer> : WorkspaceRunTestBase<TContainer>
   where TContainer : ServerContainer, new()
@@ -47,15 +48,12 @@ public abstract class WorkspaceRunNoSolutionSingleFileTests<TContainer> : Worksp
 
     await InitializeWorkspaceAsync(ws);
 
-    // No picker is shown — the server resolves directly to a SingleFileTarget and
-    // issues runCommandManaged. workspace/run returns before runCommandManaged arrives
-    // (it's dispatched from a background task), so we await them independently.
     await BeginRun(filePath: ws.SingleFilePath);
 
     var job = await ReceiveRunCommandAsync();
 
     Assert.Equal("dotnet", job.Command.Executable);
-    Assert.Contains(ws.SingleFilePath, job.Command.Arguments);
+    Assert.Contains(job.Command.Arguments, a => a.EndsWith("Hello.dll", StringComparison.OrdinalIgnoreCase));
   }
 }
 
@@ -85,9 +83,8 @@ public abstract class WorkspaceRunNoSolutionSingleFileLegacySdkTests<TContainer>
 }
 
 /// <summary>
-/// Verifies that cliArgs are passed through to the run command with the correct argument
-/// ordering: <c>["run", filePath, "--", ...cliArgs]</c>. The separator must appear between
-/// the file path and the passthrough args — matching SDK 10 single-file execution semantics.
+/// Verifies that cliArgs are passed through to the run command. The compiled binary is the
+/// first argument, followed by "--" and the passthrough args.
 /// </summary>
 public abstract class WorkspaceRunNoSolutionSingleFileWithArgsTests<TContainer> : WorkspaceRunTestBase<TContainer>
   where TContainer : ServerContainer, new()
@@ -106,17 +103,17 @@ public abstract class WorkspaceRunNoSolutionSingleFileWithArgsTests<TContainer> 
     var job = await ReceiveRunCommandAsync();
     var args = job.Command.Arguments;
 
-    var fileArgIndex = args.IndexOf(ws.SingleFilePath!);
+    var binaryArgIndex = args.FindIndex(a => a.EndsWith(".dll", StringComparison.OrdinalIgnoreCase));
     var separatorIndex = args.IndexOf("--");
     var arg1Index = args.IndexOf("user-arg1");
     var arg2Index = args.IndexOf("user-arg2");
 
-    Assert.True(fileArgIndex >= 0, "Expected filePath in Arguments");
+    Assert.True(binaryArgIndex >= 0, "Expected compiled binary (.dll) in Arguments");
     Assert.True(separatorIndex >= 0, "Expected -- separator before cliArgs");
     Assert.True(arg1Index >= 0, "Expected user-arg1 in Arguments");
     Assert.True(arg2Index >= 0, "Expected user-arg2 in Arguments");
 
-    Assert.True(fileArgIndex < separatorIndex, "filePath must precede the -- separator");
+    Assert.True(binaryArgIndex < separatorIndex, "compiled binary must precede the -- separator");
     Assert.True(separatorIndex < arg1Index, "cliArgs must follow the -- separator");
     Assert.Equal(arg1Index + 1, arg2Index);
   }
