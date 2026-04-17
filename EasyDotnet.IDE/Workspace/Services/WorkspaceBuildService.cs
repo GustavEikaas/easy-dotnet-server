@@ -39,19 +39,27 @@ public class WorkspaceBuildService(
 
   private async Task BuildProjectWithSolutionAsync(string solutionFile, WorkspaceBuildRequest request, CancellationToken ct)
   {
+    var projects = await solutionService.GetProjectsFromSolutionFile(solutionFile, ct);
+
     if (request.UseDefault)
     {
       var defaultPath = settingsService.GetDefaultBuildProject(solutionFile);
-      if (defaultPath is not null && File.Exists(defaultPath))
+      var isValidDefaultTarget =
+          defaultPath is not null &&
+          File.Exists(defaultPath) &&
+          (
+              string.Equals(defaultPath, solutionFile, StringComparison.OrdinalIgnoreCase) ||
+              projects.Any(p => string.Equals(p.AbsolutePath, defaultPath, StringComparison.OrdinalIgnoreCase))
+          );
+
+      if (isValidDefaultTarget)
       {
-        await ExecuteBuildAsync(defaultPath, request, ct);
+        await ExecuteBuildAsync(defaultPath!, request, ct);
         return;
       }
 
       settingsService.SetDefaultBuildProject(null);
     }
-
-    var projects = await solutionService.GetProjectsFromSolutionFile(solutionFile, ct);
 
     if (projects.Count == 0)
     {
@@ -137,6 +145,9 @@ public class WorkspaceBuildService(
 
   private async Task RunBuildQuickfixAsync(string targetPath, string name, CancellationToken ct)
   {
+    if (!await RestoreBeforeBuildQuickfixAsync(targetPath, name, ct))
+      return;
+
     List<BatchBuildResult> results;
     using (progressScopeFactory.Create("Building...", $"Building {name}"))
     {
@@ -150,25 +161,8 @@ public class WorkspaceBuildService(
         .SelectMany(r => r.Output?.Diagnostics ?? [])
         .ToList();
 
-    var errors = allDiagnostics
-        .Where(d => d.Severity == BuildDiagnosticSeverity.Error)
-        .Select(d => new QuickFixItem(
-            FileName: d.File ?? "",
-            LineNumber: d.LineNumber,
-            ColumnNumber: d.ColumnNumber,
-            Text: string.IsNullOrEmpty(d.Code) ? d.Message ?? "" : $"[{d.Code}] {d.Message}",
-            Type: QuickFixItemType.Error))
-        .ToList();
-
-    var warnings = allDiagnostics
-        .Where(d => d.Severity == BuildDiagnosticSeverity.Warning)
-        .Select(d => new QuickFixItem(
-            FileName: d.File ?? "",
-            LineNumber: d.LineNumber,
-            ColumnNumber: d.ColumnNumber,
-            Text: string.IsNullOrEmpty(d.Code) ? d.Message ?? "" : $"[{d.Code}] {d.Message}",
-            Type: QuickFixItemType.Warning))
-        .ToList();
+    var errors = MapDiagnostics(allDiagnostics, BuildDiagnosticSeverity.Error, QuickFixItemType.Error);
+    var warnings = MapDiagnostics(allDiagnostics, BuildDiagnosticSeverity.Warning, QuickFixItemType.Warning);
 
     if (errors.Count == 0 && warnings.Count == 0)
     {
@@ -187,4 +181,48 @@ public class WorkspaceBuildService(
     await editorService.SetQuickFixList(items);
     await editorService.DisplayError($"Build FAILED — {errors.Count} error(s), {warnings.Count} warning(s)");
   }
+
+  private async Task<bool> RestoreBeforeBuildQuickfixAsync(string targetPath, string name, CancellationToken ct)
+  {
+    List<RestoreResult> restoreResults;
+    using (progressScopeFactory.Create("Restoring...", $"Restoring {name}"))
+    {
+      restoreResults = await buildHostManager
+          .RestoreNugetPackagesAsync(new RestoreRequest([targetPath]), ct)
+          .ToListAsync(ct);
+    }
+
+    if (restoreResults.All(r => r.Success))
+      return true;
+
+    var restoreDiagnostics = restoreResults
+        .SelectMany(r => r.Output?.Diagnostics ?? [])
+        .ToList();
+
+    var errors = MapDiagnostics(restoreDiagnostics, BuildDiagnosticSeverity.Error, QuickFixItemType.Error);
+    var warnings = MapDiagnostics(restoreDiagnostics, BuildDiagnosticSeverity.Warning, QuickFixItemType.Warning);
+    if (errors.Count > 0 || warnings.Count > 0)
+    {
+      await editorService.SetQuickFixList([.. errors.Concat(warnings)]);
+      await editorService.DisplayError($"Restore FAILED — {errors.Count} error(s), {warnings.Count} warning(s)");
+      return false;
+    }
+
+    await editorService.DisplayError($"Restore failed for {name}");
+    return false;
+  }
+
+  private static List<QuickFixItem> MapDiagnostics(
+      IEnumerable<BuildDiagnostic> diagnostics,
+      BuildDiagnosticSeverity severity,
+      QuickFixItemType quickFixType) =>
+      diagnostics
+          .Where(d => d.Severity == severity)
+          .Select(d => new QuickFixItem(
+              FileName: d.File ?? "",
+              LineNumber: d.LineNumber,
+              ColumnNumber: d.ColumnNumber,
+              Text: string.IsNullOrEmpty(d.Code) ? d.Message ?? "" : $"[{d.Code}] {d.Message}",
+              Type: quickFixType))
+          .ToList();
 }
