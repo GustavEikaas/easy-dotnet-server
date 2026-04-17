@@ -31,6 +31,7 @@ public class TestRunnerService(
   private OperationControl? _operationControl;
   private long _operationId;
   private OperationStage _operationStage = OperationStage.Idle;
+  private volatile bool _isInitialized = false;
 
   private enum OperationStage
   {
@@ -56,6 +57,7 @@ public class TestRunnerService(
 
     try
     {
+      _isInitialized = false;
       registry.Clear();
       detailStore.ClearAll();
       await adapterResolver.InvalidateAllAsync();
@@ -105,11 +107,21 @@ public class TestRunnerService(
 
   public async Task<InitializeResult> InitializeAsync(string solutionPath, CancellationToken ct)
   {
+    // Fast path: already initialized, avoid MSBuild entirely.
+    if (_isInitialized) return new InitializeResult(Success: true);
+
     var opCts = new CancellationTokenSource();
     var control = new OperationControl();
 
     using var token = await operationLock.WaitAcquireAsync("initialize", ct, opCts.Token);
     TrackOperationStart(token, opCts, control);
+
+    // Double-check after acquiring the lock: another caller may have initialized while we waited.
+    if (_isInitialized)
+    {
+      TrackOperationEnd(token);
+      return new InitializeResult(Success: true);
+    }
 
     var solutionName = Path.GetFileName(solutionPath);
     var solutionId = NodeIdBuilder.Solution(solutionName);
@@ -174,6 +186,7 @@ public class TestRunnerService(
             OverallStatus: OverallStatus.Idle,
             TotalTests: registry.GetLeafCount(), TotalRunning: 0,
             TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0), token.OperationId);
+        _isInitialized = true;
         return new InitializeResult(Success: true);
       }
 
@@ -247,6 +260,7 @@ public class TestRunnerService(
           TotalTests: registry.GetLeafCount(), TotalRunning: 0,
           TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0), token.OperationId);
 
+      _isInitialized = true;
       return new InitializeResult(Success: true);
     }
     catch (OperationCanceledException)
@@ -662,6 +676,63 @@ public class TestRunnerService(
             : null
     );
   }
+
+  public List<NeotestPositionDto> GetNeotestPositions(string filePath)
+  {
+    var fileNodes = registry.GetNodesForFile(filePath).ToList();
+    if (fileNodes.Count == 0) return [];
+
+    var group = fileNodes
+        .Where(n => n.ProjectId is not null)
+        .GroupBy(n => n.ProjectId!)
+        .FirstOrDefault();
+    if (group is null) return [];
+
+    var nodes = group.ToList();
+    var nodeIdSet = nodes.Select(n => n.Id).ToHashSet(StringComparer.Ordinal);
+
+    return nodes
+        .Select(n =>
+        {
+          var type = n.Type switch
+          {
+            NodeType.Namespace => "namespace",
+            NodeType.TestClass => "namespace",
+            NodeType.TheoryGroup => "namespace",
+            NodeType.TestMethod => "test",
+            NodeType.Subcase => "test",
+            _ => null
+          };
+          if (type is null) return null;
+
+          var parentId = nodeIdSet.Contains(n.ParentId ?? "") ? n.ParentId : filePath;
+
+          return new NeotestPositionDto(
+              Id: n.Id,
+              Name: n.DisplayName,
+              Type: type,
+              ParentId: parentId,
+              StartLine: n.SignatureLine,
+              EndLine: n.EndLine);
+        })
+        .OfType<NeotestPositionDto>()
+        .OrderBy(dto => dto.StartLine ?? int.MaxValue)
+        .ToList();
+  }
+
+  public Dictionary<string, NeotestBatchResultDto> GetNeotestBatchResults(string[] ids) =>
+      ids
+          .Select(id => (id, detail: detailStore.Get(id)))
+          .Where(x => x.detail is not null)
+          .ToDictionary(
+              x => x.id,
+              x => new NeotestBatchResultDto(
+                  Outcome: x.detail!.Outcome,
+                  ErrorMessage: x.detail.ErrorMessage.Length > 0 ? x.detail.ErrorMessage : null,
+                  FailingFrame: x.detail.FailingFrame is { } ff
+                      ? new StackFrameDto(ff.OriginalText, ff.File, ff.Line, ff.IsUserCode)
+                      : null,
+                  Stdout: x.detail.Stdout.Length > 0 ? x.detail.Stdout : null));
 
   public SyncFileResult SyncFile(SyncFileRequest req)
   {
@@ -1101,3 +1172,8 @@ public record StackFrameDto(string OriginalText, string? File, int? Line, bool I
 public record SyncFileRequest(string Path, string Content, int Version);
 public record SyncFileResult(LineNumberUpdateDto[] Updates, int Version);
 public record LineNumberUpdateDto(string Id, int SignatureLine, int BodyStartLine, int EndLine);
+
+public record NeotestPositionsRequest(string FilePath);
+public record NeotestPositionDto(string Id, string Name, string Type, string? ParentId, int? StartLine, int? EndLine);
+public record NeotestBatchResultsRequest(string[] Ids);
+public record NeotestBatchResultDto(string Outcome, string[]? ErrorMessage, StackFrameDto? FailingFrame, string[]? Stdout);

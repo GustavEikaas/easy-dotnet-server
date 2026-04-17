@@ -133,6 +133,20 @@
 
 **Returns:** `Task<OperationResult>`
 
+### `testrunner/neotestBatchResults`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | NeotestBatchResultsRequest |   |
+
+**Returns:** `Dictionary<string, NeotestBatchResultDto>`
+
+### `testrunner/neotestPositions`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | NeotestPositionsRequest |   |
+
+**Returns:** `List<NeotestPositionDto>`
+
 ### `testrunner/quickDiscover`
 | Parameter | Type | Optional |
 |-----------|------|----------|
