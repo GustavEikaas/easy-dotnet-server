@@ -96,8 +96,9 @@ public class EditorService(
       {
         try
         {
-          await session.WaitForPidAsync(CancellationToken.None);
+          var pid = await session.WaitForPidAsync(CancellationToken.None);
           session.Resume();
+          request.OnPidReceived?.Invoke(pid);
         }
         catch { }
       }

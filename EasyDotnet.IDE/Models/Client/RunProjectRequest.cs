@@ -6,5 +6,6 @@ public record RunProjectRequest(
     DotnetProject Project,
     LaunchProfile.LaunchProfile? LaunchProfile,
     string[]? AdditionalArguments,
-    Dictionary<string, string>? EnvironmentVariables
+    Dictionary<string, string>? EnvironmentVariables,
+    Action<int>? OnPidReceived = null
 );

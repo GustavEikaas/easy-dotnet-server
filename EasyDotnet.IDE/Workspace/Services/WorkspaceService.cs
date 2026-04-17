@@ -20,7 +20,6 @@ public class WorkspaceService(
     WorkspaceBuildHostManager buildHostManager,
     IDebugOrchestrator debugOrchestrator,
     IDebugStrategyFactory debugStrategyFactory,
-    IStartupHookService startupHookService,
     RunningProcessRegistry runningProcessRegistry,
     ILogger<WorkspaceService> logger)
 {
@@ -175,13 +174,25 @@ public class WorkspaceService(
         ? null
         : new[] { "--" }.Concat(CommandLineParser.SplitCommandLine(cliArgs)).ToArray();
 
-    var hookSession = startupHookService.CreateSession();
-    var runRequest = new RunProjectRequest(project.Raw, launchProfile, additionalArgs, hookSession.EnvironmentVariables);
+    var runRequest = new RunProjectRequest(
+        project.Raw,
+        launchProfile,
+        additionalArgs,
+        null,
+        OnPidReceived: pid =>
+        {
+          runningProcessRegistry.Register(new RunningProcessEntry(
+              sessionKey,
+              project.ProjectName,
+              project.ProjectFullPath,
+              project.TargetFramework,
+              pid));
+          logger.LogInformation("Registered running process {ProjectName} (PID {Pid})", project.ProjectName, pid);
+        });
 
     if (!await preBuildService.BuildBeforeRunAsync(project.ProjectFullPath, project.ProjectName, ct))
     {
       sessionManager.Unregister(sessionKey);
-      await hookSession.DisposeAsync();
       return;
     }
 
@@ -195,32 +206,8 @@ public class WorkspaceService(
       logger.LogError(ex, "Unexpected error while starting {ProjectName}", project.ProjectName);
       await editorService.DisplayError($"Failed to run {project.ProjectName}: {ex.Message}");
       sessionManager.Unregister(sessionKey);
-      await hookSession.DisposeAsync();
       return;
     }
-
-    _ = Task.Run(async () =>
-    {
-      await using (hookSession)
-      {
-        try
-        {
-          var pid = await hookSession.WaitForPidAsync();
-          runningProcessRegistry.Register(new RunningProcessEntry(
-              sessionKey,
-              project.ProjectName,
-              project.ProjectFullPath,
-              project.TargetFramework,
-              pid));
-          hookSession.Resume();
-          logger.LogInformation("Registered running process {ProjectName} (PID {Pid})", project.ProjectName, pid);
-        }
-        catch (Exception ex)
-        {
-          logger.LogWarning(ex, "Failed to capture PID for {ProjectName} via startup hook", project.ProjectName);
-        }
-      }
-    }, CancellationToken.None);
 
     _ = Task.Run(async () =>
     {
