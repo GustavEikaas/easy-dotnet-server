@@ -53,6 +53,13 @@
 
 **Returns:** `Task`
 
+### `workspace/debug-attach`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | WorkspaceDebugAttachRequest |   |
+
+**Returns:** `Task`
+
 ### `workspace/restore`
 | Parameter | Type | Optional |
 |-----------|------|----------|
