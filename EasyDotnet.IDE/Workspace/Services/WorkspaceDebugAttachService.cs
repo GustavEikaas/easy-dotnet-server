@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging;
 namespace EasyDotnet.IDE.Workspace.Services;
 
 public class WorkspaceDebugAttachService(
-    RunningProcessRegistry runningProcessRegistry,
+    WorkspaceSessionRegistry sessionRegistry,
     IEditorService editorService,
     IDebugOrchestrator debugOrchestrator,
     IDebugStrategyFactory debugStrategyFactory,
@@ -19,7 +19,7 @@ public class WorkspaceDebugAttachService(
   {
     try
     {
-      var processes = runningProcessRegistry.GetAll();
+      var processes = sessionRegistry.GetRunningProcesses();
       if (processes.Count == 0)
       {
         await editorService.DisplayError("No running processes to connect to. Start a project with 'Dotnet run' first.");
