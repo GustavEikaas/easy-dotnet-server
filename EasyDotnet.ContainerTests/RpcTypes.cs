@@ -23,3 +23,17 @@ public sealed record TestRunCommand(
 public sealed record TestTrackedJob(Guid JobId, TestRunCommand Command);
 
 public sealed record TestDisplayMessage(string Message);
+
+public sealed record TestQuickFixItem(
+  string FileName,
+  int LineNumber,
+  int ColumnNumber,
+  string Text,
+  TestQuickFixItemType Type);
+
+public enum TestQuickFixItemType
+{
+  Information = 0,
+  Warning = 1,
+  Error = 2
+}
