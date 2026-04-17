@@ -13,7 +13,7 @@ namespace EasyDotnet.IDE.Workspace.Services;
 
 public class WorkspaceService(
     WorkspaceProjectResolver resolver,
-    WorkspaceSessionManager sessionManager,
+    WorkspaceSessionRegistry sessionRegistry,
     WorkspacePreBuildService preBuildService,
     IEditorService editorService,
     IEditorProcessManagerService editorProcessManagerService,
@@ -152,7 +152,7 @@ public class WorkspaceService(
     _ = Task.Run(async () =>
     {
       try { await editorService.RequestRunCommandAsync(command, CancellationToken.None); }
-      finally { sessionManager.Unregister(sessionKey); }
+      finally { sessionRegistry.Release(sessionKey); }
     }, CancellationToken.None);
   }
 
@@ -173,11 +173,25 @@ public class WorkspaceService(
         ? null
         : new[] { "--" }.Concat(CommandLineParser.SplitCommandLine(cliArgs)).ToArray();
 
-    var runRequest = new RunProjectRequest(project.Raw, launchProfile, additionalArgs, null);
+    var runRequest = new RunProjectRequest(
+        project.Raw,
+        launchProfile,
+        additionalArgs,
+        null,
+        OnPidReceived: pid =>
+        {
+          sessionRegistry.SetProcessInfo(sessionKey, new RunningProcessEntry(
+              sessionKey,
+              project.ProjectName,
+              project.ProjectFullPath,
+              project.TargetFramework,
+              pid));
+          logger.LogInformation("Registered running process {ProjectName} (PID {Pid})", project.ProjectName, pid);
+        });
 
     if (!await preBuildService.BuildBeforeRunAsync(project.ProjectFullPath, project.ProjectName, ct))
     {
-      sessionManager.Unregister(sessionKey);
+      sessionRegistry.Release(sessionKey);
       return;
     }
 
@@ -190,7 +204,7 @@ public class WorkspaceService(
     {
       logger.LogError(ex, "Unexpected error while starting {ProjectName}", project.ProjectName);
       await editorService.DisplayError($"Failed to run {project.ProjectName}: {ex.Message}");
-      sessionManager.Unregister(sessionKey);
+      sessionRegistry.Release(sessionKey);
       return;
     }
 
@@ -211,7 +225,7 @@ public class WorkspaceService(
       }
       finally
       {
-        sessionManager.Unregister(sessionKey);
+        sessionRegistry.Release(sessionKey);
       }
     }, CancellationToken.None);
   }
@@ -288,14 +302,14 @@ public class WorkspaceService(
 
   private bool TryClaimSession(string key, TerminalSlot slot)
   {
-    if (sessionManager.TryRegister(key))
+    if (sessionRegistry.TryClaim(key))
       return true;
 
     if (editorProcessManagerService.IsSlotBusy(slot))
       return false;
 
     logger.LogWarning("Session {Key} was stale (slot {Slot} is free). Reclaiming.", key, slot);
-    sessionManager.Unregister(key);
-    return sessionManager.TryRegister(key);
+    sessionRegistry.Release(key);
+    return sessionRegistry.TryClaim(key);
   }
 }
