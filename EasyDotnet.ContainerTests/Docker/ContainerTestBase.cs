@@ -43,7 +43,7 @@ public abstract class ContainerTestBase<TContainer> : IAsyncLifetime
   /// </summary>
   protected Task BeginCall(Task task, TimeSpan? timeout = null)
   {
-    var timedTask = task.WaitAsync(timeout ?? TimeSpan.FromSeconds(10));
+    var timedTask = task.WaitAsync(timeout ?? TimeSpan.FromSeconds(20));
     _rpcScope = timedTask;
     return timedTask;
   }

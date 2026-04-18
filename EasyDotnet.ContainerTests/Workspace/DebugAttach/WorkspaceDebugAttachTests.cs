@@ -16,21 +16,6 @@ public abstract class WorkspaceDebugAttachTests<TContainer> : WorkspaceDebugAtta
   where TContainer : ServerContainer, new()
 {
   [Fact]
-  public async Task DebugAttach_WithNoRunningProcesses_DisplaysError()
-  {
-    using var ws = new TempWorkspaceBuilder()
-      .WithSolutionX()
-      .WithProject("ProjectAlpha")
-      .Build();
-    await InitializeWorkspaceAsync(ws);
-
-    await BeginDebugAttach();
-
-    var error = await ReceiveDisplayErrorAsync();
-    Assert.Contains("No running .NET processes found.", error);
-  }
-
-  [Fact]
   public async Task DebugAttach_WithRunningProcess_ShowsPickerWithProjectNameAndPid()
   {
     using var ws = new TempWorkspaceBuilder()

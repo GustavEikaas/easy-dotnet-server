@@ -11,6 +11,7 @@ using EasyDotnet.IDE.Editor;
 using EasyDotnet.IDE.EntityFramework;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.NewFile;
+using EasyDotnet.IDE.PackageManager;
 using EasyDotnet.IDE.Picker;
 using EasyDotnet.IDE.ProcessExecution;
 using EasyDotnet.IDE.ProjectReference.Services;
@@ -117,6 +118,7 @@ public static class DiModules
     services.AddTransient<ILaunchProfileService, LaunchProfileService>();
     services.AddTransient<INotificationService, NotificationService>();
     services.AddTransient<NugetService>();
+    services.AddPackageManager();
     services.AddTransient<OutdatedService>();
     services.AddTransient<GlobalJsonService>();
 

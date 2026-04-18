@@ -217,6 +217,31 @@
 
 ---
 
+## PackageManagerController
+
+### `nuget/add-package`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | AddPackageRequest |   |
+
+**Returns:** `Task`
+
+### `nuget/list-installed`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | ListInstalledRequest |   |
+
+**Returns:** `Task<InstalledPackageReference[]>`
+
+### `nuget/remove-package`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | RemovePackageRequest |   |
+
+**Returns:** `Task`
+
+---
+
 ## NewFileController
 
 ### `json-code-gen-v2`
