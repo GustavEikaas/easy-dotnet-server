@@ -24,9 +24,9 @@ public sealed class UpgradeApplyService(
     await dispatcher.SendStatusAsync(new UpgradeWizardStatus("Applying", $"Updating {request.Selections.Length} package(s)…"));
 
     var updated = new List<UpgradeResultItem>();
-    var failed  = new List<UpgradeResultItem>();
+    var failed = new List<UpgradeResultItem>();
 
-    for (int i = 0; i < request.Selections.Length; i++)
+    for (var i = 0; i < request.Selections.Length; i++)
     {
       if (linkedCt.IsCancellationRequested) break;
 
