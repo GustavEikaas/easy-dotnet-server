@@ -8,7 +8,6 @@ public interface IDebugStrategyFactory
 {
   RunInTerminalStrategy CreateRunInTerminalStrategy(ValidatedDotnetProject project, string? launchProfileName, string? cliArgs = null);
   StandardAttachStrategy CreateStandardAttachStrategy(int pid, string? cwd = null);
-  VsTestStrategy CreateVsTestStrategy(string targetPath, string? projectDir);
 }
 
 public class DebugStrategyFactory(
@@ -33,8 +32,4 @@ public class DebugStrategyFactory(
     pid,
     cwd);
 
-  public VsTestStrategy CreateVsTestStrategy(string targetPath, string? projectDir) => new(
-    targetPath,
-    projectDir,
-    loggerFactory.CreateLogger<VsTestStrategy>());
 }
