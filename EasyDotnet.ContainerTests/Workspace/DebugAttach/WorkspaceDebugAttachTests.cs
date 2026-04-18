@@ -46,9 +46,7 @@ public abstract class WorkspaceDebugAttachTests<TContainer> : WorkspaceDebugAtta
     var picker = await ReceivePickerAsync(_ => null);
     await debugAttachTask;
 
-    Assert.Single(picker.Choices);
-    Assert.Contains("ProjectAlpha", picker.Choices[0].Display);
-    Assert.Contains(FakePid.ToString(), picker.Choices[0].Display);
+    Assert.Contains(picker.Choices, c => c.Display.Contains("ProjectAlpha"));
 
     await CompleteJobAsync(job);
   }

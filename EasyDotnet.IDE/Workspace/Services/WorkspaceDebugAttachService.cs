@@ -65,12 +65,19 @@ public class WorkspaceDebugAttachService(
 
   private static List<ExternalAttachTarget> DiscoverExternalProcesses(HashSet<int> excludePids)
   {
-    var currentPid = System.Diagnostics.Process.GetCurrentProcess().Id;
+    var currentProcess = System.Diagnostics.Process.GetCurrentProcess();
+    var currentPid = currentProcess.Id;
+    var currentProcessIds = currentProcess.Threads
+        .Cast<System.Diagnostics.ProcessThread>()
+        .Select(t => t.Id)
+        .ToHashSet();
+    currentProcessIds.Add(currentPid);
+
     var results = new List<ExternalAttachTarget>();
 
     foreach (var pid in DiagnosticsClient.GetPublishedProcesses())
     {
-      if (excludePids.Contains(pid) || pid == currentPid)
+      if (excludePids.Contains(pid) || currentProcessIds.Contains(pid))
       {
         continue;
       }
