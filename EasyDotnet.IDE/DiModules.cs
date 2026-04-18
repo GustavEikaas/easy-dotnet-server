@@ -117,7 +117,6 @@ public static class DiModules
     services.AddTransient<ILaunchProfileService, LaunchProfileService>();
     services.AddTransient<INotificationService, NotificationService>();
     services.AddTransient<NugetService>();
-    services.AddSingleton<VsTestService>();
     services.AddTransient<OutdatedService>();
     services.AddTransient<GlobalJsonService>();
 
