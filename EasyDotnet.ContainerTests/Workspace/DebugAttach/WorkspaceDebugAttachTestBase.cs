@@ -109,7 +109,11 @@ public abstract class WorkspaceDebugAttachTestBase<TContainer> : ContainerTestBa
 
     if (scope is not null)
     {
-      var winner = await Task.WhenAny(readTask, scope);
+      var timeout = Task.Delay(PickerTimeout);
+      var winner = await Task.WhenAny(readTask, scope, timeout);
+      if (winner == timeout)
+        throw new XunitException(
+          $"Timed out after {PickerTimeout.TotalSeconds:0}s waiting for picker/pick.{CollectPendingErrors()}");
       if (winner == scope)
       {
         await scope; // surface any server-side exception first

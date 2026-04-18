@@ -87,7 +87,11 @@ public abstract class WorkspaceBuildTestBase<TContainer> : ContainerTestBase<TCo
 
     if (scope is not null)
     {
-      var winner = await Task.WhenAny(readTask, scope);
+      var timeout = Task.Delay(SelectionTimeout);
+      var winner = await Task.WhenAny(readTask, scope, timeout);
+      if (winner == timeout)
+        throw new XunitException(
+          $"Timed out after {SelectionTimeout.TotalSeconds:0}s waiting for promptSelection.{CollectPendingNotifications()}");
       if (winner == scope)
       {
         await scope; // surface any server-side exception first
@@ -126,9 +130,13 @@ public abstract class WorkspaceBuildTestBase<TContainer> : ContainerTestBase<TCo
       }
 
       var readTask = _runCommands.Reader.ReadAsync().AsTask();
-      var winner = await Task.WhenAny(readTask, scope);
+      var timeout = Task.Delay(RunCommandTimeout);
+      var winner = await Task.WhenAny(readTask, scope, timeout);
       if (winner == readTask)
         return await CompleteJobAsync(await readTask, exitCode);
+      if (winner == timeout)
+        throw new XunitException(
+          $"Timed out after {RunCommandTimeout.TotalMinutes:0} minutes waiting for runCommandManaged.{CollectPendingNotifications()}");
 
       if (_runCommands.Reader.TryRead(out var buffered))
         return await CompleteJobAsync(buffered, exitCode);
