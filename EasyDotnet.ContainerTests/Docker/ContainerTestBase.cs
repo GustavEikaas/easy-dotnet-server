@@ -35,13 +35,17 @@ public abstract class ContainerTestBase<TContainer> : IAsyncLifetime
   protected Task? _rpcScope;
 
   /// <summary>
-  /// Starts an RPC call, stores it as the active scope, and returns the task.
+  /// Starts an RPC call, wraps it with a hard timeout, stores it as the active scope, and
+  /// returns the wrapped task. If the server does not respond within <paramref name="timeout"/>
+  /// the task faults with <see cref="TimeoutException"/> and the test fails immediately rather
+  /// than hanging indefinitely in CI.
   /// Derived classes expose typed wrappers (e.g. <c>BeginRun</c>) that call this.
   /// </summary>
-  protected Task BeginCall(Task task)
+  protected Task BeginCall(Task task, TimeSpan? timeout = null)
   {
-    _rpcScope = task;
-    return task;
+    var timedTask = task.WaitAsync(timeout ?? TimeSpan.FromSeconds(10));
+    _rpcScope = timedTask;
+    return timedTask;
   }
 
   /// <summary>
