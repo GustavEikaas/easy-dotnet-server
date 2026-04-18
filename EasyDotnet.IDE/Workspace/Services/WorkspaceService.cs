@@ -271,13 +271,10 @@ public class WorkspaceService(
       string? cliArgs,
       CancellationToken ct)
   {
-    var startRequest = new DebuggerStartRequest(
-        project.ProjectFullPath, project.TargetFramework, "Debug", launchProfileName);
-
-    var strategy = debugStrategyFactory.CreateRunInTerminalStrategy(launchProfileName, cliArgs);
+    var strategy = debugStrategyFactory.CreateRunInTerminalStrategy(project, launchProfileName, cliArgs);
 
     var session = await debugOrchestrator.StartClientDebugSessionAsync(
-        project.ProjectFullPath, startRequest, strategy, ct);
+        project.ProjectFullPath, strategy, ct);
 
     await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
     await session.ProcessStarted;

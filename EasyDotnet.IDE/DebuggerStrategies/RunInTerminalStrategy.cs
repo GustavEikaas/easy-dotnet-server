@@ -1,21 +1,21 @@
 using System.Diagnostics;
 using System.Net.Sockets;
 using System.Text.Json;
+using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.Debugger;
 using EasyDotnet.Debugger.Messages;
-using EasyDotnet.IDE;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Models.Client;
 using EasyDotnet.IDE.Models.LaunchProfile;
 using EasyDotnet.IDE.Types;
 using EasyDotnet.IDE.Utils;
-using EasyDotnet.MsBuild;
 using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.DebuggerStrategies;
 
 public class RunInTerminalStrategy(
+  ValidatedDotnetProject project,
   string? launchProfileName,
   string? cliArgs,
   ILogger<RunInTerminalStrategy> logger,
@@ -24,10 +24,9 @@ public class RunInTerminalStrategy(
   ILaunchProfileService launchProfileService,
   IAppWrapperManager appWrapperManager) : IDebugSessionStrategy
 {
-  private DotnetProject? _project;
+  private LaunchProfile? _activeProfile;
   private int _pid;
   private JsonRpc? _rpc;
-  private LaunchProfile? _activeProfile;
   private StartupHookSession? _hookSession;
   private Process? _browserProcess;
   private IAppWrapperHandle? _wrapperHandle;
@@ -46,24 +45,26 @@ public class RunInTerminalStrategy(
     PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
   };
 
-  public async Task PrepareAsync(DotnetProject project, CancellationToken ct)
+  public Task PrepareAsync(CancellationToken ct)
   {
-    _activeProfile = launchProfileService.GetLaunchProfile(project.MSBuildProjectFullPath!, launchProfileName);
-    _project = project;
+    var platform = project.Raw.GetPlatform();
+    if (platform != DotnetPlatform.None && platform != DotnetPlatform.Windows)
+      throw new InvalidOperationException($"Debugging for {platform} is not supported yet");
+
+    _activeProfile = launchProfileService.GetLaunchProfile(project.ProjectFullPath, launchProfileName);
+    return Task.CompletedTask;
   }
 
   public async Task TransformRequestAsync(InterceptableAttachRequest request, IDebuggerProxy proxy)
   {
-    if (_project == null) throw new InvalidOperationException("Strategy has not been prepared.");
-
     var profileEnv = LaunchProfileUtils.GetEnvironmentVariables(_activeProfile);
     _hookSession = startupHookService.CreateSession(profileEnv);
 
     var extraArgs = BuildCommandLineArgs();
-    var terminalArgs = new List<string>() { _project.TargetPath! };
+    var terminalArgs = new List<string>() { project.TargetPath };
     terminalArgs.AddRange(extraArgs);
 
-    var cwd = LaunchProfileUtils.ResolveCwd(_activeProfile, _project);
+    var cwd = LaunchProfileUtils.ResolveCwd(_activeProfile, project.Raw);
     var terminalKind = ExtractTerminalKind(request.Arguments.Console);
 
     if (terminalKind == RunInTerminalKind.External)
@@ -96,7 +97,7 @@ public class RunInTerminalStrategy(
     request.Command = "attach";
     request.Arguments.Request = "attach";
     request.Arguments.ProcessId = _pid;
-    if (_project?.ProjectDir is not null)
+    if (project.Raw.ProjectDir is not null)
     {
       request.Arguments.Cwd = cwd;
     }
@@ -271,14 +272,10 @@ public class RunInTerminalStrategy(
   private string[] BuildCommandLineArgs()
   {
     var args = new List<string>();
-    if (_activeProfile?.CommandLineArgs is not null && _project is not null)
-    {
-      args.AddRange(LaunchProfileUtils.ParseCommandLineArgs(_activeProfile.CommandLineArgs, _project));
-    }
-    if (cliArgs is not null && _project is not null)
-    {
-      args.AddRange(LaunchProfileUtils.ParseCommandLineArgs(cliArgs, _project));
-    }
+    if (_activeProfile?.CommandLineArgs is not null)
+      args.AddRange(LaunchProfileUtils.ParseCommandLineArgs(_activeProfile.CommandLineArgs, project.Raw));
+    if (cliArgs is not null)
+      args.AddRange(LaunchProfileUtils.ParseCommandLineArgs(cliArgs, project.Raw));
 
     return [.. args];
   }

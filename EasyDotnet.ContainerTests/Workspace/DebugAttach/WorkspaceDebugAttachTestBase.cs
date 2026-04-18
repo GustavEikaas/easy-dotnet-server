@@ -109,7 +109,11 @@ public abstract class WorkspaceDebugAttachTestBase<TContainer> : ContainerTestBa
 
     if (scope is not null)
     {
-      var winner = await Task.WhenAny(readTask, scope);
+      var timeout = Task.Delay(PickerTimeout);
+      var winner = await Task.WhenAny(readTask, scope, timeout);
+      if (winner == timeout)
+        throw new XunitException(
+          $"Timed out after {PickerTimeout.TotalSeconds:0}s waiting for picker/pick.{CollectPendingErrors()}");
       if (winner == scope)
       {
         await scope; // surface any server-side exception first
@@ -130,6 +134,57 @@ public abstract class WorkspaceDebugAttachTestBase<TContainer> : ContainerTestBa
   /// <summary>Waits for the next <c>displayError</c> notification and returns the message.</summary>
   protected async Task<string> ReceiveDisplayErrorAsync() =>
     await _displayErrors.Reader.ReadAsync().AsTask().WaitAsync(PickerTimeout);
+
+  /// <summary>
+  /// Races between a <c>picker/pick</c> reverse request and a <c>displayError</c> notification.
+  /// Returns whichever arrives first. If a picker arrives, <paramref name="respond"/> is invoked
+  /// to supply the selection (return <c>null</c> to dismiss) and the picker is returned as
+  /// <c>Picker</c>; if an error arrives it is returned as <c>Error</c>. Races against the active
+  /// RPC scope — if the scope completes before either arrives the method throws immediately.
+  /// Use this instead of <see cref="ReceiveDisplayErrorAsync"/> whenever external .NET processes
+  /// may exist in the environment and the server might show a picker rather than an error.
+  /// </summary>
+  protected async Task<(TestPickerRequest? Picker, string? Error)> ReceivePickerOrErrorAsync(
+    Func<TestPickerRequest, string[]?> respond)
+  {
+    var pickerTask = _pickers.Reader.ReadAsync().AsTask();
+    var errorTask = _displayErrors.Reader.ReadAsync().AsTask();
+    var scope = _rpcScope;
+    var timeoutTask = Task.Delay(PickerTimeout);
+
+    var winner = scope is not null
+      ? await Task.WhenAny(pickerTask, errorTask, scope, timeoutTask)
+      : await Task.WhenAny(pickerTask, errorTask, timeoutTask);
+
+    if (winner == timeoutTask)
+      throw new XunitException(
+        $"Timed out after {PickerTimeout.TotalSeconds:0}s waiting for picker/pick or displayError.{CollectPendingErrors()}");
+
+    if (winner == scope)
+    {
+      await scope;
+      // Scope may complete at the same instant as delivery — do one final check.
+      if (pickerTask.IsCompletedSuccessfully)
+      {
+        var (req, tcs) = pickerTask.Result;
+        tcs.SetResult(respond(req));
+        return (req, null);
+      }
+      if (errorTask.IsCompletedSuccessfully)
+        return (null, errorTask.Result);
+      throw new XunitException(
+        $"RPC scope completed before picker/pick or displayError arrived.{CollectPendingErrors()}");
+    }
+
+    if (winner == pickerTask)
+    {
+      var (req, tcs) = await pickerTask;
+      tcs.SetResult(respond(req));
+      return (req, null);
+    }
+
+    return (null, await errorTask);
+  }
 
   private string CollectPendingErrors()
   {

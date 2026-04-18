@@ -224,8 +224,7 @@ public sealed class VsTestAdapter(
     {
       var session = await debugOrchestrator.StartClientDebugSessionAsync(
           project.ProjectFullPath,
-          new(project.ProjectFullPath, project.TargetFramework, null, null),
-          debugStrategyFactory.CreateStandardAttachStrategy(pid),
+          debugStrategyFactory.CreateStandardAttachStrategy(pid, project.Raw.ProjectDir),
           ct);
 
       session.Stopped += onStopped;
