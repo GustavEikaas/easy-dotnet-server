@@ -28,6 +28,7 @@ using EasyDotnet.IDE.TestRunner.Registry;
 using EasyDotnet.IDE.TestRunner.Service;
 using EasyDotnet.IDE.TestRunner.Store;
 using EasyDotnet.IDE.Utils;
+using EasyDotnet.IDE.PackageManager;
 using EasyDotnet.IDE.Workspace.Services;
 using EasyDotnet.Services;
 using Microsoft.Extensions.DependencyInjection;
@@ -117,6 +118,7 @@ public static class DiModules
     services.AddTransient<ILaunchProfileService, LaunchProfileService>();
     services.AddTransient<INotificationService, NotificationService>();
     services.AddTransient<NugetService>();
+    services.AddPackageManager();
     services.AddTransient<OutdatedService>();
     services.AddTransient<GlobalJsonService>();
 
