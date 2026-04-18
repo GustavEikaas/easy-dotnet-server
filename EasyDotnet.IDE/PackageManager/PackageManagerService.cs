@@ -235,6 +235,107 @@ public class PackageManagerService(
     return await editorService.RequestPickerAsync("Pick project to add package to", choices, ct: ct);
   }
 
+  public async Task RemovePackageAsync(RemovePackageRequest request, CancellationToken ct)
+  {
+    using var progress = new ProgressScope(editorService, "Remove Package", "Loading project…");
+
+    var projectPath = request.ProjectPath ?? await PickProjectAsync(ct);
+    if (projectPath is null) return;
+
+    InstalledPackageReference[] toRemove;
+
+    if (request.PackageIds is { Length: > 0 })
+    {
+      toRemove = [.. request.PackageIds.Select(id => new InstalledPackageReference(id, ""))];
+    }
+    else
+    {
+      progress.Report("Reading installed packages…");
+
+      var installed = await buildHostManager.ListPackageReferencesAsync(projectPath, ct);
+
+      if (installed.Length == 0)
+      {
+        await editorService.DisplayError($"No packages found in {Path.GetFileNameWithoutExtension(projectPath)}");
+        return;
+      }
+
+      var choices = installed
+          .Select(p => new PickerChoice<InstalledPackageReference>(p.Id, $"{p.Id}  {p.Version}", p))
+          .ToArray();
+
+      var picked = await editorService.RequestMultiPickerAsync(
+          "Pick packages to remove",
+          choices,
+          ct: ct);
+
+      if (picked is null or { Length: 0 }) return;
+
+      toRemove = picked;
+    }
+
+    foreach (var pkg in toRemove)
+    {
+      progress.Report($"Removing {pkg.Id}…");
+
+      var (success, _, err) = await processQueue.RunProcessAsync(
+          "dotnet",
+          $"remove \"{projectPath}\" package \"{pkg.Id}\"",
+          new ProcessOptions(KillOnTimeout: true),
+          ct);
+
+      if (!success)
+      {
+        logger.LogError("dotnet remove package failed for {pkg}: {err}", pkg.Id, err);
+        await editorService.DisplayError($"Failed to remove {pkg.Id}: {err}");
+        return;
+      }
+    }
+
+    progress.Report("Restoring packages…");
+
+    var restoreResults = await buildHostManager
+        .RestoreNugetPackagesAsync(new RestoreRequest([projectPath]), ct)
+        .ToListAsync(ct);
+
+    var allDiagnostics = restoreResults
+        .Where(r => r.Output is not null)
+        .SelectMany(r => r.Output!.Diagnostics)
+        .ToList();
+
+    var errors = allDiagnostics
+        .Where(d => d.Severity == BuildDiagnosticSeverity.Error)
+        .Select(d => new QuickFixItem(
+            d.File ?? "",
+            d.LineNumber,
+            d.ColumnNumber,
+            string.IsNullOrEmpty(d.Code) ? d.Message ?? "" : $"[{d.Code}] {d.Message}",
+            QuickFixItemType.Error))
+        .ToList();
+
+    var warnings = allDiagnostics
+        .Where(d => d.Severity == BuildDiagnosticSeverity.Warning)
+        .Select(d => new QuickFixItem(
+            d.File ?? "",
+            d.LineNumber,
+            d.ColumnNumber,
+            string.IsNullOrEmpty(d.Code) ? d.Message ?? "" : $"[{d.Code}] {d.Message}",
+            QuickFixItemType.Warning))
+        .ToList();
+
+    if (errors.Count > 0)
+    {
+      await editorService.SetQuickFixList([.. errors.Concat(warnings)]);
+      return;
+    }
+
+    if (warnings.Count > 0)
+      await editorService.SetQuickFixListSilent([.. warnings]);
+
+    var names = string.Join(", ", toRemove.Select(p => p.Id));
+    await editorService.DisplayMessage($"Removed successfully: {names}");
+  }
+
   private static IEnumerable<string> WrapText(string text, int maxWidth)
   {
     var words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
