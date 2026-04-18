@@ -9,9 +9,7 @@ public interface IMsBuildService
 {
   string GetDotnetSdkBasePath();
   string GetVsTestPath();
-  string GetDotnetWatchTargets();
   SdkInstallation[] QuerySdkInstallations();
-  bool HasMinimumSdk(Version version);
   Task<bool> AddProjectReferenceAsync(string projectPath, string targetPath, CancellationToken cancellationToken = default);
   [Obsolete("Use BuildHostManager instead")]
   Task<DotnetProject> GetOrSetProjectPropertiesAsync(string projectPath, string? targetFrameworkMoniker = null, string configuration = "Debug", CancellationToken cancellationToken = default);
