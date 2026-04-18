@@ -122,6 +122,11 @@ public static class DiModules
     services.AddTransient<OutdatedService>();
     services.AddTransient<GlobalJsonService>();
 
+    services.AddSingleton<EasyDotnet.IDE.Upgrade.Dispatch.UpgradeDispatcher>();
+    services.AddTransient<EasyDotnet.IDE.Upgrade.Service.UpgradeAnalysisService>();
+    services.AddSingleton<EasyDotnet.IDE.Upgrade.Service.UpgradeApplyService>();
+    services.AddTransient<EasyDotnet.IDE.Upgrade.Service.ChangelogService>();
+
     services.AddTransient<ProjectReferenceService>();
     services.AddTransient<SolutionManagementService>();
     services.AddTransient<PostActionProcessor>();
