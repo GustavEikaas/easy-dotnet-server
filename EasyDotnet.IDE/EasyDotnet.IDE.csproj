@@ -43,6 +43,7 @@
     <PackageReference Include="Serilog.Extensions.Logging" Version="9.0.2" />
     <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+    <PackageReference Include="Microsoft.Diagnostics.NETCore.Client" Version="0.2.661903" />
     <PackageReference Include="StreamJsonRpc" Version="2.21.69" />
     <PackageReference Include="Microsoft.VisualStudio.SolutionPersistence" Version="1.0.52" />
     <PackageReference Include="NJsonSchema" Version="11.4.0" />

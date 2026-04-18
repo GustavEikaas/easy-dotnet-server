@@ -2,46 +2,35 @@ using System.Collections.Concurrent;
 using EasyDotnet.Debugger.Interfaces;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Types;
-using EasyDotnet.MsBuild;
 using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.IDE.Services;
 
-public sealed record DebuggerStartRequest(
-  string TargetPath,
-  string? TargetFramework,
-  string? Configuration,
-  string? LaunchProfileName
-);
-
 public interface IDebugOrchestrator
 {
   Task<Debugger.DebugSession> StartServerDebugSessionAsync(
-      string projectPath,
+      string sessionKey,
       string sessionId,
-      DebuggerStartRequest startRequest,
       IDebugSessionStrategy strategy,
       CancellationToken cancellationToken);
 
   Task<Debugger.DebugSession> StartClientDebugSessionAsync(
-      string projectPath,
-      DebuggerStartRequest startRequest,
+      string sessionKey,
       IDebugSessionStrategy strategy,
       CancellationToken cancellationToken);
 
-  Debugger.DebugSession? GetSessionService(string projectPath);
+  Debugger.DebugSession? GetSessionService(string sessionKey);
 
-  Task StopDebugSessionAsync(string projectPath);
+  Task StopDebugSessionAsync(string sessionKey);
 
-  DebugSession? GetSession(string projectPath);
+  DebugSession? GetSession(string sessionKey);
 
-  bool HasActiveSession(string projectPath);
+  bool HasActiveSession(string sessionKey);
 }
 
 public class DebugOrchestrator(
     IDebugSessionManager debugSessionManager,
     IDebugSessionFactory debugSessionFactory,
-    IMsBuildService msBuildService,
     IEditorService editorService,
     IClientService clientService,
     ILogger<DebugOrchestrator> logger) : IDebugOrchestrator
@@ -49,143 +38,120 @@ public class DebugOrchestrator(
   private readonly ConcurrentDictionary<string, Debugger.DebugSession> _sessionServices = new();
 
   public async Task<Debugger.DebugSession> StartClientDebugSessionAsync(
-      string projectPath,
-      DebuggerStartRequest startRequest,
+      string sessionKey,
       IDebugSessionStrategy strategy,
       CancellationToken cancellationToken)
   {
-    var projectName = Path.GetFileNameWithoutExtension(projectPath);
-    logger.LogInformation("Starting debug session for {project}.", projectName);
+    logger.LogInformation("Starting debug session for {SessionKey}.", sessionKey);
 
-    if (_sessionServices.TryGetValue(projectPath, out var existingService))
+    if (_sessionServices.TryGetValue(sessionKey, out var existingService))
     {
       if (!existingService.DisposalStarted.IsCompleted)
       {
-        throw new InvalidOperationException($"A debug session is already in progress for {projectName}");
+        throw new InvalidOperationException($"A debug session is already in progress for {sessionKey}");
       }
 
-      logger.LogInformation("Cleaning up previous session for {project}.", projectName);
+      logger.LogInformation("Cleaning up previous session for {SessionKey}.", sessionKey);
       await existingService.ForceDisposeAsync();
-      _sessionServices.TryRemove(projectPath, out _);
+      _sessionServices.TryRemove(sessionKey, out _);
     }
 
     return await debugSessionManager.StartClientSessionAsync(
-        projectPath,
-        () => StartDebugSessionInternalAsync(startRequest, strategy, cancellationToken),
+        sessionKey,
+        () => StartDebugSessionInternalAsync(sessionKey, strategy, cancellationToken),
         cancellationToken);
   }
 
   public async Task<Debugger.DebugSession> StartServerDebugSessionAsync(
-      string projectPath,
+      string sessionKey,
       string sessionId,
-      DebuggerStartRequest startRequest,
       IDebugSessionStrategy strategy,
       CancellationToken cancellationToken)
   {
-    logger.LogInformation("Starting server debug session for {projectPath} (SessionId: {sessionId})", projectPath, sessionId);
+    logger.LogInformation("Starting server debug session for {SessionKey} (SessionId: {SessionId})", sessionKey, sessionId);
 
-    if (_sessionServices.TryGetValue(projectPath, out var existingService))
+    if (_sessionServices.TryGetValue(sessionKey, out var existingService))
     {
       if (!existingService.DisposalStarted.IsCompleted)
       {
-        throw new InvalidOperationException($"A debug session is already in progress for {projectPath}");
+        throw new InvalidOperationException($"A debug session is already in progress for {sessionKey}");
       }
 
-      logger.LogInformation("Existing session is disposing, forcing cleanup for {projectPath}", projectPath);
+      logger.LogInformation("Existing session is disposing, forcing cleanup for {SessionKey}", sessionKey);
       await existingService.ForceDisposeAsync();
-      _sessionServices.TryRemove(projectPath, out _);
+      _sessionServices.TryRemove(sessionKey, out _);
     }
 
     return await debugSessionManager.StartServerSessionAsync(
-        projectPath,
+        sessionKey,
         sessionId,
-        () => StartDebugSessionInternalAsync(startRequest, strategy, cancellationToken),
+        () => StartDebugSessionInternalAsync(sessionKey, strategy, cancellationToken),
         cancellationToken);
   }
 
-  public async Task StopDebugSessionAsync(string projectPath)
+  public async Task StopDebugSessionAsync(string sessionKey)
   {
-    var projectName = Path.GetFileNameWithoutExtension(projectPath);
-    logger.LogInformation("Stopping debug session for {project}.", projectName);
+    logger.LogInformation("Stopping debug session for {SessionKey}.", sessionKey);
 
-    await debugSessionManager.EndSessionAsync(projectPath, CancellationToken.None);
+    await debugSessionManager.EndSessionAsync(sessionKey, CancellationToken.None);
 
-    if (_sessionServices.TryGetValue(projectPath, out var service))
+    if (_sessionServices.TryGetValue(sessionKey, out var service))
     {
       _ = Task.Run(async () =>
       {
         try
         {
           await service.DisposeAsync();
-          logger.LogDebug("Background disposal complete for {project}.", projectName);
+          logger.LogDebug("Background disposal complete for {SessionKey}.", sessionKey);
         }
         catch (Exception ex)
         {
-          logger.LogError(ex, "Error during background disposal for {project}.", projectName);
+          logger.LogError(ex, "Error during background disposal for {SessionKey}.", sessionKey);
         }
         finally
         {
-          _sessionServices.TryRemove(projectPath, out _);
+          _sessionServices.TryRemove(sessionKey, out _);
         }
       });
     }
   }
 
-  public DebugSession? GetSession(string projectPath) =>
-      debugSessionManager.GetSession(projectPath);
+  public DebugSession? GetSession(string sessionKey) =>
+      debugSessionManager.GetSession(sessionKey);
 
-  public bool HasActiveSession(string projectPath) =>
-      debugSessionManager.HasActiveSession(projectPath);
+  public bool HasActiveSession(string sessionKey) =>
+      debugSessionManager.HasActiveSession(sessionKey);
 
-  public Debugger.DebugSession? GetSessionService(string projectPath)
+  public Debugger.DebugSession? GetSessionService(string sessionKey)
   {
-    _sessionServices.TryGetValue(projectPath, out var service);
+    _sessionServices.TryGetValue(sessionKey, out var service);
     return service;
   }
 
   private async Task<Debugger.DebugSession> StartDebugSessionInternalAsync(
-      DebuggerStartRequest request,
+      string sessionKey,
       IDebugSessionStrategy strategy,
       CancellationToken cancellationToken)
   {
-    var projectPath = request.TargetPath;
-    var projectName = Path.GetFileNameWithoutExtension(projectPath);
+    var label = Path.GetFileNameWithoutExtension(sessionKey);
 
     try
     {
-      //TODO: replace with WorkspaceBuildHost and require TFM if multi target
-#pragma warning disable CS0618 // Type or member is obsolete
-      var project = await msBuildService.GetOrSetProjectPropertiesAsync(
-          request.TargetPath,
-          request.TargetFramework,
-          request.Configuration ?? "Debug",
-          cancellationToken);
-#pragma warning restore CS0618 // Type or member is obsolete
-
       var binaryPath = clientService.ClientOptions?.DebuggerOptions?.BinaryPath;
       if (string.IsNullOrEmpty(binaryPath))
-      {
         throw new InvalidOperationException("Failed to start debugger, no binary path provided");
-      }
 
-      var platform = project.GetPlatform();
-      if (platform != DotnetPlatform.None && platform != DotnetPlatform.Windows)
-      {
-        throw new InvalidOperationException($"Debugging for {platform} is not supported yet");
+      var session = debugSessionFactory.Create(
+          async (dapRequest, proxy) =>
+          {
+            await strategy.TransformRequestAsync(dapRequest, proxy);
+            return dapRequest;
+          },
+          clientService?.ClientOptions?.DebuggerOptions?.ApplyValueConverters ?? false);
 
-      }
+      _sessionServices[sessionKey] = session;
 
-      var session = debugSessionFactory.Create(async (dapRequest, proxy) =>
-             {
-               await strategy.TransformRequestAsync(dapRequest, proxy);
-               return dapRequest;
-             },
-             clientService?.ClientOptions?.DebuggerOptions?.ApplyValueConverters ?? false
-         );
-
-      _sessionServices[projectPath] = session;
-
-      await strategy.PrepareAsync(project, cancellationToken);
+      await strategy.PrepareAsync(cancellationToken);
 
       _ = Task.Run(async () =>
       {
@@ -210,18 +176,18 @@ public class DebugOrchestrator(
             (ex) =>
             {
               editorService.DisplayError(ex.Message);
-              logger.LogError(ex, "Failed to start debugger process for {project}.", projectName);
+              logger.LogError(ex, "Failed to start debugger process for {Label}.", label);
             },
             async () =>
             {
               try
               {
-                logger.LogDebug("Session cleanup callback invoked for {project}.", projectName);
-                await StopDebugSessionAsync(projectPath);
+                logger.LogDebug("Session cleanup callback invoked for {Label}.", label);
+                await StopDebugSessionAsync(sessionKey);
               }
               catch (Exception ex)
               {
-                logger.LogError(ex, "Error during session cleanup for {project}.", projectName);
+                logger.LogError(ex, "Error during session cleanup for {Label}.", label);
               }
               finally
               {
@@ -230,16 +196,16 @@ public class DebugOrchestrator(
             },
             cancellationToken);
 
-        logger.LogInformation("Debug session ready for {project} on port {port}.", projectName, session.Port);
+        logger.LogInformation("Debug session ready for {Label} on port {Port}.", label, session.Port);
 
         return session;
       }
       catch (Exception ex)
       {
-        logger.LogError(ex, "Failed to start debug session for {project}.", projectName);
+        logger.LogError(ex, "Failed to start debug session for {Label}.", label);
 
         await strategy.DisposeAsync();
-        if (_sessionServices.TryRemove(projectPath, out var service))
+        if (_sessionServices.TryRemove(sessionKey, out var service))
         {
           try
           {
@@ -255,7 +221,7 @@ public class DebugOrchestrator(
     }
     catch (Exception ex)
     {
-      logger.LogError(ex, "Error initializing debug session for {project}.", projectName);
+      logger.LogError(ex, "Error initializing debug session for {Label}.", label);
       await strategy.DisposeAsync();
       throw;
     }
