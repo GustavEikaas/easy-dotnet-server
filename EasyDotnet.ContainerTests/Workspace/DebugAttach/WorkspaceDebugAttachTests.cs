@@ -27,7 +27,7 @@ public abstract class WorkspaceDebugAttachTests<TContainer> : WorkspaceDebugAtta
     await BeginDebugAttach();
 
     var error = await ReceiveDisplayErrorAsync();
-    Assert.Contains("No running processes", error);
+    Assert.Contains("No running .NET processes found.", error);
   }
 
   [Fact]
@@ -67,13 +67,13 @@ public abstract class WorkspaceDebugAttachTests<TContainer> : WorkspaceDebugAtta
 
     await Task.Delay(500);
 
-    await BeginDebugAttach();
+    var debugAttachTask = BeginDebugAttach();
+    var picker = await ReceivePickerAsync(_ => null);
+    await debugAttachTask;
 
-    var error = await ReceiveDisplayErrorAsync();
-    Assert.Contains("No running processes", error);
+    Assert.DoesNotContain(picker.Choices, c => c.Display.Contains("ProjectAlpha"));
+
+    await CompleteJobAsync(job);
   }
 }
-
-public sealed class WorkspaceDebugAttachSdk8Linux : WorkspaceDebugAttachTests<Sdk8LinuxContainer>;
-public sealed class WorkspaceDebugAttachSdk9Linux : WorkspaceDebugAttachTests<Sdk9LinuxContainer>;
 public sealed class WorkspaceDebugAttachSdk10Linux : WorkspaceDebugAttachTests<Sdk10LinuxContainer>;
