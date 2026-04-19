@@ -42,6 +42,7 @@ public sealed class TempWorkspaceBuilder
   private string? _singleFileRelativePath;
   private string? _globalJsonSdkVersion;
   private string? _globalJsonRollForward;
+  private string? _singleFileCode;
   private bool _mtpRunnerGlobalJson;
 
   /// <summary>Declares a <c>.slnx</c> solution file at <paramref name="relativePath"/> (relative to workspace root).</summary>
@@ -80,9 +81,10 @@ public sealed class TempWorkspaceBuilder
   /// Adds a standalone <c>.cs</c> file at <paramref name="relativePath"/> (relative to workspace root).
   /// Accessible via <see cref="TempWorkspace.SingleFilePath"/>.
   /// </summary>
-  public TempWorkspaceBuilder SingleFileProject(string relativePath)
+  public TempWorkspaceBuilder SingleFileProject(string relativePath, string? code = null)
   {
     _singleFileRelativePath = relativePath;
+    _singleFileCode = code;
     return this;
   }
 
@@ -172,7 +174,9 @@ public sealed class TempWorkspaceBuilder
     {
       singleFilePath = Path.Combine(root, _singleFileRelativePath);
       Directory.CreateDirectory(Path.GetDirectoryName(singleFilePath)!);
-      File.WriteAllText(singleFilePath, """Console.WriteLine("Hello from standalone script!");""");
+
+      var code = _singleFileCode ?? """Console.WriteLine("Hello from standalone script!");""";
+      File.WriteAllText(singleFilePath, code);
     }
 
     if (_globalJsonSdkVersion is not null)
