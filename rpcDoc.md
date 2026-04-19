@@ -264,6 +264,17 @@
 
 ---
 
+## DapController
+
+### `dap/breakpoint-candidates`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | BreakpointCandidatesRequest |   |
+
+**Returns:** `Task<List<BreakpointCandidate>>`
+
+---
+
 ## DiagnosticsController
 
 ### `diagnostics/buildserver`

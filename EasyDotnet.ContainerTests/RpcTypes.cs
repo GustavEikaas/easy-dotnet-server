@@ -7,7 +7,6 @@ public sealed record TestInitializeRequest(TestClientInfo ClientInfo, TestProjec
 public sealed record TestProjectInfo(string RootDir, string? SolutionFile = null);
 public sealed record TestClientInfo(string Name, string? Version);
 
-// Reverse-request payloads (server → client)
 public sealed record TestSelectionOption(string Id, string Display);
 public sealed record TestPromptSelectionRequest(
   string Prompt,
@@ -38,7 +37,14 @@ public enum TestQuickFixItemType
   Error = 2
 }
 
-// Picker reverse-request payloads (server → client via picker/pick)
 public sealed record TestPickerChoice(string Id, string Display);
 public sealed record TestPickerRequest(Guid Guid, string Prompt, TestPickerChoice[] Choices, bool Multi, bool Preview);
 public sealed record TestPickerResult(string[]? SelectedIds);
+
+public sealed record TestBreakpointCandidateRequest(string FilePath, int Line);
+
+public sealed record TestBreakpointCandidate(
+    int Line,
+    int Column,
+    string TargetText,
+    string ContextPreview);
