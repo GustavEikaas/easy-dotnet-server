@@ -12,4 +12,3 @@ public static class DapExtensions
           "dap/breakpoint-candidates",
           new { filePath, line });
 }
-
