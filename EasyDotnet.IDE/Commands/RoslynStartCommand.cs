@@ -5,7 +5,6 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyDotnet.IDE.Services;
-using EasyDotnet.Infrastructure.Services;
 using Microsoft.Build.Locator;
 using Spectre.Console;
 using Spectre.Console.Cli;
