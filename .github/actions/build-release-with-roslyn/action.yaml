@@ -12,7 +12,8 @@ inputs:
   razorExtensionVersion:
     description: 'NuGet package version for Microsoft.VisualStudioCode.RazorExtension'
     required: true
-    default: '10.0.0-preview.26217.1'
+    # 26152.1
+    default: '10.0.0-preview.26155.3'
   roslynOutputPath:
     description: 'Where to copy Roslyn DLLs inside project output'
     required: true
