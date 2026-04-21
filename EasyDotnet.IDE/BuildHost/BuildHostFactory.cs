@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO.Pipes;
 using System.Reflection;
 using EasyDotnet.IDE.Interfaces;
+using EasyDotnet.IDE.Logging;
 using EasyDotnet.IDE.Utils;
 using Microsoft.Build.Locator;
 using Microsoft.Extensions.Logging;
@@ -16,7 +17,7 @@ public enum BuildServerRuntime
   Net80
 }
 
-public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService clientService, CurrentLogLevel currentLogLevel, GlobalJsonService globalJsonService)
+public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService clientService, LogLevelState logLevelState, GlobalJsonService globalJsonService)
 {
   public async Task<(Process, JsonRpc)> StartServerAsync()
   {
@@ -76,22 +77,21 @@ public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService c
       RedirectStandardOutput = false,
       WorkingDirectory = coreFolder
     };
-    var logDirectory = currentLogLevel.LogDir;
-    var logLevel = currentLogLevel.Loglevel.ToString();
+    var logLevel = logLevelState.Current.ToString();
 
     if (runtime == BuildServerRuntime.Net472)
     {
       startInfo.FileName = BuildHostLocator.GetBuildServerFramework();
-      startInfo.Arguments = $"--pipe \"{pipeName}\" --log-level={logLevel} --logDirectory \"{logDirectory}\"";
+      startInfo.Arguments = $"--pipe \"{pipeName}\" --log-level={logLevel}";
     }
     else
     {
       startInfo.FileName = "dotnet";
       var fxVersionArg = ResolveFxVersionArg();
 #if DEBUG
-      startInfo.Arguments = $"exec {fxVersionArg}\"{BuildHostLocator.GetBuildServerCore()}\" --pipe \"{pipeName}\" --log-level=Verbose --logDirectory \"{logDirectory}\"";
+      startInfo.Arguments = $"exec {fxVersionArg}\"{BuildHostLocator.GetBuildServerCore()}\" --pipe \"{pipeName}\" --log-level=Verbose";
 #else
-      startInfo.Arguments = $"exec {fxVersionArg}\"{BuildHostLocator.GetBuildServerCore()}\" --pipe \"{pipeName}\" --log-level={logLevel} --logDirectory \"{logDirectory}\"";
+      startInfo.Arguments = $"exec {fxVersionArg}\"{BuildHostLocator.GetBuildServerCore()}\" --pipe \"{pipeName}\" --log-level={logLevel}";
 #endif
     }
 
