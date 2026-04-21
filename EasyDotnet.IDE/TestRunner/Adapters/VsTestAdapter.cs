@@ -30,6 +30,7 @@ public sealed class VsTestAdapter(
     SettingsService settingsService,
     ILoggerFactory loggerFactory) : ITestAdapter, IAsyncDisposable
 {
+  private readonly ILogger _logger = loggerFactory.CreateLogger<VsTestAdapter>();
   private static readonly TestPlatformOptions DefaultOptions = new()
   {
     CollectMetrics = false,
@@ -57,9 +58,13 @@ public sealed class VsTestAdapter(
         try { wrapper.CancelDiscovery(); } catch { /* best effort */ }
       });
 
-      var handler = new StreamingDiscoveryHandler(onDiscovered, loggerFactory);
+      var handler = new StreamingDiscoveryHandler(loggerFactory);
       wrapper.DiscoverTests([project.TargetPath], null, DefaultOptions, null, handler);
-      await handler.Completion;
+      await foreach (var discoveredTest in handler.ReadAllAsync().WithCancellation(ct))
+      {
+        try { await onDiscovered(discoveredTest); }
+        catch (Exception ex) { _logger.LogError(ex, "Error in onDiscovered callback for {TestCase}", discoveredTest.FullyQualifiedName); }
+      }
     }
     finally
     {
