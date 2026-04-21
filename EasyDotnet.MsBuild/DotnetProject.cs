@@ -20,7 +20,7 @@ public record DotnetProject
     bool GeneratePackageOnBuild,
     bool IsPackable,
     string? PackageId,
-    Version? Version,
+    string? Version,
     string? PackageOutputPath,
     string? TargetFrameworkVersion,
     bool UsingMicrosoftNETSdk,
