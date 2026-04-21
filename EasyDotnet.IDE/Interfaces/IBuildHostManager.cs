@@ -13,4 +13,6 @@ public interface IBuildHostManager
   Task<ConvertSingleFileResponse> ConvertFileToProjectAsync(string entryPointFilePath, CancellationToken cancellationToken);
   Task<BuildServerDiagnosticsResponse> GetBuildServerDiagnosticsAsync(CancellationToken cancellationToken);
   Task<InstalledPackageReference[]> ListPackageReferencesAsync(string projectPath, CancellationToken cancellationToken);
+  Task SetLogLevelAsync(string level, CancellationToken cancellationToken);
+  Task<string[]> GetLogsAsync(CancellationToken cancellationToken);
 }

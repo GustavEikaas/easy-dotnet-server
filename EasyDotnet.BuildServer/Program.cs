@@ -14,17 +14,16 @@ static class Program
   {
     var logLevel = ParseLogLevel(args);
     var pipe = ParsePipe(args);
-    var logDirectory = ParseLogDirectory(args);
 
-    if (pipe is null || logDirectory is null)
+    if (pipe is null)
     {
-      Console.Error.WriteLine("No --pipe passed or --logDirectory not passed");
+      Console.Error.WriteLine("No --pipe passed");
       return 1;
     }
 
     var instance = RegisterMSBuild();
 
-    return await RunServer(logLevel, logDirectory, pipe, instance);
+    return await RunServer(logLevel, pipe, instance);
   }
 
   private static MsBuildInstance RegisterMSBuild()
@@ -134,7 +133,6 @@ static class Program
   [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
   private static async Task<int> RunServer(
     SourceLevels logLevel,
-    string logDirectory,
     string pipeName,
     MsBuildInstance instance)
   {
@@ -142,7 +140,7 @@ static class Program
 
     var jsonRpc = new JsonRpc(messageHandler);
 
-    var serviceProvider = DiModule.BuildServiceProvider(jsonRpc, instance, logLevel, logDirectory);
+    var serviceProvider = DiModule.BuildServiceProvider(jsonRpc, instance, logLevel);
 
     var logger = serviceProvider.GetRequiredService<ILogger<JsonRpc>>();
 
@@ -173,21 +171,6 @@ static class Program
     return null;
   }
 
-  private static string? ParseLogDirectory(string[] args)
-  {
-    for (var i = 0; i < args.Length; i++)
-    {
-      var arg = args[i];
-
-      if (arg.Equals("--logDirectory", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length && !args[i + 1].StartsWith("--"))
-      {
-        return args[i + 1];
-      }
-    }
-
-    return null;
-  }
-
   private static SourceLevels ParseLogLevel(string[] args)
   {
     foreach (var arg in args)
@@ -204,7 +187,7 @@ static class Program
           "critical" => SourceLevels.Critical,
           "all" => SourceLevels.All,
           "off" => SourceLevels.Off,
-          _ => SourceLevels.Information
+          _ => SourceLevels.Off
         };
       }
     }
@@ -212,7 +195,7 @@ static class Program
 #if DEBUG
     return SourceLevels.Verbose;
 #else
-    return SourceLevels.Information;
+    return SourceLevels.Off;
 #endif
   }
 }
