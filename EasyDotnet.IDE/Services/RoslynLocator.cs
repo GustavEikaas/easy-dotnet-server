@@ -80,6 +80,16 @@ public static class RoslynLocator
         .Where(File.Exists)];
   }
 
+  public static string GetRazorExtensionDir()
+  {
+    var dir = Path.GetFullPath(Path.Combine(GetRoslynBaseDir(), "RazorExtension"));
+    if (!Directory.Exists(dir))
+    {
+      throw new DirectoryNotFoundException($"RazorExtension folder not found: {dir}");
+    }
+    return dir;
+  }
+
   /// <summary>
   /// Returns the base Roslyn folder inside the .NET tool installation folder.
   /// </summary>

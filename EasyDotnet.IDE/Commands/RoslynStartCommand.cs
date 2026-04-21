@@ -1,4 +1,3 @@
-using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
@@ -35,14 +34,6 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
     [Description("Full path to the Roslyn dependency used with DevKit (optional).")]
     [CommandOption("--devKitDependencyPath <PATH>")]
     public string? DevKitDependencyPath { get; init; }
-
-    [Description("Full path to the Razor source generator (optional).")]
-    [CommandOption("--razorSourceGenerator <PATH>")]
-    public string? RazorSourceGenerator { get; init; }
-
-    [Description("Full path to the Razor design time target path (optional).")]
-    [CommandOption("--razorDesignTimePath <PATH>")]
-    public string? RazorDesignTimePath { get; init; }
 
     [Description("Full path to the C# design time target path (optional).")]
     [CommandOption("--csharpDesignTimePath <PATH>")]
@@ -107,17 +98,13 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
       startInfo.ArgumentList.Add(settings.DevKitDependencyPath);
     }
 
-    if (!string.IsNullOrWhiteSpace(settings.RazorSourceGenerator))
-    {
-      startInfo.ArgumentList.Add("--razorSourceGenerator");
-      startInfo.ArgumentList.Add(settings.RazorSourceGenerator);
-    }
-
-    if (!string.IsNullOrWhiteSpace(settings.RazorDesignTimePath))
-    {
-      startInfo.ArgumentList.Add("--razorDesignTimePath");
-      startInfo.ArgumentList.Add(settings.RazorDesignTimePath);
-    }
+    var razorExtensionDir = RoslynLocator.GetRazorExtensionDir();
+    var sourceGenerator = Path.Combine(razorExtensionDir, "Microsoft.CodeAnalysis.Razor.Compiler.dll");
+    var designTimePath = Path.Combine(razorExtensionDir, "Targets", "Microsoft.NET.Sdk.Razor.DesignTime.targets");
+    var extensionDll = Path.Combine(razorExtensionDir, "Microsoft.VisualStudioCode.RazorExtension.dll");
+    startInfo.ArgumentList.Add($"--extension={extensionDll}");
+    startInfo.ArgumentList.Add($"--razorSourceGenerator={sourceGenerator}");
+    startInfo.ArgumentList.Add($"--razorDesignTimePath={designTimePath}");
 
     if (!string.IsNullOrWhiteSpace(settings.CSharpDesignTimePath))
     {
