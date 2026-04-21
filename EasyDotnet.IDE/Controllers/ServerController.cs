@@ -13,7 +13,7 @@ public class ServerController(
 {
   public sealed record SetLogLevelRequest(string Level);
 
-  [JsonRpcMethod("_server/setLogLevel")]
+  [JsonRpcMethod("_server/setLogLevel", UseSingleObjectParameterDeserialization = true)]
   public async Task SetLogLevel(SetLogLevelRequest request, CancellationToken ct)
   {
     var parsed = LogLevelState.Parse(request.Level);

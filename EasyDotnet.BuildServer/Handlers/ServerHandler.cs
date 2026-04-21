@@ -8,7 +8,7 @@ public class ServerHandler(LogLevelState logLevelState, ILogger<ServerHandler> l
 {
   public sealed record SetLogLevelRequest(string Level);
 
-  [JsonRpcMethod("_server/setLogLevel")]
+  [JsonRpcMethod("_server/setLogLevel", UseSingleObjectParameterDeserialization = true)]
   public void SetLogLevel(SetLogLevelRequest request)
   {
     var parsed = LogLevelState.Parse(request.Level);
