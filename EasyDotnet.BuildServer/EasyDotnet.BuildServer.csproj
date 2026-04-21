@@ -19,26 +19,20 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Build"              Version="17.11.48" ExcludeAssets="runtime" PrivateAssets="all" />
-    <PackageReference Include="Microsoft.Build.Framework"    Version="17.11.48" ExcludeAssets="runtime" PrivateAssets="all" />
-    <PackageReference Include="Microsoft.Build.Tasks.Core"   Version="17.11.48" ExcludeAssets="runtime" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Build" Version="17.11.48" ExcludeAssets="runtime" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Build.Framework" Version="17.11.48" ExcludeAssets="runtime" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Build.Tasks.Core" Version="17.11.48" ExcludeAssets="runtime" PrivateAssets="all" />
     <PackageReference Include="Microsoft.Build.Utilities.Core" Version="17.11.48" ExcludeAssets="runtime" PrivateAssets="all" />
-    <PackageReference Include="Microsoft.NET.StringTools"    Version="17.11.48" ExcludeAssets="runtime" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.NET.StringTools" Version="17.11.48" ExcludeAssets="runtime" PrivateAssets="all" />
   </ItemGroup>
 
-<ItemGroup Condition="'$(TargetFramework)' == 'net472'">
-  <PackageReference Include="PolySharp" Version="1.15.0">
-    <PrivateAssets>all</PrivateAssets>
-    <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-  </PackageReference>
-  <PackageReference Include="System.Collections.Immutable"        Version="*" ExcludeAssets="runtime" PrivateAssets="all" />
-  <PackageReference Include="System.Text.Json"                    Version="*" ExcludeAssets="runtime" PrivateAssets="all" />
-  <PackageReference Include="System.Memory"                       Version="*" ExcludeAssets="runtime" PrivateAssets="all" />
-  <PackageReference Include="System.Buffers"                      Version="*" ExcludeAssets="runtime" PrivateAssets="all" />
-  <PackageReference Include="System.Threading.Tasks.Extensions"   Version="*" ExcludeAssets="runtime" PrivateAssets="all" />
-  <PackageReference Include="Microsoft.Bcl.AsyncInterfaces"       Version="*" ExcludeAssets="runtime" PrivateAssets="all" />
-  <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="*" ExcludeAssets="runtime" PrivateAssets="all" />
-</ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net472'">
+    <PackageReference Include="PolySharp" Version="1.15.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="System.Collections.Immutable" Version="9.0.0" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\EasyDotnet.BuildServer.Contracts\EasyDotnet.BuildServer.Contracts.csproj" />
