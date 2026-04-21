@@ -1,14 +1,5 @@
 ## RoslynController
 
-### `roslyn/bootstrap-file`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| filePath | string |   |
-| kind | Kind |   |
-| preferFileScopedNamespace | bool |   |
-
-**Returns:** `Task<BootstrapFileResultResponse>`
-
 ### `roslyn/get-workspace-diagnostics`
 | Parameter | Type | Optional |
 |-----------|------|----------|
@@ -36,6 +27,73 @@
 | includeTransitive | bool? | ✅  |
 
 **Returns:** `Task<IAsyncEnumerable<OutdatedDependencyInfoResponse>>`
+
+---
+
+## WorkspaceController
+
+### `workspace/build`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | WorkspaceBuildRequest |   |
+
+**Returns:** `Task`
+
+### `workspace/build-solution`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | WorkspaceBuildRequest |   |
+
+**Returns:** `Task`
+
+### `workspace/debug`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | WorkspaceDebugRequest |   |
+
+**Returns:** `Task`
+
+### `workspace/debug-attach`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | WorkspaceDebugAttachRequest |   |
+
+**Returns:** `Task`
+
+### `workspace/restore`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | WorkspaceRestoreRequest |   |
+
+**Returns:** `Task`
+
+### `workspace/run`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | WorkspaceRunRequest |   |
+
+**Returns:** `Task`
+
+### `workspace/test`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | WorkspaceTestRequest |   |
+
+**Returns:** `Task`
+
+### `workspace/test-solution`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | WorkspaceTestRequest |   |
+
+**Returns:** `Task`
+
+### `workspace/watch`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | WorkspaceWatchRequest |   |
+
+**Returns:** `Task`
 
 ---
 
@@ -105,6 +163,139 @@
 
 ---
 
+## SolutionManagementController
+
+### `solution/add-project`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+
+**Returns:** `Task`
+
+### `solution/remove-project`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+
+**Returns:** `Task`
+
+---
+
+## ProjectReferenceController
+
+### `msbuild/add-project-reference-interactive`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | ProjectReferenceRequest |   |
+
+**Returns:** `Task`
+
+### `msbuild/remove-project-reference-interactive`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | ProjectReferenceRequest |   |
+
+**Returns:** `Task`
+
+---
+
+## PickerController
+
+### `picker/preview`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| guid | Guid |   |
+| itemId | string |   |
+
+**Returns:** `Task<PreviewResult>`
+
+### `picker/query`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| guid | Guid |   |
+| query | string |   |
+
+**Returns:** `Task<PickerChoice[]>`
+
+---
+
+## PackageManagerController
+
+### `nuget/add-package`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | AddPackageRequest |   |
+
+**Returns:** `Task`
+
+### `nuget/list-installed`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | ListInstalledRequest |   |
+
+**Returns:** `Task<InstalledPackageReference[]>`
+
+### `nuget/remove-package`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | RemovePackageRequest |   |
+
+**Returns:** `Task`
+
+---
+
+## NewFileController
+
+### `json-code-gen-v2`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| jsonData | string |   |
+| filePath | string |   |
+| preferFileScopedNamespace | bool |   |
+
+**Returns:** `Task<BootstrapFileResultResponse>`
+
+### `roslyn/bootstrap-file-v2`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| filePath | string |   |
+| kind | Kind |   |
+| preferFileScopedNamespace | bool |   |
+
+**Returns:** `Task<BootstrapFileResultResponse>`
+
+---
+
+## DiagnosticsController
+
+### `diagnostics/buildserver`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+
+**Returns:** `Task<BuildServerDiagnosticsResponse>`
+
+---
+
+## ServerController
+
+### `_server/logdump`
+_No parameters_
+
+**Returns:** `String[]`
+
+### `_server/logdump/buildserver`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+
+**Returns:** `Task<String[]>`
+
+### `_server/setLogLevel`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | SetLogLevelRequest |   |
+
+**Returns:** `Task`
+
+---
+
 ## UserSecretsController
 
 ### `user-secrets/init`
@@ -123,11 +314,6 @@
 |-----------|------|----------|
 
 **Returns:** `Task`
-
-### `test/solution-command`
-_No parameters_
-
-**Returns:** `RunCommand`
 
 ---
 
@@ -210,17 +396,6 @@ _No parameters_
 
 ---
 
-## NetCoreDbgController
-
-### `debugger/start`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| request | DebuggerStartRequest |   |
-
-**Returns:** `Task<DebuggerStartResponse>`
-
----
-
 ## MsBuildController
 
 ### `msbuild/add-project-reference`
@@ -267,30 +442,6 @@ _No parameters_
 | targetPath | string |   |
 
 **Returns:** `Task<bool>`
-
----
-
-## LaunchProfileController
-
-### `launch-profiles`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| targetPath | string |   |
-
-**Returns:** `IAsyncEnumerable<LaunchProfileResponse>`
-
----
-
-## JsonCodeGen
-
-### `json-code-gen`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| jsonData | string |   |
-| filePath | string |   |
-| preferFileScopedNamespace | bool |   |
-
-**Returns:** `Task<BootstrapFileResultResponse>`
 
 ---
 

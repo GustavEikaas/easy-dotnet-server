@@ -1,15 +1,14 @@
 using System.IO.Abstractions;
-using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
-using EasyDotnet.Domain.Models.Client;
-using EasyDotnet.IDE.Utils;
-using EasyDotnet.Infrastructure.Settings;
+using EasyDotnet.IDE.Interfaces;
+using EasyDotnet.IDE.Models.Client;
+using EasyDotnet.IDE.Models.Client.Prompt;
+using EasyDotnet.IDE.Settings;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Controllers.Test;
 
 public class TestController(
-  GlobalJsonService globalJsonService,
   IClientService clientService,
   IFileSystem fileSystem,
   SettingsService settingsService,
@@ -58,22 +57,5 @@ public class TestController(
     }
 
     settingsService.SetProjectRunSettings(project.Id, selection.Id);
-  }
-
-  [JsonRpcMethod("test/solution-command")]
-  public RunCommand GetTestCommandForSolution()
-  {
-    var solutionFile = clientService.RequireSolutionFile();
-    var globalJson = globalJsonService.GetGlobalJson();
-    var isMicrosoftTestingPlatformRunner = globalJson.IsMicrosoftTestingPlatformRunner();
-
-    if (isMicrosoftTestingPlatformRunner)
-    {
-      return new("dotnet", ["test", "--solution", solutionFile], ".", []);
-    }
-    else
-    {
-      return new("dotnet", ["test", solutionFile], ".", []);
-    }
   }
 }

@@ -17,13 +17,16 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Restore
-        run: dotnet restore ./EasyDotnet.sln
+        run: dotnet restore ./EasyDotnet.slnx
 
       - name: Check formatting
-        run: dotnet format ./EasyDotnet.sln --verify-no-changes
+        run: dotnet format ./EasyDotnet.slnx --verify-no-changes
 
       - name: Build
         run: dotnet build 
+
+      - name: ContainerTests
+        run: dotnet test EasyDotnet.ContainerTests 
 
       - name: Generate RPC docs
         run: dotnet run --project ./EasyDotnet.IDE/EasyDotnet.IDE.csproj -- generate-rpc-docs --format markdown

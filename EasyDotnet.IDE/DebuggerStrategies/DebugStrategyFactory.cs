@@ -1,35 +1,35 @@
-using EasyDotnet.Application.Interfaces;
+using EasyDotnet.BuildServer.Contracts;
+using EasyDotnet.IDE.Interfaces;
 using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.IDE.DebuggerStrategies;
 
 public interface IDebugStrategyFactory
 {
-  RunInTerminalStrategy CreateRunInTerminalStrategy(string? launchProfileName);
-  StandardLaunchStrategy CreateStandardLaunchStrategy();
-  StandardAttachStrategy CreateStandardAttachStrategy(int pid);
-  VsTestStrategy CreateVsTestStrategy();
+  RunInTerminalStrategy CreateRunInTerminalStrategy(ValidatedDotnetProject project, string? launchProfileName, string? cliArgs = null);
+  StandardAttachStrategy CreateStandardAttachStrategy(int pid, string? cwd = null);
 }
 
 public class DebugStrategyFactory(
   ILoggerFactory loggerFactory,
   IHttpClientFactory httpClientFactory,
   ILaunchProfileService launchProfileService,
-  IStartupHookService startupHookService) : IDebugStrategyFactory
+  IStartupHookService startupHookService,
+  IAppWrapperManager appWrapperManager) : IDebugStrategyFactory
 {
-  public RunInTerminalStrategy CreateRunInTerminalStrategy(string? launchProfileName) => new(
+  public RunInTerminalStrategy CreateRunInTerminalStrategy(ValidatedDotnetProject project, string? launchProfileName, string? cliArgs = null) => new(
+    project,
     launchProfileName,
+    cliArgs,
     loggerFactory.CreateLogger<RunInTerminalStrategy>(),
     startupHookService,
     httpClientFactory,
-    launchProfileService);
+    launchProfileService,
+    appWrapperManager);
 
-  public StandardLaunchStrategy CreateStandardLaunchStrategy() => new();
-
-  public StandardAttachStrategy CreateStandardAttachStrategy(int pid) => new(
+  public StandardAttachStrategy CreateStandardAttachStrategy(int pid, string? cwd = null) => new(
     loggerFactory.CreateLogger<StandardAttachStrategy>(),
-    pid);
+    pid,
+    cwd);
 
-  public VsTestStrategy CreateVsTestStrategy() => new(
-    loggerFactory.CreateLogger<VsTestStrategy>());
 }

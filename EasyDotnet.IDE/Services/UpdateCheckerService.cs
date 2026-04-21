@@ -5,7 +5,7 @@ using System.Reflection;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using EasyDotnet.Application.Interfaces;
+using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.Services;
 using Microsoft.Extensions.Logging;
 

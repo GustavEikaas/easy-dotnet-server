@@ -1,13 +1,12 @@
 using System.Reflection;
-using EasyDotnet.Application.Interfaces;
 using EasyDotnet.Controllers;
-using EasyDotnet.Domain.Models.Client;
 using EasyDotnet.IDE.BuildHost;
+using EasyDotnet.IDE.Editor;
+using EasyDotnet.IDE.Interfaces;
+using EasyDotnet.IDE.Models.Client;
 using EasyDotnet.IDE.Notifications;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.Utils;
-using EasyDotnet.Infrastructure.Editor;
-using EasyDotnet.Infrastructure.Services;
 using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
 
@@ -64,6 +63,7 @@ public class InitializeController(
     };
 
     var supportsSingleFileExecution = msBuildService.QuerySdkInstallations().Any(x => x.Version.Major >= 10);
+    clientService.SupportsSingleFileExecution = supportsSingleFileExecution;
     _ = updateCheckerService.CheckForUpdates(CancellationToken.None);
     progress.Report("Initialized", 100);
     return new InitializeResponse(

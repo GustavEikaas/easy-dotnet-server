@@ -1,4 +1,4 @@
-using EasyDotnet.Domain.Models.Client;
+using EasyDotnet.IDE.Models.Client;
 
 namespace EasyDotnet.IDE.Controllers.Initialize;
 

@@ -1,21 +1,15 @@
-using System;
-using System.Threading.Tasks;
-using EasyDotnet.Application.Interfaces;
+using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Notifications;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Services;
 
-public sealed record ServerRestoreRequest(string TargetPath);
 //UpdateType is "major" | "minor" | "patch"
 public sealed record ServerUpdateAvailable(Version CurrentVersion, Version AvailableVersion, string UpdateType);
 public sealed record ProjectChangedNotification(string ProjectPath, string? TargetFrameworkMoniker = null, string? Configuration = null);
 
 public class NotificationService(JsonRpc jsonRpc) : INotificationService
 {
-  [RpcNotification("request/restore")]
-  public async Task RequestRestoreAsync(string targetPath) => await jsonRpc.NotifyWithParameterObjectAsync("request/restore", new ServerRestoreRequest(targetPath));
-
   [RpcNotification("_server/update-available")]
   public async Task NotifyUpdateAvailable(Version currentVersion, Version availableVersion, string updateType) => await jsonRpc.NotifyWithParameterObjectAsync("_server/update-available", new ServerUpdateAvailable(currentVersion, availableVersion, updateType));
 

@@ -237,6 +237,13 @@ public static class MsBuildProperties
           Deserialize: MsBuildValueParsers.AsString
       );
 
+  public static readonly MsBuildProperty<string?> RunWorkingDirectory =
+      new(
+          Name: "RunWorkingDirectory",
+          Description: "Specifies the working directory for web apps",
+          Deserialize: MsBuildValueParsers.AsString
+      );
+
   public static readonly MsBuildProperty<string?> RootNamespace =
       new(
           Name: "RootNamespace",

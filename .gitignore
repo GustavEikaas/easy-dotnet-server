@@ -482,3 +482,5 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+server-publish/
+EasyDotnet.ContainerTests/nuget-feed/

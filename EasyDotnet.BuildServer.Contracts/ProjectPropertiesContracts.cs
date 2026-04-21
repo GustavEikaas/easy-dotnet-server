@@ -37,6 +37,7 @@ public record DotnetProject
     bool UsingMicrosoftNETSdkStaticWebAssets,
     bool UsingMicrosoftNETSdkBlazorWebAssembly,
     bool UseIISExpress,
+    string? RunWorkingDirectory,
     string? LangVersion,
     string? RootNamespace,
     bool IsAspireHost,
@@ -216,4 +217,56 @@ public sealed record ValidatedDotnetProject
         },
         _ => null
       };
+}
+
+public enum DotnetPlatform
+{
+  None,
+  Android,
+  iOS,
+  MacCatalyst,
+  MacOS,
+  TvOS,
+  Tizen,
+  Browser,
+  Windows,
+  Unknown
+}
+
+public static class DotnetProjectTfmExtensions
+{
+  public static string? GetTfmPlatform(this DotnetProject project)
+  {
+    var tfm = project.TargetFramework;
+    if (string.IsNullOrWhiteSpace(tfm))
+      return null;
+
+    var dashIndex = tfm!.IndexOf('-');
+    if (dashIndex < 0 || dashIndex == tfm.Length - 1)
+      return null;
+
+    return tfm[(dashIndex + 1)..];
+  }
+}
+
+public static class DotnetProjectPlatformExtensions
+{
+  public static DotnetPlatform GetPlatform(this DotnetProject project)
+  {
+    var platform = project.GetTfmPlatform()?.ToLowerInvariant();
+
+    return platform switch
+    {
+      null => DotnetPlatform.None,
+      var p when p.StartsWith("android") => DotnetPlatform.Android,
+      var p when p.StartsWith("ios") => DotnetPlatform.iOS,
+      var p when p.StartsWith("maccatalyst") => DotnetPlatform.MacCatalyst,
+      var p when p.StartsWith("macos") => DotnetPlatform.MacOS,
+      var p when p.StartsWith("tvos") => DotnetPlatform.TvOS,
+      var p when p.StartsWith("tizen") => DotnetPlatform.Tizen,
+      var p when p.StartsWith("browser") => DotnetPlatform.Browser,
+      var p when p.StartsWith("windows") => DotnetPlatform.Windows,
+      _ => DotnetPlatform.Unknown
+    };
+  }
 }

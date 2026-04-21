@@ -1,0 +1,312 @@
+using System.CommandLine.Parsing;
+using EasyDotnet.BuildServer.Contracts;
+using EasyDotnet.IDE.BuildHost;
+using EasyDotnet.IDE.DebuggerStrategies;
+using EasyDotnet.IDE.Interfaces;
+using EasyDotnet.IDE.Models.Client;
+using EasyDotnet.IDE.Models.LaunchProfile;
+using EasyDotnet.IDE.Services;
+using EasyDotnet.IDE.Workspace.Controllers;
+using Microsoft.Extensions.Logging;
+
+namespace EasyDotnet.IDE.Workspace.Services;
+
+public class WorkspaceService(
+    WorkspaceProjectResolver resolver,
+    WorkspaceSessionRegistry sessionRegistry,
+    WorkspacePreBuildService preBuildService,
+    IEditorService editorService,
+    IEditorProcessManagerService editorProcessManagerService,
+    WorkspaceBuildHostManager buildHostManager,
+    IDebugOrchestrator debugOrchestrator,
+    IDebugStrategyFactory debugStrategyFactory,
+    ILogger<WorkspaceService> logger)
+{
+  public async Task RunAsync(WorkspaceRunRequest request, CancellationToken ct)
+  {
+    if (!ValidateFilePath(request.FilePath))
+    {
+      return;
+    }
+
+    var target = await resolver.ResolveAsync(
+        request.FilePath, request.UseDefault, request.UseLaunchProfile, "run", ct);
+    if (target is null)
+    {
+      return;
+    }
+
+    if (target.Kind == ExecutionTargetKind.SingleFile)
+    {
+      var converted = await ConvertSingleFileToProjectAsync(target.SingleFilePath!, ct);
+      if (converted is null)
+      {
+        await editorService.DisplayError("Failed to convert single file app to project");
+        return;
+      }
+      await DispatchRunAsync(converted, null, request.CliArgs, ct);
+      return;
+    }
+
+    var project = target.Project!;
+    await DispatchRunAsync(project, target.LaunchProfile, request.CliArgs, ct);
+  }
+
+  public async Task DebugAsync(WorkspaceDebugRequest request, CancellationToken ct)
+  {
+    try
+    {
+      if (!ValidateFilePath(request.FilePath))
+      {
+        return;
+      }
+
+      var target = await resolver.ResolveAsync(request.FilePath, request.UseDefault, request.UseLaunchProfile, "debug", ct);
+      if (target is null)
+      {
+        return;
+      }
+
+      if (target.Kind == ExecutionTargetKind.SingleFile)
+      {
+        await DebugSingleFileAsync(target.SingleFilePath!, request.CliArgs, ct);
+        return;
+      }
+
+      var project = target.Project!;
+      if (!await preBuildService.BuildBeforeRunAsync(project.ProjectFullPath, project.ProjectName, ct))
+      {
+        return;
+      }
+
+      await StartDebugSessionAsync(project, target.LaunchProfileName, request.CliArgs, ct);
+    }
+    catch (Exception ex)
+    {
+      logger.LogError(ex, "Error starting debug session");
+      await editorService.DisplayError($"Debug session failed: {ex.Message}");
+    }
+  }
+
+  public async Task WatchAsync(WorkspaceWatchRequest request, CancellationToken ct)
+  {
+    if (request.UseDebugger)
+    {
+      throw new NotImplementedException("Debugger not available for dotnet watch");
+    }
+    if (!ValidateFilePath(request.FilePath))
+    {
+      return;
+    }
+
+    var target = await resolver.ResolveAsync(request.FilePath, request.UseDefault, request.UseLaunchProfile, "watch", ct);
+    if (target is null)
+    {
+      return;
+    }
+
+    ValidatedDotnetProject project;
+    string sessionKey;
+
+    if (target.Kind == ExecutionTargetKind.SingleFile)
+    {
+      var converted = await ConvertSingleFileToProjectAsync(target.SingleFilePath!, ct);
+      if (converted is null)
+      {
+        return;
+      }
+
+      project = converted;
+      sessionKey = $"watch:{target.SingleFilePath}";
+    }
+    else
+    {
+      project = target.Project!;
+      sessionKey = $"watch:{project.ProjectFullPath}";
+    }
+
+    if (!TryClaimSession(sessionKey, TerminalSlot.Managed))
+    {
+      await editorService.DisplayError($"{project.ProjectName} is already being watched");
+      return;
+    }
+
+    var args = new List<string> { "watch", "--non-interactive" };
+    if (target.LaunchProfileName is not null)
+    {
+      args.AddRange(["--launch-profile", target.LaunchProfileName]);
+    }
+
+    if (!string.IsNullOrEmpty(request.CliArgs))
+    {
+      args.Add("--");
+      args.AddRange(CommandLineParser.SplitCommandLine(request.CliArgs));
+    }
+
+    var command = new RunCommand(
+        "dotnet",
+        [.. args],
+        Path.GetDirectoryName(project.ProjectFullPath) ?? ".",
+        []);
+
+    _ = Task.Run(async () =>
+    {
+      try { await editorService.RequestRunCommandAsync(command, CancellationToken.None); }
+      finally { sessionRegistry.Release(sessionKey); }
+    }, CancellationToken.None);
+  }
+
+  private async Task DispatchRunAsync(
+      ValidatedDotnetProject project,
+      LaunchProfile? launchProfile,
+      string? cliArgs,
+      CancellationToken ct)
+  {
+    var sessionKey = $"{project.ProjectFullPath}:{project.TargetFramework}";
+    if (!TryClaimSession(sessionKey, TerminalSlot.LongRunning))
+    {
+      await editorService.DisplayError($"{project.ProjectName} is already running");
+      return;
+    }
+
+    var additionalArgs = string.IsNullOrEmpty(cliArgs)
+        ? null
+        : new[] { "--" }.Concat(CommandLineParser.SplitCommandLine(cliArgs)).ToArray();
+
+    var runRequest = new RunProjectRequest(
+        project.Raw,
+        launchProfile,
+        additionalArgs,
+        null,
+        OnPidReceived: pid =>
+        {
+          sessionRegistry.SetProcessInfo(sessionKey, new RunningProcessEntry(
+              sessionKey,
+              project.ProjectName,
+              project.ProjectFullPath,
+              project.TargetFramework,
+              pid));
+          logger.LogInformation("Registered running process {ProjectName} (PID {Pid})", project.ProjectName, pid);
+        });
+
+    if (!await preBuildService.BuildBeforeRunAsync(project.ProjectFullPath, project.ProjectName, ct))
+    {
+      sessionRegistry.Release(sessionKey);
+      return;
+    }
+
+    Guid guid;
+    try
+    {
+      guid = await editorService.StartRunProjectAsync(runRequest, ct);
+    }
+    catch (Exception ex)
+    {
+      logger.LogError(ex, "Unexpected error while starting {ProjectName}", project.ProjectName);
+      await editorService.DisplayError($"Failed to run {project.ProjectName}: {ex.Message}");
+      sessionRegistry.Release(sessionKey);
+      return;
+    }
+
+    _ = Task.Run(async () =>
+    {
+      try
+      {
+        var exitCode = await editorProcessManagerService.WaitForExitAsync(guid, TerminalSlot.LongRunning);
+        logger.LogInformation("{ProjectName} exited with code {ExitCode}", project.ProjectName, exitCode);
+        if (exitCode != 0)
+        {
+          await editorService.DisplayError($"{project.ProjectName} exited with code {exitCode}");
+        }
+      }
+      catch (Exception ex)
+      {
+        logger.LogError(ex, "Unexpected error while monitoring {ProjectName}", project.ProjectName);
+      }
+      finally
+      {
+        sessionRegistry.Release(sessionKey);
+      }
+    }, CancellationToken.None);
+  }
+
+  private async Task DebugSingleFileAsync(string filePath, string? cliArgs, CancellationToken ct)
+  {
+    var project = await ConvertSingleFileToProjectAsync(filePath, ct);
+    if (project is null)
+    {
+      return;
+    }
+
+    if (!await preBuildService.BuildBeforeRunAsync(project.ProjectFullPath, project.ProjectName, ct))
+    {
+      return;
+    }
+
+    await StartDebugSessionAsync(project, null, cliArgs, ct);
+  }
+
+  private async Task<ValidatedDotnetProject?> ConvertSingleFileToProjectAsync(string filePath, CancellationToken ct)
+  {
+    var convertResponse = await buildHostManager.ConvertFileToProjectAsync(filePath, ct);
+    if (!convertResponse.Properties.Success)
+    {
+      var errorMsg = convertResponse.Properties.Error?.Message ?? "Unknown error";
+      await editorService.DisplayError($"Failed to convert {Path.GetFileName(filePath)}: {errorMsg}");
+      return null;
+    }
+
+    var project = convertResponse.Properties.Project;
+    if (project is null)
+    {
+      await editorService.DisplayError($"Failed to convert {Path.GetFileName(filePath)}: No project returned");
+    }
+
+    return project;
+  }
+
+  private async Task StartDebugSessionAsync(
+      ValidatedDotnetProject project,
+      string? launchProfileName,
+      string? cliArgs,
+      CancellationToken ct)
+  {
+    var strategy = debugStrategyFactory.CreateRunInTerminalStrategy(project, launchProfileName, cliArgs);
+
+    var session = await debugOrchestrator.StartClientDebugSessionAsync(
+        project.ProjectFullPath, strategy, ct);
+
+    await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
+    await session.ProcessStarted;
+    await Task.Delay(1000, ct);
+  }
+
+  private bool ValidateFilePath(string? filePath)
+  {
+    if (filePath is null)
+    {
+      return true;
+    }
+
+    if (Path.IsPathRooted(filePath) && filePath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+    {
+      return true;
+    }
+
+    _ = editorService.DisplayError($"Invalid FilePath '{filePath}': must be an absolute path to a .cs file");
+    return false;
+  }
+
+  private bool TryClaimSession(string key, TerminalSlot slot)
+  {
+    if (sessionRegistry.TryClaim(key))
+      return true;
+
+    if (editorProcessManagerService.IsSlotBusy(slot))
+      return false;
+
+    logger.LogWarning("Session {Key} was stale (slot {Slot} is free). Reclaiming.", key, slot);
+    sessionRegistry.Release(key);
+    return sessionRegistry.TryClaim(key);
+  }
+}

@@ -1,14 +1,14 @@
 using System.IO.Abstractions;
 using System.Threading;
 using System.Threading.Channels;
-using EasyDotnet.Application.Interfaces;
 using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.IDE.DebuggerStrategies;
+using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Services;
+using EasyDotnet.IDE.Settings;
 using EasyDotnet.IDE.TestRunner.Adapters.VSTest;
 using EasyDotnet.IDE.TestRunner.Lock;
 using EasyDotnet.IDE.TestRunner.Models;
-using EasyDotnet.Infrastructure.Settings;
 using Microsoft.Extensions.Logging;
 using Microsoft.TestPlatform.VsTestConsole.TranslationLayer;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Client;
@@ -224,8 +224,7 @@ public sealed class VsTestAdapter(
     {
       var session = await debugOrchestrator.StartClientDebugSessionAsync(
           project.ProjectFullPath,
-          new(project.ProjectFullPath, project.TargetFramework, null, null),
-          debugStrategyFactory.CreateStandardAttachStrategy(pid),
+          debugStrategyFactory.CreateStandardAttachStrategy(pid, project.Raw.ProjectDir),
           ct);
 
       session.Stopped += onStopped;

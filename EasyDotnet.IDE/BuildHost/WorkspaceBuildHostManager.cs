@@ -1,7 +1,7 @@
 using System.Runtime.CompilerServices;
-using EasyDotnet.Application.Interfaces;
 using EasyDotnet.BuildServer.Contracts;
-using EasyDotnet.Infrastructure;
+using EasyDotnet.IDE;
+using EasyDotnet.IDE.Interfaces;
 using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.IDE.BuildHost;
@@ -168,6 +168,21 @@ public class WorkspaceBuildHostManager(
       GetWatchListRequest request,
       CancellationToken ct) =>
       innerManager.GetProjectWatchListAsync(request, ct);
+
+  public Task<ConvertSingleFileResponse> ConvertFileToProjectAsync(string entryPointFilePath, CancellationToken cancellationToken) =>
+      innerManager.ConvertFileToProjectAsync(entryPointFilePath, cancellationToken);
+
+  public Task<BuildServerDiagnosticsResponse> GetBuildServerDiagnosticsAsync(CancellationToken cancellationToken) =>
+      innerManager.GetBuildServerDiagnosticsAsync(cancellationToken);
+
+  public Task<InstalledPackageReference[]> ListPackageReferencesAsync(string projectPath, CancellationToken cancellationToken) =>
+      innerManager.ListPackageReferencesAsync(projectPath, cancellationToken);
+
+  public Task SetLogLevelAsync(string level, CancellationToken cancellationToken) =>
+      innerManager.SetLogLevelAsync(level, cancellationToken);
+
+  public Task<string[]> GetLogsAsync(CancellationToken cancellationToken) =>
+      innerManager.GetLogsAsync(cancellationToken);
 
   public void InvalidateCache(string projectPath, string config = "Debug") => cache.Invalidate(projectPath, config);
 

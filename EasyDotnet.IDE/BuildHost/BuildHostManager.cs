@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using EasyDotnet.Application.Interfaces;
 using EasyDotnet.BuildServer.Contracts;
+using EasyDotnet.IDE.Interfaces;
 using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
 
@@ -104,6 +104,92 @@ public sealed class BuildHostManager(ILogger<BuildHostManager> logger, BuildHost
     await foreach (var result in stream.WithCancellation(cancellationToken))
     {
       yield return result;
+    }
+  }
+
+  public async Task<ConvertSingleFileResponse> ConvertFileToProjectAsync(string entryPointFilePath, CancellationToken cancellationToken)
+  {
+    EnsureNotDisposed();
+    var rpc = await GetRpcClientAsync();
+    try
+    {
+      return await rpc.InvokeWithParameterObjectAsync<ConvertSingleFileResponse>(
+          "singlefile/convert",
+          new ConvertSingleFileRequest(entryPointFilePath),
+          cancellationToken);
+    }
+    catch (ConnectionLostException)
+    {
+      InvalidateConnection();
+      throw new Exception("BuildServer connection was lost. Please try again.");
+    }
+  }
+
+  public async Task<BuildServerDiagnosticsResponse> GetBuildServerDiagnosticsAsync(CancellationToken cancellationToken)
+  {
+    EnsureNotDisposed();
+    var rpc = await GetRpcClientAsync();
+    try
+    {
+      return await rpc.InvokeAsync<BuildServerDiagnosticsResponse>("diagnostics/buildserver").WaitAsync(cancellationToken);
+    }
+    catch (ConnectionLostException)
+    {
+      InvalidateConnection();
+      throw new Exception("BuildServer connection was lost. Please try again.");
+    }
+  }
+
+  public async Task SetLogLevelAsync(string level, CancellationToken cancellationToken)
+  {
+    EnsureNotDisposed();
+    if (_rpc?.IsDisposed != false || _serverProcess?.HasExited != false)
+    {
+      return;
+    }
+    try
+    {
+      await _rpc.InvokeWithParameterObjectAsync("_server/setLogLevel", new { level }, cancellationToken);
+    }
+    catch (ConnectionLostException)
+    {
+      InvalidateConnection();
+    }
+  }
+
+  public async Task<string[]> GetLogsAsync(CancellationToken cancellationToken)
+  {
+    EnsureNotDisposed();
+    if (_rpc?.IsDisposed != false || _serverProcess?.HasExited != false)
+    {
+      return [];
+    }
+    try
+    {
+      return await _rpc.InvokeAsync<string[]>("_server/logdump").WaitAsync(cancellationToken);
+    }
+    catch (ConnectionLostException)
+    {
+      InvalidateConnection();
+      return [];
+    }
+  }
+
+  public async Task<InstalledPackageReference[]> ListPackageReferencesAsync(string projectPath, CancellationToken cancellationToken)
+  {
+    EnsureNotDisposed();
+    var rpc = await GetRpcClientAsync();
+    try
+    {
+      return await rpc.InvokeWithParameterObjectAsync<InstalledPackageReference[]>(
+          "projects/list-package-references",
+          new ListPackageReferencesRequest(projectPath),
+          cancellationToken);
+    }
+    catch (ConnectionLostException)
+    {
+      InvalidateConnection();
+      throw new Exception("BuildServer connection was lost. Please try again.");
     }
   }
 

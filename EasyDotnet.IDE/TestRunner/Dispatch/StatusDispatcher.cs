@@ -1,6 +1,7 @@
-using EasyDotnet.Application.Interfaces;
 using EasyDotnet.BuildServer.Contracts;
-using EasyDotnet.Domain.Models.Client;
+using EasyDotnet.IDE.Interfaces;
+using EasyDotnet.IDE.Models.Client;
+using EasyDotnet.IDE.Models.Client.Quickfix;
 using EasyDotnet.IDE.TestRunner.Lock;
 using EasyDotnet.IDE.TestRunner.Models;
 using EasyDotnet.IDE.TestRunner.Registry;

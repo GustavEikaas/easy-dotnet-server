@@ -1,5 +1,5 @@
 using EasyDotnet.Controllers;
-using EasyDotnet.Infrastructure.Settings;
+using EasyDotnet.IDE.Settings;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Controllers.Editor;

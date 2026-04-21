@@ -1,6 +1,6 @@
-using EasyDotnet.Application.Interfaces;
 using EasyDotnet.BuildServer.Contracts;
-using EasyDotnet.Infrastructure.Editor;
+using EasyDotnet.IDE.Editor;
+using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.MsBuild;
 using Microsoft.Extensions.FileSystemGlobbing;
 using Microsoft.Extensions.Logging;

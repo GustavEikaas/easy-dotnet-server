@@ -1,0 +1,27 @@
+using EasyDotnet.IDE.Models.MsBuild.Build;
+using EasyDotnet.IDE.Models.MsBuild.Project;
+using EasyDotnet.IDE.Models.MsBuild.SDK;
+using EasyDotnet.MsBuild;
+
+namespace EasyDotnet.IDE.Interfaces;
+
+public interface IMsBuildService
+{
+  string GetDotnetSdkBasePath();
+  string GetVsTestPath();
+  SdkInstallation[] QuerySdkInstallations();
+  Task<bool> AddProjectReferenceAsync(string projectPath, string targetPath, CancellationToken cancellationToken = default);
+  [Obsolete("Use BuildHostManager instead")]
+  Task<DotnetProject> GetOrSetProjectPropertiesAsync(string projectPath, string? targetFrameworkMoniker = null, string configuration = "Debug", CancellationToken cancellationToken = default);
+  [Obsolete("Use BuildHostManager instead")]
+  Task<DotnetProject> GetProjectPropertiesAsync(string projectPath, string? targetFrameworkMoniker = null, string configuration = "Debug", CancellationToken cancellationToken = default);
+  Task<List<string>> GetProjectReferencesAsync(string projectPath, CancellationToken cancellationToken = default);
+  Task<List<PackageReference>> GetPackageReferencesAsync(string projectPath, string targetFramework, CancellationToken cancellationToken = default);
+  Task InvalidateProjectProperties(string projectPath, string? targetFrameworkMoniker = null, string configuration = "Debug");
+  Task<bool> RemoveProjectReferenceAsync(string projectPath, string targetPath, CancellationToken cancellationToken = default);
+  [Obsolete("Use BuildHostManager instead")]
+  Task<BuildResult> RequestBuildAsync(string targetPath, string? targetFrameworkMoniker, string? buildArgs, string? configuration, CancellationToken cancellationToken = default);
+  Task<string> BuildTestCommand(DotnetProject project);
+  Task<string> BuildBuildCommand(DotnetProject project);
+  Task<string> BuildRunCommand(DotnetProject project);
+}

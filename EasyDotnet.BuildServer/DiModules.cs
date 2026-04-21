@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using EasyDotnet.BuildServer.Handlers;
+using EasyDotnet.BuildServer.Logging;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog;
@@ -11,11 +12,12 @@ namespace EasyDotnet.BuildServer;
 
 public static class DiModule
 {
-  public static ServiceProvider BuildServiceProvider(JsonRpc jsonRpc, MsBuildInstance instance, SourceLevels logLevel, string logDirectory)
+  public static ServiceProvider BuildServiceProvider(JsonRpc jsonRpc, MsBuildInstance instance, SourceLevels logLevel)
   {
     var services = new ServiceCollection();
 
-    ConfigureLogging(logLevel, logDirectory);
+    var logLevelState = new LogLevelState(logLevel);
+    ConfigureLogging(logLevelState);
 
     services.AddLogging(builder =>
     {
@@ -24,57 +26,45 @@ public static class DiModule
     });
 
     services.AddSingleton(jsonRpc);
+    services.AddSingleton(logLevelState);
 
     services.AddTransient<WatchHandler>();
     services.AddTransient<ProjectPropertiesBatchHandler>();
     services.AddTransient<RestoreHandler>();
     services.AddTransient<BatchBuildHandler>();
+    services.AddTransient<SingleFileConvertHandler>();
+    services.AddTransient<DiagnosticsHandler>();
+    services.AddTransient<PackageReferenceHandler>();
+    services.AddTransient<ServerHandler>();
 
     services.AddSingleton(instance);
 
     var serviceProvider = services.BuildServiceProvider();
 
-    ConfigureJsonRpc(jsonRpc, serviceProvider, logLevel);
+    ConfigureJsonRpc(jsonRpc, serviceProvider, logLevelState);
 
     return serviceProvider;
   }
 
-  private static void ConfigureLogging(SourceLevels logLevel, string logDirectory)
+  private static void ConfigureLogging(LogLevelState state)
   {
-    string? logFile = null;
-
-    if (logLevel.HasFlag(SourceLevels.Verbose) || logLevel.HasFlag(SourceLevels.Information))
-    {
-      Directory.CreateDirectory(logDirectory);
-      logFile = Path.Combine(logDirectory,
-          $"buildserver-{DateTime.UtcNow:yyyyMMdd_HHmmss}.log");
-    }
-
-    var serilogConfig = new LoggerConfiguration()
-        .MinimumLevel.Is(ConvertLogLevel(logLevel))
+    Log.Logger = new LoggerConfiguration()
+        .MinimumLevel.ControlledBy(state.Switch)
         .Enrich.WithProperty("ServerType", "BuildServer")
         .WriteTo.Console(
             outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] [{ServerType}] {Message:lj}{NewLine}{Exception}"
-        );
-
-    if (!string.IsNullOrEmpty(logFile))
-    {
-      serilogConfig = serilogConfig.WriteTo.File(
-          logFile!,
-          outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] [{ProcessId}] {Message:lj}{NewLine}{Exception}",
-          rollingInterval: RollingInterval.Day,
-          retainedFileCountLimit: 7);
-    }
-
-    Log.Logger = serilogConfig.CreateLogger();
+        )
+        .WriteTo.Sink(state.RingSink)
+        .CreateLogger();
     WriteLogHeader();
   }
 
-  private static void ConfigureJsonRpc(JsonRpc jsonRpc, IServiceProvider serviceProvider, SourceLevels logLevel)
+  private static void ConfigureJsonRpc(JsonRpc jsonRpc, IServiceProvider serviceProvider, LogLevelState logLevelState)
   {
     var logger = serviceProvider.GetRequiredService<ILogger<JsonRpc>>();
 
-    jsonRpc.TraceSource.Switch.Level = logLevel;
+    jsonRpc.TraceSource.Switch.Level = logLevelState.Current;
+    logLevelState.LevelChanged += l => jsonRpc.TraceSource.Switch.Level = l;
     jsonRpc.TraceSource.Listeners.Clear();
     jsonRpc.TraceSource.Listeners.Add(new JsonRpcTraceListener(logger));
 
@@ -87,6 +77,10 @@ public static class DiModule
       serviceProvider.GetRequiredService<ProjectPropertiesBatchHandler>(),
       serviceProvider.GetRequiredService<RestoreHandler>(),
       serviceProvider.GetRequiredService<BatchBuildHandler>(),
+      serviceProvider.GetRequiredService<SingleFileConvertHandler>(),
+      serviceProvider.GetRequiredService<DiagnosticsHandler>(),
+      serviceProvider.GetRequiredService<PackageReferenceHandler>(),
+      serviceProvider.GetRequiredService<ServerHandler>(),
     };
 
     foreach (var handler in handlers)
@@ -97,17 +91,6 @@ public static class DiModule
       });
     }
   }
-
-  private static Serilog.Events.LogEventLevel ConvertLogLevel(SourceLevels level) =>
-      level switch
-      {
-        SourceLevels.Critical => Serilog.Events.LogEventLevel.Fatal,
-        SourceLevels.Error => Serilog.Events.LogEventLevel.Error,
-        SourceLevels.Warning => Serilog.Events.LogEventLevel.Warning,
-        SourceLevels.Information => Serilog.Events.LogEventLevel.Information,
-        SourceLevels.Verbose => Serilog.Events.LogEventLevel.Verbose,
-        _ => Serilog.Events.LogEventLevel.Information
-      };
 
   private static void WriteLogHeader()
   {

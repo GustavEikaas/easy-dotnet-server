@@ -1,5 +1,5 @@
-using EasyDotnet.Application.Interfaces;
-using EasyDotnet.Domain.Models.MsBuild.Project;
+using EasyDotnet.IDE.Interfaces;
+using EasyDotnet.IDE.Models.MsBuild.Project;
 using Microsoft.Extensions.Logging;
 using NuGet.Common;
 using NuGet.Configuration;

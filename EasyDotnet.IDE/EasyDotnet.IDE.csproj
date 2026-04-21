@@ -6,7 +6,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>dotnet-easydotnet</ToolCommandName>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
-    <Version>3.1.0</Version>
+    <Version>3.0.41</Version>
     <Authors>Gustav Eikaas</Authors>
     <PackageId>EasyDotnet</PackageId>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
@@ -21,9 +21,9 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="DotNetOutdatedTool.Core" Version="4.6.8" />
-    <PackageReference Include="Microsoft.CodeAnalysis" Version="4.14.0" />
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
-    <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="4.14.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis" Version="5.3.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.3.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="5.3.0" />
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="9.0.9" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.9" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.9" />
@@ -42,17 +42,36 @@
     <PackageReference Include="Serilog" Version="4.3.0" />
     <PackageReference Include="Serilog.Extensions.Logging" Version="9.0.2" />
     <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
-    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+    <PackageReference Include="Microsoft.Diagnostics.NETCore.Client" Version="0.2.661903" />
     <PackageReference Include="StreamJsonRpc" Version="2.21.69" />
+    <PackageReference Include="Microsoft.VisualStudio.SolutionPersistence" Version="1.0.52" />
+    <PackageReference Include="NJsonSchema" Version="11.4.0" />
+    <PackageReference Include="NJsonSchema.CodeGeneration.CSharp" Version="11.4.0" />
+    <PackageReference Include="System.IO.Abstractions" Version="22.1.0" />
+    <PackageReference Include="Spectre.Console" Version="0.53.1-preview.0.2" />
     <PackageReference Include="Spectre.Console.Cli" Version="0.53.1-preview.0.2" />
+    <PackageReference Include="Microsoft.Build.Locator" Version="1.9.1" />
     <PackageReference Include="System.CommandLine" Version="2.0.3" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\EasyDotnet.Infrastructure\EasyDotnet.Infrastructure.csproj" />
-    <ProjectReference Include="..\EasyDotnet.Application\EasyDotnet.Application.csproj" />
+    <ProjectReference Include="..\EasyDotnet.MsBuild\EasyDotnet.MsBuild.csproj" />
+    <ProjectReference Include="..\EasyDotnet.Debugger\EasyDotnet.Debugger.csproj" />
     <ProjectReference Include="..\EasyDotnet.ProjXLanguageServer\EasyDotnet.ProjXLanguageServer.csproj" />
     <ProjectReference Include="..\EasyDotnet.BuildServer.Contracts\EasyDotnet.BuildServer.Contracts.csproj" />
+    <ProjectReference Include="..\EasyDotnet.AppWrapper.Contracts\EasyDotnet.AppWrapper.Contracts.csproj" />
   </ItemGroup>
+
+  <Target Name="PublishAppWrapper" BeforeTargets="Build">
+    <PropertyGroup>
+      <AppWrapperOutputPath>$(OutputPath)Tools\AppWrapper\</AppWrapperOutputPath>
+    </PropertyGroup>
+    <Message Text="Publishing AppWrapper for net8.0..." Importance="high" />
+    <MSBuild
+      Projects="..\EasyDotnet.AppWrapper\EasyDotnet.AppWrapper.csproj"
+      Targets="Publish"
+      Properties="TargetFramework=net8.0;Configuration=$(Configuration);PublishDir=$(MSBuildProjectDirectory)\$(AppWrapperOutputPath)net8.0\;SelfContained=false" />
+    <Message Text="AppWrapper publish complete at $(AppWrapperOutputPath)" Importance="high" />
+  </Target>
 
   <Target Name="PublishBuildServers" BeforeTargets="Build">
     <PropertyGroup>

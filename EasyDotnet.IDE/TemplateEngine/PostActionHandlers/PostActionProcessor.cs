@@ -1,4 +1,4 @@
-using EasyDotnet.Application.Interfaces;
+using EasyDotnet.IDE.Interfaces;
 using Microsoft.TemplateEngine.Abstractions;
 
 namespace EasyDotnet.IDE.TemplateEngine.PostActionHandlers;

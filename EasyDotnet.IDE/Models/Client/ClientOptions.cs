@@ -1,0 +1,13 @@
+namespace EasyDotnet.IDE.Models.Client;
+
+public sealed record DebuggerOptions(string? BinaryPath = null, bool ApplyValueConverters = false);
+public sealed record ClientOptions(
+  DebuggerOptions? DebuggerOptions = null,
+  bool UseVisualStudio = false,
+  ExternalTerminalOptions? ExternalTerminal = null,
+  bool EnableOsNotifications = false);
+
+public sealed record ExternalTerminalOptions(
+    string Command = "",
+    string[]? Args = null
+);

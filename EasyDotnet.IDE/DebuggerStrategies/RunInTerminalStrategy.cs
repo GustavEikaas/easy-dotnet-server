@@ -1,31 +1,35 @@
 using System.Diagnostics;
 using System.Net.Sockets;
 using System.Text.Json;
-using EasyDotnet.Application.Interfaces;
+using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.Debugger;
 using EasyDotnet.Debugger.Messages;
-using EasyDotnet.Domain.Models.LaunchProfile;
+using EasyDotnet.IDE.Interfaces;
+using EasyDotnet.IDE.Models.Client;
+using EasyDotnet.IDE.Models.LaunchProfile;
 using EasyDotnet.IDE.Types;
 using EasyDotnet.IDE.Utils;
-using EasyDotnet.MsBuild;
 using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.DebuggerStrategies;
 
 public class RunInTerminalStrategy(
+  ValidatedDotnetProject project,
   string? launchProfileName,
+  string? cliArgs,
   ILogger<RunInTerminalStrategy> logger,
   IStartupHookService startupHookService,
   IHttpClientFactory httpClientFactory,
-  ILaunchProfileService launchProfileService) : IDebugSessionStrategy
+  ILaunchProfileService launchProfileService,
+  IAppWrapperManager appWrapperManager) : IDebugSessionStrategy
 {
-  private DotnetProject? _project;
+  private LaunchProfile? _activeProfile;
   private int _pid;
   private JsonRpc? _rpc;
-  private LaunchProfile? _activeProfile;
   private StartupHookSession? _hookSession;
   private Process? _browserProcess;
+  private IAppWrapperHandle? _wrapperHandle;
 
   private int _configurationDoneFlag;
   private int _pidReceivedFlag;
@@ -41,42 +45,49 @@ public class RunInTerminalStrategy(
     PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
   };
 
-  public async Task PrepareAsync(DotnetProject project, CancellationToken ct)
+  public Task PrepareAsync(CancellationToken ct)
   {
-    _activeProfile = launchProfileService.GetLaunchProfile(project.MSBuildProjectFullPath!, launchProfileName);
-    _project = project;
+    var platform = project.Raw.GetPlatform();
+    if (platform != DotnetPlatform.None && platform != DotnetPlatform.Windows)
+      throw new InvalidOperationException($"Debugging for {platform} is not supported yet");
+
+    _activeProfile = launchProfileService.GetLaunchProfile(project.ProjectFullPath, launchProfileName);
+    return Task.CompletedTask;
   }
 
   public async Task TransformRequestAsync(InterceptableAttachRequest request, IDebuggerProxy proxy)
   {
-    if (_project == null) throw new InvalidOperationException("Strategy has not been prepared.");
-
-    var profileEnv = DebugStrategyUtils.GetEnvironmentVariables(_activeProfile);
+    var profileEnv = LaunchProfileUtils.GetEnvironmentVariables(_activeProfile);
     _hookSession = startupHookService.CreateSession(profileEnv);
 
     var extraArgs = BuildCommandLineArgs();
-    var terminalArgs = new List<string>() { "dotnet", _project.TargetPath! };
+    var terminalArgs = new List<string>() { project.TargetPath };
     terminalArgs.AddRange(extraArgs);
 
+    var cwd = LaunchProfileUtils.ResolveCwd(_activeProfile, project.Raw);
     var terminalKind = ExtractTerminalKind(request.Arguments.Console);
-    var runInTerminalReq = RunInTerminalRequest.Create(terminalKind, [.. terminalArgs]);
 
-    var cwd = !string.IsNullOrWhiteSpace(_activeProfile?.WorkingDirectory)
-        ? DebugStrategyUtils.NormalizePath(DebugStrategyUtils.InterpolateVariables(_activeProfile.WorkingDirectory, _project))
-        : _project.ProjectDir;
-
-    runInTerminalReq.Arguments.Cwd = cwd;
-    runInTerminalReq.Arguments.Env = _hookSession.EnvironmentVariables;
-
-
-    logger.LogInformation("Sending runInTerminal request to Neovim: {payload}", JsonSerializer.Serialize(runInTerminalReq, _jsonSerializerOptions));
-    var termResponse = await proxy.RunClientRequestAsync(runInTerminalReq, CancellationToken.None);
-
-    if (!termResponse.Success)
+    if (terminalKind == RunInTerminalKind.External)
     {
-      throw new InvalidOperationException($"Neovim failed to launch terminal: {termResponse.Message}");
+      var runCommand = new RunCommand("dotnet", terminalArgs, cwd, _hookSession.EnvironmentVariables);
+      _wrapperHandle = await appWrapperManager.GetOrSpawnAsync(CancellationToken.None);
+      await _wrapperHandle.SendRunCommandAsync(Guid.NewGuid(), runCommand, CancellationToken.None);
     }
-    logger.LogInformation("runInTerminal response from Neovim");
+    else
+    {
+      var runInTerminalReq = RunInTerminalRequest.Create(terminalKind, ["dotnet", .. terminalArgs]);
+      runInTerminalReq.Arguments.Cwd = cwd;
+      runInTerminalReq.Arguments.Env = _hookSession.EnvironmentVariables;
+
+      logger.LogInformation("Sending runInTerminal request to Neovim: {payload}", JsonSerializer.Serialize(runInTerminalReq, _jsonSerializerOptions));
+      var termResponse = await proxy.RunClientRequestAsync(runInTerminalReq, CancellationToken.None);
+
+      if (!termResponse.Success)
+      {
+        throw new InvalidOperationException($"Neovim failed to launch terminal: {termResponse.Message}");
+      }
+      logger.LogInformation("runInTerminal response from Neovim");
+    }
 
     _pid = await _hookSession.WaitForPidAsync();
     SetFlag(ref _pidReceivedFlag);
@@ -86,7 +97,7 @@ public class RunInTerminalStrategy(
     request.Command = "attach";
     request.Arguments.Request = "attach";
     request.Arguments.ProcessId = _pid;
-    if (_project?.ProjectDir is not null)
+    if (project.Raw.ProjectDir is not null)
     {
       request.Arguments.Cwd = cwd;
     }
@@ -107,6 +118,12 @@ public class RunInTerminalStrategy(
   {
     _rpc?.Dispose();
     _rpc = null;
+
+    if (_wrapperHandle != null)
+    {
+      await _wrapperHandle.TerminateAsync();
+      _wrapperHandle = null;
+    }
 
     if (_hookSession != null)
     {
@@ -254,11 +271,12 @@ public class RunInTerminalStrategy(
 
   private string[] BuildCommandLineArgs()
   {
-    if (_activeProfile?.CommandLineArgs is not null && _project is not null)
-    {
-      var interpolatedArgs = DebugStrategyUtils.InterpolateVariables(_activeProfile.CommandLineArgs, _project);
-      return DebugStrategyUtils.SplitCommandLineArgs(interpolatedArgs);
-    }
-    return [];
+    var args = new List<string>();
+    if (_activeProfile?.CommandLineArgs is not null)
+      args.AddRange(LaunchProfileUtils.ParseCommandLineArgs(_activeProfile.CommandLineArgs, project.Raw));
+    if (cliArgs is not null)
+      args.AddRange(LaunchProfileUtils.ParseCommandLineArgs(cliArgs, project.Raw));
+
+    return [.. args];
   }
 }
