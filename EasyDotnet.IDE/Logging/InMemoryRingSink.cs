@@ -5,25 +5,18 @@ using Serilog.Formatting.Display;
 
 namespace EasyDotnet.IDE.Logging;
 
-public sealed class InMemoryRingSink : ILogEventSink
+public sealed class InMemoryRingSink(int capacity, string? outputTemplate = null) : ILogEventSink
 {
   private const string DefaultOutputTemplate =
       "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}";
 
   private readonly object _gate = new();
-  private readonly string[] _buffer;
-  private readonly ITextFormatter _formatter;
+  private readonly string[] _buffer = new string[capacity];
+  private readonly ITextFormatter _formatter = new MessageTemplateTextFormatter(outputTemplate ?? DefaultOutputTemplate);
   private int _head;
   private int _count;
 
-  public int Capacity { get; }
-
-  public InMemoryRingSink(int capacity, string? outputTemplate = null)
-  {
-    Capacity = capacity;
-    _buffer = new string[capacity];
-    _formatter = new MessageTemplateTextFormatter(outputTemplate ?? DefaultOutputTemplate);
-  }
+  public int Capacity { get; } = capacity;
 
   public void Emit(LogEvent logEvent)
   {

@@ -1,5 +1,4 @@
 using System.IO.Pipes;
-using System.Text.Json;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Logging;
 using Microsoft.Extensions.Logging;

@@ -8,21 +8,17 @@ public sealed class LogLevelState
 {
   public LoggingLevelSwitch Switch { get; } = new();
   public InMemoryRingSink RingSink { get; }
-
-  private SourceLevels _current;
   public event Action<SourceLevels>? LevelChanged;
-
   public LogLevelState(SourceLevels initial, int ringCapacity = 5000)
   {
     RingSink = new InMemoryRingSink(ringCapacity);
     Set(initial);
   }
-
-  public SourceLevels Current => _current;
+  public SourceLevels Current { get; private set; }
 
   public void Set(SourceLevels level)
   {
-    _current = level;
+    Current = level;
     Switch.MinimumLevel = ToSerilog(level);
     LevelChanged?.Invoke(level);
   }
