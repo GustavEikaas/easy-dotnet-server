@@ -1,3 +1,4 @@
+using System.Threading.Channels;
 using EasyDotnet.IDE.TestRunner.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel;
@@ -7,37 +8,32 @@ using Microsoft.VisualStudio.TestPlatform.ObjectModel.Logging;
 namespace EasyDotnet.IDE.TestRunner.Adapters;
 
 /// <summary>
-/// VSTest discovery handler that invokes a callback per test as they arrive,
+/// VSTest discovery handler that exposes tests through an asynchronous enumerable sequence as they arrive,
 /// enabling streaming registerTest notifications rather than end-of-batch delivery.
 /// </summary>
-internal sealed class StreamingDiscoveryHandler(
-    Func<DiscoveredTest, Task> onDiscovered,
-    ILoggerFactory loggerFactory) : ITestDiscoveryEventsHandler2
+internal sealed class StreamingDiscoveryHandler(ILoggerFactory loggerFactory) : ITestDiscoveryEventsHandler2
 {
   private readonly ILogger _logger = loggerFactory.CreateLogger<StreamingDiscoveryHandler>();
-  private readonly TaskCompletionSource _tcs = new();
-
-  public Task Completion => _tcs.Task;
-
+  private readonly Channel<DiscoveredTest> _channel = Channel.CreateUnbounded<DiscoveredTest>();
   public void HandleDiscoveredTests(IEnumerable<TestCase>? discoveredTestCases)
   {
     if (discoveredTestCases is null) return;
     foreach (var testCase in discoveredTestCases)
     {
-      // Fire-and-forget per test: callback handles its own async work
-      // (emitting registerTest notification). Errors are logged, not thrown.
-      _ = Task.Run(async () =>
+      if (!_channel.Writer.TryWrite(testCase.ToDiscoveredTest()))
       {
-        try { await onDiscovered(testCase.ToDiscoveredTest()); }
-        catch (Exception ex) { _logger.LogError(ex, "Error in onDiscovered callback for {TestCase}", testCase.FullyQualifiedName); }
-      });
+        _logger.LogWarning("Failed to write test case {TestCase} to the channel", testCase.FullyQualifiedName);
+      }
     }
   }
-
+  public IAsyncEnumerable<DiscoveredTest> ReadAllAsync()
+  {
+    return _channel.Reader.ReadAllAsync();
+  }
   public void HandleDiscoveryComplete(DiscoveryCompleteEventArgs discoveryCompleteEventArgs, IEnumerable<TestCase>? lastChunk)
   {
     if (lastChunk is not null) HandleDiscoveredTests(lastChunk);
-    _tcs.TrySetResult();
+    _channel.Writer.Complete();
   }
 
   public void HandleLogMessage(TestMessageLevel level, string? message)
