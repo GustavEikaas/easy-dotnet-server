@@ -102,12 +102,9 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
     var sourceGenerator = Path.Combine(razorExtensionDir, "Microsoft.CodeAnalysis.Razor.Compiler.dll");
     var designTimePath = Path.Combine(razorExtensionDir, "Targets", "Microsoft.NET.Sdk.Razor.DesignTime.targets");
     var extensionDll = Path.Combine(razorExtensionDir, "Microsoft.VisualStudioCode.RazorExtension.dll");
-    startInfo.ArgumentList.Add("--razorSourceGenerator");
-    startInfo.ArgumentList.Add(sourceGenerator);
-    startInfo.ArgumentList.Add("--razorDesignTimePath");
-    startInfo.ArgumentList.Add(designTimePath);
-    startInfo.ArgumentList.Add("--extension");
-    startInfo.ArgumentList.Add(extensionDll);
+    startInfo.ArgumentList.Add($"--extension={extensionDll}");
+    startInfo.ArgumentList.Add($"--razorSourceGenerator={sourceGenerator}");
+    startInfo.ArgumentList.Add($"--razorDesignTimePath={designTimePath}");
 
     if (!string.IsNullOrWhiteSpace(settings.CSharpDesignTimePath))
     {
