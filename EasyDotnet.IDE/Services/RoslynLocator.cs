@@ -82,7 +82,12 @@ public static class RoslynLocator
 
   public static string GetRazorExtensionDir()
   {
-    return Path.GetFullPath(Path.Combine(GetRoslynBaseDir(), "RazorExtension"));
+    var dir = Path.GetFullPath(Path.Combine(GetRoslynBaseDir(), "RazorExtension"));
+    if (!Directory.Exists(dir))
+    {
+      throw new DirectoryNotFoundException($"RazorExtension folder not found: {dir}");
+    }
+    return dir;
   }
 
   /// <summary>

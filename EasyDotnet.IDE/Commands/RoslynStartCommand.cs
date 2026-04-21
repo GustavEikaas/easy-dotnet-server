@@ -100,27 +100,15 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
     }
 
     var razorExtensionDir = RoslynLocator.GetRazorExtensionDir();
-    if (razorExtensionDir != null)
-    {
-      var sourceGenerator = Path.Combine(razorExtensionDir, "Microsoft.CodeAnalysis.Razor.Compiler.dll");
-      var designTimePath = Path.Combine(razorExtensionDir, "Targets", "Microsoft.NET.Sdk.Razor.DesignTime.targets");
-      var extensionDll = Path.Combine(razorExtensionDir, "Microsoft.VisualStudioCode.RazorExtension.dll");
-      if (File.Exists(sourceGenerator))
-      {
-        startInfo.ArgumentList.Add("--razorSourceGenerator");
-        startInfo.ArgumentList.Add(sourceGenerator);
-      }
-      if (File.Exists(designTimePath))
-      {
-        startInfo.ArgumentList.Add("--razorDesignTimePath");
-        startInfo.ArgumentList.Add(designTimePath);
-      }
-      if (File.Exists(extensionDll))
-      {
-        startInfo.ArgumentList.Add("--extension");
-        startInfo.ArgumentList.Add(extensionDll);
-      }
-    }
+    var sourceGenerator = Path.Combine(razorExtensionDir, "Microsoft.CodeAnalysis.Razor.Compiler.dll");
+    var designTimePath = Path.Combine(razorExtensionDir, "Targets", "Microsoft.NET.Sdk.Razor.DesignTime.targets");
+    var extensionDll = Path.Combine(razorExtensionDir, "Microsoft.VisualStudioCode.RazorExtension.dll");
+    startInfo.ArgumentList.Add("--razorSourceGenerator");
+    startInfo.ArgumentList.Add(sourceGenerator);
+    startInfo.ArgumentList.Add("--razorDesignTimePath");
+    startInfo.ArgumentList.Add(designTimePath);
+    startInfo.ArgumentList.Add("--extension");
+    startInfo.ArgumentList.Add(extensionDll);
 
     if (!string.IsNullOrWhiteSpace(settings.CSharpDesignTimePath))
     {
