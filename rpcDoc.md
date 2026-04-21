@@ -274,6 +274,28 @@
 
 ---
 
+## ServerController
+
+### `_server/logdump`
+_No parameters_
+
+**Returns:** `String[]`
+
+### `_server/logdump/buildserver`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+
+**Returns:** `Task<String[]>`
+
+### `_server/setLogLevel`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | SetLogLevelRequest |   |
+
+**Returns:** `Task`
+
+---
+
 ## UserSecretsController
 
 ### `user-secrets/init`
