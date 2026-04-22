@@ -34,6 +34,7 @@ public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService c
 
     var pipeName = PipeUtils.GeneratePipeName();
     var process = SpawnProcess(runtime, pipeName);
+    pipeName = "debugPipe";
 
     try
     {
@@ -79,6 +80,7 @@ public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService c
     };
     var logLevel = logLevelState.Current.ToString();
 
+    runtime = BuildServerRuntime.Net80;
     if (runtime == BuildServerRuntime.Net472)
     {
       startInfo.FileName = BuildHostLocator.GetBuildServerFramework();
