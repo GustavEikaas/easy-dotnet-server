@@ -114,11 +114,14 @@ public static class VsTestExtensions
 
   private static (string MethodName, string? Args) ParseArguments(string displayName)
   {
+    // Mirrors MtpExtensions.ParseArguments — MSTest DynamicData emits DisplayName as
+    // "M (1)" with a space before the paren, so the prefix needs TrimEnd to avoid
+    // trailing whitespace leaking into the method name.
     var start = displayName.IndexOf('(');
     var end = displayName.LastIndexOf(')');
     if (start >= 0 && end > start && end == displayName.Length - 1)
-      return (displayName[..start], displayName[start..(end + 1)]);
-    return (displayName, null);
+      return (displayName[..start].TrimEnd(), displayName[start..(end + 1)]);
+    return (displayName.Trim(), null);
   }
 
   /// <summary>
