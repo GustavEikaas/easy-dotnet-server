@@ -25,6 +25,9 @@ jobs:
       - name: Test
         run: dotnet test --no-build  ./EasyDotnet.IntegrationTests/EasyDotnet.IntegrationTests.csproj
 
+      - name: BuildServer Smoke Tests
+        run: dotnet test --no-build ./EasyDotnet.BuildServer.SmokeTests/EasyDotnet.BuildServer.SmokeTests.csproj
+
       - name: Test MTP
         run: |
           dotnet run --no-build --project ./EasyDotnet.Debugger.Tests

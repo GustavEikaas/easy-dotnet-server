@@ -3,66 +3,47 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using EasyDotnet.BuildServer.Handlers;
 using EasyDotnet.BuildServer.Logging;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Serilog;
 using StreamJsonRpc;
 
 namespace EasyDotnet.BuildServer;
 
 public static class DiModule
 {
-  public static ServiceProvider BuildServiceProvider(JsonRpc jsonRpc, MsBuildInstance instance, SourceLevels logLevel)
+  public sealed record BuildServerServices(Logger Logger, LogLevelState LogLevelState);
+
+  public static BuildServerServices Bootstrap(JsonRpc jsonRpc, MsBuildInstance instance, SourceLevels logLevel)
   {
-    var services = new ServiceCollection();
-
     var logLevelState = new LogLevelState(logLevel);
-    ConfigureLogging(logLevelState);
+    var logger = new Logger(logLevelState);
 
-    services.AddLogging(builder =>
+    WriteLogHeader(logger);
+
+    var watchHandler = new WatchHandler(instance);
+    var projectPropertiesBatchHandler = new ProjectPropertiesBatchHandler();
+    var restoreHandler = new RestoreHandler();
+    var batchBuildHandler = new BatchBuildHandler();
+    var singleFileConvertHandler = new SingleFileConvertHandler(restoreHandler, projectPropertiesBatchHandler, logger);
+    var diagnosticsHandler = new DiagnosticsHandler(instance);
+    var packageReferenceHandler = new PackageReferenceHandler();
+    var serverHandler = new ServerHandler(logLevelState, logger);
+
+    ConfigureJsonRpc(jsonRpc, logger, logLevelState, new object[]
     {
-      builder.ClearProviders();
-      builder.AddSerilog(Log.Logger, dispose: true);
+      watchHandler,
+      projectPropertiesBatchHandler,
+      restoreHandler,
+      batchBuildHandler,
+      singleFileConvertHandler,
+      diagnosticsHandler,
+      packageReferenceHandler,
+      serverHandler,
     });
 
-    services.AddSingleton(jsonRpc);
-    services.AddSingleton(logLevelState);
-
-    services.AddTransient<WatchHandler>();
-    services.AddTransient<ProjectPropertiesBatchHandler>();
-    services.AddTransient<RestoreHandler>();
-    services.AddTransient<BatchBuildHandler>();
-    services.AddTransient<SingleFileConvertHandler>();
-    services.AddTransient<DiagnosticsHandler>();
-    services.AddTransient<PackageReferenceHandler>();
-    services.AddTransient<ServerHandler>();
-
-    services.AddSingleton(instance);
-
-    var serviceProvider = services.BuildServiceProvider();
-
-    ConfigureJsonRpc(jsonRpc, serviceProvider, logLevelState);
-
-    return serviceProvider;
+    return new BuildServerServices(logger, logLevelState);
   }
 
-  private static void ConfigureLogging(LogLevelState state)
+  private static void ConfigureJsonRpc(JsonRpc jsonRpc, Logger logger, LogLevelState logLevelState, object[] handlers)
   {
-    Log.Logger = new LoggerConfiguration()
-        .MinimumLevel.ControlledBy(state.Switch)
-        .Enrich.WithProperty("ServerType", "BuildServer")
-        .WriteTo.Console(
-            outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] [{ServerType}] {Message:lj}{NewLine}{Exception}"
-        )
-        .WriteTo.Sink(state.RingSink)
-        .CreateLogger();
-    WriteLogHeader();
-  }
-
-  private static void ConfigureJsonRpc(JsonRpc jsonRpc, IServiceProvider serviceProvider, LogLevelState logLevelState)
-  {
-    var logger = serviceProvider.GetRequiredService<ILogger<JsonRpc>>();
-
     jsonRpc.TraceSource.Switch.Level = logLevelState.Current;
     logLevelState.LevelChanged += l => jsonRpc.TraceSource.Switch.Level = l;
     jsonRpc.TraceSource.Listeners.Clear();
@@ -70,18 +51,6 @@ public static class DiModule
 
     jsonRpc.Disconnected += (sender, args) => logger.LogWarning("JSON RPC disconnected: {Reason} - {Description}",
               args.Reason, args.Description);
-
-    var handlers = new object[]
-    {
-      serviceProvider.GetRequiredService<WatchHandler>(),
-      serviceProvider.GetRequiredService<ProjectPropertiesBatchHandler>(),
-      serviceProvider.GetRequiredService<RestoreHandler>(),
-      serviceProvider.GetRequiredService<BatchBuildHandler>(),
-      serviceProvider.GetRequiredService<SingleFileConvertHandler>(),
-      serviceProvider.GetRequiredService<DiagnosticsHandler>(),
-      serviceProvider.GetRequiredService<PackageReferenceHandler>(),
-      serviceProvider.GetRequiredService<ServerHandler>(),
-    };
 
     foreach (var handler in handlers)
     {
@@ -92,31 +61,30 @@ public static class DiModule
     }
   }
 
-  private static void WriteLogHeader()
+  private static void WriteLogHeader(Logger logger)
   {
-    var logger = Log.Logger ?? throw new InvalidOperationException("Serilog logger not initialized");
     var process = Process.GetCurrentProcess();
     var assembly = Assembly.GetExecutingAssembly();
 
-    logger.Information("============================================================");
-    logger.Information(" EasyDotnet Build Server");
-    logger.Information("============================================================");
-    logger.Information("Timestamp      : {Timestamp}", DateTime.UtcNow.ToString("O"));
-    logger.Information("Process Name   : {ProcessName}", process.ProcessName);
-    logger.Information("Machine Name   : {MachineName}", Environment.MachineName);
-    logger.Information("User           : {UserName}", Environment.UserName);
-    logger.Information("OS Version     : {OSVersion}", Environment.OSVersion);
-    logger.Information("OS Arch        : {OSArch}", RuntimeInformation.OSArchitecture);
-    logger.Information("Process Arch   : {ProcessArch}", RuntimeInformation.ProcessArchitecture);
-    logger.Information("Framework      : {Framework}", RuntimeInformation.FrameworkDescription);
-    logger.Information("CPU Count      : {CPUCount}", Environment.ProcessorCount);
-    logger.Information("Working Set    : {WorkingSet} MB", process.WorkingSet64 / 1024 / 1024);
-    logger.Information("Current Dir    : {CurrentDir}", Environment.CurrentDirectory);
-    logger.Information("Server Version : {Version}", assembly.GetName().Version);
-    logger.Information("============================================================");
+    logger.LogInformation("============================================================");
+    logger.LogInformation(" EasyDotnet Build Server");
+    logger.LogInformation("============================================================");
+    logger.LogInformation("Timestamp      : {Timestamp}", DateTime.UtcNow.ToString("O"));
+    logger.LogInformation("Process Name   : {ProcessName}", process.ProcessName);
+    logger.LogInformation("Machine Name   : {MachineName}", Environment.MachineName);
+    logger.LogInformation("User           : {UserName}", Environment.UserName);
+    logger.LogInformation("OS Version     : {OSVersion}", Environment.OSVersion);
+    logger.LogInformation("OS Arch        : {OSArch}", RuntimeInformation.OSArchitecture);
+    logger.LogInformation("Process Arch   : {ProcessArch}", RuntimeInformation.ProcessArchitecture);
+    logger.LogInformation("Framework      : {Framework}", RuntimeInformation.FrameworkDescription);
+    logger.LogInformation("CPU Count      : {CPUCount}", Environment.ProcessorCount);
+    logger.LogInformation("Working Set    : {WorkingSet} MB", process.WorkingSet64 / 1024 / 1024);
+    logger.LogInformation("Current Dir    : {CurrentDir}", Environment.CurrentDirectory);
+    logger.LogInformation("Server Version : {Version}", assembly.GetName().Version);
+    logger.LogInformation("============================================================");
   }
 
-  private class JsonRpcTraceListener(ILogger<JsonRpc> logger) : TraceListener
+  private class JsonRpcTraceListener(Logger logger) : TraceListener
   {
     public override void Write(string? message)
     {
@@ -136,16 +104,16 @@ public static class DiModule
 
     public override void TraceEvent(TraceEventCache? eventCache, string source, TraceEventType eventType, int id, string? message)
     {
-      var logLevel = eventType switch
+      var level = eventType switch
       {
-        TraceEventType.Critical => LogLevel.Critical,
-        TraceEventType.Error => LogLevel.Error,
-        TraceEventType.Warning => LogLevel.Warning,
-        TraceEventType.Information => LogLevel.Information,
-        _ => LogLevel.Debug
+        TraceEventType.Critical => SourceLevels.Critical,
+        TraceEventType.Error => SourceLevels.Error,
+        TraceEventType.Warning => SourceLevels.Warning,
+        TraceEventType.Information => SourceLevels.Information,
+        _ => SourceLevels.Verbose,
       };
 
-      logger.Log(logLevel, "[{Source}] {Message}", source, message);
+      logger.Log(level, "[{Source}] {Message}", source, message);
     }
   }
 }

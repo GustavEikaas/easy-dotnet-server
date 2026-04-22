@@ -1,8 +1,6 @@
 ﻿using System.Diagnostics;
 using System.IO.Pipes;
 using Microsoft.Build.Locator;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Serialization;
 using StreamJsonRpc;
 
@@ -140,9 +138,8 @@ static class Program
 
     var jsonRpc = new JsonRpc(messageHandler);
 
-    var serviceProvider = DiModule.BuildServiceProvider(jsonRpc, instance, logLevel);
-
-    var logger = serviceProvider.GetRequiredService<ILogger<JsonRpc>>();
+    var services = DiModule.Bootstrap(jsonRpc, instance, logLevel);
+    var logger = services.Logger;
 
     logger.LogInformation("JSON-RPC Server initialized");
     logger.LogInformation("Listening on named pipe {PipeName}", pipeName);
