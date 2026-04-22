@@ -18,16 +18,9 @@
     </PackageReference>
   </ItemGroup>
 
-  <!--
-    On net472, MSBuild 17.11's XMakeElements static ctor calls
-    FrozenSet.Create(IEqualityComparer<T>, ReadOnlySpan<T>) which only
-    exists in System.Collections.Immutable 9.0.0. The copy that ships
-    inside VS's MSBuild folder is older, so we MUST deploy 9.0.0 locally
-    (no ExcludeAssets="runtime") to win normal CLR probing before our
-    AssemblyResolve handler reaches into MSBuildPath.
-  -->
   <ItemGroup Condition="'$(TargetFramework)' == 'net472'">
-    <PackageReference Include="System.Collections.Immutable" Version="9.0.0" />
+    <PackageReference Include="System.Collections.Immutable" Version="10.0.0" />
+    <PackageReference Include="System.Reflection.Metadata" Version="10.0.0" />
   </ItemGroup>
 
   <ItemGroup>
