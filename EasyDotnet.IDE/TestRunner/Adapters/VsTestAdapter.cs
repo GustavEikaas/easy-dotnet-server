@@ -60,10 +60,25 @@ public sealed class VsTestAdapter(
 
       var handler = new StreamingDiscoveryHandler(loggerFactory);
       wrapper.DiscoverTests([project.TargetPath], null, DefaultOptions, null, handler);
-      await foreach (var discoveredTest in handler.ReadAllAsync().WithCancellation(ct))
+
+      // Buffer all TestCases so we can detect parameterised rows by duplicate FQN —
+      // this is the only reliable VSTest-layer signal, since frameworks like MSTest
+      // can strip parens from DisplayName entirely via [DataRow(DisplayName = "...")].
+      var testCases = new List<Microsoft.VisualStudio.TestPlatform.ObjectModel.TestCase>();
+      await foreach (var tc in handler.ReadAllAsync().WithCancellation(ct))
       {
-        try { await onDiscovered(discoveredTest); }
-        catch (Exception ex) { _logger.LogError(ex, "Error in onDiscovered callback for {TestCase}", discoveredTest.FullyQualifiedName); }
+        testCases.Add(tc);
+      }
+
+      foreach (var group in testCases.GroupBy(tc => tc.FullyQualifiedName))
+      {
+        var isParameterised = group.Count() > 1;
+        foreach (var tc in group)
+        {
+          var discoveredTest = tc.ToDiscoveredTest(isParameterised);
+          try { await onDiscovered(discoveredTest); }
+          catch (Exception ex) { _logger.LogError(ex, "Error in onDiscovered callback for {TestCase}", discoveredTest.FullyQualifiedName); }
+        }
       }
     }
     finally
