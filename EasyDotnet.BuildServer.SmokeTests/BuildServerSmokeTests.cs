@@ -63,9 +63,6 @@ public sealed class BuildServerSmokeTests
     }
 
     Assert.NotEmpty(results);
-    Assert.All(results, r =>
-    {
-      Assert.Null(r.Error);
-    });
+    Assert.All(results, r => Assert.Null(r.Error));
   }
 }
