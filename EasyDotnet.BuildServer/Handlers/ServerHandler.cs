@@ -1,10 +1,9 @@
 using EasyDotnet.BuildServer.Logging;
-using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
 
 namespace EasyDotnet.BuildServer.Handlers;
 
-public class ServerHandler(LogLevelState logLevelState, ILogger<ServerHandler> logger)
+public class ServerHandler(LogLevelState logLevelState, Logger logger)
 {
   public sealed record SetLogLevelRequest(string Level);
 
