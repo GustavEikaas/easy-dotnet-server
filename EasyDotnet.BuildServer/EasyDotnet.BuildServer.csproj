@@ -18,6 +18,10 @@
     </PackageReference>
   </ItemGroup>
 
+  <ItemGroup Condition="'$(TargetFramework)' == 'net472'">
+    <PackageReference Include="System.Collections.Immutable" Version="9.0.0" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\EasyDotnet.BuildServer.Contracts\EasyDotnet.BuildServer.Contracts.csproj" />
   </ItemGroup>
