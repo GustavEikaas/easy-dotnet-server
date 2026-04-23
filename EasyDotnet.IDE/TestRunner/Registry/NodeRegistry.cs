@@ -77,9 +77,9 @@ public class NodeRegistry
     }
   }
 
-  /// <summary>Returns all leaf nodes (TestMethod, Subcase) under a given root.</summary>
+  /// <summary>Returns all leaf nodes (TestMethod, Subcase, ProbableTest) under a given root.</summary>
   public IEnumerable<TestNode> GetLeafDescendants(string rootId) =>
-      GetDescendants(rootId).Where(n => n.Type is NodeType.TestMethod or NodeType.Subcase);
+      GetDescendants(rootId).Where(n => n.Type is NodeType.TestMethod or NodeType.Subcase or NodeType.ProbableTest);
 
   public void Clear()
   {
@@ -138,7 +138,7 @@ public class NodeRegistry
   {
     var normalized = filePath.Replace('\\', '/');
     return _nodes.Values.Where(n =>
-        (n.Type is NodeType.TestMethod or NodeType.Subcase or NodeType.TheoryGroup or NodeType.TestClass) &&
+        (n.Type is NodeType.TestMethod or NodeType.Subcase or NodeType.TheoryGroup or NodeType.TestClass or NodeType.ProbableTest) &&
         string.Equals(
             n.FilePath?.Replace('\\', '/'),
             normalized,

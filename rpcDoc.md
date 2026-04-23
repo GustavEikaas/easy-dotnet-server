@@ -159,7 +159,7 @@
 |-----------|------|----------|
 | request | SyncFileRequest |   |
 
-**Returns:** `SyncFileResult`
+**Returns:** `Task<SyncFileResult>`
 
 ---
 

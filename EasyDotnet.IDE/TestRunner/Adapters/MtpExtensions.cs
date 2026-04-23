@@ -36,10 +36,6 @@ public static class MtpExtensions
 
     var (leafMethodName, args) = ParseArguments(rawLeaf);
 
-    var baseMethodName = !string.IsNullOrEmpty(node.TestMethod)
-        ? StripSignature(node.TestMethod)
-        : leafMethodName;
-
     var fqn = !string.IsNullOrEmpty(node.TestType)
         ? $"{node.TestType}.{node.DisplayName}"
         : node.DisplayName;
@@ -50,8 +46,8 @@ public static class MtpExtensions
       FullyQualifiedName = fqn,
       NamespaceParts = namespaceParts,
       ClassName = className,
-      MethodName = baseMethodName,
-      DisplayName = baseMethodName,
+      MethodName = leafMethodName,
+      DisplayName = leafMethodName,
       Arguments = args,
       FilePath = node.FilePath?.Replace("\\", "/"),
       // MTP is 1-based → convert to 0-based (LSP standard)
@@ -103,13 +99,4 @@ public static class MtpExtensions
     return (rawName.Trim(), null);
   }
 
-  private static string StripSignature(string testMethod)
-  {
-    var name = testMethod.Trim();
-    var parenIdx = name.IndexOf('(');
-    if (parenIdx >= 0) name = name[..parenIdx];
-    var lastDot = name.LastIndexOf('.');
-    if (lastDot >= 0) name = name[(lastDot + 1)..];
-    return name.Trim();
-  }
 }
