@@ -704,10 +704,21 @@ public class TestRunnerService(
         .Select(n => n.Id)
         .ToHashSet(StringComparer.Ordinal);
 
+    // Build a set of signature lines already occupied by real (non-probable) nodes.
+    // Any probable method whose line overlaps a real node is discarded — it's already discovered.
+    var realNodeLines = registry.GetNodesForFile(req.Path)
+        .Where(n => n.Type is not NodeType.ProbableTest && n.SignatureLine.HasValue)
+        .Select(n => n.SignatureLine!.Value)
+        .ToHashSet();
+
     var newProbableIds = new HashSet<string>(StringComparer.Ordinal);
 
     foreach (var probable in parsed.ProbableMethods)
     {
+      // Discard if any real node already occupies the same signature line
+      if (realNodeLines.Contains(probable.Location.SignatureLine))
+        continue;
+
       // Find the registered class node for this file + class name
       var classNode = registry.GetNodesForFile(req.Path)
           .FirstOrDefault(n =>
@@ -718,12 +729,9 @@ public class TestRunnerService(
 
       var probableId = NodeIdBuilder.Method(classNode.Id, probable.MethodName);
 
-      // If already a real (non-probable) node, skip
-      var existing = registry.Get(probableId);
-      if (existing is not null && existing.Type is not NodeType.ProbableTest) continue;
-
       newProbableIds.Add(probableId);
 
+      var existing = registry.Get(probableId);
       if (existing?.Type is NodeType.ProbableTest)
       {
         // Already known probable — update line numbers and include in updates
