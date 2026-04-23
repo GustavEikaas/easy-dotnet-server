@@ -176,6 +176,66 @@ public abstract class TUnitSyncFileTests<TContainer> : TestRunnerTestBase<TConta
     Assert.Contains("Run", probableNode.AvailableActions ?? []);
     Assert.Contains("Debug", probableNode.AvailableActions ?? []);
   }
+
+  [Fact]
+  public async Task SyncFile_RunningProbableTest_ReportsOutcomeOnReconciledNode()
+  {
+    const string original = """
+      namespace Sample.SyncProbableRun;
+
+      public class C
+      {
+          [TUnit.Core.Test]
+          public async Task M() { await Task.CompletedTask; }
+      }
+      """;
+
+    const string withAddedTest = """
+      namespace Sample.SyncProbableRun;
+
+      public class C
+      {
+          [TUnit.Core.Test]
+          public async Task M() { await Task.CompletedTask; }
+
+          [TUnit.Core.Test]
+          public async Task JustWrittenByUser() { await Task.CompletedTask; }
+      }
+      """;
+
+    using var fixture = new TestProjectFixtureBuilder()
+      .WithName("Sample.TUnitSyncProbableRun")
+      .WithFramework(TestFrameworkKind.TUnitMtp)
+      .WithFile("Run.cs", original)
+      .Build();
+
+    await InitializeTestRunnerAsync(fixture);
+
+    var path = Path.Combine(fixture.ProjectDir, "Run.cs");
+    await Container.Rpc.TestRunnerSyncFileAsync(path, withAddedTest, version: 1);
+
+    var probable = Assert.Single(NodesOfType(NodeTypeNames.ProbableTest),
+      n => n.DisplayName == "JustWrittenByUser");
+
+    await File.WriteAllTextAsync(path, withAddedTest);
+
+    await Container.Rpc.TestRunnerRunAsync(probable.Id);
+
+    // After the run the probable must be gone — either replaced by a real TestMethod
+    // under the same id or removed entirely and re-registered under a different id.
+    var reconciled = NodesOfType(NodeTypeNames.TestMethod)
+      .Concat(NodesOfType(NodeTypeNames.TheoryGroup))
+      .SingleOrDefault(n => n.DisplayName == "JustWrittenByUser");
+    Assert.NotNull(reconciled);
+
+    // Regression guard: the first run must actually dispatch and report a terminal
+    // status on the reconciled node. Before the fix, no status ever landed because
+    // RunNodeAsync was called with the stale probable id.
+    Assert.True(
+      LastStatusKind.TryGetValue(reconciled!.Id, out var kind)
+        && kind is "Passed" or "Failed" or "Skipped",
+      $"Expected a terminal status on {reconciled.Id}, got {(kind ?? "<none>")}.");
+  }
 }
 
 public sealed class TUnitSyncFileSdk10Linux : TUnitSyncFileTests<Sdk10LinuxContainer>;

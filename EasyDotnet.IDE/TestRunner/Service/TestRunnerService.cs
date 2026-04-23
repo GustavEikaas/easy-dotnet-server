@@ -793,6 +793,34 @@ public class TestRunnerService(
     return string.Join(".", segments);
   }
 
+  /// <summary>
+  /// If <paramref name="nodeId"/> pointed to a ProbableTest that has now been replaced
+  /// (same FilePath + ParentId + DisplayName) by a real TestMethod / TheoryGroup under a
+  /// different stable id (adapters disagree on whether <c>discovered.MethodName</c> is
+  /// short or FQN), returns the successor's id. Otherwise returns <paramref name="nodeId"/>.
+  /// </summary>
+  private string ResolveProbableSuccessor(
+      string nodeId,
+      (string? FilePath, string? ParentId, string MethodName) snapshot)
+  {
+    if (snapshot.FilePath is null || snapshot.ParentId is null) return nodeId;
+
+    var current = registry.Get(nodeId);
+    if (current is not null && current.Type is not NodeType.ProbableTest) return nodeId;
+
+    var normalized = snapshot.FilePath.Replace('\\', '/');
+    var successor = registry.GetAll().FirstOrDefault(n =>
+        (n.Type is NodeType.TestMethod or NodeType.TheoryGroup) &&
+        n.ParentId == snapshot.ParentId &&
+        string.Equals(n.DisplayName, snapshot.MethodName, StringComparison.Ordinal) &&
+        string.Equals(
+            n.FilePath?.Replace('\\', '/'),
+            normalized,
+            StringComparison.OrdinalIgnoreCase));
+
+    return successor?.Id ?? nodeId;
+  }
+
   private async Task<OperationResult> ExecuteOnNodeAsync(
       string nodeId, string opName, bool debug, string? source, CancellationToken ct)
   {
@@ -955,6 +983,14 @@ public class TestRunnerService(
     var project = await ResolveProjectAsync(projectId, token.Ct)
         ?? throw new InvalidOperationException($"Project {projectId} not found");
 
+    // Snapshot probable metadata before re-discovery wipes the node. After discovery
+    // we try to resolve the successor (real TestMethod / TheoryGroup) by file + class +
+    // method name — adapters disagree on whether discovered.MethodName is short or FQN,
+    // so the probable's stable id doesn't always survive rediscovery.
+    var probableSnapshot = node.Type is NodeType.ProbableTest
+        ? (FilePath: node.FilePath, ParentId: node.ParentId, MethodName: node.DisplayName)
+        : default;
+
     await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus("Building", OverallStatus.Building), token.OperationId);
     await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.Building(), operationId: token.OperationId);
 
@@ -1002,9 +1038,13 @@ public class TestRunnerService(
       await executor.DiscoverProjectAsync(project, solutionNodeId, control, token);
     }
 
+    // If the caller handed us a ProbableTest id that discovery just replaced under a
+    // different stable id, redirect to the successor so this first run actually fires.
+    var runNodeId = ResolveProbableSuccessor(nodeId, probableSnapshot);
+
     await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus(debug ? "Debugging" : "Running", debug ? OverallStatus.Debugging : OverallStatus.Running), token.OperationId);
 
-    var counter = await executor.RunNodeAsync(nodeId, project, control, token, debug);
+    var counter = await executor.RunNodeAsync(runNodeId, project, control, token, debug);
 
     token.Ct.ThrowIfCancellationRequested();
 

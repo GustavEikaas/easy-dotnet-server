@@ -27,9 +27,16 @@ public abstract class TestRunnerTestBase<TContainer> : ContainerTestBase<TContai
   private static readonly TimeSpan InitializeTimeout = TimeSpan.FromMinutes(2);
 
   private readonly ConcurrentDictionary<string, TestNodeDto> _nodes = new();
+  private readonly ConcurrentDictionary<string, string> _lastStatusKind = new();
 
   /// <summary>All nodes registered so far, keyed by <see cref="TestNodeDto.Id"/>.</summary>
   public IReadOnlyDictionary<string, TestNodeDto> Nodes => _nodes;
+
+  /// <summary>
+  /// Last status discriminator seen for each node id via <c>updateStatus</c> /
+  /// <c>updateStatusBatch</c> (e.g. <c>"Running"</c>, <c>"Passed"</c>, <c>"Failed"</c>).
+  /// </summary>
+  public IReadOnlyDictionary<string, string> LastStatusKind => _lastStatusKind;
 
   protected override void ConfigureRpc(JsonRpc rpc) =>
     rpc.AddLocalRpcTarget(new RpcHandlers(this), new JsonRpcTargetOptions { DisposeOnDisconnect = false });
@@ -75,10 +82,20 @@ public abstract class TestRunnerTestBase<TContainer> : ContainerTestBase<TContai
       owner._nodes.TryRemove(payload.Id, out _);
 
     [JsonRpcMethod("updateStatus", UseSingleObjectParameterDeserialization = true)]
-    public void UpdateStatus(UpdateStatusPayload _) { /* not asserted in batch 1 */ }
+    public void UpdateStatus(UpdateStatusPayload payload)
+    {
+      if (payload.Status is { } s) owner._lastStatusKind[payload.Id] = s.Type;
+    }
 
     [JsonRpcMethod("updateStatusBatch", UseSingleObjectParameterDeserialization = true)]
-    public void UpdateStatusBatch(UpdateStatusBatchPayload _) { /* not asserted in batch 1 */ }
+    public void UpdateStatusBatch(UpdateStatusBatchPayload payload)
+    {
+      if (payload.Updates is null) return;
+      foreach (var u in payload.Updates)
+      {
+        if (u.Id is { } id && u.Status is { } s) owner._lastStatusKind[id] = s.Type;
+      }
+    }
 
     [JsonRpcMethod("testrunner/statusUpdate", UseSingleObjectParameterDeserialization = true)]
     public void TestrunnerStatusUpdate(object _) { /* runner-level status, not asserted */ }
@@ -89,6 +106,8 @@ public abstract class TestRunnerTestBase<TContainer> : ContainerTestBase<TContai
 
   private sealed record RegisterTestPayload(TestNodeDto Test);
   private sealed record RemoveTestPayload(string Id);
-  private sealed record UpdateStatusPayload(string Id, object? Status, List<string>? AvailableActions);
-  private sealed record UpdateStatusBatchPayload(List<object> Updates);
+  private sealed record StatusDto(string Type);
+  private sealed record UpdateStatusPayload(string Id, StatusDto? Status, List<string>? AvailableActions);
+  private sealed record UpdateStatusBatchPayload(List<StatusUpdate>? Updates);
+  private sealed record StatusUpdate(string Id, StatusDto? Status, List<string>? AvailableActions);
 }
