@@ -34,7 +34,6 @@ public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService c
 
     var pipeName = PipeUtils.GeneratePipeName();
     var process = SpawnProcess(runtime, pipeName);
-    //pipeName = "debugPipe";
 
     try
     {
