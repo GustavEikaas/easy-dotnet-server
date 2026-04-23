@@ -20,4 +20,13 @@ public abstract record NodeType
   /// on the next discovery.
   /// </summary>
   public sealed record ProbableTest : NodeType;
+
+  /// <summary>
+  /// Class in source that has at least one <see cref="ProbableTest"/> but is
+  /// not (yet) present in the compiled assembly. Parents its probable methods
+  /// in the client tree. Reconciled to a real <see cref="TestClass"/> on the
+  /// next discovery. Parented to the closest matching <see cref="Namespace"/>
+  /// under its project, or the project itself if no prefix matches.
+  /// </summary>
+  public sealed record ProbableClass : NodeType;
 }

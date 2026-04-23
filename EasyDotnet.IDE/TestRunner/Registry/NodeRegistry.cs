@@ -138,7 +138,8 @@ public class NodeRegistry
   {
     var normalized = filePath.Replace('\\', '/');
     return _nodes.Values.Where(n =>
-        (n.Type is NodeType.TestMethod or NodeType.Subcase or NodeType.TheoryGroup or NodeType.TestClass or NodeType.ProbableTest) &&
+        (n.Type is NodeType.TestMethod or NodeType.Subcase or NodeType.TheoryGroup
+            or NodeType.TestClass or NodeType.ProbableTest or NodeType.ProbableClass) &&
         string.Equals(
             n.FilePath?.Replace('\\', '/'),
             normalized,

@@ -695,58 +695,54 @@ public class TestRunnerService(
       updates.Add(new LineNumberUpdateDto(node.Id, loc.SignatureLine, loc.BodyStartLine, loc.EndLine));
     }
 
-    // --- 2. Synthesise ProbableTest nodes for newly-written test methods ---
-    //
-    // Only methods whose containing class IS already in the registry can get a
-    // probable node — we need the classNodeId to build the stable ID.
-    var existingProbableIds = registry.GetNodesForFile(req.Path)
+    // --- 2. Synthesise ProbableClass / ProbableTest nodes for newly-written tests ---
+    var existingProbableTestIds = registry.GetNodesForFile(req.Path)
         .Where(n => n.Type is NodeType.ProbableTest)
         .Select(n => n.Id)
         .ToHashSet(StringComparer.Ordinal);
+    var existingProbableClassIds = registry.GetNodesForFile(req.Path)
+        .Where(n => n.Type is NodeType.ProbableClass)
+        .Select(n => n.Id)
+        .ToHashSet(StringComparer.Ordinal);
 
-    // Build a set of signature lines already occupied by real (non-probable) nodes.
-    // Any probable method whose line overlaps a real node is discarded — it's already discovered.
+    // Signature lines already occupied by real (non-probable) nodes.
+    // Any probable overlapping a real node is discarded — it's already discovered.
     var realNodeLines = registry.GetNodesForFile(req.Path)
-        .Where(n => n.Type is not NodeType.ProbableTest && n.SignatureLine.HasValue)
+        .Where(n => n.Type is not NodeType.ProbableTest and not NodeType.ProbableClass
+                    && n.SignatureLine.HasValue)
         .Select(n => n.SignatureLine!.Value)
         .ToHashSet();
 
-    var newProbableIds = new HashSet<string>(StringComparer.Ordinal);
+    var newProbableTestIds = new HashSet<string>(StringComparer.Ordinal);
+    var newProbableClassIds = new HashSet<string>(StringComparer.Ordinal);
 
     foreach (var probable in parsed.ProbableMethods)
     {
-      // Discard if any real node already occupies the same signature line
       if (realNodeLines.Contains(probable.Location.SignatureLine))
         continue;
 
-      // Find the registered class node for this file + class name
-      var classNode = registry.GetNodesForFile(req.Path)
-          .FirstOrDefault(n =>
-              n.Type is NodeType.TestClass &&
-              string.Equals(n.DisplayName, probable.ClassName, StringComparison.Ordinal));
+      var classNodeId = await EnsureClassNodeForProbableAsync(req.Path, probable, newProbableClassIds, updates);
+      if (classNodeId is null) continue;
 
-      if (classNode is null) continue;
+      var classNode = registry.Get(classNodeId)!;
+      var probableId = NodeIdBuilder.Method(classNodeId, probable.MethodName);
 
-      var probableId = NodeIdBuilder.Method(classNode.Id, probable.MethodName);
-
-      newProbableIds.Add(probableId);
+      newProbableTestIds.Add(probableId);
 
       var existing = registry.Get(probableId);
       if (existing?.Type is NodeType.ProbableTest)
       {
-        // Already known probable — update line numbers and include in updates
         registry.UpdateLineNumbers(probableId, probable.Location.SignatureLine, probable.Location.BodyStartLine, probable.Location.EndLine);
         updates.Add(new LineNumberUpdateDto(probableId, probable.Location.SignatureLine, probable.Location.BodyStartLine, probable.Location.EndLine));
         continue;
       }
 
-      // New probable — synthesise FQN by walking up through namespace segments
       var fqn = BuildFqn(classNode, probable.MethodName);
 
       var probableNode = new TestNode(
           Id: probableId,
           DisplayName: probable.MethodName,
-          ParentId: classNode.Id,
+          ParentId: classNodeId,
           FilePath: req.Path,
           SignatureLine: probable.Location.SignatureLine,
           BodyStartLine: probable.Location.BodyStartLine,
@@ -762,15 +758,127 @@ public class TestRunnerService(
       updates.Add(new LineNumberUpdateDto(probableId, probable.Location.SignatureLine, probable.Location.BodyStartLine, probable.Location.EndLine));
     }
 
-    // --- 3. Remove probable nodes whose methods are no longer in the source ---
-    foreach (var staleId in existingProbableIds)
+    // --- 3. Remove stale probable tests, then any now-empty probable classes ---
+    foreach (var staleId in existingProbableTestIds)
     {
-      if (newProbableIds.Contains(staleId)) continue;
+      if (newProbableTestIds.Contains(staleId)) continue;
       registry.RemoveSubtree(staleId);
       await dispatcher.SendRemoveTestAsync(staleId);
     }
+    foreach (var classId in existingProbableClassIds.Concat(newProbableClassIds).Distinct())
+    {
+      if (registry.Get(classId)?.Type is not NodeType.ProbableClass) continue;
+      if (registry.GetChildren(classId).Any()) continue;
+      registry.RemoveSubtree(classId);
+      await dispatcher.SendRemoveTestAsync(classId);
+    }
 
     return new SyncFileResult([.. updates], req.Version);
+  }
+
+  /// <summary>
+  /// Returns the node id of the parent class for a ProbableMethod. Uses the real
+  /// <see cref="NodeType.TestClass"/> if one is registered for this file + class name;
+  /// otherwise synthesises (or reuses) a <see cref="NodeType.ProbableClass"/> parented
+  /// to the closest matching <see cref="NodeType.Namespace"/> under the file's project,
+  /// or the project node itself if no prefix matches. Returns null if we can't locate
+  /// a project for the file.
+  /// </summary>
+  private async Task<string?> EnsureClassNodeForProbableAsync(
+      string filePath,
+      ProbableMethod probable,
+      HashSet<string> newProbableClassIds,
+      List<LineNumberUpdateDto> updates)
+  {
+    var realClass = registry.GetNodesForFile(filePath)
+        .FirstOrDefault(n =>
+            n.Type is NodeType.TestClass &&
+            string.Equals(n.DisplayName, probable.ClassName, StringComparison.Ordinal));
+    if (realClass is not null) return realClass.Id;
+
+    var projectNode = FindProjectNodeForFile(filePath);
+    if (projectNode is null) return null;
+
+    var parentId = FindClosestNamespaceNodeId(projectNode.Id, probable.NamespaceParts) ?? projectNode.Id;
+    var probableClassId = NodeIdBuilder.Class(parentId, probable.ClassName);
+
+    newProbableClassIds.Add(probableClassId);
+
+    var existing = registry.Get(probableClassId);
+    if (existing?.Type is NodeType.ProbableClass)
+    {
+      registry.UpdateLineNumbers(probableClassId, probable.ClassLocation.SignatureLine, probable.ClassLocation.BodyStartLine, probable.ClassLocation.EndLine);
+      updates.Add(new LineNumberUpdateDto(probableClassId, probable.ClassLocation.SignatureLine, probable.ClassLocation.BodyStartLine, probable.ClassLocation.EndLine));
+      return probableClassId;
+    }
+
+    var classNode = new TestNode(
+        Id: probableClassId,
+        DisplayName: probable.ClassName,
+        ParentId: parentId,
+        FilePath: filePath,
+        SignatureLine: probable.ClassLocation.SignatureLine,
+        BodyStartLine: probable.ClassLocation.BodyStartLine,
+        EndLine: probable.ClassLocation.EndLine,
+        Type: new NodeType.ProbableClass(),
+        ProjectId: projectNode.Id,
+        AvailableActions: [TestAction.Run, TestAction.Debug, TestAction.GoToSource]
+    );
+    registry.Register(classNode);
+    await dispatcher.SendRegisterTestAsync(classNode);
+    updates.Add(new LineNumberUpdateDto(probableClassId, probable.ClassLocation.SignatureLine, probable.ClassLocation.BodyStartLine, probable.ClassLocation.EndLine));
+    return probableClassId;
+  }
+
+  /// <summary>
+  /// Finds the project node whose csproj matches the nearest csproj in the file's
+  /// parent chain. If the project has multiple TFM variants, picks any — we don't
+  /// try to be clever about TFM selection for probables (they're reconciled on
+  /// the next discovery anyway).
+  /// </summary>
+  private TestNode? FindProjectNodeForFile(string filePath)
+  {
+    var csproj = FindCsprojForFile(filePath);
+    if (csproj is null) return null;
+    return registry.GetAll().FirstOrDefault(n =>
+        n.Type is NodeType.Project &&
+        string.Equals(n.FilePath, csproj, StringComparison.OrdinalIgnoreCase));
+  }
+
+  /// <summary>
+  /// Walks the parent directories of <paramref name="filePath"/> looking for a
+  /// single <c>*.csproj</c>; returns the first match or null.
+  /// </summary>
+  private static string? FindCsprojForFile(string filePath)
+  {
+    var dir = Path.GetDirectoryName(filePath);
+    while (!string.IsNullOrEmpty(dir))
+    {
+      var csproj = Directory.EnumerateFiles(dir, "*.csproj").FirstOrDefault();
+      if (csproj is not null) return csproj;
+      dir = Path.GetDirectoryName(dir);
+    }
+    return null;
+  }
+
+  /// <summary>
+  /// Returns the id of the deepest registered <see cref="NodeType.Namespace"/>
+  /// under <paramref name="projectNodeId"/> whose dotted path is a prefix of
+  /// <paramref name="namespaceParts"/>, or null if none match.
+  /// </summary>
+  private string? FindClosestNamespaceNodeId(string projectNodeId, IReadOnlyList<string> namespaceParts)
+  {
+    var nsIds = registry.GetDescendants(projectNodeId)
+        .Where(n => n.Type is NodeType.Namespace)
+        .Select(n => n.Id)
+        .ToHashSet(StringComparer.Ordinal);
+
+    for (var len = namespaceParts.Count; len >= 1; len--)
+    {
+      var candidate = NodeIdBuilder.Namespace(projectNodeId, namespaceParts.Take(len).ToArray());
+      if (nsIds.Contains(candidate)) return candidate;
+    }
+    return null;
   }
 
   /// <summary>
@@ -794,31 +902,52 @@ public class TestRunnerService(
   }
 
   /// <summary>
-  /// If <paramref name="nodeId"/> pointed to a ProbableTest that has now been replaced
-  /// (same FilePath + ParentId + DisplayName) by a real TestMethod / TheoryGroup under a
-  /// different stable id (adapters disagree on whether <c>discovered.MethodName</c> is
-  /// short or FQN), returns the successor's id. Otherwise returns <paramref name="nodeId"/>.
+  /// If <paramref name="nodeId"/> pointed to a Probable* node that has now been replaced
+  /// by a real node under a different stable id, returns the successor's id. A null
+  /// MethodName indicates the probable was a ProbableClass (match a TestClass by file +
+  /// name); a non-null MethodName indicates a ProbableTest (match a TestMethod /
+  /// TheoryGroup by file + class name + method name).
   /// </summary>
   private string ResolveProbableSuccessor(
       string nodeId,
-      (string? FilePath, string? ParentId, string MethodName) snapshot)
+      (string? FilePath, string? ClassName, string? MethodName) snapshot)
   {
-    if (snapshot.FilePath is null || snapshot.ParentId is null) return nodeId;
+    if (snapshot.FilePath is null || snapshot.ClassName is null) return nodeId;
 
     var current = registry.Get(nodeId);
-    if (current is not null && current.Type is not NodeType.ProbableTest) return nodeId;
+    if (current is not null && current.Type is not NodeType.ProbableTest and not NodeType.ProbableClass)
+      return nodeId;
 
     var normalized = snapshot.FilePath.Replace('\\', '/');
+
+    if (snapshot.MethodName is null)
+    {
+      var cls = registry.GetAll().FirstOrDefault(n =>
+          n.Type is NodeType.TestClass &&
+          string.Equals(n.DisplayName, snapshot.ClassName, StringComparison.Ordinal) &&
+          string.Equals(n.FilePath?.Replace('\\', '/'), normalized, StringComparison.OrdinalIgnoreCase));
+      return cls?.Id ?? nodeId;
+    }
+
     var successor = registry.GetAll().FirstOrDefault(n =>
         (n.Type is NodeType.TestMethod or NodeType.TheoryGroup) &&
-        n.ParentId == snapshot.ParentId &&
         string.Equals(n.DisplayName, snapshot.MethodName, StringComparison.Ordinal) &&
-        string.Equals(
-            n.FilePath?.Replace('\\', '/'),
-            normalized,
-            StringComparison.OrdinalIgnoreCase));
+        string.Equals(n.FilePath?.Replace('\\', '/'), normalized, StringComparison.OrdinalIgnoreCase) &&
+        ClassNameOf(n) is { } cls &&
+        string.Equals(cls, snapshot.ClassName, StringComparison.Ordinal));
 
     return successor?.Id ?? nodeId;
+  }
+
+  private string? ClassNameOf(TestNode node)
+  {
+    var parent = node.ParentId is not null ? registry.Get(node.ParentId) : null;
+    while (parent is not null)
+    {
+      if (parent.Type is NodeType.TestClass or NodeType.ProbableClass) return parent.DisplayName;
+      parent = parent.ParentId is not null ? registry.Get(parent.ParentId) : null;
+    }
+    return null;
   }
 
   private async Task<OperationResult> ExecuteOnNodeAsync(
@@ -984,12 +1113,20 @@ public class TestRunnerService(
         ?? throw new InvalidOperationException($"Project {projectId} not found");
 
     // Snapshot probable metadata before re-discovery wipes the node. After discovery
-    // we try to resolve the successor (real TestMethod / TheoryGroup) by file + class +
-    // method name — adapters disagree on whether discovered.MethodName is short or FQN,
-    // so the probable's stable id doesn't always survive rediscovery.
-    var probableSnapshot = node.Type is NodeType.ProbableTest
-        ? (FilePath: node.FilePath, ParentId: node.ParentId, MethodName: node.DisplayName)
-        : default;
+    // we try to resolve the successor (real TestMethod / TheoryGroup / TestClass) by
+    // FilePath + class name (+ method name for a ProbableTest). Adapters disagree on
+    // whether discovered.MethodName is short or FQN, and a ProbableClass parent won't
+    // match the real TestClass's parent, so we key off DisplayName.
+    var probableSnapshot = node.Type switch
+    {
+      NodeType.ProbableTest => (FilePath: node.FilePath,
+          ClassName: node.ParentId is not null ? registry.Get(node.ParentId)?.DisplayName : null,
+          MethodName: (string?)node.DisplayName),
+      NodeType.ProbableClass => (FilePath: node.FilePath,
+          ClassName: node.DisplayName,
+          MethodName: (string?)null),
+      _ => default,
+    };
 
     await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus("Building", OverallStatus.Building), token.OperationId);
     await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.Building(), operationId: token.OperationId);
