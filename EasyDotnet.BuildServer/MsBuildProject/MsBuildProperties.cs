@@ -342,11 +342,11 @@ public static class MsBuildProperties
           Deserialize: MsBuildValueParsers.AsString
       );
 
-  public static readonly MsBuildProperty<Version?> AspireHostingSDKVersion =
+  public static readonly MsBuildProperty<string?> AspireHostingSDKVersion =
       new(
           Name: "AspireHostingSDKVersion",
           Description: "Specifies the version of the Aspire Hosting SDK applied to the project (null if using the old workload-based approach).",
-          Deserialize: MsBuildValueParsers.AsVersion
+          Deserialize: MsBuildValueParsers.AsString
       );
 
   public static readonly MsBuildProperty<bool> IsLegacyAspire =
@@ -418,11 +418,11 @@ public static class MsBuildProperties
           Deserialize: MsBuildValueParsers.AsStringList
       );
 
-  public static readonly MsBuildProperty<Version?> RazorLangVersion =
+  public static readonly MsBuildProperty<string?> RazorLangVersion =
       new(
           Name: "RazorLangVersion",
           Description: "Specifies the Razor language version used for code generation (e.g., '9.0').",
-          Deserialize: MsBuildValueParsers.AsVersion
+          Deserialize: MsBuildValueParsers.AsString
       );
 
   public static readonly MsBuildProperty<bool> UsingMicrosoftNETSdkBlazorWebAssembly =
