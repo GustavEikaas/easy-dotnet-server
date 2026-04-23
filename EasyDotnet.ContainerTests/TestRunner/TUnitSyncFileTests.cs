@@ -131,10 +131,7 @@ public abstract class TUnitSyncFileTests<TContainer> : TestRunnerTestBase<TConta
     Assert.DoesNotContain(result.Updates, u => u.Id == n.Id);
   }
 
-  [Fact(Skip = "Pending feature: syncFile should surface newly-written test methods that are " +
-               "not yet in the compiled assembly as 'probable' test nodes so the client can " +
-               "render provisional signs before the next discover/build. Unskip once the " +
-               "probable-test emission and downstream logic land.")]
+  [Fact]
   public async Task SyncFile_WhenFileGainsNewTestMethod_SurfacesItAsProbableTest()
   {
     const string original = """
@@ -172,8 +169,12 @@ public abstract class TUnitSyncFileTests<TContainer> : TestRunnerTestBase<TConta
     var result = await Container.Rpc.TestRunnerSyncFileAsync(path, withAddedTest, version: 1);
 
     Assert.Contains(result.Updates, u => u.Id.Contains("JustWrittenByUser"));
-    // Future: assert the registered TestNode for the probable test carries the flag
-    // that distinguishes it from a discovered test (not yet designed).
+
+    var probableNode = Assert.Single(NodesOfType(NodeTypeNames.ProbableTest),
+        n => n.DisplayName == "JustWrittenByUser");
+    Assert.Equal(NodeTypeNames.ProbableTest, probableNode.Type.Type);
+    Assert.Contains("Run", probableNode.AvailableActions ?? []);
+    Assert.Contains("Debug", probableNode.AvailableActions ?? []);
   }
 }
 

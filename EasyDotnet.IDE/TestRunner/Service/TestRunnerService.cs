@@ -663,11 +663,12 @@ public class TestRunnerService(
     );
   }
 
-  public SyncFileResult SyncFile(SyncFileRequest req)
+  public async Task<SyncFileResult> SyncFileAsync(SyncFileRequest req)
   {
     var parsed = TestSourceLocator.ParseContent(req.Content);
     var updates = new List<LineNumberUpdateDto>();
 
+    // --- 1. Update line numbers for all already-registered nodes in this file ---
     foreach (var node in registry.GetNodesForFile(req.Path))
     {
       TestMethodLocation? loc;
@@ -691,11 +692,97 @@ public class TestRunnerService(
       if (loc is null) continue;
 
       registry.UpdateLineNumbers(node.Id, loc.SignatureLine, loc.BodyStartLine, loc.EndLine);
-
       updates.Add(new LineNumberUpdateDto(node.Id, loc.SignatureLine, loc.BodyStartLine, loc.EndLine));
     }
 
+    // --- 2. Synthesise ProbableTest nodes for newly-written test methods ---
+    //
+    // Only methods whose containing class IS already in the registry can get a
+    // probable node — we need the classNodeId to build the stable ID.
+    var existingProbableIds = registry.GetNodesForFile(req.Path)
+        .Where(n => n.Type is NodeType.ProbableTest)
+        .Select(n => n.Id)
+        .ToHashSet(StringComparer.Ordinal);
+
+    var newProbableIds = new HashSet<string>(StringComparer.Ordinal);
+
+    foreach (var probable in parsed.ProbableMethods)
+    {
+      // Find the registered class node for this file + class name
+      var classNode = registry.GetNodesForFile(req.Path)
+          .FirstOrDefault(n =>
+              n.Type is NodeType.TestClass &&
+              string.Equals(n.DisplayName, probable.ClassName, StringComparison.Ordinal));
+
+      if (classNode is null) continue;
+
+      var probableId = NodeIdBuilder.Method(classNode.Id, probable.MethodName);
+
+      // If already a real (non-probable) node, skip
+      var existing = registry.Get(probableId);
+      if (existing is not null && existing.Type is not NodeType.ProbableTest) continue;
+
+      newProbableIds.Add(probableId);
+
+      if (existing?.Type is NodeType.ProbableTest)
+      {
+        // Already known probable — update line numbers and include in updates
+        registry.UpdateLineNumbers(probableId, probable.Location.SignatureLine, probable.Location.BodyStartLine, probable.Location.EndLine);
+        updates.Add(new LineNumberUpdateDto(probableId, probable.Location.SignatureLine, probable.Location.BodyStartLine, probable.Location.EndLine));
+        continue;
+      }
+
+      // New probable — synthesise FQN by walking up through namespace segments
+      var fqn = BuildFqn(classNode, probable.MethodName);
+
+      var probableNode = new TestNode(
+          Id: probableId,
+          DisplayName: probable.MethodName,
+          ParentId: classNode.Id,
+          FilePath: req.Path,
+          SignatureLine: probable.Location.SignatureLine,
+          BodyStartLine: probable.Location.BodyStartLine,
+          EndLine: probable.Location.EndLine,
+          Type: new NodeType.ProbableTest(),
+          ProjectId: classNode.ProjectId,
+          AvailableActions: [TestAction.Run, TestAction.Debug, TestAction.GoToSource]
+      );
+
+      registry.Register(probableNode, nativeId: fqn);
+      await dispatcher.SendRegisterTestAsync(probableNode);
+
+      updates.Add(new LineNumberUpdateDto(probableId, probable.Location.SignatureLine, probable.Location.BodyStartLine, probable.Location.EndLine));
+    }
+
+    // --- 3. Remove probable nodes whose methods are no longer in the source ---
+    foreach (var staleId in existingProbableIds)
+    {
+      if (newProbableIds.Contains(staleId)) continue;
+      registry.RemoveSubtree(staleId);
+      await dispatcher.SendRemoveTestAsync(staleId);
+    }
+
     return new SyncFileResult([.. updates], req.Version);
+  }
+
+  /// <summary>
+  /// Walks from a class node upward through Namespace nodes and builds the
+  /// dotted FQN used as the probable node's nativeId.
+  /// </summary>
+  private string BuildFqn(TestNode classNode, string methodName)
+  {
+    var segments = new Stack<string>();
+    segments.Push(methodName);
+    segments.Push(classNode.DisplayName);
+
+    var current = classNode.ParentId is not null ? registry.Get(classNode.ParentId) : null;
+    while (current is not null && current.Type is NodeType.Namespace)
+    {
+      segments.Push(current.DisplayName);
+      current = current.ParentId is not null ? registry.Get(current.ParentId) : null;
+    }
+
+    return string.Join(".", segments);
   }
 
   private async Task<OperationResult> ExecuteOnNodeAsync(
@@ -894,6 +981,17 @@ public class TestRunnerService(
     {
       await dispatcher.SendRunnerStatusAsync(BuildIdleStatus(), token.OperationId);
       return new OperationResult(Success: false);
+    }
+
+    // Re-discover after a successful build so any newly-written tests (with or
+    // without probable nodes) are registered and emitted to the client before
+    // RunNodeAsync collects its leaf set.  This also covers MTP, which has no
+    // internal pre-run discovery of its own.
+    var solutionNodeId = registry.Get(projectId)?.ParentId;
+    if (solutionNodeId is not null)
+    {
+      await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus("Discovering", OverallStatus.Discovering), token.OperationId);
+      await executor.DiscoverProjectAsync(project, solutionNodeId, control, token);
     }
 
     await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus(debug ? "Debugging" : "Running", debug ? OverallStatus.Debugging : OverallStatus.Running), token.OperationId);

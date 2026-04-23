@@ -77,9 +77,9 @@ public class NodeRegistry
     }
   }
 
-  /// <summary>Returns all leaf nodes (TestMethod, Subcase) under a given root.</summary>
+  /// <summary>Returns all leaf nodes (TestMethod, Subcase, ProbableTest) under a given root.</summary>
   public IEnumerable<TestNode> GetLeafDescendants(string rootId) =>
-      GetDescendants(rootId).Where(n => n.Type is NodeType.TestMethod or NodeType.Subcase);
+      GetDescendants(rootId).Where(n => n.Type is NodeType.TestMethod or NodeType.Subcase or NodeType.ProbableTest);
 
   public void Clear()
   {

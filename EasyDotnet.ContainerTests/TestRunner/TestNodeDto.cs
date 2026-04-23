@@ -34,4 +34,5 @@ public static class NodeTypeNames
   public const string TheoryGroup = "TheoryGroup";
   public const string TestMethod = "TestMethod";
   public const string Subcase = "Subcase";
+  public const string ProbableTest = "ProbableTest";
 }
