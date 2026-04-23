@@ -17,14 +17,9 @@ public record TestMethodLocation(
 /// <summary>
 /// A method that carries at least one known test attribute but is not yet
 /// present in the compiled assembly — e.g. a test the user just wrote.
-/// <see cref="NamespaceParts"/> is the dotted namespace of the enclosing
-/// class, split on '.' — empty for types in the global namespace.
-/// <see cref="ClassLocation"/> is the enclosing class's position.
 /// </summary>
 public record ProbableMethod(
-    IReadOnlyList<string> NamespaceParts,
     string ClassName,
-    TestMethodLocation ClassLocation,
     string MethodName,
     TestMethodLocation Location
 );
@@ -141,19 +136,8 @@ public class TestSourceLocator
             return TestAttributeNames.Contains(name);
           });
 
-  private static ClassDeclarationSyntax? EnclosingClass(MethodDeclarationSyntax method) =>
-      method.Parent as ClassDeclarationSyntax;
-
-  private static IReadOnlyList<string> EnclosingNamespaceParts(SyntaxNode node)
-  {
-    var parts = new List<string>();
-    for (var current = node.Parent; current is not null; current = current.Parent)
-    {
-      if (current is BaseNamespaceDeclarationSyntax ns)
-        parts.InsertRange(0, ns.Name.ToString().Split('.', StringSplitOptions.RemoveEmptyEntries));
-    }
-    return parts;
-  }
+  private static string? EnclosingClassName(MethodDeclarationSyntax method) =>
+      (method.Parent as ClassDeclarationSyntax)?.Identifier.Text;
 
   private static ParsedFileLocations ParseSource(string source)
   {
@@ -162,25 +146,7 @@ public class TestSourceLocator
 
     var methods = new Dictionary<string, TestMethodLocation>(StringComparer.Ordinal);
     var classes = new Dictionary<string, TestMethodLocation>(StringComparer.Ordinal);
-    var classLocations = new Dictionary<string, TestMethodLocation>(StringComparer.Ordinal);
     var probableMethods = new List<ProbableMethod>();
-
-    foreach (var cls in root.DescendantNodes().OfType<ClassDeclarationSyntax>())
-    {
-      var signatureNode = cls.AttributeLists.Count > 0
-          ? (SyntaxNode)cls.AttributeLists[0]
-          : cls;
-      var signatureLine = signatureNode.GetLocation()
-          .GetLineSpan().StartLinePosition.Line;
-
-      var firstMember = cls.Members.FirstOrDefault();
-      var bodyStartLine = firstMember is not null
-          ? firstMember.GetLocation().GetLineSpan().StartLinePosition.Line
-          : cls.OpenBraceToken.GetLocation().GetLineSpan().StartLinePosition.Line;
-
-      var endLine = cls.GetLocation().GetLineSpan().EndLinePosition.Line;
-      classLocations[cls.Identifier.Text] = new TestMethodLocation(signatureLine, bodyStartLine, endLine);
-    }
 
     foreach (var method in root.DescendantNodes().OfType<MethodDeclarationSyntax>())
     {
@@ -214,16 +180,31 @@ public class TestSourceLocator
 
       methods[name] = loc;
 
-      if (HasTestAttribute(method) && EnclosingClass(method) is { } cls
-          && classLocations.TryGetValue(cls.Identifier.Text, out var clsLoc))
-      {
-        var namespaceParts = EnclosingNamespaceParts(cls);
-        probableMethods.Add(new ProbableMethod(namespaceParts, cls.Identifier.Text, clsLoc, name, loc));
-      }
+      if (HasTestAttribute(method) && EnclosingClassName(method) is { } className)
+        probableMethods.Add(new ProbableMethod(className, name, loc));
     }
 
-    foreach (var (name, loc) in classLocations)
-      classes[name] = loc;
+    foreach (var cls in root.DescendantNodes().OfType<ClassDeclarationSyntax>())
+    {
+      var name = cls.Identifier.Text;
+
+      // SignatureLine: first attribute if present, otherwise the class keyword
+      var signatureNode = cls.AttributeLists.Count > 0
+          ? (SyntaxNode)cls.AttributeLists[0]
+          : cls;
+      var signatureLine = signatureNode.GetLocation()
+          .GetLineSpan().StartLinePosition.Line;
+
+      // BodyStartLine: first member, or opening brace if empty
+      var firstMember = cls.Members.FirstOrDefault();
+      var bodyStartLine = firstMember is not null
+          ? firstMember.GetLocation().GetLineSpan().StartLinePosition.Line
+          : cls.OpenBraceToken.GetLocation().GetLineSpan().StartLinePosition.Line;
+
+      var endLine = cls.GetLocation().GetLineSpan().EndLinePosition.Line;
+
+      classes[name] = new TestMethodLocation(signatureLine, bodyStartLine, endLine);
+    }
 
     return new ParsedFileLocations(methods, classes, probableMethods);
   }
