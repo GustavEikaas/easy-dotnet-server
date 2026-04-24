@@ -13,6 +13,7 @@
     <PackageReference Include="Microsoft.CodeAnalysis.Features" Version="5.0.0" ExcludeAssets="runtime" PrivateAssets="all" />
     <PackageReference Include="Krafs.Publicizer" Version="2.2.1" PrivateAssets="all" />
     <Publicize Include="Microsoft.CodeAnalysis.Features" />
+    <Publicize Include="Microsoft.CodeAnalysis.Workspaces" />
   </ItemGroup>
 
 </Project>
