@@ -73,7 +73,11 @@ public static class RoslynLocator
       throw new DirectoryNotFoundException($"EasyDotnet Analyzer folder not found: {analyzersDir}");
     }
 
-    var analyzerDlls = new[] { "EasyDotnet.RoslynLanguageServices.dll" };
+    var analyzerDlls = new[]
+    {
+      "EasyDotnet.RoslynLanguageServices.dll",
+      "EasyDotnet.RoslynLanguageServices.Workspace.dll",
+    };
 
     return [.. analyzerDlls
         .Select(dll => Path.Combine(analyzersDir, dll))

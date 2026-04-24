@@ -38,21 +38,6 @@ runs:
       shell: bash
       run: dotnet restore
 
-    - name: Build Release
-      shell: bash
-      run: dotnet build -c Release --no-restore
-
-
-    - name: Build and Copy Custom Analyzer
-      shell: bash
-      run: |
-        OUTPUT_PATH="${{ inputs.roslynOutputPath }}/Roslyn/Analyzers"
-
-        mkdir -p "$OUTPUT_PATH"
-        cp EasyDotnet.RoslynLanguageServices/bin/Release/net8.0/EasyDotnet.RoslynLanguageServices.dll "$OUTPUT_PATH/"
-        
-        echo "✓ Custom analyzer copied to $OUTPUT_PATH"
-
     - name: Download and Extract Roslyn DLLs
       shell: bash
       run: |
@@ -60,7 +45,7 @@ runs:
         ROSLYN_PACKAGE_VERSION="${{ inputs.roslynPackageVersion }}"
         ROSLYNATOR_VERSION=4.14.0
         OUTPUT_PATH="${{ inputs.roslynOutputPath }}/Roslyn"
-        
+
         mkdir -p "$OUTPUT_PATH/LanguageServer"
         mkdir -p "$OUTPUT_PATH/Analyzers"
 
@@ -77,6 +62,26 @@ runs:
 
         unzip -o artifacts/roslynator/roslynator.nupkg -d artifacts/roslynator/extracted
         cp artifacts/roslynator/extracted/analyzers/dotnet/roslyn4.7/cs/*.dll "$OUTPUT_PATH/Analyzers/"
+
+    # The Workspace project links against the bundled Roslyn DLLs (so its
+    # MEF metadata stamps the matching AssemblyVersion). It must build *after*
+    # the Roslyn payload has been extracted.
+    - name: Build Release
+      shell: bash
+      env:
+        ROSLYN_LANGUAGE_SERVER_PATH: ${{ github.workspace }}/${{ inputs.roslynOutputPath }}/Roslyn/LanguageServer
+      run: dotnet build -c Release --no-restore /p:RoslynLanguageServerPath="$ROSLYN_LANGUAGE_SERVER_PATH"
+
+    - name: Copy Custom Analyzers
+      shell: bash
+      run: |
+        OUTPUT_PATH="${{ inputs.roslynOutputPath }}/Roslyn/Analyzers"
+
+        mkdir -p "$OUTPUT_PATH"
+        cp EasyDotnet.RoslynLanguageServices/bin/Release/net8.0/EasyDotnet.RoslynLanguageServices.dll "$OUTPUT_PATH/"
+        cp EasyDotnet.RoslynLanguageServices.Workspace/bin/Release/net10.0/EasyDotnet.RoslynLanguageServices.Workspace.dll "$OUTPUT_PATH/"
+
+        echo "✓ Custom analyzers copied to $OUTPUT_PATH"
 
     - name: Download and Extract netcoredbg
       shell: bash

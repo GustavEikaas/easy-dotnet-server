@@ -6,7 +6,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>dotnet-easydotnet</ToolCommandName>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
-    <Version>3.1.2</Version>
+    <Version>3.1.3</Version>
     <Authors>Gustav Eikaas</Authors>
     <PackageId>EasyDotnet</PackageId>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
@@ -118,3 +118,38 @@
     <Message Text="Successfully staged BuildServer and DebuggerPayloads for NuGet packing." Importance="high" />
   </Target>
 </Project>
+
+<!--   class with fields ,actions, -->
+<!-- ▌ 1. Generate constructor 'TriggerSnapshot()'                                                                                                                                                                                                                                  -->
+<!-- ▌ 2. Convert to positional record                                                                                                                                                                                                                                              -->
+<!-- ▌ 3. Extract interface...                                                                                                                                                                                                                                                      -->
+<!-- ▌ 4. Extract base class...                                                                                                                                                                                                                                                     -->
+<!-- ▌ 5. Add 'DebuggerDisplay' attribute                                                                                                                                                                                                                                           -->
+<!---->
+<!-- public Guid Id ,actions, -->
+<!-- ▌ 1. Generate constructor 'TriggerSnapshot(Guid id)'                                                                                                                                                                                                                           -->
+<!-- ▌ 2. Convert to full property                                                                                                                                                                                                                                                  -->
+<!-- ▌ 3. Convert to 'field' property                                                                                                                                                                                                                                               -->
+<!-- ▌ 4. Replace 'Id' with methods                                                                                                                                                                                                                                                 -->
+<!-- ▌ 5. Generate Equals(...)                                                                                                                                                                                                                                                      -->
+<!-- ▌ 6. Generate Equals and GetHashCode                                                                                                                                                                                                                                           -->
+<!-- ▌ 7. Extract base class...                                                                                                                                                                                                                                                     -->
+
+
+<!--  After change where we exposed picker -->
+
+<!--   class with fields ,actions, -->
+<!-- ▌ 1. Generate constructor 'TriggerSnapshot()'                                                                                                                                                                                                                                  -->
+<!-- ▌ 2. Extract interface...                                                                                                                                                                                                                                                      -->
+<!-- ▌ 3. Convert to positional record                                                                                                                                                                                                                                              -->
+<!-- ▌ 4. Extract base class...                                                                                                                                                                                                                                                     -->
+<!-- ▌ 5. Add 'DebuggerDisplay' attribute                                                                                                                                                                                                                                           -->
+
+<!-- public Guid Id ,actions, -->
+<!-- ▌ 1. Replace 'Id' with methods                                                                                                                                                                                                                                                 -->
+<!-- ▌ 2. Generate constructor 'TriggerSnapshot(Guid id)'                                                                                                                                                                                                                           -->
+<!-- ▌ 3. Generate Equals(...)                                                                                                                                                                                                                                                      -->
+<!-- ▌ 4. Generate Equals and GetHashCode                                                                                                                                                                                                                                           -->
+<!-- ▌ 5. Convert to full property                                                                                                                                                                                                                                                  -->
+<!-- ▌ 6. Convert to 'field' property                                                                                                                                                                                                                                               -->
+<!-- ▌ 7. Extract base class...                                                                                                                                                                                                                                                     -->
