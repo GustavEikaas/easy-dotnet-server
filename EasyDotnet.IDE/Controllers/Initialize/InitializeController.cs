@@ -6,6 +6,7 @@ using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Models.Client;
 using EasyDotnet.IDE.Notifications;
 using EasyDotnet.IDE.Services;
+using EasyDotnet.IDE.Settings;
 using EasyDotnet.IDE.Utils;
 using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
@@ -20,6 +21,7 @@ public class InitializeController(
   IMsBuildService msBuildService,
   UpdateCheckerService updateCheckerService,
   IProgressScopeFactory progressScopeFactory,
+  SettingsService settingsService,
   ILogger<InitializeController> logger) : BaseController
 {
   [JsonRpcMethod("initialize")]
@@ -65,6 +67,7 @@ public class InitializeController(
     var supportsSingleFileExecution = msBuildService.QuerySdkInstallations().Any(x => x.Version.Major >= 10);
     clientService.SupportsSingleFileExecution = supportsSingleFileExecution;
     _ = updateCheckerService.CheckForUpdates(CancellationToken.None);
+    _ = settingsService.PushActiveProjectChangedAsync();
     progress.Report("Initialized", 100);
     return new InitializeResponse(
         new ServerInfo("EasyDotnet", serverVersion.ToString()),
