@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(grep -E \"\\\\.\\(cs|ts|js\\)$\")",
-      "Bash(grep -E \"\\\\.\\(cs|ts\\)$\")"
-    ]
-  }
-}
