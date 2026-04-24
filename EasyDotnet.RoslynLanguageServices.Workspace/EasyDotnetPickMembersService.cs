@@ -4,7 +4,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Host.Mef;
 using Microsoft.CodeAnalysis.PickMembers;
 
-namespace EasyDotnet.RoslynLanguageServices.PickMembers;
+namespace EasyDotnet.RoslynLanguageServices.Workspace;
 
 [ExportWorkspaceService(typeof(IPickMembersService), ServiceLayer.Host), Shared]
 internal sealed class EasyDotnetPickMembersService : IPickMembersService

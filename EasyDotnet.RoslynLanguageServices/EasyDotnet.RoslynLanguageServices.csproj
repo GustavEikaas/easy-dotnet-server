@@ -1,20 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!--
-      The bundled Roslyn LSP targets net10.0; references against its DLLs
-      pull in System.Runtime 10.0.0.0, so this project must target net10.0
-      too.
-    -->
-    <TargetFramework>net10.0</TargetFramework>
-    <!--
-      Path to the bundled Roslyn LSP payload (the LanguageServer folder containing
-      Microsoft.CodeAnalysis.*.dll). Override on the command line / in CI:
-        dotnet build /p:RoslynLanguageServerPath=/abs/path/to/LanguageServer
-      Defaults to the locally installed dotnet-easydotnet tool's bundled copy so
-      developers can rebuild without re-running the CI download step.
-    -->
-    <RoslynLanguageServerPath Condition="'$(RoslynLanguageServerPath)' == ''">$(HOME)/.dotnet/tools/.store/easydotnet/3.1.3-alpha.2/easydotnet/3.1.3-alpha.2/tools/Roslyn/LanguageServer</RoslynLanguageServerPath>
+    <TargetFramework>$(LowestNetCoreTfm)</TargetFramework>
   </PropertyGroup>
 
   <ItemGroup>
@@ -22,43 +9,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Krafs.Publicizer" Version="2.2.1" PrivateAssets="all" />
-    <PackageReference Include="System.Composition.AttributedModel" Version="10.0.1" />
-  </ItemGroup>
-
-  <!--
-    Bind directly against the bundled Roslyn DLLs so the AssemblyVersion stamped
-    into our [ExportWorkspaceService(...)] metadata matches the runtime.
-    Roslyn's MEF lookup (LayeredServiceUtilities.PickService) does *string*
-    equality on the assembly-qualified type name, so a 5.0.0.0 vs 5.4.0.0
-    mismatch causes our parts to be silently dropped from the catalog.
-  -->
-  <ItemGroup>
-    <Reference Include="Microsoft.CodeAnalysis">
-      <HintPath>$(RoslynLanguageServerPath)/Microsoft.CodeAnalysis.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="Microsoft.CodeAnalysis.CSharp">
-      <HintPath>$(RoslynLanguageServerPath)/Microsoft.CodeAnalysis.CSharp.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="Microsoft.CodeAnalysis.Workspaces">
-      <HintPath>$(RoslynLanguageServerPath)/Microsoft.CodeAnalysis.Workspaces.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="Microsoft.CodeAnalysis.CSharp.Workspaces">
-      <HintPath>$(RoslynLanguageServerPath)/Microsoft.CodeAnalysis.CSharp.Workspaces.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="Microsoft.CodeAnalysis.Features">
-      <HintPath>$(RoslynLanguageServerPath)/Microsoft.CodeAnalysis.Features.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-  </ItemGroup>
-
-  <ItemGroup>
-    <Publicize Include="Microsoft.CodeAnalysis.Features" />
-    <Publicize Include="Microsoft.CodeAnalysis.Workspaces" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.0.0" />
   </ItemGroup>
 
 </Project>

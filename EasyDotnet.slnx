@@ -20,5 +20,6 @@
   <Project Path="EasyDotnet.ProjXLanguageServer/EasyDotnet.ProjXLanguageServer.csproj" />
   <Project Path="EasyDotnet.RoslynLanguageServices.Tests/EasyDotnet.RoslynLanguageServices.Tests.csproj" />
   <Project Path="EasyDotnet.RoslynLanguageServices/EasyDotnet.RoslynLanguageServices.csproj" />
+  <Project Path="EasyDotnet.RoslynLanguageServices.Workspace/EasyDotnet.RoslynLanguageServices.Workspace.csproj" />
   <Project Path="EasyDotnet.StartupHook/EasyDotnet.StartupHook.csproj" />
 </Solution>

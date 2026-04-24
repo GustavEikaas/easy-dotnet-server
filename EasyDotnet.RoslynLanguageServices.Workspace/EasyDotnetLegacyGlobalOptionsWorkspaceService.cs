@@ -4,7 +4,7 @@ using Microsoft.CodeAnalysis.Host;
 using Microsoft.CodeAnalysis.Host.Mef;
 using Microsoft.CodeAnalysis.Options;
 
-namespace EasyDotnet.RoslynLanguageServices.PickMembers;
+namespace EasyDotnet.RoslynLanguageServices.Workspace;
 
 [ExportWorkspaceService(typeof(ILegacyGlobalOptionsWorkspaceService)), Shared]
 internal sealed class EasyDotnetLegacyGlobalOptionsWorkspaceService : ILegacyGlobalOptionsWorkspaceService
