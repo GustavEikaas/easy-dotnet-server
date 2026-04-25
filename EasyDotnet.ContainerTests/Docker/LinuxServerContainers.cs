@@ -44,6 +44,11 @@ public sealed class Sdk10LinuxContainer() : LinuxServerContainer("mcr.microsoft.
   public override int SdkMajorVersion => 10;
 }
 
+public sealed class Sdk11LinuxContainer() : LinuxServerContainer("mcr.microsoft.com/dotnet/nightly/sdk:11.0-preview-alpine")
+{
+  public override int SdkMajorVersion => 11;
+}
+
 /// <summary>
 /// A container with both .NET 8 and .NET 10 SDKs and runtimes installed.
 /// .NET 10 is the default (highest) SDK; .NET 8 is also present.

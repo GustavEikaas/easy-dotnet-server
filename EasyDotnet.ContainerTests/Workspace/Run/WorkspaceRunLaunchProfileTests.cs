@@ -433,3 +433,4 @@ public abstract class WorkspaceRunLaunchProfileTests<TContainer> : WorkspaceRunT
 public sealed class WorkspaceRunLaunchProfileSdk8Linux : WorkspaceRunLaunchProfileTests<Sdk8LinuxContainer>;
 public sealed class WorkspaceRunLaunchProfileSdk9Linux : WorkspaceRunLaunchProfileTests<Sdk9LinuxContainer>;
 public sealed class WorkspaceRunLaunchProfileSdk10Linux : WorkspaceRunLaunchProfileTests<Sdk10LinuxContainer>;
+public sealed class WorkspaceRunLaunchProfileSdk11Linux : WorkspaceRunLaunchProfileTests<Sdk11LinuxContainer>;
