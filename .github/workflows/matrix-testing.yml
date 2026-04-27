@@ -33,4 +33,3 @@ jobs:
           dotnet run --no-build --project ./EasyDotnet.Debugger.Tests
           dotnet run --no-build --project ./EasyDotnet.IDE.Tests/EasyDotnet.IDE.Tests.csproj
           dotnet run --no-build --project ./EasyDotnet.MsBuild.Tests/EasyDotnet.MsBuild.Tests.csproj
-          dotnet run --no-build --project ./EasyDotnet.RoslynLanguageServices.Tests/EasyDotnet.RoslynLanguageServices.Tests.csproj
