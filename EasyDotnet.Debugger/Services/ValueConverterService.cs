@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text.Json;
 using EasyDotnet.Debugger.Messages;
 using EasyDotnet.Debugger.ValueConverters;
 using Microsoft.Extensions.Logging;
@@ -70,6 +71,55 @@ public class ValueConverterService(
         _variablesReferenceMap[id] = converter;
       }
     }
+  }
+
+  public void FormatInlineStringJsonVariables(VariablesResponse response)
+  {
+    if (response.Body?.Variables == null)
+    {
+      return;
+    }
+
+    foreach (var variable in response.Body.Variables.Where(x => x.Type.Equals("string", StringComparison.OrdinalIgnoreCase)))
+    {
+      if (JsonStringFormatter.TryFormatJsonSingleLine(variable.Value, out var compactJson))
+      {
+        variable.Value = compactJson;
+      }
+    }
+  }
+
+  public void FormatEvaluateResponse(Response response)
+  {
+    if (!response.Success || !string.Equals(response.Command, "evaluate", StringComparison.OrdinalIgnoreCase))
+    {
+      return;
+    }
+
+    if (response.Body is null || response.Body.Value.ValueKind != JsonValueKind.Object)
+    {
+      return;
+    }
+
+    if (!response.Body.Value.TryGetProperty("result", out var resultElement) || resultElement.ValueKind != JsonValueKind.String)
+    {
+      return;
+    }
+
+    var rawResult = resultElement.GetString();
+    if (string.IsNullOrWhiteSpace(rawResult) || !JsonStringFormatter.TryFormatJson(rawResult, out var prettyJson))
+    {
+      return;
+    }
+
+    var body = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(response.Body.Value.GetRawText());
+    if (body == null)
+    {
+      return;
+    }
+
+    body["result"] = JsonSerializer.SerializeToElement(prettyJson);
+    response.Body = JsonSerializer.SerializeToElement(body);
   }
 
   public void ClearVariablesReferenceMap() => _variablesReferenceMap.Clear();
