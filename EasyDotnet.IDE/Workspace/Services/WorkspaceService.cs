@@ -225,7 +225,7 @@ public class WorkspaceService(
       {
         var exitCode = await editorProcessManagerService.WaitForExitAsync(guid);
         logger.LogInformation("{ProjectName} exited with code {ExitCode}", project.ProjectName, exitCode);
-        if (exitCode != 0)
+        if (exitCode != 0 && exitCode != 134)
         {
           await editorService.DisplayError($"{project.ProjectName} exited with code {exitCode}");
         }
