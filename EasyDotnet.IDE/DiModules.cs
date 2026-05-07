@@ -97,6 +97,7 @@ public static class DiModules
     services.AddSingleton<WorkspacePreBuildService>();
     services.AddSingleton<WorkspaceSessionRegistry>();
     services.AddSingleton<WorkspaceDebugAttachService>();
+    services.AddSingleton<WorkspaceStopService>();
     services.AddSingleton<NodeRegistry>();
     services.AddSingleton<StatusDispatcher>();
     services.AddSingleton<DetailStore>();

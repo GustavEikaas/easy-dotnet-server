@@ -17,6 +17,7 @@ public class WorkspaceService(
     WorkspacePreBuildService preBuildService,
     IEditorService editorService,
     IEditorProcessManagerService editorProcessManagerService,
+    INotificationService notificationService,
     WorkspaceBuildHostManager buildHostManager,
     IDebugOrchestrator debugOrchestrator,
     IDebugStrategyFactory debugStrategyFactory,
@@ -125,11 +126,13 @@ public class WorkspaceService(
       sessionKey = $"watch:{project.ProjectFullPath}";
     }
 
-    if (!TryClaimSession(sessionKey, TerminalSlot.Managed))
+    if (!TryClaimSession(sessionKey, project.ProjectName, TerminalSlot.Managed))
     {
       await editorService.DisplayError($"{project.ProjectName} is already being watched");
       return;
     }
+
+    _ = NotifyRunningSessionsAsync();
 
     var args = new List<string> { "watch", "--non-interactive" };
     if (target.LaunchProfileName is not null)
@@ -152,7 +155,11 @@ public class WorkspaceService(
     _ = Task.Run(async () =>
     {
       try { await editorService.RequestRunCommandAsync(command, CancellationToken.None); }
-      finally { sessionRegistry.Release(sessionKey); }
+      finally
+      {
+        sessionRegistry.Release(sessionKey);
+        _ = NotifyRunningSessionsAsync();
+      }
     }, CancellationToken.None);
   }
 
@@ -163,11 +170,13 @@ public class WorkspaceService(
       CancellationToken ct)
   {
     var sessionKey = $"{project.ProjectFullPath}:{project.TargetFramework}";
-    if (!TryClaimSession(sessionKey, null))
+    if (!TryClaimSession(sessionKey, project.ProjectName, null))
     {
       await editorService.DisplayError($"{project.ProjectName} is already running");
       return;
     }
+
+    _ = NotifyRunningSessionsAsync();
 
     var additionalArgs = string.IsNullOrEmpty(cliArgs)
         ? null
@@ -192,6 +201,7 @@ public class WorkspaceService(
     if (!await preBuildService.BuildBeforeRunAsync(project.ProjectFullPath, project.ProjectName, ct))
     {
       sessionRegistry.Release(sessionKey);
+      _ = NotifyRunningSessionsAsync();
       return;
     }
 
@@ -205,6 +215,7 @@ public class WorkspaceService(
       logger.LogError(ex, "Unexpected error while starting {ProjectName}", project.ProjectName);
       await editorService.DisplayError($"Failed to run {project.ProjectName}: {ex.Message}");
       sessionRegistry.Release(sessionKey);
+      _ = NotifyRunningSessionsAsync();
       return;
     }
 
@@ -226,6 +237,7 @@ public class WorkspaceService(
       finally
       {
         sessionRegistry.Release(sessionKey);
+        _ = NotifyRunningSessionsAsync();
       }
     }, CancellationToken.None);
   }
@@ -271,14 +283,38 @@ public class WorkspaceService(
       string? cliArgs,
       CancellationToken ct)
   {
+    var sessionKey = $"debug:{project.ProjectFullPath}";
+    sessionRegistry.TryClaim(sessionKey, project.ProjectName);
+    _ = NotifyRunningSessionsAsync();
+
     var strategy = debugStrategyFactory.CreateRunInTerminalStrategy(project, launchProfileName, cliArgs);
 
-    var session = await debugOrchestrator.StartClientDebugSessionAsync(
-        project.ProjectFullPath, strategy, ct);
+    EasyDotnet.Debugger.DebugSession session;
+    try
+    {
+      session = await debugOrchestrator.StartClientDebugSessionAsync(
+          project.ProjectFullPath, strategy, ct);
 
-    await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
-    await session.ProcessStarted;
-    await Task.Delay(1000, ct);
+      await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
+      await session.ProcessStarted;
+      await Task.Delay(1000, ct);
+    }
+    catch
+    {
+      sessionRegistry.Release(sessionKey);
+      _ = NotifyRunningSessionsAsync();
+      throw;
+    }
+
+    _ = Task.Run(async () =>
+    {
+      try { await session.DisposalStarted; }
+      finally
+      {
+        sessionRegistry.Release(sessionKey);
+        _ = NotifyRunningSessionsAsync();
+      }
+    }, CancellationToken.None);
   }
 
   private bool ValidateFilePath(string? filePath)
@@ -297,9 +333,12 @@ public class WorkspaceService(
     return false;
   }
 
-  private bool TryClaimSession(string key, TerminalSlot? slot)
+  private Task NotifyRunningSessionsAsync() =>
+      notificationService.NotifyRunningProcessesChangedAsync([.. sessionRegistry.GetAllRunningNames()]);
+
+  private bool TryClaimSession(string key, string projectName, TerminalSlot? slot)
   {
-    if (sessionRegistry.TryClaim(key))
+    if (sessionRegistry.TryClaim(key, projectName))
       return true;
 
     if (!slot.HasValue)
@@ -310,6 +349,6 @@ public class WorkspaceService(
 
     logger.LogWarning("Session {Key} was stale (slot {Slot} is free). Reclaiming.", key, slot.Value);
     sessionRegistry.Release(key);
-    return sessionRegistry.TryClaim(key);
+    return sessionRegistry.TryClaim(key, projectName);
   }
 }
