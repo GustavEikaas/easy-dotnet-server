@@ -163,7 +163,7 @@ public class WorkspaceService(
       CancellationToken ct)
   {
     var sessionKey = $"{project.ProjectFullPath}:{project.TargetFramework}";
-    if (!TryClaimSession(sessionKey, TerminalSlot.LongRunning))
+    if (!TryClaimSession(sessionKey, null))
     {
       await editorService.DisplayError($"{project.ProjectName} is already running");
       return;
@@ -212,7 +212,7 @@ public class WorkspaceService(
     {
       try
       {
-        var exitCode = await editorProcessManagerService.WaitForExitAsync(guid, TerminalSlot.LongRunning);
+        var exitCode = await editorProcessManagerService.WaitForExitAsync(guid);
         logger.LogInformation("{ProjectName} exited with code {ExitCode}", project.ProjectName, exitCode);
         if (exitCode != 0)
         {
@@ -297,15 +297,18 @@ public class WorkspaceService(
     return false;
   }
 
-  private bool TryClaimSession(string key, TerminalSlot slot)
+  private bool TryClaimSession(string key, TerminalSlot? slot)
   {
     if (sessionRegistry.TryClaim(key))
       return true;
 
-    if (editorProcessManagerService.IsSlotBusy(slot))
+    if (!slot.HasValue)
       return false;
 
-    logger.LogWarning("Session {Key} was stale (slot {Slot} is free). Reclaiming.", key, slot);
+    if (editorProcessManagerService.IsSlotBusy(slot.Value))
+      return false;
+
+    logger.LogWarning("Session {Key} was stale (slot {Slot} is free). Reclaiming.", key, slot.Value);
     sessionRegistry.Release(key);
     return sessionRegistry.TryClaim(key);
   }
