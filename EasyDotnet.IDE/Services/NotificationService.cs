@@ -8,7 +8,8 @@ namespace EasyDotnet.IDE.Services;
 public sealed record ServerUpdateAvailable(Version CurrentVersion, Version AvailableVersion, string UpdateType);
 public sealed record ProjectChangedNotification(string ProjectPath, string? TargetFrameworkMoniker = null, string? Configuration = null);
 public sealed record ActiveProjectChangedNotification(string? ProjectPath, string? ProjectName, string? LaunchProfile);
-public sealed record RunningProcessesChangedNotification(string[] Projects);
+public sealed record RunningProcessesChangedNotification(RunningSessionInfo[] Projects);
+public sealed record RunningSessionInfo(string Name, bool IsDebugging);
 
 public class NotificationService(JsonRpc jsonRpc) : INotificationService
 {
@@ -22,5 +23,5 @@ public class NotificationService(JsonRpc jsonRpc) : INotificationService
   public async Task NotifyActiveProjectChanged(string? projectPath, string? projectName, string? launchProfile) => await jsonRpc.NotifyWithParameterObjectAsync("activeProject/changed", new ActiveProjectChangedNotification(projectPath, projectName, launchProfile));
 
   [RpcNotification("runningProcesses/changed")]
-  public async Task NotifyRunningProcessesChangedAsync(string[] projectNames) => await jsonRpc.NotifyWithParameterObjectAsync("runningProcesses/changed", new RunningProcessesChangedNotification(projectNames));
+  public async Task NotifyRunningProcessesChangedAsync(RunningSessionInfo[] projects) => await jsonRpc.NotifyWithParameterObjectAsync("runningProcesses/changed", new RunningProcessesChangedNotification(projects));
 }

@@ -10,9 +10,11 @@ public record RunningProcessEntry(
     int Pid
 );
 
+public record RunningSessionEntry(string ProjectName, bool IsDebugging);
+
 /// <summary>
 /// Combined session mutex and process data store, keyed by session key
-/// (<c>"{projectPath}:{tfm}"</c> for run; <c>"watch:{path}"</c> for watch).
+/// (<c>"{projectPath}:{tfm}"</c> for run; <c>"watch:{path}"</c> for watch; <c>"debug:{projectPath}"</c> for debug).
 ///
 /// <para>
 /// A <c>null</c> value means the slot is claimed but no PID has been received yet
@@ -27,19 +29,19 @@ public record RunningProcessEntry(
 ///   <item><see cref="Release"/> — clean up when the process exits.</item>
 /// </list>
 ///
-/// Watch sessions use only <see cref="TryClaim"/> and <see cref="Release"/>.
+/// Watch and debug sessions use only <see cref="TryClaim"/> and <see cref="Release"/>.
 /// </summary>
 public class WorkspaceSessionRegistry
 {
   private readonly ConcurrentDictionary<string, RunningProcessEntry?> _sessions = new();
-  private readonly ConcurrentDictionary<string, string> _claimedNames = new();
+  private readonly ConcurrentDictionary<string, RunningSessionEntry> _claimedEntries = new();
 
   /// <summary>Claims the slot. Returns <c>false</c> if already active.</summary>
-  public bool TryClaim(string key, string projectName)
+  public bool TryClaim(string key, string projectName, bool isDebug = false)
   {
     if (!_sessions.TryAdd(key, null))
       return false;
-    _claimedNames[key] = projectName;
+    _claimedEntries[key] = new RunningSessionEntry(projectName, isDebug);
     return true;
   }
 
@@ -56,15 +58,15 @@ public class WorkspaceSessionRegistry
   public void Release(string key)
   {
     _sessions.TryRemove(key, out _);
-    _claimedNames.TryRemove(key, out _);
+    _claimedEntries.TryRemove(key, out _);
   }
 
   /// <summary>
-  /// Returns the display names of all currently claimed sessions, including those
-  /// that have not yet received a PID. Used for status notifications.
+  /// Returns metadata for all currently claimed sessions, including those that have not
+  /// yet received a PID. Used for status notifications.
   /// </summary>
-  public IReadOnlyList<string> GetAllRunningNames() =>
-    [.. _claimedNames.Values];
+  public IReadOnlyList<RunningSessionEntry> GetAllRunningSessions() =>
+    [.. _claimedEntries.Values];
 
   /// <summary>
   /// Returns all sessions that have received a PID — i.e. live run sessions eligible

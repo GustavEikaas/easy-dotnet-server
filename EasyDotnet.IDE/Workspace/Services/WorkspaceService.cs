@@ -284,7 +284,7 @@ public class WorkspaceService(
       CancellationToken ct)
   {
     var sessionKey = $"debug:{project.ProjectFullPath}";
-    sessionRegistry.TryClaim(sessionKey, project.ProjectName);
+    sessionRegistry.TryClaim(sessionKey, project.ProjectName, isDebug: true);
     _ = NotifyRunningSessionsAsync();
 
     var strategy = debugStrategyFactory.CreateRunInTerminalStrategy(project, launchProfileName, cliArgs);
@@ -334,7 +334,8 @@ public class WorkspaceService(
   }
 
   private Task NotifyRunningSessionsAsync() =>
-      notificationService.NotifyRunningProcessesChangedAsync([.. sessionRegistry.GetAllRunningNames()]);
+      notificationService.NotifyRunningProcessesChangedAsync(
+          [.. sessionRegistry.GetAllRunningSessions().Select(s => new RunningSessionInfo(s.ProjectName, s.IsDebugging))]);
 
   private bool TryClaimSession(string key, string projectName, TerminalSlot? slot)
   {

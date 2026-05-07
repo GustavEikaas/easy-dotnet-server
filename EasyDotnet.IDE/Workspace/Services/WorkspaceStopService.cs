@@ -11,9 +11,9 @@ public class WorkspaceStopService(
 {
   public async Task StopAsync(CancellationToken ct)
   {
-    var allNames = sessionRegistry.GetAllRunningNames();
+    var allSessions = sessionRegistry.GetAllRunningSessions();
 
-    if (allNames.Count == 0)
+    if (allSessions.Count == 0)
     {
       await editorService.DisplayError("No running projects");
       return;
@@ -21,9 +21,16 @@ public class WorkspaceStopService(
 
     var running = sessionRegistry.GetRunningProcesses();
 
+    //TODO: support killing debugging sessions
+    // Debug sessions never receive a PID — their teardown goes through the DAP client.
+    // Only raise "still starting" when there are non-debug sessions without a PID yet.
     if (running.Count == 0)
     {
-      await editorService.DisplayError("Projects are still starting, please wait");
+      var hasNonDebug = allSessions.Any(s => !s.IsDebugging);
+      var msg = hasNonDebug
+          ? "Projects are still starting, please wait"
+          : "Debug sessions must be stopped from the debugger";
+      await editorService.DisplayError(msg);
       return;
     }
 
