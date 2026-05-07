@@ -27,7 +27,7 @@ public class RoslynLocatorTests
     }
     finally
     {
-      File.Delete(customDllPath);
+      System.IO.File.Delete(customDllPath);
     }
   }
 

@@ -29,10 +29,10 @@ public sealed class CompatBuildCommand : AsyncCommand<CompatBuildCommand.Setting
     if (string.IsNullOrWhiteSpace(settings.MsBuildPath))
       return ValidationResult.Error("Missing required --msbuild option.");
 
-    if (!File.Exists(settings.ProjectPath))
+    if (!System.IO.File.Exists(settings.ProjectPath))
       return ValidationResult.Error($"Project file not found: {settings.ProjectPath}");
 
-    if (!File.Exists(settings.MsBuildPath))
+    if (!System.IO.File.Exists(settings.MsBuildPath))
       return ValidationResult.Error($"MSBuild not found: {settings.MsBuildPath}");
 
     return ValidationResult.Success();

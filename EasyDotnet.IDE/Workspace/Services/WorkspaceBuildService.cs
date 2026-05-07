@@ -46,7 +46,7 @@ public class WorkspaceBuildService(
       var defaultPath = settingsService.GetDefaultBuildProject(solutionFile);
       var isValidDefaultTarget =
           defaultPath is not null &&
-          File.Exists(defaultPath) &&
+          System.IO.File.Exists(defaultPath) &&
           (
               string.Equals(defaultPath, solutionFile, StringComparison.OrdinalIgnoreCase) ||
               projects.Any(p => string.Equals(p.AbsolutePath, defaultPath, StringComparison.OrdinalIgnoreCase))

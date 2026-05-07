@@ -26,11 +26,11 @@ public class GlobalJsonService(IClientService clientService)
     {
       var filePath = Path.Combine(directory.FullName, "global.json");
 
-      if (File.Exists(filePath))
+      if (System.IO.File.Exists(filePath))
       {
         try
         {
-          var jsonContent = File.ReadAllText(filePath);
+          var jsonContent = System.IO.File.ReadAllText(filePath);
           return JsonSerializer.Deserialize<GlobalJson>(jsonContent, _jsonSerializerOptions);
         }
         catch (JsonException)

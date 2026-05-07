@@ -43,13 +43,13 @@ public sealed class CompatTestCommand : AsyncCommand<CompatTestCommand.Settings>
     if (string.IsNullOrWhiteSpace(settings.TargetPath))
       return ValidationResult.Error("Missing required --target option.");
 
-    if (!File.Exists(settings.ProjectPath))
+    if (!System.IO.File.Exists(settings.ProjectPath))
       return ValidationResult.Error($"Project file not found: {settings.ProjectPath}");
 
-    if (!File.Exists(settings.MsBuildPath))
+    if (!System.IO.File.Exists(settings.MsBuildPath))
       return ValidationResult.Error($"MSBuild not found: {settings.MsBuildPath}");
 
-    if (!File.Exists(settings.VsTestPath))
+    if (!System.IO.File.Exists(settings.VsTestPath))
       return ValidationResult.Error($"vstest.console.exe not found: {settings.VsTestPath}");
 
     return ValidationResult.Success();

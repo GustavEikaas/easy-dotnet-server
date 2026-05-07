@@ -122,7 +122,7 @@ public class RoslynService(ILogger<RoslynService> logService)
     if (string.IsNullOrWhiteSpace(targetPath))
       throw new ArgumentException("Project path must be provided", nameof(targetPath));
 
-    if (!File.Exists(targetPath))
+    if (!System.IO.File.Exists(targetPath))
       throw new FileNotFoundException($"Project or solution file not found: {targetPath}");
 
     using var workspace = MSBuildWorkspace.Create();

@@ -78,7 +78,7 @@ public sealed class ChangeFilePermissionsPostActionHandler(
 
     var fullPath = Path.Combine(workingDirectory, pattern);
 
-    return File.Exists(fullPath)
+    return System.IO.File.Exists(fullPath)
         ? [fullPath]
         : [];
   }

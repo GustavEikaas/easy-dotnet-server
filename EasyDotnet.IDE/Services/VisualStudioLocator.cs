@@ -16,32 +16,32 @@ public class VisualStudioLocator(IMemoryCache cache, IClientService clientServic
     return vsCommand ?? throw new InvalidOperationException("Could not locate MSBuild on this machine.");
   }
 
-  public string? GetApplicationHostConfig() => cache.GetOrCreate("ApplicationHostConfig", entry =>
+  public string? GetApplicationHostConfig() => cache.GetOrCreate<string>("ApplicationHostConfig", entry =>
                                                 {
                                                   var sln = clientService.ProjectInfo?.SolutionFile;
                                                   if (string.IsNullOrEmpty(sln))
                                                   {
-                                                    return null;
+                                                    return null!;
                                                   }
 
                                                   var slnDir = Path.GetDirectoryName(sln);
                                                   if (string.IsNullOrEmpty(slnDir))
                                                   {
-                                                    return null;
+                                                    return null!;
                                                   }
 
                                                   var slnName = Path.GetFileNameWithoutExtension(sln);
 
                                                   var configPath = Path.Combine(slnDir, ".vs", slnName, "config", "applicationhost.config");
 
-                                                  return File.Exists(configPath) ? configPath : null;
+                                                  return File.Exists(configPath) ? configPath : null!;
                                                 });
 
-  public string? GetIisExpressExe() => cache.GetOrCreate("IisExpressExe", entry => new[]
+  public string? GetIisExpressExe() => cache.GetOrCreate<string>("IisExpressExe", entry => (new[]
   {
   Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "IIS Express", "iisexpress.exe"),
   Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "IIS Express", "iisexpress.exe")
-}.FirstOrDefault(File.Exists));
+}).FirstOrDefault(File.Exists)!);
 
   private async Task<string?> GetVisualStudioMSBuild()
   {
@@ -50,7 +50,7 @@ public class VisualStudioLocator(IMemoryCache cache, IClientService clientServic
       var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
       var vswhere = Path.Combine(programFiles, "Microsoft Visual Studio", "Installer", "vswhere.exe");
 
-      if (!File.Exists(vswhere))
+      if (!System.IO.File.Exists(vswhere))
       {
         return null;
       }
@@ -70,7 +70,7 @@ public class VisualStudioLocator(IMemoryCache cache, IClientService clientServic
       }
 
       var msbuildPath = Path.Combine(basePath, "MSBuild", "Current", "Bin", "MSBuild.exe");
-      return File.Exists(msbuildPath) ? msbuildPath : null;
+      return System.IO.File.Exists(msbuildPath) ? msbuildPath : null;
     }
     catch
     {

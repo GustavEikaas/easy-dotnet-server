@@ -32,16 +32,16 @@ public class LaunchProfileService : ILaunchProfileService
 
   public Dictionary<string, LaunchProfile>? GetLaunchProfiles(string targetPath)
   {
-    var baseDir = File.Exists(targetPath) ? Path.GetDirectoryName(targetPath)! : targetPath;
+    var baseDir = System.IO.File.Exists(targetPath) ? Path.GetDirectoryName(targetPath)! : targetPath;
 
     var launchSettingsPath = Path.Combine(baseDir, "Properties", "launchSettings.json");
 
-    if (!File.Exists(launchSettingsPath))
+    if (!System.IO.File.Exists(launchSettingsPath))
     {
       return null;
     }
 
-    var json = File.ReadAllText(launchSettingsPath) ?? throw new Exception($"Failed to read file {launchSettingsPath}");
+    var json = System.IO.File.ReadAllText(launchSettingsPath) ?? throw new Exception($"Failed to read file {launchSettingsPath}");
 
     var settings = JsonSerializer.Deserialize<LaunchSettings>(json, DeserializerOptions);
     return settings?.Profiles?.OrderBy(p => p.Key).ToDictionary(p => p.Key, p => p.Value) ?? [];

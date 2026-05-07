@@ -36,10 +36,10 @@ public sealed class CompatRunCommand : AsyncCommand<CompatRunCommand.Settings>
     if (string.IsNullOrWhiteSpace(settings.TargetPath))
       return ValidationResult.Error("Missing required --target option.");
 
-    if (!File.Exists(settings.ProjectPath))
+    if (!System.IO.File.Exists(settings.ProjectPath))
       return ValidationResult.Error($"Project file not found: {settings.ProjectPath}");
 
-    if (!File.Exists(settings.MsBuildPath))
+    if (!System.IO.File.Exists(settings.MsBuildPath))
       return ValidationResult.Error($"MSBuild not found: {settings.MsBuildPath}");
 
     return ValidationResult.Success();
@@ -53,7 +53,7 @@ public sealed class CompatRunCommand : AsyncCommand<CompatRunCommand.Settings>
       return buildExit;
     }
 
-    if (!File.Exists(settings.TargetPath))
+    if (!System.IO.File.Exists(settings.TargetPath))
     {
       Console.Error.WriteLine($"[compat] Target executable not found: {settings.TargetPath}");
       return 1;

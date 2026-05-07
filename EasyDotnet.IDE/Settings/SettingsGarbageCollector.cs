@@ -84,7 +84,7 @@ public class SettingsGarbageCollector(
       var originalPath = settings.Metadata.OriginalPath;
 
       // Check if the original file still exists
-      if (!File.Exists(originalPath))
+      if (!System.IO.File.Exists(originalPath))
       {
         logger.LogInformation(
             "Original file no longer exists, marking for deletion: {OriginalPath}",

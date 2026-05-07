@@ -15,7 +15,7 @@ public static class RoslynLocator
     var customDllPath = Environment.GetEnvironmentVariable(ROSLYN_DLL_PATH_ENV);
     if (!string.IsNullOrWhiteSpace(customDllPath))
     {
-      if (File.Exists(customDllPath))
+      if (System.IO.File.Exists(customDllPath))
       {
         return customDllPath;
       }
@@ -28,7 +28,7 @@ public static class RoslynLocator
     var roslynDir = GetRoslynBaseDir();
     var roslynDll = Path.Combine(roslynDir, "LanguageServer", "Microsoft.CodeAnalysis.LanguageServer.dll");
 
-    if (!File.Exists(roslynDll))
+    if (!System.IO.File.Exists(roslynDll))
     {
       throw new FileNotFoundException("Roslyn LSP DLL not found", roslynDll);
     }
@@ -57,7 +57,7 @@ public static class RoslynLocator
 
     return [.. analyzerDlls
         .Select(dll => Path.Combine(analyzersDir, dll))
-        .Where(File.Exists)];
+        .Where(System.IO.File.Exists)];
   }
 
   /// <summary>
@@ -77,7 +77,7 @@ public static class RoslynLocator
 
     return [.. analyzerDlls
         .Select(dll => Path.Combine(analyzersDir, dll))
-        .Where(File.Exists)];
+        .Where(System.IO.File.Exists)];
   }
 
   /// <summary>

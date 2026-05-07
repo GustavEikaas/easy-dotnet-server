@@ -59,10 +59,10 @@ public static class CompatCommandHandler
 
   public static async Task<int> RunBuildWithSpectreAsync(string msbuildPath, string projectPath)
   {
-    if (!File.Exists(msbuildPath))
+    if (!System.IO.File.Exists(msbuildPath))
       throw new FileNotFoundException("MSBuild not found.", msbuildPath);
 
-    if (!File.Exists(projectPath))
+    if (!System.IO.File.Exists(projectPath))
       throw new FileNotFoundException("Project file not found.", projectPath);
 
     var exitCode = 0;

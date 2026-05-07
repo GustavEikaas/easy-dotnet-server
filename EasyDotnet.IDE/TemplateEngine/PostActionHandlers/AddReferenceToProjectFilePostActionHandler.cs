@@ -112,7 +112,7 @@ public class AddReferenceToProjectFilePostActionHandler : IPostActionHandler
     {
       return [.. config.TargetFiles
           .Select(f => Path.IsPathRooted(f) ? f : Path.Combine(workingDirectory, f))
-          .Where(File.Exists)];
+          .Where(System.IO.File.Exists)];
     }
 
     return FindProjectFileInDirectoryOrParent(

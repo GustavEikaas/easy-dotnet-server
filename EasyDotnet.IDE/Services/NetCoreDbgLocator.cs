@@ -14,7 +14,7 @@ public static class NetCoreDbgLocator
     var customPath = Environment.GetEnvironmentVariable(DEBUGGER_PATH_ENV);
     if (!string.IsNullOrWhiteSpace(customPath))
     {
-      if (File.Exists(customPath))
+      if (System.IO.File.Exists(customPath))
       {
         return customPath;
       }
@@ -30,7 +30,7 @@ public static class NetCoreDbgLocator
     var executableName = OperatingSystem.IsWindows() ? "netcoredbg.exe" : "netcoredbg";
     var netcoredbgPath = Path.Combine(platformDir, executableName);
 
-    if (!File.Exists(netcoredbgPath))
+    if (!System.IO.File.Exists(netcoredbgPath))
     {
       throw new FileNotFoundException(
         $"netcoredbg executable not found for platform '{platform}'",

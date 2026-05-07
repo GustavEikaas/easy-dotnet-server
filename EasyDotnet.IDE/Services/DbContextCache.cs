@@ -17,11 +17,11 @@ public class DbContextCache(IAppPathsService appPathsService)
 
   public async Task<List<DbContextInfo>?> TryGetAsync(string efProj, string startupProj)
   {
-    if (!File.Exists(_cacheFilePath)) return null;
+    if (!System.IO.File.Exists(_cacheFilePath)) return null;
 
     try
     {
-      var json = await File.ReadAllTextAsync(_cacheFilePath);
+      var json = await System.IO.File.ReadAllTextAsync(_cacheFilePath);
       var cache = JsonSerializer.Deserialize<Dictionary<string, List<DbContextInfo>>>(json, _jsonSerializerOptions);
       var key = GetKey(efProj, startupProj);
 
@@ -38,9 +38,9 @@ public class DbContextCache(IAppPathsService appPathsService)
     Dictionary<string, List<DbContextInfo>> cache;
     try
     {
-      if (File.Exists(_cacheFilePath))
+      if (System.IO.File.Exists(_cacheFilePath))
       {
-        var json = await File.ReadAllTextAsync(_cacheFilePath);
+        var json = await System.IO.File.ReadAllTextAsync(_cacheFilePath);
         cache = JsonSerializer.Deserialize<Dictionary<string, List<DbContextInfo>>>(json, _jsonSerializerOptions) ?? [];
       }
       else
@@ -55,7 +55,7 @@ public class DbContextCache(IAppPathsService appPathsService)
 
     cache[GetKey(efProj, startupProj)] = contexts;
 
-    await File.WriteAllTextAsync(_cacheFilePath, JsonSerializer.Serialize(cache, _jsonSerializerOptions));
+    await System.IO.File.WriteAllTextAsync(_cacheFilePath, JsonSerializer.Serialize(cache, _jsonSerializerOptions));
   }
 
   private static string GetKey(string ef, string startup) => $"{ef}::{startup}";

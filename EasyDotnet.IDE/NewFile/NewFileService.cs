@@ -15,7 +15,7 @@ public class NewFileService(IBuildHostManager buildHostManager, IEditorService e
 {
   public async Task<bool> BootstrapFile(string filePath, Kind kind, bool preferFileScopedNamespace, CancellationToken cancellationToken)
   {
-    if (File.Exists(filePath) && new FileInfo(filePath).Length > 0)
+    if (System.IO.File.Exists(filePath) && new FileInfo(filePath).Length > 0)
     {
       return false;
     }
@@ -56,7 +56,7 @@ public class NewFileService(IBuildHostManager buildHostManager, IEditorService e
 
   public async Task<bool> BootstrapFileFromJson(string jsonData, string filePath, bool preferFileScopedNamespace, CancellationToken cancellationToken)
   {
-    if (File.Exists(filePath) && new FileInfo(filePath).Length > 0)
+    if (System.IO.File.Exists(filePath) && new FileInfo(filePath).Length > 0)
     {
       return false;
     }

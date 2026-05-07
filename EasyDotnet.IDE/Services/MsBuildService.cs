@@ -301,11 +301,11 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
 
     var siteName = project.MSBuildProjectName ?? Path.GetFileNameWithoutExtension(projectPath);
     var iisExe = locator.GetIisExpressExe();
-    if (string.IsNullOrWhiteSpace(iisExe) || !File.Exists(iisExe))
+    if (string.IsNullOrWhiteSpace(iisExe) || !System.IO.File.Exists(iisExe))
       throw new FileNotFoundException("[compat] IIS Express executable not found.", iisExe);
 
     var configPath = locator.GetApplicationHostConfig();
-    return string.IsNullOrWhiteSpace(configPath) || !File.Exists(configPath)
+    return string.IsNullOrWhiteSpace(configPath) || !System.IO.File.Exists(configPath)
       ? throw new FileNotFoundException("[compat] IIS Express applicationhost.config not found.", configPath)
       : CompatCommandHandler.GetIisCommand(
         projectPath: projectPath,
@@ -347,7 +347,7 @@ public class MsBuildService(IVisualStudioLocator locator, IClientService clientS
     var msbuildPath = await locator.GetVisualStudioMSBuildPath();
 
     var vstestPath = GetVsTestPath();
-    return string.IsNullOrWhiteSpace(vstestPath) || !File.Exists(vstestPath)
+    return string.IsNullOrWhiteSpace(vstestPath) || !System.IO.File.Exists(vstestPath)
       ? throw new FileNotFoundException("[compat] Could not locate vstest", vstestPath)
       : CompatCommandHandler.GetTestCommand(projectPath, targetPath, msbuildPath, vstestPath);
   }

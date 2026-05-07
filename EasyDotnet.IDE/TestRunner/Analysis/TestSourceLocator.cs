@@ -104,7 +104,7 @@ public class TestSourceLocator
     if (_cache.TryGetValue(filePath, out var cached)) return cached;
 
     string source;
-    try { source = File.ReadAllText(filePath); }
+    try { source = System.IO.File.ReadAllText(filePath); }
     catch
     {
       _cache[filePath] = new ParsedFileLocations([], [], []);

@@ -61,7 +61,7 @@ public class AddPropertyToExistingJsonFilePostActionHandler : IPostActionHandler
             detectRepoRoot ? GetRootDirectory(workingDirectory) : workingDirectory,
             jsonFileName);
 
-        await File.WriteAllTextAsync(newJsonFilePath, "{}", cancellationToken);
+        await System.IO.File.WriteAllTextAsync(newJsonFilePath, "{}", cancellationToken);
         jsonFiles = [newJsonFilePath];
       }
 
@@ -99,7 +99,7 @@ public class AddPropertyToExistingJsonFilePostActionHandler : IPostActionHandler
         return false;
       }
 
-      await File.WriteAllTextAsync(jsonFiles[0], newJsonContent.ToJsonString(SerializerOptions), cancellationToken);
+      await System.IO.File.WriteAllTextAsync(jsonFiles[0], newJsonContent.ToJsonString(SerializerOptions), cancellationToken);
       return true;
     }
     catch
@@ -116,7 +116,7 @@ public class AddPropertyToExistingJsonFilePostActionHandler : IPostActionHandler
       bool createPath,
       CancellationToken cancellationToken)
   {
-    var jsonText = await File.ReadAllTextAsync(targetJsonFile, cancellationToken);
+    var jsonText = await System.IO.File.ReadAllTextAsync(targetJsonFile, cancellationToken);
     var jsonContent = JsonNode.Parse(jsonText, nodeOptions: null, documentOptions: DeserializerOptions);
 
     if (jsonContent == null)
@@ -207,8 +207,8 @@ public class AddPropertyToExistingJsonFilePostActionHandler : IPostActionHandler
 
     while (currentDirectory != null)
     {
-      if (File.Exists(Path.Combine(currentDirectory, "global.json")) ||
-          File.Exists(Path.Combine(currentDirectory, ".git")) ||
+      if (System.IO.File.Exists(Path.Combine(currentDirectory, "global.json")) ||
+          System.IO.File.Exists(Path.Combine(currentDirectory, ".git")) ||
           Directory.Exists(Path.Combine(currentDirectory, ".git")))
       {
         return currentDirectory;

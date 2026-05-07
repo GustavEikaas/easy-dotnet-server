@@ -51,16 +51,16 @@ public sealed class CompatRunIisCommand : AsyncCommand<CompatRunIisCommand.Setti
     if (string.IsNullOrWhiteSpace(settings.SiteName))
       return ValidationResult.Error("Missing required --site option.");
 
-    if (!File.Exists(settings.ProjectPath))
+    if (!System.IO.File.Exists(settings.ProjectPath))
       return ValidationResult.Error($"Project file not found: {settings.ProjectPath}");
 
-    if (!File.Exists(settings.MsBuildPath))
+    if (!System.IO.File.Exists(settings.MsBuildPath))
       return ValidationResult.Error($"MSBuild not found: {settings.MsBuildPath}");
 
-    if (!File.Exists(settings.IisExe))
+    if (!System.IO.File.Exists(settings.IisExe))
       return ValidationResult.Error($"IIS Express executable not found: {settings.IisExe}");
 
-    if (!File.Exists(settings.ConfigPath))
+    if (!System.IO.File.Exists(settings.ConfigPath))
       return ValidationResult.Error($"IIS configuration file not found: {settings.ConfigPath}");
 
     return ValidationResult.Success();

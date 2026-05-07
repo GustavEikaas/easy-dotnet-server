@@ -9,7 +9,7 @@ public class UserSecretsService(IMsBuildService msBuildService, IProcessQueue pr
 
   public async Task<ProjectUserSecret> AddUserSecretsId(string projectPath)
   {
-    if (!File.Exists(projectPath))
+    if (!System.IO.File.Exists(projectPath))
     {
       throw new FileNotFoundException("Project file not found", projectPath);
     }
@@ -38,9 +38,9 @@ public class UserSecretsService(IMsBuildService msBuildService, IProcessQueue pr
     EnsureSecretsDirectory(newSecretsId);
     var secretsFilePath = GetSecretsPath(newSecretsId);
 
-    if (!File.Exists(secretsFilePath))
+    if (!System.IO.File.Exists(secretsFilePath))
     {
-      File.WriteAllText(secretsFilePath, "{ }");
+      System.IO.File.WriteAllText(secretsFilePath, "{ }");
     }
     return new(newSecretsId, secretsFilePath);
   }

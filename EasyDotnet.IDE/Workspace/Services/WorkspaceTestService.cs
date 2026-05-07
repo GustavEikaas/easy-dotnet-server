@@ -47,7 +47,7 @@ public class WorkspaceTestService(
     if (request.UseDefault)
     {
       var defaultPath = settingsService.GetDefaultTestProject();
-      if (defaultPath is not null && File.Exists(defaultPath))
+      if (defaultPath is not null && System.IO.File.Exists(defaultPath))
       {
         var defaultProject = await TryGetProjectAsync(defaultPath, ct);
         if (defaultProject is not null)

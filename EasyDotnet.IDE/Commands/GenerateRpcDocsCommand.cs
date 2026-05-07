@@ -41,7 +41,7 @@ public sealed class GenerateRpcDocsCommand : AsyncCommand<GenerateRpcDocsCommand
       _ => throw new ArgumentException("Invalid format. Must be 'json' or 'markdown'.")
     };
 
-    await File.WriteAllTextAsync(outputPath, content, cancellationToken);
+    await System.IO.File.WriteAllTextAsync(outputPath, content, cancellationToken);
 
     AnsiConsole.MarkupLine(
         $"[green]✔ RPC documentation written to[/] [yellow]{Path.GetFullPath(outputPath)}[/]");

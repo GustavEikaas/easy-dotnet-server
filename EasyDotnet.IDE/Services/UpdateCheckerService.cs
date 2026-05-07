@@ -80,10 +80,10 @@ public class UpdateCheckerService(
     {
       var cacheFile = appPaths.UpdateCheckCacheFile;
 
-      if (!File.Exists(cacheFile))
+      if (!System.IO.File.Exists(cacheFile))
         return null;
 
-      var content = await File.ReadAllTextAsync(cacheFile);
+      var content = await System.IO.File.ReadAllTextAsync(cacheFile);
       var cacheData = JsonSerializer.Deserialize<UpdateCheckCache>(content);
 
       return cacheData?.LastCheckTime;
@@ -103,7 +103,7 @@ public class UpdateCheckerService(
       var cacheData = new UpdateCheckCache(checkTime);
       var json = JsonSerializer.Serialize(cacheData, JsonSerializerOptions);
 
-      await File.WriteAllTextAsync(cacheFile, json);
+      await System.IO.File.WriteAllTextAsync(cacheFile, json);
       logger.LogDebug("Saved update check time to cache");
     }
     catch (Exception ex)

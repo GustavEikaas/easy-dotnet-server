@@ -25,7 +25,7 @@ public class DebuggerLocatorTests
     }
     finally
     {
-      File.Delete(customDebuggerPath);
+      System.IO.File.Delete(customDebuggerPath);
       Environment.SetEnvironmentVariable(NetCoreDbgLocator.DEBUGGER_PATH_ENV, null);
     }
   }

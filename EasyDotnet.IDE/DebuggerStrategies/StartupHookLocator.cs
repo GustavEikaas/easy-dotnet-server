@@ -12,7 +12,7 @@ public static class StartupHookLocator
 #else
     path = Path.Combine(GetBaseDir(), "StartupHook", "EasyDotnet.StartupHook.dll");
 #endif
-    if (!File.Exists(path))
+    if (!System.IO.File.Exists(path))
     {
       throw new Exception("StartupHook dll not found");
     }
