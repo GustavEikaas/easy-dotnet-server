@@ -54,6 +54,18 @@ public class WorkspaceSessionRegistry
     _sessions.TryUpdate(key, entry, null);
   }
 
+  /// <summary>
+  /// Updates the <c>IsDebugging</c> flag on an existing claimed session.
+  /// No-op if the key is not present.
+  /// </summary>
+  public void SetDebugging(string key, bool isDebugging)
+  {
+    _claimedEntries.AddOrUpdate(
+        key,
+        _ => new RunningSessionEntry("", isDebugging),
+        (_, existing) => existing with { IsDebugging = isDebugging });
+  }
+
   /// <summary>Removes the session slot.</summary>
   public void Release(string key)
   {
