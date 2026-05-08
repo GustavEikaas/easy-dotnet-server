@@ -1,0 +1,20 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>$(LowestNetCoreTfm)</TargetFramework>
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="TUnit.Assertions" Version="1.13.56" />
+    <PackageReference Include="TUnit" Version="1.13.56" />
+    <PackageReference Include="System.IO.Abstractions" Version="21.0.29" />
+    <PackageReference Include="System.IO.Abstractions.TestingHelpers" Version="21.0.29" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\EasyDotnet.ProjXLanguageServer\EasyDotnet.ProjXLanguageServer.csproj" />
+  </ItemGroup>
+
+</Project>

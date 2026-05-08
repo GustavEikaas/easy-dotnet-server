@@ -9,6 +9,7 @@
     <PackageReference Include="Microsoft.VisualStudio.LanguageServer.Protocol" Version="17.2.8" />
     <PackageReference Include="StreamJsonRpc" Version="2.21.69" />
     <PackageReference Include="GuiLabs.Language.Xml" Version="1.2.93" />
+    <PackageReference Include="System.IO.Abstractions" Version="21.0.29" />
   </ItemGroup>
 
   <ItemGroup>
