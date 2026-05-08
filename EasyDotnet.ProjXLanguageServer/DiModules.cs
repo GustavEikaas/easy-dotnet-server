@@ -23,6 +23,7 @@ public static class DiModules
     services.AddSingleton<IDiagnosticsService, DiagnosticsService>();
     services.AddSingleton<IDiagnosticsPublisher, DiagnosticsPublisher>();
     services.AddSingleton<IFormattingService, FormattingService>();
+    services.AddSingleton<ISignatureHelpService, SignatureHelpService>();
     AssemblyScanner.GetControllerTypes().ForEach(x => services.AddTransient(x));
 
     return services.BuildServiceProvider();

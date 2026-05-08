@@ -10,8 +10,12 @@ public interface ICodeActionService
   CodeAction[] GetCodeActions(CsprojDocument doc, LspRange range, Diagnostic[] contextDiagnostics);
 }
 
-public class CodeActionService : ICodeActionService
+public class CodeActionService(IUserSecretsResolver userSecretsResolver) : ICodeActionService
 {
+  private static readonly System.Text.RegularExpressions.Regex GuidRegex = new(
+      @"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+      System.Text.RegularExpressions.RegexOptions.Compiled);
+
   public CodeAction[] GetCodeActions(CsprojDocument doc, LspRange range, Diagnostic[] contextDiagnostics)
   {
     var actions = new List<CodeAction>();
@@ -30,6 +34,10 @@ public class CodeActionService : ICodeActionService
     var tfmConvert = TryConvertTargetFramework(doc, startOffset, endOffset);
     if (tfmConvert != null)
       actions.Add(tfmConvert);
+
+    var openSecrets = TryOpenSecrets(doc, startOffset, endOffset);
+    if (openSecrets != null)
+      actions.Add(openSecrets);
 
     foreach (var diagnostic in contextDiagnostics)
     {
@@ -94,6 +102,35 @@ public class CodeActionService : ICodeActionService
           [doc.Uri.ToString()] = [edit]
         }
       }
+    };
+  }
+
+  private CodeAction? TryOpenSecrets(CsprojDocument doc, int rangeStart, int rangeEnd)
+  {
+    var element = FindElementOverlapping(doc.Root, rangeStart, rangeEnd, "UserSecretsId");
+    if (element is not XmlElementSyntax full || full.StartTag == null || full.EndTag == null)
+      return null;
+
+    var contentStart = full.StartTag.Start + full.StartTag.FullWidth;
+    var contentEnd = full.EndTag.Start;
+    if (contentEnd <= contentStart || contentEnd > doc.Text.Length)
+      return null;
+
+    var inner = doc.Text.Substring(contentStart, contentEnd - contentStart).Trim();
+    if (!GuidRegex.IsMatch(inner))
+      return null;
+
+    var path = userSecretsResolver.EnsureSecretsFile(inner);
+    return new CodeAction
+    {
+      Title = "Open secrets.json",
+      Kind = CodeActionKind.QuickFix,
+      Command = new Command
+      {
+        Title = "Open secrets.json",
+        CommandIdentifier = "easy-dotnet.openFile",
+        Arguments = [path],
+      },
     };
   }
 

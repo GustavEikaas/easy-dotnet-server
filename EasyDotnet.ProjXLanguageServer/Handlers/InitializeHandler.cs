@@ -27,6 +27,11 @@ public class InitializeHandler(ISemanticTokensService semanticTokensService) : B
         DefinitionProvider = true,
         CodeActionProvider = true,
         DocumentFormattingProvider = true,
+        SignatureHelpProvider = new SignatureHelpOptions
+        {
+          TriggerCharacters = ["\"", "="],
+          RetriggerCharacters = ["\""],
+        },
         SemanticTokensOptions = new SemanticTokensOptions
         {
           Legend = semanticTokensService.Legend,

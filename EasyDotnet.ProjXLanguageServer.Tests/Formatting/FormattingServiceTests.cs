@@ -103,6 +103,52 @@ public class FormattingServiceTests
   }
 
   [Test]
+  public async Task PreservesSingleBlankLinesBetweenSiblings()
+  {
+    var input =
+        "<Project Sdk=\"Microsoft.NET.Sdk\">\n" +
+        "\n" +
+        "  <PropertyGroup>\n" +
+        "    <TargetFramework>net10.0</TargetFramework>\n" +
+        "  </PropertyGroup>\n" +
+        "\n" +
+        "  <PropertyGroup>\n" +
+        "    <PackageId>Foo</PackageId>\n" +
+        "  </PropertyGroup>\n" +
+        "\n" +
+        "  <ItemGroup>\n" +
+        "    <PackageReference Include=\"Serilog\" Version=\"5.0.0\" />\n" +
+        "  </ItemGroup>\n" +
+        "\n" +
+        "</Project>";
+    var edits = Sut.Format(Docs.Make(input), Opts);
+    var result = Apply(input, edits);
+    await Assert.That(result).Contains("</PropertyGroup>\n\n  <PropertyGroup>");
+    await Assert.That(result).Contains("</PropertyGroup>\n\n  <ItemGroup>");
+  }
+
+  [Test]
+  public async Task CollapsesMultipleBlankLinesToOne()
+  {
+    var input =
+        "<Project>\n" +
+        "  <PropertyGroup>\n" +
+        "    <Nullable>enable</Nullable>\n" +
+        "  </PropertyGroup>\n" +
+        "\n" +
+        "\n" +
+        "\n" +
+        "  <ItemGroup>\n" +
+        "    <PackageReference Include=\"X\" Version=\"1\" />\n" +
+        "  </ItemGroup>\n" +
+        "</Project>";
+    var edits = Sut.Format(Docs.Make(input), Opts);
+    var result = Apply(input, edits);
+    await Assert.That(result).Contains("</PropertyGroup>\n\n  <ItemGroup>");
+    await Assert.That(result).DoesNotContain("\n\n\n");
+  }
+
+  [Test]
   public async Task UsesTabsWhenRequested()
   {
     var input = "<Project>\n<PropertyGroup>\n<Nullable>enable</Nullable>\n</PropertyGroup>\n</Project>";

@@ -148,8 +148,15 @@ public class FormattingService : IFormattingService
 
     sb.Append(">\n");
 
+    SyntaxNode? prev = null;
     foreach (var child in full.Content)
     {
+      if (child is not (IXmlElementSyntax or XmlCommentSyntax))
+        continue;
+
+      if (prev != null && HasBlankLineBetween(doc.Text, prev, child))
+        sb.Append('\n');
+
       switch (child)
       {
         case IXmlElementSyntax childEl:
@@ -165,6 +172,8 @@ public class FormattingService : IFormattingService
           }
           break;
       }
+
+      prev = child;
     }
 
     sb.Append(pad);
@@ -191,6 +200,25 @@ public class FormattingService : IFormattingService
     if (contentEnd <= contentStart || contentEnd > text.Length)
       return string.Empty;
     return text.Substring(contentStart, contentEnd - contentStart);
+  }
+
+  private static bool HasBlankLineBetween(string text, SyntaxNode prev, SyntaxNode next)
+  {
+    var start = prev.SpanStart + prev.Width;
+    var end = next.SpanStart;
+    if (start < 0 || end > text.Length || start >= end)
+      return false;
+    var newlines = 0;
+    for (var i = start; i < end; i++)
+    {
+      if (text[i] == '\n')
+      {
+        newlines++;
+        if (newlines >= 2)
+          return true;
+      }
+    }
+    return false;
   }
 
   private static string RawSource(string text, SyntaxNode node)

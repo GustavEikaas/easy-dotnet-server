@@ -7,7 +7,7 @@ namespace EasyDotnet.ProjXLanguageServer.Tests.CodeActions;
 
 public class RemoveDuplicatePackageReferenceTests
 {
-  private static readonly CodeActionService Sut = new();
+  private static readonly CodeActionService Sut = new(new UserSecretsResolver(new System.IO.Abstractions.TestingHelpers.MockFileSystem()));
 
   private static string ApplyEdits(string original, TextEdit[] edits)
   {

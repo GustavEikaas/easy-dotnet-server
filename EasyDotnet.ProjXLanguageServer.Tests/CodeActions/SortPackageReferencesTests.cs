@@ -7,7 +7,7 @@ namespace EasyDotnet.ProjXLanguageServer.Tests.CodeActions;
 
 public class SortPackageReferencesTests
 {
-  private static readonly CodeActionService Sut = new();
+  private static readonly CodeActionService Sut = new(new UserSecretsResolver(new System.IO.Abstractions.TestingHelpers.MockFileSystem()));
 
   private static LspRange WholeDocument(string text)
   {
