@@ -4,8 +4,6 @@ Hot — daily wins
   the GUID hover/go-to-def already in place.                                             
   3. Bump PackageReference version to latest — query NuGet, offer "Update X to " / "Update X
    to ". Can be invoked on a single ref or "Update all packages in this project".           
-  4. Remove unused / dangling <ProjectReference> — when the path doesn't resolve on disk,   
-  offer "Remove this reference" (pairs with a diagnostic).                               
   5. Convert legacy csproj → SDK-style — single-shot rewrite for old <Project               
   ToolsVersion="..."> files. Huge win on legacy repos.                
                                                                                             

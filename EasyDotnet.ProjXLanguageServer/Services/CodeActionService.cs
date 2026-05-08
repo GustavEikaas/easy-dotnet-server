@@ -27,24 +27,40 @@ public class CodeActionService : ICodeActionService
         actions.Add(sortAction);
     }
 
+    var tfmConvert = TryConvertTargetFramework(doc, startOffset, endOffset);
+    if (tfmConvert != null)
+      actions.Add(tfmConvert);
+
     foreach (var diagnostic in contextDiagnostics)
     {
       var code = diagnostic.Code?.Value?.ToString();
       if (string.Equals(code, DiagnosticCodes.MissingProjectReference, StringComparison.Ordinal))
       {
-        var removal = TryRemoveProjectReference(doc, diagnostic);
+        var removal = TryRemoveElement(doc, diagnostic, "ProjectReference", "Remove this ProjectReference");
         if (removal != null)
           actions.Add(removal);
+      }
+      else if (string.Equals(code, DiagnosticCodes.DuplicatePackageReference, StringComparison.Ordinal))
+      {
+        var removal = TryRemoveElement(doc, diagnostic, "PackageReference", "Remove duplicate PackageReference");
+        if (removal != null)
+          actions.Add(removal);
+      }
+      else if (string.Equals(code, DiagnosticCodes.SingleTfmInTargetFrameworks, StringComparison.Ordinal))
+      {
+        var convert = TryConvertSingleTfmToFramework(doc, diagnostic);
+        if (convert != null)
+          actions.Add(convert);
       }
     }
 
     return [.. actions];
   }
 
-  private static CodeAction? TryRemoveProjectReference(CsprojDocument doc, Diagnostic diagnostic)
+  private static CodeAction? TryRemoveElement(CsprojDocument doc, Diagnostic diagnostic, string elementName, string title)
   {
     var startOffset = doc.ToOffset(diagnostic.Range.Start.Line, diagnostic.Range.Start.Character);
-    var element = FindElementAt(doc.Root, startOffset, "ProjectReference");
+    var element = FindElementAt(doc.Root, startOffset, elementName);
     if (element == null)
       return null;
 
@@ -68,7 +84,7 @@ public class CodeActionService : ICodeActionService
 
     return new CodeAction
     {
-      Title = "Remove this ProjectReference",
+      Title = title,
       Kind = CodeActionKind.QuickFix,
       Diagnostics = [diagnostic],
       Edit = new WorkspaceEdit
@@ -79,6 +95,101 @@ public class CodeActionService : ICodeActionService
         }
       }
     };
+  }
+
+  private static CodeAction? TryConvertTargetFramework(CsprojDocument doc, int rangeStart, int rangeEnd)
+  {
+    var element = FindElementOverlapping(doc.Root, rangeStart, rangeEnd, "TargetFramework");
+    if (element is not XmlElementSyntax full || full.StartTag == null || full.EndTag == null)
+      return null;
+
+    var edits = RenameElementEdits(doc, full, "TargetFrameworks");
+    if (edits == null)
+      return null;
+
+    return BuildCodeAction(doc, "Convert <TargetFramework> to <TargetFrameworks>", CodeActionKind.RefactorRewrite, null, edits.ToArray());
+  }
+
+  private static CodeAction? TryConvertSingleTfmToFramework(CsprojDocument doc, Diagnostic diagnostic)
+  {
+    var startOffset = doc.ToOffset(diagnostic.Range.Start.Line, diagnostic.Range.Start.Character);
+    var element = FindElementAt(doc.Root, startOffset, "TargetFrameworks");
+    if (element is not XmlElementSyntax full || full.StartTag == null || full.EndTag == null)
+      return null;
+
+    var contentStart = full.StartTag.Start + full.StartTag.FullWidth;
+    var contentEnd = full.EndTag.Start;
+    var inner = doc.Text.Substring(contentStart, contentEnd - contentStart);
+    var tfm = inner.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault();
+    if (string.IsNullOrEmpty(tfm))
+      return null;
+
+    var edits = new List<TextEdit>(RenameElementEdits(doc, full, "TargetFramework") ?? []);
+    edits.Add(new TextEdit
+    {
+      Range = PositionUtils.ToRange(doc.LineOffsets, contentStart, contentEnd - contentStart),
+      NewText = tfm,
+    });
+
+    return BuildCodeAction(doc, "Convert <TargetFrameworks> to <TargetFramework>", CodeActionKind.QuickFix, diagnostic, edits.ToArray());
+  }
+
+  private static List<TextEdit>? RenameElementEdits(CsprojDocument doc, XmlElementSyntax element, string newName)
+  {
+    var startName = element.StartTag?.NameNode?.LocalNameNode;
+    var endName = element.EndTag?.NameNode?.LocalNameNode;
+    if (startName == null || endName == null)
+      return null;
+
+    return
+    [
+      new TextEdit
+      {
+        Range = PositionUtils.ToRange(doc.LineOffsets, startName.Start, startName.FullWidth),
+        NewText = newName,
+      },
+      new TextEdit
+      {
+        Range = PositionUtils.ToRange(doc.LineOffsets, endName.Start, endName.FullWidth),
+        NewText = newName,
+      },
+    ];
+  }
+
+  private static CodeAction BuildCodeAction(CsprojDocument doc, string title, CodeActionKind kind, Diagnostic? diagnostic, TextEdit[] edits) => new()
+  {
+    Title = title,
+    Kind = kind,
+    Diagnostics = diagnostic == null ? null : [diagnostic],
+    Edit = new WorkspaceEdit
+    {
+      Changes = new Dictionary<string, TextEdit[]>
+      {
+        [doc.Uri.ToString()] = edits,
+      },
+    },
+  };
+
+  private static IXmlElementSyntax? FindElementOverlapping(SyntaxNode root, int rangeStart, int rangeEnd, string name)
+  {
+    IXmlElementSyntax? best = null;
+    var stack = new Stack<SyntaxNode>();
+    stack.Push(root);
+    while (stack.Count > 0)
+    {
+      var node = stack.Pop();
+      if (node is IXmlElementSyntax e
+          && string.Equals(e.Name, name, StringComparison.Ordinal))
+      {
+        var nodeStart = node.Start;
+        var nodeEnd = node.Start + node.FullWidth;
+        if (rangeStart < nodeEnd && rangeEnd > nodeStart)
+          best = e;
+      }
+      foreach (var child in node.ChildNodes)
+        stack.Push(child);
+    }
+    return best;
   }
 
   private static IXmlElementSyntax? FindElementAt(SyntaxNode root, int offset, string name)
