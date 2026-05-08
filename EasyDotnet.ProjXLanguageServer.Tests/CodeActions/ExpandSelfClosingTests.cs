@@ -59,6 +59,31 @@ public class ExpandSelfClosingTests
   }
 
   [Test]
+  public async Task EmptyNonSelfClosingPackageReference_OffersCollapseAction()
+  {
+    var text = "<Project>\n  <ItemGroup>\n    <PackageReference @CURSORInclude=\"X\" Version=\"1\"></PackageReference>\n  </ItemGroup>\n</Project>";
+    var range = CursorAt(text, "@CURSOR");
+    var clean = text.Replace("@CURSOR", string.Empty);
+
+    var actions = Sut.GetCodeActions(Docs.Make(clean), range, []);
+    var collapse = actions.FirstOrDefault(a => a.Title.StartsWith("Collapse <PackageReference"));
+    await Assert.That(collapse).IsNotNull();
+
+    var result = Apply(clean, collapse!.Edit!.Changes!.Values.Single());
+    await Assert.That(result).Contains("<PackageReference Include=\"X\" Version=\"1\" />");
+    await Assert.That(result).DoesNotContain("</PackageReference>");
+  }
+
+  [Test]
+  public async Task NonEmptyElement_NoCollapseAction()
+  {
+    var text = "<Project>\n  <PropertyGroup>\n    <Nullable>enable</Nullable>\n  </PropertyGroup>\n</Project>";
+    var range = new LspRange { Start = new Position { Line = 2, Character = 8 }, End = new Position { Line = 2, Character = 8 } };
+    var actions = Sut.GetCodeActions(Docs.Make(text), range, []);
+    await Assert.That(actions.Any(a => a.Title.StartsWith("Collapse "))).IsFalse();
+  }
+
+  [Test]
   public async Task NonSelfClosingElement_NoExpandAction()
   {
     var text = "<Project>\n  <PropertyGroup>\n    <Nullable>enable</Nullable>\n  </PropertyGroup>\n</Project>";

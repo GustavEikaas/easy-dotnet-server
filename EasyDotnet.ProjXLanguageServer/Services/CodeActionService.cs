@@ -43,6 +43,10 @@ public class CodeActionService(IUserSecretsResolver userSecretsResolver) : ICode
     if (expandSelfClosing != null)
       actions.Add(expandSelfClosing);
 
+    var collapseSelfClosing = TryCollapseToSelfClosing(doc, startOffset, endOffset);
+    if (collapseSelfClosing != null)
+      actions.Add(collapseSelfClosing);
+
     foreach (var diagnostic in contextDiagnostics)
     {
       var code = diagnostic.Code?.Value?.ToString();
@@ -170,6 +174,74 @@ public class CodeActionService(IUserSecretsResolver userSecretsResolver) : ICode
         },
       },
     };
+  }
+
+  private static CodeAction? TryCollapseToSelfClosing(CsprojDocument doc, int rangeStart, int rangeEnd)
+  {
+    var element = FindFullElementOverlapping(doc.Root, rangeStart, rangeEnd);
+    if (element?.StartTag == null || element.EndTag == null)
+      return null;
+
+    if (element.Elements.Any())
+      return null;
+    if (element.Content.Any(c => c is XmlCommentSyntax))
+      return null;
+
+    var bodyStart = element.StartTag.Start + element.StartTag.FullWidth;
+    var bodyEnd = element.EndTag.Start;
+    if (bodyEnd < bodyStart || bodyEnd > doc.Text.Length)
+      return null;
+
+    var inner = doc.Text.Substring(bodyStart, bodyEnd - bodyStart);
+    if (inner.Trim().Length != 0)
+      return null;
+
+    var gt = element.StartTag.GreaterThanToken;
+    if (gt == null)
+      return null;
+
+    var replaceStart = gt.Start;
+    var replaceEnd = element.EndTag.Start + element.EndTag.FullWidth;
+
+    var edit = new TextEdit
+    {
+      Range = PositionUtils.ToRange(doc.LineOffsets, replaceStart, replaceEnd - replaceStart),
+      NewText = " />",
+    };
+
+    return new CodeAction
+    {
+      Title = $"Collapse <{element.Name}></{element.Name}> to <{element.Name} />",
+      Kind = CodeActionKind.RefactorRewrite,
+      Edit = new WorkspaceEdit
+      {
+        Changes = new Dictionary<string, TextEdit[]>
+        {
+          [doc.Uri.ToString()] = [edit],
+        },
+      },
+    };
+  }
+
+  private static XmlElementSyntax? FindFullElementOverlapping(SyntaxNode root, int rangeStart, int rangeEnd)
+  {
+    XmlElementSyntax? best = null;
+    var stack = new Stack<SyntaxNode>();
+    stack.Push(root);
+    while (stack.Count > 0)
+    {
+      var node = stack.Pop();
+      if (node is XmlElementSyntax el)
+      {
+        var nodeStart = node.Start;
+        var nodeEnd = node.Start + node.FullWidth;
+        if (rangeStart < nodeEnd && rangeEnd > nodeStart)
+          best = el;
+      }
+      foreach (var child in node.ChildNodes)
+        stack.Push(child);
+    }
+    return best;
   }
 
   private static XmlEmptyElementSyntax? FindEmptyElementOverlapping(SyntaxNode root, int rangeStart, int rangeEnd)
