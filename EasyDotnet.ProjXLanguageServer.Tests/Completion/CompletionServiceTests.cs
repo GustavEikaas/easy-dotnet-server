@@ -71,6 +71,17 @@ public class CompletionServiceTests
   }
 
   [Test]
+  public async Task PartialTagInPropertyGroup_OffersPropertyCompletions()
+  {
+    var text = "<Project>\n<PropertyGroup>\n<Tar@CURSOR\n</PropertyGroup>\n</Project>";
+    var (line, character) = Docs.PositionAt(text, "@CURSOR");
+    var clean = text.Replace("@CURSOR", string.Empty);
+    var items = Sut.GetCompletions(Docs.Make(clean), line, character);
+    await Assert.That(items.Any(i => i.Label == "TargetFramework")).IsTrue();
+    await Assert.That(items.Any(i => i.Label == "TargetFrameworks")).IsTrue();
+  }
+
+  [Test]
   public async Task UnknownContext_ReturnsEmpty()
   {
     var text = "@CURSOR";

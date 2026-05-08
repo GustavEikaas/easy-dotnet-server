@@ -38,11 +38,19 @@ public class CompletionService : ICompletionService
       CursorContextKind.ProjectRoot => GetProjectRootCompletions(),
       CursorContextKind.PropertyGroup => GetPropertyGroupCompletions(),
       CursorContextKind.ItemGroup => GetItemGroupCompletions(),
-      CursorContextKind.InsideElementText => GetValueCompletions(ctx.ElementName),
+      CursorContextKind.InsideElementText => GetInsideElementCompletions(ctx.ElementName),
       CursorContextKind.InsideStartTag => GetStartTagCompletions(ctx.ParentElementName),
       _ => [],
     };
   }
+
+  private static CompletionItem[] GetInsideElementCompletions(string? elementName) => elementName switch
+  {
+    "Project" => GetProjectRootCompletions(),
+    "PropertyGroup" => GetPropertyGroupCompletions(),
+    "ItemGroup" => GetItemGroupCompletions(),
+    _ => GetValueCompletions(elementName),
+  };
 
   private static CompletionItem[] GetStartTagCompletions(string? parentName) => parentName switch
   {

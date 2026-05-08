@@ -29,6 +29,25 @@ public class DiagnosticsServiceTests
   }
 
   [Test]
+  public async Task ExistingProjectReference_WithBackslashSeparators_NoDiagnostic()
+  {
+    var fs = new MockFileSystem();
+    fs.AddFile("/repo/Greendrill.Api.Models/Greendrill.Api.Models.csproj", new MockFileData("<Project/>"));
+    var sut = new DiagnosticsService(fs);
+
+    var text =
+        "<Project>\n" +
+        "  <ItemGroup>\n" +
+        "    <ProjectReference Include=\"..\\Greendrill.Api.Models\\Greendrill.Api.Models.csproj\" />\n" +
+        "  </ItemGroup>\n" +
+        "</Project>";
+    var doc = Docs.Make(text, "/repo/Self/Self.csproj");
+
+    var diagnostics = sut.GetDiagnostics(doc);
+    await Assert.That(diagnostics.Length).IsEqualTo(0);
+  }
+
+  [Test]
   public async Task ExistingProjectReference_NoDiagnostic()
   {
     var fs = new MockFileSystem();

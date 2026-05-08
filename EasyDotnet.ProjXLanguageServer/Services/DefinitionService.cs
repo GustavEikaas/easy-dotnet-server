@@ -97,7 +97,8 @@ public partial class DefinitionService(
       return null;
     }
 
-    var combined = fileSystem.Path.GetFullPath(fileSystem.Path.Combine(docDir, relative));
+    var normalized = Path.DirectorySeparatorChar == '/' ? relative.Replace('\\', '/') : relative.Replace('/', '\\');
+    var combined = fileSystem.Path.GetFullPath(fileSystem.Path.Combine(docDir, normalized));
     if (!fileSystem.File.Exists(combined))
     {
       return null;

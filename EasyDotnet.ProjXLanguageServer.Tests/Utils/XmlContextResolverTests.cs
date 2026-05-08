@@ -37,7 +37,7 @@ public class XmlContextResolverTests
     await Assert.That(ctx.ElementName).IsEqualTo("TargetFramework");
   }
 
-  [Test]
+[Test]
   public async Task InsideAttributeValue_PackageReferenceInclude_ReturnsAttribute()
   {
     var text = "<Project>\n<ItemGroup>\n<PackageReference Include=\"@CURSOR\" Version=\"1.0.0\" />\n</ItemGroup>\n</Project>";

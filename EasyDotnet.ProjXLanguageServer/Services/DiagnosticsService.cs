@@ -39,7 +39,8 @@ public class DiagnosticsService(IFileSystem fileSystem) : IDiagnosticsService
       if (string.IsNullOrWhiteSpace(include))
         continue;
 
-      var resolved = fileSystem.Path.GetFullPath(fileSystem.Path.Combine(docDir, include));
+      var normalized = NormalizeSeparators(include);
+      var resolved = fileSystem.Path.GetFullPath(fileSystem.Path.Combine(docDir, normalized));
       if (fileSystem.File.Exists(resolved))
         continue;
 
@@ -58,6 +59,9 @@ public class DiagnosticsService(IFileSystem fileSystem) : IDiagnosticsService
 
     return [.. diagnostics];
   }
+
+  private static string NormalizeSeparators(string path) =>
+      Path.DirectorySeparatorChar == '/' ? path.Replace('\\', '/') : path.Replace('/', '\\');
 
   private static IEnumerable<IXmlElementSyntax> EnumerateElements(SyntaxNode root)
   {
