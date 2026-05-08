@@ -26,8 +26,125 @@ public static class XmlContextResolver
   public static CursorContext Resolve(CsprojDocument doc, int line, int character)
   {
     var position = doc.ToOffset(line, character);
-    return Resolve(doc.Root, position);
+    var ctx = Resolve(doc.Root, position);
+    if (NeedsTextualFallback(ctx))
+    {
+      var fallback = TextualFallback(doc.Text, position);
+      if (fallback != null)
+        return fallback;
+    }
+    return ctx;
   }
+
+  private static bool NeedsTextualFallback(CursorContext ctx)
+  {
+    if (ctx.Kind == CursorContextKind.Unknown)
+      return true;
+    if (ctx.Kind == CursorContextKind.InsideStartTag)
+    {
+      var parent = ctx.ParentElementName;
+      return parent is not ("Project" or "PropertyGroup" or "ItemGroup");
+    }
+    if (ctx.Kind == CursorContextKind.InsideElementText)
+    {
+      var name = ctx.ElementName;
+      if (name == null)
+        return true;
+      if (name is "Project" or "PropertyGroup" or "ItemGroup")
+        return true;
+      return !EasyDotnet.MsBuild.MsBuildProperties.GetAllPropertyNames().Any(n => string.Equals(n, name, StringComparison.Ordinal));
+    }
+    return false;
+  }
+
+  private static CursorContext? TextualFallback(string text, int position)
+  {
+    var enclosing = FindEnclosingByText(text, Math.Min(position, text.Length));
+    if (enclosing == null)
+      return null;
+
+    var (name, parent) = enclosing.Value;
+    var kind = name switch
+    {
+      "Project" => CursorContextKind.ProjectRoot,
+      "PropertyGroup" => CursorContextKind.PropertyGroup,
+      "ItemGroup" => CursorContextKind.ItemGroup,
+      _ => CursorContextKind.InsideStartTag,
+    };
+    return new CursorContext(kind, null, name, null, parent);
+  }
+
+  private static (string name, string? parent)? FindEnclosingByText(string text, int upTo)
+  {
+    var stack = new List<string>();
+    var i = 0;
+    while (i < upTo)
+    {
+      var lt = text.IndexOf('<', i);
+      if (lt < 0 || lt >= upTo)
+        break;
+
+      if (lt + 1 < upTo && text[lt + 1] == '!')
+      {
+        var endComment = text.IndexOf("-->", lt + 1, StringComparison.Ordinal);
+        i = endComment < 0 || endComment >= upTo ? upTo : endComment + 3;
+        continue;
+      }
+
+      if (lt + 1 < upTo && text[lt + 1] == '?')
+      {
+        var endPi = text.IndexOf("?>", lt + 1, StringComparison.Ordinal);
+        i = endPi < 0 || endPi >= upTo ? upTo : endPi + 2;
+        continue;
+      }
+
+      var isClose = lt + 1 < upTo && text[lt + 1] == '/';
+      var nameStart = lt + (isClose ? 2 : 1);
+      var nameEnd = nameStart;
+      while (nameEnd < upTo && IsTagNameChar(text[nameEnd]))
+        nameEnd++;
+
+      if (nameEnd == nameStart)
+      {
+        i = lt + 1;
+        continue;
+      }
+
+      var tagName = text.Substring(nameStart, nameEnd - nameStart);
+      var gt = text.IndexOf('>', nameEnd);
+      if (gt < 0 || gt >= upTo)
+        break;
+
+      var selfClosing = gt > 0 && text[gt - 1] == '/';
+
+      if (isClose)
+      {
+        for (var s = stack.Count - 1; s >= 0; s--)
+        {
+          if (string.Equals(stack[s], tagName, StringComparison.Ordinal))
+          {
+            stack.RemoveRange(s, stack.Count - s);
+            break;
+          }
+        }
+      }
+      else if (!selfClosing)
+      {
+        stack.Add(tagName);
+      }
+
+      i = gt + 1;
+    }
+
+    if (stack.Count == 0)
+      return null;
+    var top = stack[^1];
+    var parent = stack.Count >= 2 ? stack[^2] : null;
+    return (top, parent);
+  }
+
+  private static bool IsTagNameChar(char c) =>
+      char.IsLetterOrDigit(c) || c == '_' || c == '-' || c == '.' || c == ':';
 
   public static CursorContext Resolve(XmlDocumentSyntax root, int position)
   {
