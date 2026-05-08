@@ -27,4 +27,6 @@ public class DocumentManager : IDocumentManager
   public int GetDocumentVersion(Uri uri) => _documents.TryGetValue(uri, out var doc) ? doc.Version : -1;
 
   public CsprojDocument? GetDocument(Uri uri) => _documents.TryGetValue(uri, out var doc) ? doc : null;
+
+  public Uri? TryGetAnyDocumentUri() => _documents.Keys.FirstOrDefault();
 }

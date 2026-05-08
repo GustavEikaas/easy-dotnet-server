@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\EasyDotnet.ProjXLanguageServer\EasyDotnet.ProjXLanguageServer.csproj" />
+    <ProjectReference Include="..\EasyDotnet.Nuget\EasyDotnet.Nuget.csproj" />
   </ItemGroup>
 
 </Project>

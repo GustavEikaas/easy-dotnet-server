@@ -6,7 +6,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>dotnet-easydotnet</ToolCommandName>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
-    <Version>3.1.7</Version>
+    <Version>3.1.8</Version>
     <Authors>Gustav Eikaas</Authors>
     <PackageId>EasyDotnet</PackageId>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
@@ -55,6 +55,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\EasyDotnet.MsBuild\EasyDotnet.MsBuild.csproj" />
+    <ProjectReference Include="..\EasyDotnet.Nuget\EasyDotnet.Nuget.csproj" />
     <ProjectReference Include="..\EasyDotnet.Debugger\EasyDotnet.Debugger.csproj" />
     <ProjectReference Include="..\EasyDotnet.ProjXLanguageServer\EasyDotnet.ProjXLanguageServer.csproj" />
     <ProjectReference Include="..\EasyDotnet.BuildServer.Contracts\EasyDotnet.BuildServer.Contracts.csproj" />

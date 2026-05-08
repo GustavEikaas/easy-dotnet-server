@@ -6,7 +6,7 @@ namespace EasyDotnet.ProjXLanguageServer.Tests.Completion;
 
 public class PartialTagCompletionTests
 {
-  private static readonly CompletionService Sut = new();
+  private static readonly CompletionService Sut = CompletionTestFactory.Create();
 
   private static (CursorContextKind kind, string? element, string? parent) ResolveAt(string text)
   {
@@ -27,7 +27,7 @@ public class PartialTagCompletionTests
   {
     var text = "<Project Sdk=\"Microsoft.NET.Sdk.Web\">\n\n    <PropertyGroup>\n    <T@CURSOR";
     var doc = DocAt(text, out var line, out var character);
-    var items = Sut.GetCompletions(doc, line, character);
+    var items = (await Sut.GetCompletionsAsync(doc, line, character, default)).Items;
     await Assert.That(items.Any(i => i.Label == "TargetFramework")).IsTrue();
   }
 
@@ -36,7 +36,7 @@ public class PartialTagCompletionTests
   {
     var text = "<Project Sdk=\"Microsoft.NET.Sdk.Web\">\n  <PropertyGroup>\n    <T@CURSOR\n  </PropertyGroup>";
     var doc = DocAt(text, out var line, out var character);
-    var items = Sut.GetCompletions(doc, line, character);
+    var items = (await Sut.GetCompletionsAsync(doc, line, character, default)).Items;
     await Assert.That(items.Any(i => i.Label == "TargetFramework")).IsTrue();
   }
 
@@ -45,7 +45,7 @@ public class PartialTagCompletionTests
   {
     var text = "<Project>\n  <PropertyGroup>\n    <T@CURSOR\n</Project>";
     var doc = DocAt(text, out var line, out var character);
-    var items = Sut.GetCompletions(doc, line, character);
+    var items = (await Sut.GetCompletionsAsync(doc, line, character, default)).Items;
     await Assert.That(items.Any(i => i.Label == "TargetFramework")).IsTrue();
   }
 
@@ -54,7 +54,7 @@ public class PartialTagCompletionTests
   {
     var text = "<Project>\n  <PropertyGroup>\n    <Nullable>enable</Nullable>\n    <T@CURSOR\n  </PropertyGroup>\n</Project>";
     var doc = DocAt(text, out var line, out var character);
-    var items = Sut.GetCompletions(doc, line, character);
+    var items = (await Sut.GetCompletionsAsync(doc, line, character, default)).Items;
     await Assert.That(items.Any(i => i.Label == "TargetFramework")).IsTrue();
   }
 
@@ -63,7 +63,7 @@ public class PartialTagCompletionTests
   {
     var text = "<Project>\n  <PropertyGroup>\n    <T @CURSOR\n  </PropertyGroup>\n</Project>";
     var doc = DocAt(text, out var line, out var character);
-    var items = Sut.GetCompletions(doc, line, character);
+    var items = (await Sut.GetCompletionsAsync(doc, line, character, default)).Items;
     await Assert.That(items.Any(i => i.Label == "TargetFramework")).IsTrue();
   }
 
