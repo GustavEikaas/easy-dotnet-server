@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Read(//tmp/peek2/**)",
-      "Bash(dotnet run *)",
-      "Bash(git fetch *)"
-    ]
-  }
-}
