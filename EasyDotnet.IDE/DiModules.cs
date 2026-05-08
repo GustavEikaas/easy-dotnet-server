@@ -10,7 +10,9 @@ using EasyDotnet.IDE.DebuggerStrategies;
 using EasyDotnet.IDE.Editor;
 using EasyDotnet.IDE.EntityFramework;
 using EasyDotnet.IDE.Interfaces;
+using EasyDotnet.IDE.Logging;
 using EasyDotnet.IDE.NewFile;
+using EasyDotnet.IDE.PackageManager;
 using EasyDotnet.IDE.Picker;
 using EasyDotnet.IDE.ProcessExecution;
 using EasyDotnet.IDE.ProjectReference.Services;
@@ -37,16 +39,14 @@ using StreamJsonRpc;
 
 namespace EasyDotnet;
 
-public record CurrentLogLevel(SourceLevels Loglevel, string LogDir);
-
 public static class DiModules
 {
   public static ServiceProvider BuildServiceProvider(JsonRpc jsonRpc, SourceLevels levels)
   {
     var services = new ServiceCollection();
 
-    var logDir = Path.Combine(Directory.GetCurrentDirectory(), "logs");
-    ConfigureLogging(levels, logDir);
+    var logLevelState = new LogLevelState(levels);
+    ConfigureLogging(logLevelState);
 
     services.AddLogging(builder =>
         {
@@ -58,7 +58,7 @@ public static class DiModules
     services.AddHttpClient();
     services.AddSingleton(jsonRpc);
     services.AddSingleton<DbContextCache>();
-    services.AddSingleton(new CurrentLogLevel(levels, logDir));
+    services.AddSingleton(logLevelState);
     services.AddSingleton<IClientService, ClientService>();
     services.AddSingleton<IVisualStudioLocator, VisualStudioLocator>();
     services.AddSingleton<IFileSystem, FileSystem>();
@@ -95,7 +95,9 @@ public static class DiModules
     services.AddSingleton<WorkspaceRestoreService>();
     services.AddSingleton<WorkspaceTestService>();
     services.AddSingleton<WorkspacePreBuildService>();
-    services.AddSingleton<WorkspaceSessionManager>();
+    services.AddSingleton<WorkspaceSessionRegistry>();
+    services.AddSingleton<WorkspaceDebugAttachService>();
+    services.AddSingleton<WorkspaceStopService>();
     services.AddSingleton<NodeRegistry>();
     services.AddSingleton<StatusDispatcher>();
     services.AddSingleton<DetailStore>();
@@ -103,7 +105,8 @@ public static class DiModules
     services.AddSingleton<GlobalOperationLock>();
     services.AddSingleton<OperationExecutor>();
     services.AddSingleton<AdapterResolver>();
-    services.AddSingleton<VsTestAdapter>();
+    services.AddTransient<VsTestAdapter>();
+    services.AddSingleton<Func<VsTestAdapter>>(x => () => x.GetRequiredService<VsTestAdapter>());
     services.AddSingleton<MtpAdapter>();
     services.AddSingleton<MtpClientFactory>();
 
@@ -116,7 +119,7 @@ public static class DiModules
     services.AddTransient<ILaunchProfileService, LaunchProfileService>();
     services.AddTransient<INotificationService, NotificationService>();
     services.AddTransient<NugetService>();
-    services.AddSingleton<VsTestService>();
+    services.AddPackageManager();
     services.AddTransient<OutdatedService>();
     services.AddTransient<GlobalJsonService>();
 
@@ -148,6 +151,7 @@ public static class DiModules
 
     var logger = serviceProvider.GetRequiredService<ILogger<JsonRpc>>();
     jsonRpc.TraceSource.Switch.Level = levels;
+    logLevelState.LevelChanged += l => jsonRpc.TraceSource.Switch.Level = l;
     jsonRpc.TraceSource.Listeners.Clear();
     jsonRpc.TraceSource.Listeners.Add(new JsonRpcLogger(logger));
 
@@ -157,39 +161,15 @@ public static class DiModules
     return serviceProvider;
   }
 
-  private static void ConfigureLogging(SourceLevels levels, string logDir)
+  private static void ConfigureLogging(LogLevelState state)
   {
-    string? logFile = null;
-    if (levels.HasFlag(SourceLevels.Verbose))
-    {
-      Directory.CreateDirectory(logDir);
-      logFile = Path.Combine(logDir,
-          $"easy-dotnet-{DateTime.UtcNow:yyyyMMdd_HHmmss}-{Environment.ProcessId}.log");
-    }
-
-    var serilogConfig = new LoggerConfiguration()
-        .MinimumLevel.Is(ConvertLogLevel(levels))
-        .WriteTo.Console();
-
-    if (!string.IsNullOrEmpty(logFile))
-    {
-      serilogConfig = serilogConfig.WriteTo.File(logFile, rollingInterval: RollingInterval.Day);
-    }
-
-    Log.Logger = serilogConfig.CreateLogger();
+    Log.Logger = new LoggerConfiguration()
+        .MinimumLevel.ControlledBy(state.Switch)
+        .WriteTo.Console()
+        .WriteTo.Sink(state.RingSink)
+        .CreateLogger();
     WriteLogHeader();
   }
-
-  private static Serilog.Events.LogEventLevel ConvertLogLevel(SourceLevels level) =>
-       level switch
-       {
-         SourceLevels.Critical => Serilog.Events.LogEventLevel.Fatal,
-         SourceLevels.Error => Serilog.Events.LogEventLevel.Error,
-         SourceLevels.Warning => Serilog.Events.LogEventLevel.Warning,
-         SourceLevels.Information => Serilog.Events.LogEventLevel.Information,
-         SourceLevels.Verbose => Serilog.Events.LogEventLevel.Verbose,
-         _ => Serilog.Events.LogEventLevel.Information
-       };
 
   private static void WriteLogHeader()
   {

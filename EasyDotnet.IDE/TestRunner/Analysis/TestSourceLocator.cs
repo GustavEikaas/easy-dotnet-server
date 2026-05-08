@@ -15,11 +15,22 @@ public record TestMethodLocation(
 );
 
 /// <summary>
+/// A method that carries at least one known test attribute but is not yet
+/// present in the compiled assembly — e.g. a test the user just wrote.
+/// </summary>
+public record ProbableMethod(
+    string ClassName,
+    string MethodName,
+    TestMethodLocation Location
+);
+
+/// <summary>
 /// Parsed locations for a single source file.
 /// </summary>
 public record ParsedFileLocations(
     Dictionary<string, TestMethodLocation> Methods,
-    Dictionary<string, TestMethodLocation> Classes
+    Dictionary<string, TestMethodLocation> Classes,
+    List<ProbableMethod> ProbableMethods
 );
 
 /// <summary>
@@ -96,7 +107,7 @@ public class TestSourceLocator
     try { source = File.ReadAllText(filePath); }
     catch
     {
-      _cache[filePath] = new ParsedFileLocations([], []);
+      _cache[filePath] = new ParsedFileLocations([], [], []);
       return null;
     }
 
@@ -105,6 +116,29 @@ public class TestSourceLocator
     return parsed;
   }
 
+  private static readonly HashSet<string> TestAttributeNames = new(StringComparer.Ordinal)
+  {
+    "Fact", "Theory", "Test", "TestCase", "TestCaseSource", "TestMethod",
+    "InlineData", "DataRow", "Arguments",
+  };
+
+  private static bool HasTestAttribute(MethodDeclarationSyntax method) =>
+      method.AttributeLists
+          .SelectMany(al => al.Attributes)
+          .Any(a =>
+          {
+            var name = a.Name switch
+            {
+              QualifiedNameSyntax q => q.Right.Identifier.Text,
+              IdentifierNameSyntax i => i.Identifier.Text,
+              _ => a.Name.ToString(),
+            };
+            return TestAttributeNames.Contains(name);
+          });
+
+  private static string? EnclosingClassName(MethodDeclarationSyntax method) =>
+      (method.Parent as ClassDeclarationSyntax)?.Identifier.Text;
+
   private static ParsedFileLocations ParseSource(string source)
   {
     var tree = CSharpSyntaxTree.ParseText(source);
@@ -112,6 +146,7 @@ public class TestSourceLocator
 
     var methods = new Dictionary<string, TestMethodLocation>(StringComparer.Ordinal);
     var classes = new Dictionary<string, TestMethodLocation>(StringComparer.Ordinal);
+    var probableMethods = new List<ProbableMethod>();
 
     foreach (var method in root.DescendantNodes().OfType<MethodDeclarationSyntax>())
     {
@@ -141,8 +176,12 @@ public class TestSourceLocator
       }
 
       var endLine = method.GetLocation().GetLineSpan().EndLinePosition.Line;
+      var loc = new TestMethodLocation(signatureLine, bodyStartLine, endLine);
 
-      methods[name] = new TestMethodLocation(signatureLine, bodyStartLine, endLine);
+      methods[name] = loc;
+
+      if (HasTestAttribute(method) && EnclosingClassName(method) is { } className)
+        probableMethods.Add(new ProbableMethod(className, name, loc));
     }
 
     foreach (var cls in root.DescendantNodes().OfType<ClassDeclarationSyntax>())
@@ -167,6 +206,6 @@ public class TestSourceLocator
       classes[name] = new TestMethodLocation(signatureLine, bodyStartLine, endLine);
     }
 
-    return new ParsedFileLocations(methods, classes);
+    return new ParsedFileLocations(methods, classes, probableMethods);
   }
 }

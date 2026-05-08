@@ -1,8 +1,6 @@
 ﻿using System.Diagnostics;
 using System.IO.Pipes;
 using Microsoft.Build.Locator;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Serialization;
 using StreamJsonRpc;
 
@@ -14,17 +12,16 @@ static class Program
   {
     var logLevel = ParseLogLevel(args);
     var pipe = ParsePipe(args);
-    var logDirectory = ParseLogDirectory(args);
 
-    if (pipe is null || logDirectory is null)
+    if (pipe is null)
     {
-      Console.Error.WriteLine("No --pipe passed or --logDirectory not passed");
+      Console.Error.WriteLine("No --pipe passed");
       return 1;
     }
 
     var instance = RegisterMSBuild();
 
-    return await RunServer(logLevel, logDirectory, pipe, instance);
+    return await RunServer(logLevel, pipe, instance);
   }
 
   private static MsBuildInstance RegisterMSBuild()
@@ -43,7 +40,6 @@ static class Program
     try
     {
       var instances = MSBuildLocator.QueryVisualStudioInstances().ToList();
-
       var bestInstance = instances
           .OrderByDescending(i => i.Version)
           .FirstOrDefault();
@@ -52,12 +48,42 @@ static class Program
       {
         throw new Exception("[Error] No Visual Studio instances found.");
       }
+      var msbuildPath = bestInstance.MSBuildPath;
+      var appBaseDir = AppDomain.CurrentDomain.BaseDirectory;
+      AppDomain.CurrentDomain.AssemblyResolve += (_, resolveArgs) =>
+      {
+        var assemblyName = new System.Reflection.AssemblyName(resolveArgs.Name);
+        var fileName = assemblyName.Name + ".dll";
+
+        // Prefer assemblies we ship next to the .exe before falling back to
+        // VS's MSBuild folder. This matters when MSBuild was compiled against
+        // a higher version of e.g. System.Collections.Immutable than what we
+        // target — without this, normal probing fails on the version mismatch
+        // and we'd end up loading a stale copy from MSBuild\Current\Bin that
+        // is missing newer APIs (FrozenSet.Create(...,ReadOnlySpan<T>) etc.).
+        var localCandidate = Path.Combine(appBaseDir, fileName);
+        if (File.Exists(localCandidate))
+        {
+          Console.Error.WriteLine($"[Info] Resolved {assemblyName.Name} from {localCandidate} (local)");
+          return System.Reflection.Assembly.LoadFrom(localCandidate);
+        }
+
+        var msbuildCandidate = Path.Combine(msbuildPath, fileName);
+        if (File.Exists(msbuildCandidate))
+        {
+          Console.Error.WriteLine($"[Info] Resolved {assemblyName.Name} from {msbuildCandidate}");
+          return System.Reflection.Assembly.LoadFrom(msbuildCandidate);
+        }
+        return null;
+      };
+
 
       MSBuildLocator.RegisterInstance(bestInstance);
 
       Console.Error.WriteLine($"[Info] BuildServer running on .NET Framework {Environment.Version}");
       Console.Error.WriteLine($"[Info] Registered MSBuild: {bestInstance.Name} (v{bestInstance.Version})");
       Console.Error.WriteLine($"[Info] MSBuild Path: {bestInstance.MSBuildPath}");
+
       return new MsBuildInstance(bestInstance.Name, $"net{bestInstance.Version.Major}.0", bestInstance.Version, bestInstance.MSBuildPath, bestInstance.VisualStudioRootPath, MsBuildInstanceOrigin.VisualStudio);
     }
     catch (Exception ex)
@@ -134,7 +160,6 @@ static class Program
   [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
   private static async Task<int> RunServer(
     SourceLevels logLevel,
-    string logDirectory,
     string pipeName,
     MsBuildInstance instance)
   {
@@ -142,9 +167,8 @@ static class Program
 
     var jsonRpc = new JsonRpc(messageHandler);
 
-    var serviceProvider = DiModule.BuildServiceProvider(jsonRpc, instance, logLevel, logDirectory);
-
-    var logger = serviceProvider.GetRequiredService<ILogger<JsonRpc>>();
+    var services = DiModule.Bootstrap(jsonRpc, instance, logLevel);
+    var logger = services.Logger;
 
     logger.LogInformation("JSON-RPC Server initialized");
     logger.LogInformation("Listening on named pipe {PipeName}", pipeName);
@@ -173,21 +197,6 @@ static class Program
     return null;
   }
 
-  private static string? ParseLogDirectory(string[] args)
-  {
-    for (var i = 0; i < args.Length; i++)
-    {
-      var arg = args[i];
-
-      if (arg.Equals("--logDirectory", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length && !args[i + 1].StartsWith("--"))
-      {
-        return args[i + 1];
-      }
-    }
-
-    return null;
-  }
-
   private static SourceLevels ParseLogLevel(string[] args)
   {
     foreach (var arg in args)
@@ -204,7 +213,7 @@ static class Program
           "critical" => SourceLevels.Critical,
           "all" => SourceLevels.All,
           "off" => SourceLevels.Off,
-          _ => SourceLevels.Information
+          _ => SourceLevels.Off
         };
       }
     }
@@ -212,7 +221,7 @@ static class Program
 #if DEBUG
     return SourceLevels.Verbose;
 #else
-    return SourceLevels.Information;
+    return SourceLevels.Off;
 #endif
   }
 }

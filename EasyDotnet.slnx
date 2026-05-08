@@ -8,6 +8,7 @@
   <Project Path="EasyDotnet.AppWrapper/EasyDotnet.AppWrapper.csproj" />
   <Project Path="EasyDotnet.BuildServer.Contracts/EasyDotnet.BuildServer.Contracts.csproj" />
   <Project Path="EasyDotnet.BuildServer/EasyDotnet.BuildServer.csproj" />
+  <Project Path="EasyDotnet.BuildServer.SmokeTests/EasyDotnet.BuildServer.SmokeTests.csproj" />
   <Project Path="EasyDotnet.ContainerTests/EasyDotnet.ContainerTests.csproj" />
   <Project Path="EasyDotnet.Debugger.Tests/EasyDotnet.Debugger.Tests.csproj" />
   <Project Path="EasyDotnet.Debugger/EasyDotnet.Debugger.csproj" />
@@ -16,8 +17,8 @@
   <Project Path="EasyDotnet.IntegrationTests/EasyDotnet.IntegrationTests.csproj" />
   <Project Path="EasyDotnet.MsBuild.Tests/EasyDotnet.MsBuild.Tests.csproj" />
   <Project Path="EasyDotnet.MsBuild/EasyDotnet.MsBuild.csproj" />
+  <Project Path="EasyDotnet.ProjXLanguageServer.Tests/EasyDotnet.ProjXLanguageServer.Tests.csproj" />
   <Project Path="EasyDotnet.ProjXLanguageServer/EasyDotnet.ProjXLanguageServer.csproj" />
-  <Project Path="EasyDotnet.RoslynLanguageServices.Tests/EasyDotnet.RoslynLanguageServices.Tests.csproj" />
   <Project Path="EasyDotnet.RoslynLanguageServices/EasyDotnet.RoslynLanguageServices.csproj" />
   <Project Path="EasyDotnet.StartupHook/EasyDotnet.StartupHook.csproj" />
 </Solution>

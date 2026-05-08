@@ -2,8 +2,8 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using EasyDotnet.BuildServer.Contracts;
+using EasyDotnet.BuildServer.Logging;
 using EasyDotnet.BuildServer.MsBuildProject;
-using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
 
 namespace EasyDotnet.BuildServer.Handlers;
@@ -14,7 +14,7 @@ namespace EasyDotnet.BuildServer.Handlers;
 public class SingleFileConvertHandler(
     RestoreHandler restoreHandler,
     ProjectPropertiesBatchHandler projectPropertiesHandler,
-    ILogger<SingleFileConvertHandler> logger)
+    Logger logger)
 {
   [JsonRpcMethod("singlefile/convert", UseSingleObjectParameterDeserialization = true)]
   public async Task<ConvertSingleFileResponse> Convert(

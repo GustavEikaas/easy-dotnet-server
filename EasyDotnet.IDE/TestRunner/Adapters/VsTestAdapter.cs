@@ -30,6 +30,7 @@ public sealed class VsTestAdapter(
     SettingsService settingsService,
     ILoggerFactory loggerFactory) : ITestAdapter, IAsyncDisposable
 {
+  private readonly ILogger _logger = loggerFactory.CreateLogger<VsTestAdapter>();
   private static readonly TestPlatformOptions DefaultOptions = new()
   {
     CollectMetrics = false,
@@ -57,9 +58,28 @@ public sealed class VsTestAdapter(
         try { wrapper.CancelDiscovery(); } catch { /* best effort */ }
       });
 
-      var handler = new StreamingDiscoveryHandler(onDiscovered, loggerFactory);
+      var handler = new StreamingDiscoveryHandler(loggerFactory);
       wrapper.DiscoverTests([project.TargetPath], null, DefaultOptions, null, handler);
-      await handler.Completion;
+
+      // Buffer all TestCases so we can detect parameterised rows by duplicate FQN —
+      // this is the only reliable VSTest-layer signal, since frameworks like MSTest
+      // can strip parens from DisplayName entirely via [DataRow(DisplayName = "...")].
+      var testCases = new List<Microsoft.VisualStudio.TestPlatform.ObjectModel.TestCase>();
+      await foreach (var tc in handler.ReadAllAsync().WithCancellation(ct))
+      {
+        testCases.Add(tc);
+      }
+
+      foreach (var group in testCases.GroupBy(tc => tc.FullyQualifiedName))
+      {
+        var isParameterised = group.Count() > 1;
+        foreach (var tc in group)
+        {
+          var discoveredTest = tc.ToDiscoveredTest(isParameterised);
+          try { await onDiscovered(discoveredTest); }
+          catch (Exception ex) { _logger.LogError(ex, "Error in onDiscovered callback for {TestCase}", discoveredTest.FullyQualifiedName); }
+        }
+      }
     }
     finally
     {
@@ -224,8 +244,7 @@ public sealed class VsTestAdapter(
     {
       var session = await debugOrchestrator.StartClientDebugSessionAsync(
           project.ProjectFullPath,
-          new(project.ProjectFullPath, project.TargetFramework, null, null),
-          debugStrategyFactory.CreateStandardAttachStrategy(pid),
+          debugStrategyFactory.CreateStandardAttachStrategy(pid, project.Raw.ProjectDir),
           ct);
 
       session.Stopped += onStopped;

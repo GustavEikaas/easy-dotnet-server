@@ -175,6 +175,15 @@ public class WorkspaceBuildHostManager(
   public Task<BuildServerDiagnosticsResponse> GetBuildServerDiagnosticsAsync(CancellationToken cancellationToken) =>
       innerManager.GetBuildServerDiagnosticsAsync(cancellationToken);
 
+  public Task<InstalledPackageReference[]> ListPackageReferencesAsync(string projectPath, CancellationToken cancellationToken) =>
+      innerManager.ListPackageReferencesAsync(projectPath, cancellationToken);
+
+  public Task SetLogLevelAsync(string level, CancellationToken cancellationToken) =>
+      innerManager.SetLogLevelAsync(level, cancellationToken);
+
+  public Task<string[]> GetLogsAsync(CancellationToken cancellationToken) =>
+      innerManager.GetLogsAsync(cancellationToken);
+
   public void InvalidateCache(string projectPath, string config = "Debug") => cache.Invalidate(projectPath, config);
 
   public void ClearCache() => cache.Clear(CacheInvalidationReason.ClearedAll);

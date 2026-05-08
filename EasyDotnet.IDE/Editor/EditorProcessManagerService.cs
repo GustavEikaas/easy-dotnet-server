@@ -7,15 +7,14 @@ public class EditorProcessManagerService : IEditorProcessManagerService
 {
   private readonly ConcurrentDictionary<Guid, TaskCompletionSource<int>> _pendingJobs = new();
   private readonly SemaphoreSlim _managedSlot = new(1, 1);
-  private readonly SemaphoreSlim _longRunningSlot = new(1, 1);
 
   public bool IsSlotBusy(TerminalSlot slot) => GetSlot(slot).CurrentCount == 0;
 
-  public Guid RegisterJob(TerminalSlot slot)
+  public Guid RegisterJob(TerminalSlot? slot = null)
   {
-    if (!GetSlot(slot).Wait(0))
+    if (slot.HasValue && !GetSlot(slot.Value).Wait(0))
     {
-      throw new InvalidOperationException($"A job is already running in the {slot} terminal");
+      throw new InvalidOperationException($"A job is already running in the {slot.Value} terminal");
     }
 
     var jobId = Guid.NewGuid();
@@ -29,16 +28,17 @@ public class EditorProcessManagerService : IEditorProcessManagerService
       tcs.TrySetResult(exitCode);
   }
 
-  public void SetFailedToStart(Guid jobId, TerminalSlot slot, string message)
+  public void SetFailedToStart(Guid jobId, TerminalSlot? slot, string message)
   {
-    GetSlot(slot).Release();
+    if (slot.HasValue)
+      GetSlot(slot.Value).Release();
     if (_pendingJobs.TryRemove(jobId, out var tcs))
     {
       tcs.SetException(new InvalidOperationException(message));
     }
   }
 
-  public async Task<int> WaitForExitAsync(Guid jobId, TerminalSlot slot)
+  public async Task<int> WaitForExitAsync(Guid jobId, TerminalSlot? slot = null)
   {
     try
     {
@@ -49,14 +49,14 @@ public class EditorProcessManagerService : IEditorProcessManagerService
     finally
     {
       _pendingJobs.TryRemove(jobId, out _);
-      GetSlot(slot).Release();
+      if (slot.HasValue)
+        GetSlot(slot.Value).Release();
     }
   }
 
   private SemaphoreSlim GetSlot(TerminalSlot slot) => slot switch
   {
     TerminalSlot.Managed => _managedSlot,
-    TerminalSlot.LongRunning => _longRunningSlot,
     _ => throw new ArgumentOutOfRangeException(nameof(slot))
   };
 }

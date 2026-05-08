@@ -140,6 +140,59 @@ public sealed class BuildHostManager(ILogger<BuildHostManager> logger, BuildHost
     }
   }
 
+  public async Task SetLogLevelAsync(string level, CancellationToken cancellationToken)
+  {
+    EnsureNotDisposed();
+    if (_rpc?.IsDisposed != false || _serverProcess?.HasExited != false)
+    {
+      return;
+    }
+    try
+    {
+      await _rpc.InvokeWithParameterObjectAsync("_server/setLogLevel", new { level }, cancellationToken);
+    }
+    catch (ConnectionLostException)
+    {
+      InvalidateConnection();
+    }
+  }
+
+  public async Task<string[]> GetLogsAsync(CancellationToken cancellationToken)
+  {
+    EnsureNotDisposed();
+    if (_rpc?.IsDisposed != false || _serverProcess?.HasExited != false)
+    {
+      return [];
+    }
+    try
+    {
+      return await _rpc.InvokeAsync<string[]>("_server/logdump").WaitAsync(cancellationToken);
+    }
+    catch (ConnectionLostException)
+    {
+      InvalidateConnection();
+      return [];
+    }
+  }
+
+  public async Task<InstalledPackageReference[]> ListPackageReferencesAsync(string projectPath, CancellationToken cancellationToken)
+  {
+    EnsureNotDisposed();
+    var rpc = await GetRpcClientAsync();
+    try
+    {
+      return await rpc.InvokeWithParameterObjectAsync<InstalledPackageReference[]>(
+          "projects/list-package-references",
+          new ListPackageReferencesRequest(projectPath),
+          cancellationToken);
+    }
+    catch (ConnectionLostException)
+    {
+      InvalidateConnection();
+      throw new Exception("BuildServer connection was lost. Please try again.");
+    }
+  }
+
   private async Task<JsonRpc> GetRpcClientAsync()
   {
     if (_rpc?.IsDisposed == false && _serverProcess?.HasExited == false)

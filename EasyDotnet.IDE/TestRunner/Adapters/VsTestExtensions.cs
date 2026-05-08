@@ -5,7 +5,7 @@ namespace EasyDotnet.IDE.TestRunner.Adapters;
 
 public static class VsTestExtensions
 {
-  public static DiscoveredTest ToDiscoveredTest(this TestCase x)
+  public static DiscoveredTest ToDiscoveredTest(this TestCase x, bool isParameterised = false)
   {
     // TestCaseProperties does not expose ManagedType in this ObjectModel version.
     // We derive namespace + class from FullyQualifiedName for all VSTest frameworks.
@@ -40,7 +40,25 @@ public static class VsTestExtensions
       namespaceParts = [];
     }
 
-    var (methodName, args) = ParseArguments(x.DisplayName);
+    var (displayMethodName, displayArgs) = ParseArguments(x.DisplayName);
+
+    string methodName;
+    string? arguments;
+    if (isParameterised)
+    {
+      // Duplicate-FQN group: this is a parameterised row. Anchor MethodName to the FQN's
+      // last segment so the TheoryGroup reflects the actual CLR method (not a custom per-row
+      // label like [DataRow(DisplayName = "…")]), and always emit a non-null Arguments so
+      // the executor promotes the node to a Subcase. Fall back to DisplayName as the per-row
+      // label when the framework didn't encode args in the display name.
+      methodName = fqnParts.Length >= 1 ? fqnParts[^1] : displayMethodName;
+      arguments = displayArgs ?? x.DisplayName;
+    }
+    else
+    {
+      methodName = displayMethodName;
+      arguments = displayArgs;
+    }
 
     return new DiscoveredTest
     {
@@ -50,7 +68,7 @@ public static class VsTestExtensions
       ClassName = className,
       MethodName = methodName,
       DisplayName = x.DisplayName,
-      Arguments = args,
+      Arguments = arguments,
       FilePath = x.CodeFilePath?.Replace("\\", "/"),
       // VSTest LineNumber is already 0-based for MSTest; others may vary — treat negative as null
       LineNumber = x.LineNumber >= 0 ? x.LineNumber : null,
@@ -96,11 +114,14 @@ public static class VsTestExtensions
 
   private static (string MethodName, string? Args) ParseArguments(string displayName)
   {
+    // Mirrors MtpExtensions.ParseArguments — MSTest DynamicData emits DisplayName as
+    // "M (1)" with a space before the paren, so the prefix needs TrimEnd to avoid
+    // trailing whitespace leaking into the method name.
     var start = displayName.IndexOf('(');
     var end = displayName.LastIndexOf(')');
     if (start >= 0 && end > start && end == displayName.Length - 1)
-      return (displayName[..start], displayName[start..(end + 1)]);
-    return (displayName, null);
+      return (displayName[..start].TrimEnd(), displayName[start..(end + 1)]);
+    return (displayName.Trim(), null);
   }
 
   /// <summary>

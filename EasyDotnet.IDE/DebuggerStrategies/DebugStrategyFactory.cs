@@ -1,3 +1,4 @@
+using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.IDE.Interfaces;
 using Microsoft.Extensions.Logging;
 
@@ -5,8 +6,8 @@ namespace EasyDotnet.IDE.DebuggerStrategies;
 
 public interface IDebugStrategyFactory
 {
-  RunInTerminalStrategy CreateRunInTerminalStrategy(string? launchProfileName, string? cliArgs = null);
-  StandardAttachStrategy CreateStandardAttachStrategy(int pid);
+  RunInTerminalStrategy CreateRunInTerminalStrategy(ValidatedDotnetProject project, string? launchProfileName, string? cliArgs = null);
+  StandardAttachStrategy CreateStandardAttachStrategy(int pid, string? cwd = null);
 }
 
 public class DebugStrategyFactory(
@@ -16,7 +17,8 @@ public class DebugStrategyFactory(
   IStartupHookService startupHookService,
   IAppWrapperManager appWrapperManager) : IDebugStrategyFactory
 {
-  public RunInTerminalStrategy CreateRunInTerminalStrategy(string? launchProfileName, string? cliArgs = null) => new(
+  public RunInTerminalStrategy CreateRunInTerminalStrategy(ValidatedDotnetProject project, string? launchProfileName, string? cliArgs = null) => new(
+    project,
     launchProfileName,
     cliArgs,
     loggerFactory.CreateLogger<RunInTerminalStrategy>(),
@@ -25,8 +27,9 @@ public class DebugStrategyFactory(
     launchProfileService,
     appWrapperManager);
 
-
-  public StandardAttachStrategy CreateStandardAttachStrategy(int pid) => new(
+  public StandardAttachStrategy CreateStandardAttachStrategy(int pid, string? cwd = null) => new(
     loggerFactory.CreateLogger<StandardAttachStrategy>(),
-    pid);
+    pid,
+    cwd);
+
 }

@@ -37,3 +37,8 @@ public enum TestQuickFixItemType
   Warning = 1,
   Error = 2
 }
+
+// Picker reverse-request payloads (server → client via picker/pick)
+public sealed record TestPickerChoice(string Id, string Display);
+public sealed record TestPickerRequest(Guid Guid, string Prompt, TestPickerChoice[] Choices, bool Multi, bool Preview);
+public sealed record TestPickerResult(string[]? SelectedIds);

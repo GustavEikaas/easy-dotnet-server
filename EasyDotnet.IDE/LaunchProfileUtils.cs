@@ -37,22 +37,6 @@ public static partial class LaunchProfileUtils
     return env;
   }
 
-  public static string ResolveCwd(LaunchProfile? profile, MsBuild.DotnetProject project)
-  {
-    if (!string.IsNullOrWhiteSpace(profile?.WorkingDirectory))
-    {
-      return NormalizePath(InterpolateVariables(profile.WorkingDirectory, project));
-    }
-
-    if (!string.IsNullOrWhiteSpace(project.RunWorkingDirectory))
-    {
-      return NormalizePath(project.RunWorkingDirectory);
-    }
-
-    return NormalizePath(
-        Path.GetDirectoryName(project.TargetPath) ?? project.ProjectDir!);
-  }
-
   public static string[] ParseCommandLineArgs(string? input, DotnetProject project)
   {
     if (string.IsNullOrWhiteSpace(input))
@@ -63,15 +47,6 @@ public static partial class LaunchProfileUtils
     return SplitCommandLineArgs(InterpolateVariables(input, project));
   }
 
-  public static string[] ParseCommandLineArgs(string? input, MsBuild.DotnetProject project)
-  {
-    if (string.IsNullOrWhiteSpace(input))
-    {
-      return [];
-    }
-
-    return SplitCommandLineArgs(InterpolateVariables(input, project));
-  }
 
   /// <summary>
   /// Resolves the working directory for launching a project, matching VS behaviour:
@@ -94,22 +69,6 @@ public static partial class LaunchProfileUtils
 
     return NormalizePath(
         Path.GetDirectoryName(project.TargetPath) ?? project.ProjectDir!);
-  }
-
-  public static string InterpolateVariables(string input, MsBuild.DotnetProject project)
-  {
-    if (string.IsNullOrWhiteSpace(input))
-    {
-      return input;
-    }
-
-    var variables = BuildVariablesDictionary(project);
-
-    return MsBuildVarRegex().Replace(input, match =>
-    {
-      var varName = match.Groups[1].Value;
-      return variables.TryGetValue(varName, out var value) ? value : match.Value;
-    });
   }
 
   public static string InterpolateVariables(string input, DotnetProject project)
@@ -169,28 +128,6 @@ public static partial class LaunchProfileUtils
     }
 
     return [.. args];
-  }
-
-  private static Dictionary<string, string> BuildVariablesDictionary(MsBuild.DotnetProject project)
-  {
-    var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-    void Add(string key, string? value) { if (!string.IsNullOrWhiteSpace(value)) { variables[key] = value; } }
-
-    Add("ProjectDir", project.ProjectDir);
-    Add("OutDir", project.OutDir);
-    Add("OutputPath", project.OutputPath);
-    Add("Configuration", project.Configuration);
-    Add("TargetDir", project.TargetDir);
-    Add("TargetName", project.TargetName);
-    Add("TargetFileName", project.TargetFileName);
-    Add("TargetPath", project.TargetPath);
-    Add("AssemblyName", project.AssemblyName);
-    Add("ProjectName", project.ProjectName);
-    Add("TargetFramework", project.TargetFramework);
-    Add("UserProfile", Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
-
-    return variables;
   }
 
   private static Dictionary<string, string> BuildVariablesDictionary(DotnetProject project)

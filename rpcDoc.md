@@ -53,6 +53,13 @@
 
 **Returns:** `Task`
 
+### `workspace/debug-attach`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | WorkspaceDebugAttachRequest |   |
+
+**Returns:** `Task`
+
 ### `workspace/restore`
 | Parameter | Type | Optional |
 |-----------|------|----------|
@@ -64,6 +71,13 @@
 | Parameter | Type | Optional |
 |-----------|------|----------|
 | request | WorkspaceRunRequest |   |
+
+**Returns:** `Task`
+
+### `workspace/stop`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | WorkspaceStopRequest |   |
 
 **Returns:** `Task`
 
@@ -166,7 +180,7 @@
 |-----------|------|----------|
 | request | SyncFileRequest |   |
 
-**Returns:** `SyncFileResult`
+**Returns:** `Task<SyncFileResult>`
 
 ---
 
@@ -224,6 +238,31 @@
 
 ---
 
+## PackageManagerController
+
+### `nuget/add-package`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | AddPackageRequest |   |
+
+**Returns:** `Task`
+
+### `nuget/list-installed`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | ListInstalledRequest |   |
+
+**Returns:** `Task<InstalledPackageReference[]>`
+
+### `nuget/remove-package`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | RemovePackageRequest |   |
+
+**Returns:** `Task`
+
+---
+
 ## NewFileController
 
 ### `json-code-gen-v2`
@@ -253,6 +292,28 @@
 |-----------|------|----------|
 
 **Returns:** `Task<BuildServerDiagnosticsResponse>`
+
+---
+
+## ServerController
+
+### `_server/logdump`
+_No parameters_
+
+**Returns:** `String[]`
+
+### `_server/logdump/buildserver`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+
+**Returns:** `Task<String[]>`
+
+### `_server/setLogLevel`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | SetLogLevelRequest |   |
+
+**Returns:** `Task`
 
 ---
 

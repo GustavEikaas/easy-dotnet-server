@@ -6,30 +6,39 @@ internal static class StartupHook
 {
   public static void Initialize()
   {
-    LogIfDebug($"ProcessId: {Environment.ProcessId}");
-    LogIfDebug($"CurrentDirectory: {Environment.CurrentDirectory}");
-    LogIfDebug($".NET Version: {Environment.Version}");
-    var pipeName = ReadAndDiscardHookPipe();
-    RemoveStartupHookEnvironment();
+    try
+    {
+      LogIfDebug($"ProcessId: {Environment.ProcessId}");
+      LogIfDebug($"CurrentDirectory: {Environment.CurrentDirectory}");
+      LogIfDebug($".NET Version: {Environment.Version}");
+      var pipeName = ReadAndDiscardHookPipe();
+      RemoveStartupHookEnvironment();
 
-    LogIfDebug($"EASY_DOTNET_HOOK_PIPE: '{pipeName}'");
-    if (string.IsNullOrEmpty(pipeName)) return;
+      LogIfDebug($"EASY_DOTNET_HOOK_PIPE: '{pipeName}'");
+      if (string.IsNullOrEmpty(pipeName)) return;
 
-    using var client = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut);
-    client.Connect(5000);
-    LogIfDebug($"Pipe connected: {client.IsConnected}");
+      using var client = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut);
+      client.Connect(5000);
+      LogIfDebug($"Pipe connected: {client.IsConnected}");
 
-    var pid = Environment.ProcessId;
-    LogIfDebug($"Sending PID: {pid}");
-    var pidBytes = BitConverter.GetBytes(pid);
-    LogIfDebug($"Writing {pidBytes.Length} bytes to pipe...");
-    client.Write(pidBytes, 0, pidBytes.Length);
-    client.Flush();
-    LogIfDebug("PID written and flushed.");
+      var pid = Environment.ProcessId;
+      LogIfDebug($"Sending PID: {pid}");
+      var pidBytes = BitConverter.GetBytes(pid);
+      LogIfDebug($"Writing {pidBytes.Length} bytes to pipe...");
+      client.Write(pidBytes, 0, pidBytes.Length);
+      client.Flush();
+      LogIfDebug("PID written and flushed.");
 
-    LogIfDebug("Waiting for resume byte...");
-    client.ReadByte();
-    LogIfDebug("Received resume byte");
+      LogIfDebug("Waiting for resume byte...");
+      client.ReadByte();
+      LogIfDebug("Received resume byte");
+    }
+    catch (Exception ex)
+    {
+      LogIfDebug($"Initialize failed: {ex.GetType().Name}: {ex.Message}");
+      LogIfDebug(ex.StackTrace ?? "<no stack>");
+      throw;
+    }
   }
 
   private static string? ReadAndDiscardHookPipe()
@@ -63,9 +72,19 @@ internal static class StartupHook
   private static void LogIfDebug(string message)
   {
     var debug = Environment.GetEnvironmentVariable("EASY_DOTNET_HOOK_DEBUG") == "1";
-    if (debug)
+    if (!debug) return;
+
+    var line = $"[StartupHook] {DateTime.UtcNow:O} | {message}";
+    Console.WriteLine(line);
+
+    var logFile = Environment.GetEnvironmentVariable("EASY_DOTNET_HOOK_LOG_FILE");
+    if (string.IsNullOrEmpty(logFile)) return;
+    try
     {
-      Console.WriteLine($"[StartupHook] {DateTime.UtcNow:O} | {message}");
+      File.AppendAllText(logFile, line + Environment.NewLine);
+    }
+    catch
+    {
     }
   }
 }

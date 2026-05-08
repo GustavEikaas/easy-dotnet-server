@@ -66,8 +66,8 @@ public class TestRunnerController(TestRunnerService service) : BaseController
       service.GetNeotestBatchResults(request.Ids);
 
   [JsonRpcMethod("testrunner/syncFile", UseSingleObjectParameterDeserialization = true)]
-  public SyncFileResult SyncFile(SyncFileRequest request) =>
-          service.SyncFile(request);
+  public Task<SyncFileResult> SyncFileAsync(SyncFileRequest request) =>
+          service.SyncFileAsync(request);
 
   [JsonRpcMethod("testrunner/getBuildErrors", UseSingleObjectParameterDeserialization = true)]
   public Task GetBuildErrorsAsync(NodeRequest request) =>

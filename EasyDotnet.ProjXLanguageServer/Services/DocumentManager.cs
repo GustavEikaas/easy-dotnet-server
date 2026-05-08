@@ -9,21 +9,22 @@ public interface IDocumentManager
   void CloseDocument(Uri uri);
   string? GetDocumentContent(Uri uri);
   int GetDocumentVersion(Uri uri);
+  CsprojDocument? GetDocument(Uri uri);
 }
 
 public class DocumentManager : IDocumentManager
 {
-  private readonly ConcurrentDictionary<Uri, DocumentState> _documents = new();
+  private readonly ConcurrentDictionary<Uri, CsprojDocument> _documents = new();
 
-  public void OpenDocument(Uri uri, string text, int version) => _documents[uri] = new DocumentState(text, version);
+  public void OpenDocument(Uri uri, string text, int version) => _documents[uri] = new CsprojDocument(uri, text, version);
 
-  public void UpdateDocument(Uri uri, string text, int version) => _documents[uri] = new DocumentState(text, version);
+  public void UpdateDocument(Uri uri, string text, int version) => _documents[uri] = new CsprojDocument(uri, text, version);
 
   public void CloseDocument(Uri uri) => _documents.TryRemove(uri, out _);
 
-  public string? GetDocumentContent(Uri uri) => _documents.TryGetValue(uri, out var state) ? state.Text : null;
+  public string? GetDocumentContent(Uri uri) => _documents.TryGetValue(uri, out var doc) ? doc.Text : null;
 
-  public int GetDocumentVersion(Uri uri) => _documents.TryGetValue(uri, out var state) ? state.Version : -1;
+  public int GetDocumentVersion(Uri uri) => _documents.TryGetValue(uri, out var doc) ? doc.Version : -1;
 
-  private record DocumentState(string Text, int Version);
+  public CsprojDocument? GetDocument(Uri uri) => _documents.TryGetValue(uri, out var doc) ? doc : null;
 }

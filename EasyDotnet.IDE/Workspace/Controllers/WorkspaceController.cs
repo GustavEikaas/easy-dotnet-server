@@ -4,7 +4,7 @@ using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Workspace.Controllers;
 
-public class WorkspaceController(WorkspaceService service, WorkspaceBuildService buildService, WorkspaceRestoreService restoreService, WorkspaceTestService testService) : BaseController
+public class WorkspaceController(WorkspaceService service, WorkspaceBuildService buildService, WorkspaceRestoreService restoreService, WorkspaceTestService testService, WorkspaceDebugAttachService debugAttachService, WorkspaceStopService stopService) : BaseController
 {
   [JsonRpcMethod("workspace/run", UseSingleObjectParameterDeserialization = true)]
   public async Task RunAsync(WorkspaceRunRequest request, CancellationToken ct) =>
@@ -13,6 +13,10 @@ public class WorkspaceController(WorkspaceService service, WorkspaceBuildService
   [JsonRpcMethod("workspace/debug", UseSingleObjectParameterDeserialization = true)]
   public async Task DebugAsync(WorkspaceDebugRequest request, CancellationToken ct) =>
       await service.DebugAsync(request, ct);
+
+  [JsonRpcMethod("workspace/debug-attach", UseSingleObjectParameterDeserialization = true)]
+  public async Task DebugAttachAsync(WorkspaceDebugAttachRequest request, CancellationToken ct) =>
+      await debugAttachService.DebugAttachAsync(ct);
 
   [JsonRpcMethod("workspace/watch", UseSingleObjectParameterDeserialization = true)]
   public async Task WatchAsync(WorkspaceWatchRequest request, CancellationToken ct) =>
@@ -37,4 +41,8 @@ public class WorkspaceController(WorkspaceService service, WorkspaceBuildService
   [JsonRpcMethod("workspace/test-solution", UseSingleObjectParameterDeserialization = true)]
   public async Task TestSolutionAsync(WorkspaceTestRequest request, CancellationToken ct) =>
       await testService.TestSolutionAsync(request, ct);
+
+  [JsonRpcMethod("workspace/stop", UseSingleObjectParameterDeserialization = true)]
+  public async Task StopAsync(WorkspaceStopRequest request, CancellationToken ct) =>
+      await stopService.StopAsync(ct);
 }

@@ -91,7 +91,11 @@ public abstract class WorkspaceRunTestBase<TContainer> : ContainerTestBase<TCont
 
     if (scope is not null)
     {
-      var winner = await Task.WhenAny(readTask, scope);
+      var timeout = Task.Delay(SelectionTimeout);
+      var winner = await Task.WhenAny(readTask, scope, timeout);
+      if (winner == timeout)
+        throw new XunitException(
+          $"Timed out after {SelectionTimeout.TotalSeconds:0}s waiting for promptSelection.{CollectPendingErrors()}");
       if (winner == scope)
       {
         await scope; // surface any server-side exception first
@@ -138,9 +142,13 @@ public abstract class WorkspaceRunTestBase<TContainer> : ContainerTestBase<TCont
 
       // Scope still running: race the channel read against the scope completing.
       var readTask = _runCommands.Reader.ReadAsync().AsTask();
-      var winner = await Task.WhenAny(readTask, scope);
+      var timeout = Task.Delay(RunCommandTimeout);
+      var winner = await Task.WhenAny(readTask, scope, timeout);
       if (winner == readTask)
         return await CompleteJobAsync(await readTask);
+      if (winner == timeout)
+        throw new XunitException(
+          $"Timed out after {RunCommandTimeout.TotalMinutes:0} minutes waiting for runCommandManaged.{CollectPendingErrors()}");
 
       // Scope won — item may have arrived at the same instant; try one last TryRead.
       if (_runCommands.Reader.TryRead(out var buffered))

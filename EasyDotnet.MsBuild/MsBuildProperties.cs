@@ -160,11 +160,11 @@ public static class MsBuildProperties
           Deserialize: MsBuildValueParsers.AsString
       );
 
-  public static readonly MsBuildProperty<Version?> Version =
+  public static readonly MsBuildProperty<string?> Version =
       new(
           Name: "Version",
           Description: "Specifies the version number of the NuGet package for the project (e.g., '1.0.0').",
-          Deserialize: MsBuildValueParsers.AsVersion
+          Deserialize: MsBuildValueParsers.AsString
       );
 
   public static readonly MsBuildProperty<string?> PackageOutputPath =
