@@ -6,7 +6,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>dotnet-easydotnet</ToolCommandName>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
-    <Version>3.1.7</Version>
+    <Version>3.1.8</Version>
     <Authors>Gustav Eikaas</Authors>
     <PackageId>EasyDotnet</PackageId>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
@@ -66,7 +66,10 @@
       <AppWrapperOutputPath>$(OutputPath)Tools\AppWrapper\</AppWrapperOutputPath>
     </PropertyGroup>
     <Message Text="Publishing AppWrapper for net8.0..." Importance="high" />
-    <MSBuild Projects="..\EasyDotnet.AppWrapper\EasyDotnet.AppWrapper.csproj" Targets="Publish" Properties="TargetFramework=net8.0;Configuration=$(Configuration);PublishDir=$(MSBuildProjectDirectory)\$(AppWrapperOutputPath)net8.0\;SelfContained=false" />
+    <MSBuild
+      Projects="..\EasyDotnet.AppWrapper\EasyDotnet.AppWrapper.csproj"
+      Targets="Publish"
+      Properties="TargetFramework=net8.0;Configuration=$(Configuration);PublishDir=$(MSBuildProjectDirectory)\$(AppWrapperOutputPath)net8.0\;SelfContained=false" />
     <Message Text="AppWrapper publish complete at $(AppWrapperOutputPath)" Importance="high" />
   </Target>
 
@@ -74,13 +77,19 @@
     <PropertyGroup>
       <BuildServerOutputPath>$(OutputPath)Tools\BuildServer\</BuildServerOutputPath>
     </PropertyGroup>
-
+    
     <Message Text="Publishing BuildServer for net8.0..." Importance="high" />
-    <MSBuild Projects="..\EasyDotnet.BuildServer\EasyDotnet.BuildServer.csproj" Targets="Publish" Properties="TargetFramework=net8.0;Configuration=$(Configuration);PublishDir=$(MSBuildProjectDirectory)\$(BuildServerOutputPath)net8.0\;SelfContained=false" />
-
+    <MSBuild 
+      Projects="..\EasyDotnet.BuildServer\EasyDotnet.BuildServer.csproj" 
+      Targets="Publish" 
+      Properties="TargetFramework=net8.0;Configuration=$(Configuration);PublishDir=$(MSBuildProjectDirectory)\$(BuildServerOutputPath)net8.0\;SelfContained=false" />
+    
     <Message Text="Publishing BuildServer for net472..." Importance="high" />
-    <MSBuild Projects="..\EasyDotnet.BuildServer\EasyDotnet.BuildServer.csproj" Targets="Publish" Properties="TargetFramework=net472;Configuration=$(Configuration);PublishDir=$(MSBuildProjectDirectory)\$(BuildServerOutputPath)net472\;SelfContained=false" />
-
+    <MSBuild 
+      Projects="..\EasyDotnet.BuildServer\EasyDotnet.BuildServer.csproj" 
+      Targets="Publish" 
+      Properties="TargetFramework=net472;Configuration=$(Configuration);PublishDir=$(MSBuildProjectDirectory)\$(BuildServerOutputPath)net472\;SelfContained=false" />
+    
     <Message Text="BuildServer publish complete at $(BuildServerOutputPath)" Importance="high" />
   </Target>
 
@@ -90,7 +99,10 @@
     </PropertyGroup>
 
     <Message Text="Publishing StartupHook payload..." Importance="high" />
-    <MSBuild Projects="..\EasyDotnet.StartupHook\EasyDotnet.StartupHook.csproj" Targets="Publish" Properties="TargetFramework=net6.0;Configuration=$(Configuration);PublishDir=$(MSBuildProjectDirectory)\$(PayloadsOutputPath)StartupHook\;SelfContained=false" />
+    <MSBuild 
+      Projects="..\EasyDotnet.StartupHook\EasyDotnet.StartupHook.csproj" 
+      Targets="Publish" 
+      Properties="TargetFramework=net6.0;Configuration=$(Configuration);PublishDir=$(MSBuildProjectDirectory)\$(PayloadsOutputPath)StartupHook\;SelfContained=false" />
   </Target>
 
   <Target Name="IncludeDynamicContentInPack" DependsOnTargets="PublishBuildServers;PublishDebuggerPayloads">
