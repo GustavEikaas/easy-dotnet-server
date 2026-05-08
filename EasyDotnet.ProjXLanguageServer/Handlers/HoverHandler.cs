@@ -13,7 +13,10 @@ public class HoverHandler(
   {
     var doc = documentManager.GetDocument(@params.TextDocument.Uri);
     if (doc == null)
+    {
       return null;
+    }
+
     return hoverService.GetHover(doc, @params.Position.Line, @params.Position.Character);
   }
 }

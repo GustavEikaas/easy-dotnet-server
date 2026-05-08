@@ -1,5 +1,4 @@
 using System.Text.RegularExpressions;
-using EasyDotnet.ProjXLanguageServer.Utils;
 using Microsoft.Language.Xml;
 using Microsoft.VisualStudio.LanguageServer.Protocol;
 
@@ -55,7 +54,9 @@ public class SemanticTokensService : ISemanticTokensService
   private static void Walk(SyntaxNode? node, string text, List<RawToken> tokens)
   {
     if (node == null)
+    {
       return;
+    }
 
     switch (node)
     {
@@ -63,7 +64,10 @@ public class SemanticTokensService : ISemanticTokensService
         EmitElementName(element.StartTag?.NameNode, tokens);
         EmitElementName(element.EndTag?.NameNode, tokens);
         if (element.StartTag != null)
+        {
           EmitAttributes(element.StartTag.AttributesNode, element.Name, text, tokens);
+        }
+
         EmitElementText(element, text, tokens);
         break;
 
@@ -74,16 +78,24 @@ public class SemanticTokensService : ISemanticTokensService
     }
 
     foreach (var child in node.ChildNodes)
+    {
       Walk(child, text, tokens);
+    }
   }
 
   private static void EmitElementName(XmlNameSyntax? nameNode, List<RawToken> tokens)
   {
     if (nameNode == null || nameNode.LocalNameNode == null)
+    {
       return;
+    }
+
     var local = nameNode.LocalNameNode;
     if (local.FullWidth <= 0)
+    {
       return;
+    }
+
     tokens.Add(new RawToken(local.Start, local.FullWidth, TypeClass));
   }
 
@@ -92,19 +104,25 @@ public class SemanticTokensService : ISemanticTokensService
     foreach (var attr in attributes)
     {
       var attrName = attr.NameNode?.LocalNameNode;
-      if (attrName != null && attrName.FullWidth > 0)
+      if (attrName?.FullWidth > 0)
+      {
         tokens.Add(new RawToken(attrName.Start, attrName.FullWidth, TypeProperty));
+      }
 
       var value = attr.ValueNode;
       if (value == null)
+      {
         continue;
+      }
 
       var startQuote = value.StartQuoteToken;
       var endQuote = value.EndQuoteToken;
       var inside = startQuote != null ? startQuote.Start + startQuote.FullWidth : value.Start;
       var insideEnd = endQuote != null ? endQuote.Start : value.Start + value.FullWidth;
       if (insideEnd <= inside || insideEnd > text.Length)
+      {
         continue;
+      }
 
       var attrType = ClassifyAttributeValue(elementName, attr.Name);
       tokens.Add(new RawToken(inside, insideEnd - inside, attrType));
@@ -116,10 +134,16 @@ public class SemanticTokensService : ISemanticTokensService
   private static int ClassifyAttributeValue(string elementName, string attrName)
   {
     if (string.Equals(attrName, "Condition", StringComparison.Ordinal))
+    {
       return TypeRegexp;
+    }
+
     if (string.Equals(elementName, "PackageReference", StringComparison.Ordinal)
         && string.Equals(attrName, "Version", StringComparison.Ordinal))
+    {
       return TypeNumber;
+    }
+
     return TypeString;
   }
 
@@ -128,12 +152,16 @@ public class SemanticTokensService : ISemanticTokensService
     var startTag = element.StartTag;
     var endTag = element.EndTag;
     if (startTag == null || endTag == null)
+    {
       return;
+    }
 
     var contentStart = startTag.Start + startTag.FullWidth;
     var contentEnd = endTag.Start;
     if (contentEnd <= contentStart || contentEnd > text.Length)
+    {
       return;
+    }
 
     var hasChildElements = element.Elements.Any();
     if (hasChildElements)
@@ -143,10 +171,12 @@ public class SemanticTokensService : ISemanticTokensService
       return;
     }
 
-    var inner = text.Substring(contentStart, contentEnd - contentStart);
+    var inner = text[contentStart..contentEnd];
     var trimmed = inner.Trim();
     if (trimmed.Length == 0)
+    {
       return;
+    }
 
     if (string.Equals(element.Name, "UserSecretsId", StringComparison.Ordinal))
     {
@@ -160,7 +190,10 @@ public class SemanticTokensService : ISemanticTokensService
 
     var trimStart = inner.IndexOf(trimmed, StringComparison.Ordinal);
     if (trimStart < 0)
+    {
       trimStart = 0;
+    }
+
     tokens.Add(new RawToken(contentStart + trimStart, trimmed.Length, TypeString));
 
     EmitMsBuildVars(text, contentStart, contentEnd - contentStart, tokens);
@@ -169,10 +202,15 @@ public class SemanticTokensService : ISemanticTokensService
   private static void EmitMsBuildVars(string text, int start, int length, List<RawToken> tokens)
   {
     if (length <= 0 || start + length > text.Length)
+    {
       return;
+    }
+
     var slice = text.Substring(start, length);
     foreach (Match m in MsBuildVarRegex.Matches(slice))
+    {
       tokens.Add(new RawToken(start + m.Index, m.Length, TypeVariable));
+    }
   }
 
   private static int[] Encode(List<RawToken> tokens, int[] lineOffsets)
@@ -186,7 +224,10 @@ public class SemanticTokensService : ISemanticTokensService
       var deltaLine = line - prevLine;
       var deltaChar = deltaLine == 0 ? character - prevChar : character;
       if (deltaLine < 0 || (deltaLine == 0 && deltaChar < 0))
+      {
         continue;
+      }
+
       result.Add(deltaLine);
       result.Add(deltaChar);
       result.Add(t.Length);
@@ -206,9 +247,13 @@ public class SemanticTokensService : ISemanticTokensService
     {
       var mid = (lo + hi + 1) / 2;
       if (lineOffsets[mid] <= offset)
+      {
         lo = mid;
+      }
       else
+      {
         hi = mid - 1;
+      }
     }
     return (lo, offset - lineOffsets[lo]);
   }

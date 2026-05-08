@@ -11,7 +11,9 @@ public static class PositionUtils
     for (var i = 0; i < text.Length; i++)
     {
       if (text[i] == '\n')
+      {
         offsets.Add(i + 1);
+      }
     }
     return [.. offsets];
   }
@@ -19,9 +21,15 @@ public static class PositionUtils
   public static int ToOffset(int[] lineOffsets, int textLength, int line, int character)
   {
     if (line < 0)
+    {
       return 0;
+    }
+
     if (line >= lineOffsets.Length)
+    {
       return textLength;
+    }
+
     var offset = lineOffsets[line] + character;
     return Math.Min(offset, textLength);
   }
@@ -47,9 +55,13 @@ public static class PositionUtils
     {
       var mid = (lo + hi + 1) / 2;
       if (lineOffsets[mid] <= offset)
+      {
         lo = mid;
+      }
       else
+      {
         hi = mid - 1;
+      }
     }
     return lo;
   }

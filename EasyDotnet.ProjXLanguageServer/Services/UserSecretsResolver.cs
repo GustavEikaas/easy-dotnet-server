@@ -26,11 +26,15 @@ public class UserSecretsResolver(IFileSystem fileSystem) : IUserSecretsResolver
   {
     var dir = fileSystem.Path.Combine(_basePath, userSecretsId);
     if (!fileSystem.Directory.Exists(dir))
+    {
       fileSystem.Directory.CreateDirectory(dir);
+    }
 
     var path = fileSystem.Path.Combine(dir, "secrets.json");
     if (!fileSystem.File.Exists(path))
+    {
       fileSystem.File.WriteAllText(path, "{}");
+    }
 
     return path;
   }

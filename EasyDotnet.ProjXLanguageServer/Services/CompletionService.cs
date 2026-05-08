@@ -13,11 +13,11 @@ public class CompletionService : ICompletionService
 {
   private static readonly Dictionary<string, string[]> ValueCompletions = new(StringComparer.Ordinal)
   {
-    ["TargetFramework"] = ["net9.0", "net8.0", "net7.0", "net6.0", "netstandard2.1", "netstandard2.0", "net48"],
+    ["TargetFramework"] = ["net11.0", "net10.0", "net9.0", "net8.0", "net7.0", "net6.0", "netstandard2.1", "netstandard2.0", "net48", "net472"],
     ["TargetFrameworks"] = ["net9.0;net8.0", "net8.0;netstandard2.0"],
     ["Nullable"] = ["enable", "disable", "warnings", "annotations"],
     ["OutputType"] = ["Exe", "Library", "WinExe", "Module"],
-    ["LangVersion"] = ["latest", "preview", "latestMajor", "13", "12", "11", "10"],
+    ["LangVersion"] = ["latest", "preview", "latestMajor", "14", "13", "12", "11", "10"],
     ["ImplicitUsings"] = ["enable", "disable"],
     ["TreatWarningsAsErrors"] = ["true", "false"],
     ["GenerateDocumentationFile"] = ["true", "false"],
@@ -26,6 +26,7 @@ public class CompletionService : ICompletionService
     ["PublishAot"] = ["true", "false"],
     ["PublishTrimmed"] = ["true", "false"],
     ["InvariantGlobalization"] = ["true", "false"],
+    ["Configurations"] = ["Debug;Release"]
   };
 
   public CompletionItem[] GetCompletions(CsprojDocument doc, int line, int character)
@@ -54,7 +55,9 @@ public class CompletionService : ICompletionService
   private static CompletionItem[] GetValueCompletions(string? elementName)
   {
     if (elementName == null)
+    {
       return [];
+    }
 
     if (string.Equals(elementName, "UserSecretsId", StringComparison.Ordinal))
     {
@@ -71,7 +74,9 @@ public class CompletionService : ICompletionService
     }
 
     if (!ValueCompletions.TryGetValue(elementName, out var values))
+    {
       return [];
+    }
 
     return [.. values.Select(v => new CompletionItem
     {

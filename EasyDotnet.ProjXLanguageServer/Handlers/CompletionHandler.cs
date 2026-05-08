@@ -13,7 +13,9 @@ public class CompletionHandler(
   {
     var doc = documentManager.GetDocument(completionParams.TextDocument.Uri);
     if (doc == null)
+    {
       return new CompletionList { Items = [] };
+    }
 
     var items = completionService.GetCompletions(doc, completionParams.Position.Line, completionParams.Position.Character);
     return new CompletionList { Items = items };

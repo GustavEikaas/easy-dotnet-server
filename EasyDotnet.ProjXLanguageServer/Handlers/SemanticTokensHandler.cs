@@ -13,7 +13,10 @@ public class SemanticTokensHandler(
   {
     var doc = documentManager.GetDocument(@params.TextDocument.Uri);
     if (doc == null)
+    {
       return new SemanticTokens { Data = [] };
+    }
+
     return semanticTokensService.GetTokens(doc);
   }
 }

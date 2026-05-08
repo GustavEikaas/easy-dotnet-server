@@ -35,7 +35,9 @@ public static class XmlContextResolver
     {
       var node = root.FindNode(position, includeTrivia: true);
       if (node == null)
+      {
         return Unknown();
+      }
 
       var attributeName = TryFindEnclosingAttributeName(node, position);
       if (attributeName != null)
@@ -51,7 +53,9 @@ public static class XmlContextResolver
 
       var element = FindContainingElement(node);
       if (element == null)
+      {
         return Unknown();
+      }
 
       if (IsInsideStartTag(element, position))
       {
@@ -116,7 +120,10 @@ public static class XmlContextResolver
       {
         var value = attr.ValueNode;
         if (value != null && position >= value.Start && position <= value.Start + value.FullWidth)
+        {
           return attr.Name;
+        }
+
         return null;
       }
       current = current.Parent;
@@ -129,7 +136,10 @@ public static class XmlContextResolver
     while (node != null)
     {
       if (node is IXmlElementSyntax element)
+      {
         return element;
+      }
+
       node = node.Parent;
     }
     return null;
@@ -144,7 +154,10 @@ public static class XmlContextResolver
     {
       var startTag = full.StartTag;
       if (startTag == null)
+      {
         return false;
+      }
+
       return position >= startTag.Start && position < startTag.Start + startTag.FullWidth;
     }
     if (element is XmlEmptyElementSyntax empty)
@@ -159,7 +172,10 @@ public static class XmlContextResolver
     var startTag = element.StartTag;
     var endTag = element.EndTag;
     if (startTag == null || endTag == null)
+    {
       return false;
+    }
+
     var contentStart = startTag.Start + startTag.FullWidth;
     var contentEnd = endTag.Start;
     return position >= contentStart && position <= contentEnd;

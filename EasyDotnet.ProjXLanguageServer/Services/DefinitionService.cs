@@ -12,11 +12,11 @@ public interface IDefinitionService
   Location? GetDefinition(CsprojDocument doc, int line, int character);
 }
 
-public class DefinitionService(
+public partial class DefinitionService(
     IUserSecretsResolver userSecretsResolver,
     IFileSystem fileSystem) : IDefinitionService
 {
-  private static readonly Regex GuidRegex = new(@"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", RegexOptions.Compiled);
+  private static readonly Regex GuidRegex = SecretGuidRegex();
 
   public Location? GetDefinition(CsprojDocument doc, int line, int character)
   {
@@ -58,14 +58,22 @@ public class DefinitionService(
     var startTag = element.StartTag;
     var endTag = element.EndTag;
     if (startTag == null || endTag == null)
+    {
       return null;
+    }
+
     var contentStart = startTag.Start + startTag.FullWidth;
     var contentEnd = endTag.Start;
     if (contentEnd <= contentStart || contentEnd > text.Length)
+    {
       return null;
-    var inner = text.Substring(contentStart, contentEnd - contentStart).Trim();
+    }
+
+    var inner = text[contentStart..contentEnd].Trim();
     if (!GuidRegex.IsMatch(inner))
+    {
       return null;
+    }
 
     var path = userSecretsResolver.EnsureSecretsFile(inner);
     return new Location
@@ -78,14 +86,23 @@ public class DefinitionService(
   private Location? ResolveRelativeFile(Uri docUri, string relative)
   {
     if (string.IsNullOrWhiteSpace(relative))
+    {
       return null;
+    }
+
     var docPath = docUri.LocalPath;
     var docDir = fileSystem.Path.GetDirectoryName(docPath);
     if (string.IsNullOrEmpty(docDir))
+    {
       return null;
+    }
+
     var combined = fileSystem.Path.GetFullPath(fileSystem.Path.Combine(docDir, relative));
     if (!fileSystem.File.Exists(combined))
+    {
       return null;
+    }
+
     return new Location
     {
       Uri = new Uri(combined),
@@ -106,7 +123,9 @@ public class DefinitionService(
     foreach (var attr in element.Attributes)
     {
       if (string.Equals(attr.Name, name, StringComparison.Ordinal))
+      {
         return attr.Value;
+      }
     }
     return null;
   }
@@ -116,4 +135,7 @@ public class DefinitionService(
     Start = new Position { Line = 0, Character = 0 },
     End = new Position { Line = 0, Character = 0 }
   };
+
+  [GeneratedRegex(@"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", RegexOptions.Compiled)]
+  private static partial Regex SecretGuidRegex();
 }

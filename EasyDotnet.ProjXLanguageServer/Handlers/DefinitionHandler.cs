@@ -13,7 +13,10 @@ public class DefinitionHandler(
   {
     var doc = documentManager.GetDocument(@params.TextDocument.Uri);
     if (doc == null)
+    {
       return [];
+    }
+
     var location = definitionService.GetDefinition(doc, @params.Position.Line, @params.Position.Character);
     return location == null ? [] : [location];
   }
