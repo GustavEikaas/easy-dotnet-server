@@ -26,6 +26,7 @@ public class InitializeHandler(ISemanticTokensService semanticTokensService) : B
         HoverProvider = true,
         DefinitionProvider = true,
         CodeActionProvider = true,
+        DocumentFormattingProvider = true,
         SemanticTokensOptions = new SemanticTokensOptions
         {
           Legend = semanticTokensService.Legend,

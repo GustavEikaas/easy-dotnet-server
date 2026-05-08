@@ -22,6 +22,7 @@ public static class DiModules
     services.AddSingleton<ICodeActionService, CodeActionService>();
     services.AddSingleton<IDiagnosticsService, DiagnosticsService>();
     services.AddSingleton<IDiagnosticsPublisher, DiagnosticsPublisher>();
+    services.AddSingleton<IFormattingService, FormattingService>();
     AssemblyScanner.GetControllerTypes().ForEach(x => services.AddTransient(x));
 
     return services.BuildServiceProvider();
