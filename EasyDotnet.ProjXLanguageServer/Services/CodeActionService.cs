@@ -39,6 +39,10 @@ public class CodeActionService(IUserSecretsResolver userSecretsResolver) : ICode
     if (openSecrets != null)
       actions.Add(openSecrets);
 
+    var expandSelfClosing = TryExpandSelfClosing(doc, startOffset, endOffset);
+    if (expandSelfClosing != null)
+      actions.Add(expandSelfClosing);
+
     foreach (var diagnostic in contextDiagnostics)
     {
       var code = diagnostic.Code?.Value?.ToString();
@@ -132,6 +136,61 @@ public class CodeActionService(IUserSecretsResolver userSecretsResolver) : ICode
         Arguments = [path],
       },
     };
+  }
+
+  private static CodeAction? TryExpandSelfClosing(CsprojDocument doc, int rangeStart, int rangeEnd)
+  {
+    var element = FindEmptyElementOverlapping(doc.Root, rangeStart, rangeEnd);
+    if (element == null)
+      return null;
+
+    var slash = element.SlashGreaterThanToken;
+    if (slash == null)
+      return null;
+
+    var replaceStart = slash.Start;
+    var replaceEnd = slash.Start + slash.FullWidth;
+    while (replaceStart > 0 && char.IsWhiteSpace(doc.Text[replaceStart - 1]))
+      replaceStart--;
+    var edit = new TextEdit
+    {
+      Range = PositionUtils.ToRange(doc.LineOffsets, replaceStart, replaceEnd - replaceStart),
+      NewText = $"></{element.Name}>",
+    };
+
+    return new CodeAction
+    {
+      Title = $"Expand <{element.Name}/> to <{element.Name}></{element.Name}>",
+      Kind = CodeActionKind.RefactorRewrite,
+      Edit = new WorkspaceEdit
+      {
+        Changes = new Dictionary<string, TextEdit[]>
+        {
+          [doc.Uri.ToString()] = [edit],
+        },
+      },
+    };
+  }
+
+  private static XmlEmptyElementSyntax? FindEmptyElementOverlapping(SyntaxNode root, int rangeStart, int rangeEnd)
+  {
+    XmlEmptyElementSyntax? best = null;
+    var stack = new Stack<SyntaxNode>();
+    stack.Push(root);
+    while (stack.Count > 0)
+    {
+      var node = stack.Pop();
+      if (node is XmlEmptyElementSyntax empty)
+      {
+        var nodeStart = node.Start;
+        var nodeEnd = node.Start + node.FullWidth;
+        if (rangeStart < nodeEnd && rangeEnd > nodeStart)
+          best = empty;
+      }
+      foreach (var child in node.ChildNodes)
+        stack.Push(child);
+    }
+    return best;
   }
 
   private static CodeAction? TryConvertTargetFramework(CsprojDocument doc, int rangeStart, int rangeEnd)

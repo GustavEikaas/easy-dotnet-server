@@ -47,10 +47,8 @@ public class SortPackageReferencesTests
         "</Project>";
 
     var actions = Sut.GetCodeActions(Docs.Make(text), WholeDocument(text), []);
-    await Assert.That(actions.Length).IsEqualTo(1);
-    await Assert.That(actions[0].Title).IsEqualTo("Sort PackageReferences alphabetically");
-
-    var edits = actions[0].Edit!.Changes!.Values.Single();
+    var sort = actions.Single(a => a.Title == "Sort PackageReferences alphabetically");
+    var edits = sort.Edit!.Changes!.Values.Single();
     var result = ApplyEdits(text, edits);
 
     var apple = result.IndexOf("Apple", StringComparison.Ordinal);
@@ -76,7 +74,7 @@ public class SortPackageReferencesTests
         "</Project>";
 
     var actions = Sut.GetCodeActions(Docs.Make(text), WholeDocument(text), []);
-    await Assert.That(actions.Length).IsEqualTo(0);
+    await Assert.That(actions.Any(a => a.Title.StartsWith("Sort"))).IsFalse();
   }
 
   [Test]
@@ -90,7 +88,7 @@ public class SortPackageReferencesTests
         "</Project>";
 
     var actions = Sut.GetCodeActions(Docs.Make(text), WholeDocument(text), []);
-    await Assert.That(actions.Length).IsEqualTo(0);
+    await Assert.That(actions.Any(a => a.Title.StartsWith("Sort"))).IsFalse();
   }
 
   [Test]
@@ -98,6 +96,6 @@ public class SortPackageReferencesTests
   {
     var text = "<Project>\n  <PropertyGroup>\n    <Nullable>enable</Nullable>\n  </PropertyGroup>\n</Project>";
     var actions = Sut.GetCodeActions(Docs.Make(text), WholeDocument(text), []);
-    await Assert.That(actions.Length).IsEqualTo(0);
+    await Assert.That(actions.Any(a => a.Title.StartsWith("Sort"))).IsFalse();
   }
 }
