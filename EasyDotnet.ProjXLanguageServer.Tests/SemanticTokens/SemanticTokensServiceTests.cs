@@ -65,6 +65,29 @@ public class SemanticTokensServiceTests
   }
 
   [Test]
+  public async Task Tokens_HighlightsMsBuildVarsAsMacro_NonOverlapping()
+  {
+    var text = "<Project><PropertyGroup><OutputPath>bin/$(Configuration)/end</OutputPath></PropertyGroup></Project>";
+    var tokens = Decode(Sut.GetTokens(Docs.Make(text)).Data!, text);
+
+    var macroToken = tokens.FirstOrDefault(t => t.Text == "$(Configuration)");
+    await Assert.That(macroToken).IsNotNull();
+    await Assert.That(macroToken!.TypeIndex).IsEqualTo(5);
+
+    await Assert.That(tokens.Any(t => t.Text == "bin/" && t.TypeIndex == 2)).IsTrue();
+    await Assert.That(tokens.Any(t => t.Text == "/end" && t.TypeIndex == 2)).IsTrue();
+
+    var sorted = tokens.OrderBy(t => t.Line).ThenBy(t => t.Char).ToList();
+    for (var i = 1; i < sorted.Count; i++)
+    {
+      var prev = sorted[i - 1];
+      var prevEnd = prev.Char + prev.Length;
+      if (sorted[i].Line == prev.Line)
+        await Assert.That(sorted[i].Char >= prevEnd).IsTrue();
+    }
+  }
+
+  [Test]
   public async Task Tokens_DeltaEncoded_NoNegativeDeltas()
   {
     var text = "<Project>\n<PropertyGroup>\n<TargetFramework>net8.0</TargetFramework>\n</PropertyGroup>\n</Project>";

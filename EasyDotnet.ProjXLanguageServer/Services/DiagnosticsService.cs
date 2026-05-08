@@ -18,6 +18,7 @@ public static class DiagnosticCodes
   public const string DuplicatePackageReference = "projx-duplicate-packageref";
   public const string SingleTfmInTargetFrameworks = "projx-single-tfm-in-targetframeworks";
   public const string ConflictingTargetFrameworkProperties = "projx-conflicting-targetframework-properties";
+  public const string MismatchedTagNames = "projx-mismatched-tag-names";
 }
 
 public class DiagnosticsService(IFileSystem fileSystem) : IDiagnosticsService
@@ -32,6 +33,7 @@ public class DiagnosticsService(IFileSystem fileSystem) : IDiagnosticsService
     AddDuplicatePackageReferenceDiagnostics(doc, diagnostics);
     AddSingleTfmInTargetFrameworksDiagnostics(doc, diagnostics);
     AddConflictingTargetFrameworkDiagnostics(doc, diagnostics);
+    AddMismatchedTagDiagnostics(doc, diagnostics);
 
     foreach (var element in EnumerateElements(doc.Root))
     {
@@ -166,6 +168,35 @@ public class DiagnosticsService(IFileSystem fileSystem) : IDiagnosticsService
         Source = DiagnosticCodes.Source,
         Code = DiagnosticCodes.ConflictingTargetFrameworkProperties,
         Message = "Cannot specify both <TargetFramework> and <TargetFrameworks>; <TargetFrameworks> takes precedence.",
+      });
+    }
+  }
+
+  private static void AddMismatchedTagDiagnostics(CsprojDocument doc, List<Diagnostic> diagnostics)
+  {
+    foreach (var element in EnumerateElements(doc.Root))
+    {
+      if (element is not XmlElementSyntax full)
+        continue;
+
+      var startName = full.StartTag?.Name;
+      var endName = full.EndTag?.Name;
+      if (string.IsNullOrEmpty(startName) || string.IsNullOrEmpty(endName))
+        continue;
+      if (string.Equals(startName, endName, StringComparison.Ordinal))
+        continue;
+
+      var endNameNode = full.EndTag!.NameNode?.LocalNameNode;
+      if (endNameNode == null)
+        continue;
+
+      diagnostics.Add(new Diagnostic
+      {
+        Range = PositionUtils.ToRange(doc.LineOffsets, endNameNode.Start, endNameNode.FullWidth),
+        Severity = LspDiagnosticSeverity.Error,
+        Source = DiagnosticCodes.Source,
+        Code = DiagnosticCodes.MismatchedTagNames,
+        Message = $"Closing tag '</{endName}>' does not match opening tag '<{startName}>'.",
       });
     }
   }

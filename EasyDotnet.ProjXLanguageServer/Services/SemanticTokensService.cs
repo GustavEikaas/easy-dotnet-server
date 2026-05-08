@@ -19,7 +19,7 @@ public class SemanticTokensService : ISemanticTokensService
     SemanticTokenTypes.String,       // 2 attribute value / element text
     SemanticTokenTypes.Number,       // 3 version
     SemanticTokenTypes.EnumMember,   // 4 user secrets guid
-    SemanticTokenTypes.Variable,     // 5 $(MsBuildVar)
+    SemanticTokenTypes.Macro,        // 5 $(MsBuildVar)
     SemanticTokenTypes.Regexp,       // 6 condition value
   ];
 
@@ -30,7 +30,7 @@ public class SemanticTokensService : ISemanticTokensService
   private const int TypeString = 2;
   private const int TypeNumber = 3;
   private const int TypeEnumMember = 4;
-  private const int TypeVariable = 5;
+  private const int TypeMacro = 5;
   private const int TypeRegexp = 6;
 
   private static readonly Regex GuidRegex = new(@"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", RegexOptions.Compiled);
@@ -125,9 +125,7 @@ public class SemanticTokensService : ISemanticTokensService
       }
 
       var attrType = ClassifyAttributeValue(elementName, attr.Name);
-      tokens.Add(new RawToken(inside, insideEnd - inside, attrType));
-
-      EmitMsBuildVars(text, inside, insideEnd - inside, tokens);
+      EmitSegmentsWithMacros(text, inside, insideEnd - inside, attrType, tokens);
     }
   }
 
@@ -165,11 +163,7 @@ public class SemanticTokensService : ISemanticTokensService
 
     var hasChildElements = element.Elements.Any();
     if (hasChildElements)
-    {
-      // child elements will be tokenized individually; only emit MSBuild vars in raw text if any
-      EmitMsBuildVars(text, contentStart, contentEnd - contentStart, tokens);
       return;
-    }
 
     var inner = text[contentStart..contentEnd];
     var trimmed = inner.Trim();
@@ -190,27 +184,34 @@ public class SemanticTokensService : ISemanticTokensService
 
     var trimStart = inner.IndexOf(trimmed, StringComparison.Ordinal);
     if (trimStart < 0)
-    {
       trimStart = 0;
-    }
 
-    tokens.Add(new RawToken(contentStart + trimStart, trimmed.Length, TypeString));
-
-    EmitMsBuildVars(text, contentStart, contentEnd - contentStart, tokens);
+    EmitSegmentsWithMacros(text, contentStart + trimStart, trimmed.Length, TypeString, tokens);
   }
 
-  private static void EmitMsBuildVars(string text, int start, int length, List<RawToken> tokens)
+  private static void EmitSegmentsWithMacros(string text, int start, int length, int baseType, List<RawToken> tokens)
   {
     if (length <= 0 || start + length > text.Length)
+      return;
+
+    var slice = text.Substring(start, length);
+    var matches = MsBuildVarRegex.Matches(slice);
+    if (matches.Count == 0)
     {
+      tokens.Add(new RawToken(start, length, baseType));
       return;
     }
 
-    var slice = text.Substring(start, length);
-    foreach (Match m in MsBuildVarRegex.Matches(slice))
+    var cursor = 0;
+    foreach (Match m in matches)
     {
-      tokens.Add(new RawToken(start + m.Index, m.Length, TypeVariable));
+      if (m.Index > cursor)
+        tokens.Add(new RawToken(start + cursor, m.Index - cursor, baseType));
+      tokens.Add(new RawToken(start + m.Index, m.Length, TypeMacro));
+      cursor = m.Index + m.Length;
     }
+    if (cursor < length)
+      tokens.Add(new RawToken(start + cursor, length - cursor, baseType));
   }
 
   private static int[] Encode(List<RawToken> tokens, int[] lineOffsets)
