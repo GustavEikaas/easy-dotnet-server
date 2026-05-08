@@ -38,6 +38,6 @@ public class UserSecretsResolverTests
     var path = sut.GetSecretsPath("33333333-3333-3333-3333-333333333333");
     await Assert.That(path).EndsWith("secrets.json");
     await Assert.That(path).Contains("33333333-3333-3333-3333-333333333333");
-    await Assert.That(path).Contains("UserSecrets");
+    await Assert.That(path.Contains("usersecrets", StringComparison.OrdinalIgnoreCase)).IsTrue();
   }
 }

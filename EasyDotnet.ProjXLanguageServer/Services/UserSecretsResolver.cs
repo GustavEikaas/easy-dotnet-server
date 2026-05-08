@@ -10,11 +10,15 @@ public interface IUserSecretsResolver
 
 public class UserSecretsResolver(IFileSystem fileSystem) : IUserSecretsResolver
 {
-  private readonly string _basePath = fileSystem.Path.Combine(
-      Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-      "Microsoft",
-      "UserSecrets");
-
+  private readonly string _basePath = OperatingSystem.IsWindows()
+      ? fileSystem.Path.Combine(
+          Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+          "Microsoft",
+          "UserSecrets")
+      : fileSystem.Path.Combine(
+          Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+          ".microsoft",
+          "usersecrets");
   public string GetSecretsPath(string userSecretsId) =>
       fileSystem.Path.Combine(_basePath, userSecretsId, "secrets.json");
 

@@ -5,7 +5,15 @@ namespace EasyDotnet.IDE.Services;
 
 public class UserSecretsService(IMsBuildService msBuildService, IProcessQueue processQueue) : IUserSecretsService
 {
-  private readonly string _basePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Microsoft", "UserSecrets");
+  private readonly string _basePath = OperatingSystem.IsWindows()
+      ? Path.Combine(
+          Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+          "Microsoft",
+          "UserSecrets")
+      : Path.Combine(
+          Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+          ".microsoft",
+          "usersecrets");
 
   public async Task<ProjectUserSecret> AddUserSecretsId(string projectPath)
   {
