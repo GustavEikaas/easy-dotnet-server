@@ -1,5 +1,5 @@
-using LspRange = Microsoft.VisualStudio.LanguageServer.Protocol.Range;
 using LspPosition = Microsoft.VisualStudio.LanguageServer.Protocol.Position;
+using LspRange = Microsoft.VisualStudio.LanguageServer.Protocol.Range;
 
 namespace EasyDotnet.ProjXLanguageServer.Utils;
 
