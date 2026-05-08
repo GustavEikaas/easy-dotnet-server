@@ -55,6 +55,36 @@ public class SignatureHelpServiceTests
   }
 
   [Test]
+  public async Task PackageReferencePrivateAssets_ReturnsAssetsSignature()
+  {
+    var text = "<Project>\n<ItemGroup>\n<PackageReference Include=\"X\" Version=\"1\" PrivateAssets=\"@CURSOR\" />\n</ItemGroup>\n</Project>";
+    var (doc, line, character) = Pose(text);
+    var sig = Sut.GetSignatureHelp(doc, line, character);
+    await Assert.That(sig).IsNotNull();
+    await Assert.That(sig!.Signatures[0].Label).Contains("PrivateAssets");
+  }
+
+  [Test]
+  public async Task ProjectSdkAttribute_ReturnsSdkSignature()
+  {
+    var text = "<Project Sdk=\"@CURSOR\">\n</Project>";
+    var (doc, line, character) = Pose(text);
+    var sig = Sut.GetSignatureHelp(doc, line, character);
+    await Assert.That(sig).IsNotNull();
+    await Assert.That(sig!.Signatures[0].Label).Contains("sdk id");
+  }
+
+  [Test]
+  public async Task TargetNameAttribute_ReturnsTargetNameSignature()
+  {
+    var text = "<Project>\n<Target Name=\"@CURSOR\">\n</Target>\n</Project>";
+    var (doc, line, character) = Pose(text);
+    var sig = Sut.GetSignatureHelp(doc, line, character);
+    await Assert.That(sig).IsNotNull();
+    await Assert.That(sig!.Signatures[0].Label).Contains("target name");
+  }
+
+  [Test]
   public async Task UnknownAttribute_ReturnsNull()
   {
     var text = "<Project>\n<ItemGroup>\n<PackageReference Mystery=\"@CURSOR\" />\n</ItemGroup>\n</Project>";
