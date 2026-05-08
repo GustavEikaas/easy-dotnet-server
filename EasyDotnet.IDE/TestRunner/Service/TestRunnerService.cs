@@ -734,7 +734,7 @@ public class TestRunnerService(
                       : null,
                   Stdout: x.detail.Stdout.Length > 0 ? x.detail.Stdout : null));
 
-  public SyncFileResult SyncFile(SyncFileRequest req)
+  public async Task<SyncFileResult> SyncFileAsync(SyncFileRequest req)
   {
     var parsed = TestSourceLocator.ParseContent(req.Content);
     var updates = new List<LineNumberUpdateDto>();
