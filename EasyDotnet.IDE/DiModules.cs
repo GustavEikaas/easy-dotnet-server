@@ -71,6 +71,7 @@ public static class DiModules
     services.AddSingleton<IDebugOrchestrator, DebugOrchestrator>();
     services.AddSingleton<IAppPathsService, AppPathsService>();
     services.AddSingleton<UpdateCheckerService>();
+    services.AddSingleton<ProfilerService>();
     services.AddSingleton<SettingsFileResolver>();
     services.AddSingleton<SettingsSerializer>();
     services.AddSingleton<SettingsService>();

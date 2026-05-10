@@ -7,5 +7,6 @@ public record RunProjectRequest(
     LaunchProfile.LaunchProfile? LaunchProfile,
     string[]? AdditionalArguments,
     Dictionary<string, string>? EnvironmentVariables,
-    Action<int>? OnPidReceived = null
+    Action<int>? OnPidReceived = null,
+    bool UseProfiler = false
 );

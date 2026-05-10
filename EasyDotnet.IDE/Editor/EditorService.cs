@@ -7,6 +7,7 @@ using EasyDotnet.IDE.Models.Client.Prompt;
 using EasyDotnet.IDE.Models.Client.Quickfix;
 using EasyDotnet.IDE.Picker;
 using EasyDotnet.IDE.Picker.Models;
+using EasyDotnet.IDE.Services;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Editor;
@@ -18,6 +19,7 @@ public class EditorService(
   IClientService clientService,
   IAppWrapperManager appWrapperManager,
   IPickerService pickerService,
+  ProfilerService profilerService,
   JsonRpc jsonRpc) : IEditorService
 {
   public async Task DisplayError(string message) =>
@@ -99,6 +101,15 @@ public class EditorService(
         try
         {
           var pid = await session.WaitForPidAsync(CancellationToken.None);
+          if (request.UseProfiler)
+          {
+            // Attach the profiler BEFORE releasing the hook so we capture every JIT and
+            // sample from t=0. The session runs until the user process exits (durationSeconds=null);
+            // WorkspaceService.DispatchRunAsync calls ProfilerService.StopAsync on exit, which
+            // finalizes the trace and emits per-line deltas.
+            try { await profilerService.StartAsync(pid, durationSeconds: null); }
+            catch (Exception) { /* fall through; resume the app even if profiler attach failed */ }
+          }
           session.Resume();
           request.OnPidReceived?.Invoke(pid);
         }

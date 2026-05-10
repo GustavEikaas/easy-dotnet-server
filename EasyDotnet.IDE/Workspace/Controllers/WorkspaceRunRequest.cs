@@ -4,5 +4,6 @@ public sealed record WorkspaceRunRequest(
     bool UseDefault,
     bool UseLaunchProfile,
     string? FilePath,
-    string? CliArgs
+    string? CliArgs,
+    bool UseProfiler = false
 );

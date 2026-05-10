@@ -21,6 +21,7 @@ public class WorkspaceService(
     WorkspaceBuildHostManager buildHostManager,
     IDebugOrchestrator debugOrchestrator,
     IDebugStrategyFactory debugStrategyFactory,
+    ProfilerService profilerService,
     ILogger<WorkspaceService> logger)
 {
   public async Task RunAsync(WorkspaceRunRequest request, CancellationToken ct)
@@ -45,12 +46,12 @@ public class WorkspaceService(
         await editorService.DisplayError("Failed to convert single file app to project");
         return;
       }
-      await DispatchRunAsync(converted, null, request.CliArgs, ct);
+      await DispatchRunAsync(converted, null, request.CliArgs, request.UseProfiler, ct);
       return;
     }
 
     var project = target.Project!;
-    await DispatchRunAsync(project, target.LaunchProfile, request.CliArgs, ct);
+    await DispatchRunAsync(project, target.LaunchProfile, request.CliArgs, request.UseProfiler, ct);
   }
 
   public async Task DebugAsync(WorkspaceDebugRequest request, CancellationToken ct)
@@ -167,6 +168,7 @@ public class WorkspaceService(
       ValidatedDotnetProject project,
       LaunchProfile? launchProfile,
       string? cliArgs,
+      bool useProfiler,
       CancellationToken ct)
   {
     var sessionKey = $"{project.ProjectFullPath}:{project.TargetFramework}";
@@ -196,7 +198,8 @@ public class WorkspaceService(
               project.TargetFramework,
               pid));
           logger.LogInformation("Registered running process {ProjectName} (PID {Pid})", project.ProjectName, pid);
-        });
+        },
+        UseProfiler: useProfiler);
 
     if (!await preBuildService.BuildBeforeRunAsync(project.ProjectFullPath, project.ProjectName, ct))
     {
@@ -238,6 +241,11 @@ public class WorkspaceService(
       {
         sessionRegistry.Release(sessionKey);
         _ = NotifyRunningSessionsAsync();
+        if (useProfiler)
+        {
+          try { await profilerService.StopAsync(); }
+          catch (Exception ex) { logger.LogWarning(ex, "Profiler stop failed for {ProjectName}", project.ProjectName); }
+        }
       }
     }, CancellationToken.None);
   }
