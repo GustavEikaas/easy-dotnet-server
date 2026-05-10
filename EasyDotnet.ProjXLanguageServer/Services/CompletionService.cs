@@ -90,15 +90,41 @@ public class CompletionService(INugetSearchService nugetSearch, ILogger<Completi
               return Static([]);
             }
             var versions = await nugetSearch.GetVersionsAsync(packageId, includePrerelease: true, cancellationToken);
-            var items = versions.Select((v, i) => new CompletionItem
+            var latestStable = versions.FirstOrDefault(v => !v.IsPrerelease);
+            var latestAny = versions.FirstOrDefault();
+
+            var items = new List<CompletionItem>(versions.Count + 2);
+            if (latestStable is not null)
+            {
+              items.Add(new CompletionItem
+              {
+                Label = "latest",
+                Kind = CompletionItemKind.Constant,
+                InsertText = latestStable.ToNormalizedString(),
+                Detail = $"latest stable ({latestStable.ToNormalizedString()})",
+                SortText = "00000"
+              });
+            }
+            if (latestAny is not null && latestAny.IsPrerelease && !latestAny.Equals(latestStable))
+            {
+              items.Add(new CompletionItem
+              {
+                Label = "latest-preview",
+                Kind = CompletionItemKind.Constant,
+                InsertText = latestAny.ToNormalizedString(),
+                Detail = $"latest prerelease ({latestAny.ToNormalizedString()})",
+                SortText = "00001"
+              });
+            }
+            items.AddRange(versions.Select((v, i) => new CompletionItem
             {
               Label = v.ToNormalizedString(),
               Kind = CompletionItemKind.Value,
               InsertText = v.ToNormalizedString(),
               Detail = v.IsPrerelease ? "prerelease" : "release",
-              SortText = i.ToString("D5")
-            }).ToArray();
-            return new CompletionResult(items, IsIncomplete: false);
+              SortText = (i + 10).ToString("D5")
+            }));
+            return new CompletionResult(items.ToArray(), IsIncomplete: false);
           }
         default:
           return Static([]);

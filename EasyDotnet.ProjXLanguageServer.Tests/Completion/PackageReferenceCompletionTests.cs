@@ -85,7 +85,56 @@ public class PackageReferenceCompletionTests
 
     await Assert.That(capturedId).IsEqualTo("Newtonsoft.Json");
     await Assert.That(result.Items.Any(i => i.Label == "13.0.3")).IsTrue();
-    await Assert.That(result.Items[0].Label).IsEqualTo("13.0.3");
+    await Assert.That(result.Items[0].Label).IsEqualTo("latest");
+    await Assert.That(result.Items[0].InsertText).IsEqualTo("13.0.3");
+  }
+
+  [Test]
+  public async Task VersionAttribute_AddsLatestPreviewWhenPrereleaseIsNewer()
+  {
+    var fake = new FakeNugetSearchService
+    {
+      OnVersions = _ =>
+      [
+        NuGetVersion.Parse("14.0.0-preview1"),
+        NuGetVersion.Parse("13.0.3"),
+        NuGetVersion.Parse("12.0.3"),
+      ]
+    };
+    var sut = CompletionTestFactory.Create(fake);
+
+    var text = "<Project>\n<ItemGroup>\n<PackageReference Include=\"Newtonsoft.Json\" Version=\"@CURSOR\" />\n</ItemGroup>\n</Project>";
+    var (line, character, clean) = PositionFor(text);
+
+    var result = await sut.GetCompletionsAsync(Docs.Make(clean), line, character, default);
+
+    await Assert.That(result.Items[0].Label).IsEqualTo("latest");
+    await Assert.That(result.Items[0].InsertText).IsEqualTo("13.0.3");
+    await Assert.That(result.Items[1].Label).IsEqualTo("latest-preview");
+    await Assert.That(result.Items[1].InsertText).IsEqualTo("14.0.0-preview1");
+  }
+
+  [Test]
+  public async Task VersionAttribute_OnlyPrereleaseVersions_AddsLatestPreviewOnly()
+  {
+    var fake = new FakeNugetSearchService
+    {
+      OnVersions = _ =>
+      [
+        NuGetVersion.Parse("1.0.0-beta2"),
+        NuGetVersion.Parse("1.0.0-beta1"),
+      ]
+    };
+    var sut = CompletionTestFactory.Create(fake);
+
+    var text = "<Project>\n<ItemGroup>\n<PackageReference Include=\"Foo\" Version=\"@CURSOR\" />\n</ItemGroup>\n</Project>";
+    var (line, character, clean) = PositionFor(text);
+
+    var result = await sut.GetCompletionsAsync(Docs.Make(clean), line, character, default);
+
+    await Assert.That(result.Items.Any(i => i.Label == "latest")).IsFalse();
+    await Assert.That(result.Items[0].Label).IsEqualTo("latest-preview");
+    await Assert.That(result.Items[0].InsertText).IsEqualTo("1.0.0-beta2");
   }
 
   [Test]
