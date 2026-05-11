@@ -41,6 +41,8 @@ public class DebuggerMessageInterceptor(
   {
     logger.LogDebug("[DEBUGGER] Variables response");
 
+    valueConverterService.FormatInlineStringJsonVariables(response);
+
     if (applyValueConverters)
     {
       valueConverterService.RegisterVariablesReferences(response);
@@ -64,6 +66,7 @@ public class DebuggerMessageInterceptor(
       TryCaptureScopes(response);
     }
 
+    valueConverterService.FormatEvaluateResponse(response);
     return Task.FromResult<ProtocolMessage?>(response);
   }
 
