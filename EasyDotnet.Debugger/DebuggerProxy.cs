@@ -17,6 +17,7 @@ public interface IDebuggerProxy
   Task WriteProxyToClientAsync(ProtocolMessage response, CancellationToken cancellationToken);
   Task EmitEventToClientAsync(Event evt, CancellationToken cancellationToken);
   RequestContext? GetAndRemoveContext(int proxySeq);
+  int? PeekOriginalSeq(int proxySeq);
 }
 
 public class DebuggerProxy : IDebuggerProxy
@@ -149,6 +150,12 @@ public class DebuggerProxy : IDebuggerProxy
   }
 
   public RequestContext? GetAndRemoveContext(int proxySeq) => _requestTracker.GetAndRemoveContext(proxySeq);
+
+  public int? PeekOriginalSeq(int proxySeq)
+  {
+    var ctx = _requestTracker.PeekContext(proxySeq);
+    return ctx?.Origin == RequestOrigin.Client ? ctx.OriginalSeq : null;
+  }
 
   public async Task<Response> RunInternalRequestAsync(Request request, CancellationToken cancellationToken)
   {

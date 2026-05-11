@@ -116,6 +116,19 @@ public class InterceptableVariablesRequest : Request
   public new InterceptableVariablesArguments? Arguments { get; set; } = new();
 }
 
+public class ScopesRequest : Request
+{
+  public new ScopesArguments? Arguments { get; set; } = new();
+}
+
+public class ScopesArguments
+{
+  public int FrameId { get; set; }
+
+  [JsonExtensionData]
+  public Dictionary<string, JsonElement>? ExtraProperties { get; set; }
+}
+
 public class InterceptableVariablesArguments
 {
   public int VariablesReference { get; set; }

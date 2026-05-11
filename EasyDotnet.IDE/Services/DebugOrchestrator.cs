@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using EasyDotnet.Debugger.Interfaces;
+using EasyDotnet.Debugger.Services;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Types;
 using Microsoft.Extensions.Logging;
@@ -33,6 +34,7 @@ public class DebugOrchestrator(
     IDebugSessionFactory debugSessionFactory,
     IEditorService editorService,
     IClientService clientService,
+    IVariableLocationResolver variableLocationResolver,
     ILogger<DebugOrchestrator> logger) : IDebugOrchestrator
 {
   private readonly ConcurrentDictionary<string, Debugger.DebugSession> _sessionServices = new();
@@ -147,7 +149,8 @@ public class DebugOrchestrator(
             await strategy.TransformRequestAsync(dapRequest, proxy);
             return dapRequest;
           },
-          clientService?.ClientOptions?.DebuggerOptions?.ApplyValueConverters ?? false);
+          clientService?.ClientOptions?.DebuggerOptions?.ApplyValueConverters ?? false,
+          variableLocationResolver);
 
       _sessionServices[sessionKey] = session;
 
