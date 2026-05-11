@@ -13,37 +13,40 @@ namespace EasyDotnet.IntegrationTests.Profiler;
 // This is the test that drove the iteration on the EF Core SQL bucket feature — keep it as a
 // regression guard for the FilterAndPayloadSpecs string, the payload key names, and the call
 // stack resolution.
-public sealed class ProfilerEfSqlTests : IAsyncLifetime
+public sealed class ProfilerEfSqlTests
 {
   private static readonly TimeSpan ProfilerDuration = TimeSpan.FromSeconds(8);
 
-  private string _workspaceRoot = null!;
-  private string _appBinary = null!;
-  private string _querySourceFile = null!;
-  private int _querySourceLine;
-
-  public Task InitializeAsync()
+  // Matrix: prove the call-site resolution path works against multiple EF Core / TFM combos.
+  // The user reports it works in this xunit harness but fails in a real EF 10 app — repro must
+  // cover both the LTS we get most reports for (EF 8 / net8.0) and the current major (EF 10 /
+  // net10.0).
+  [Theory]
+  [InlineData("net8.0", "8.0.0")]
+  [InlineData("net10.0", "10.0.0")]
+  public async Task Profiler_AttachesToRealEfApp_EmitsSqlBucketAttributedToUserCallSite(string tfm, string efVersion)
   {
-    _workspaceRoot = Path.Combine(Path.GetTempPath(), $"ProfilerEfTest_{Guid.NewGuid():N}");
-    Directory.CreateDirectory(_workspaceRoot);
-    ScaffoldEfApp(_workspaceRoot, out _querySourceFile, out _querySourceLine);
-    DotnetBuild(_workspaceRoot);
-    _appBinary = Path.Combine(_workspaceRoot, "bin", "Debug", "net10.0", "EfTarget.dll");
-    Assert.True(File.Exists(_appBinary), $"Built binary not found at {_appBinary}");
-    return Task.CompletedTask;
+    var workspaceRoot = Path.Combine(Path.GetTempPath(), $"ProfilerEfTest_{Guid.NewGuid():N}");
+    Directory.CreateDirectory(workspaceRoot);
+    try
+    {
+      ScaffoldEfApp(workspaceRoot, tfm, efVersion, out var querySourceFile, out _);
+      DotnetBuild(workspaceRoot);
+      var appBinary = Path.Combine(workspaceRoot, "bin", "Debug", tfm, "EfTarget.dll");
+      Assert.True(File.Exists(appBinary), $"Built binary not found at {appBinary}");
+
+      await RunMatrixCaseAsync(appBinary, workspaceRoot, querySourceFile);
+    }
+    finally
+    {
+      try { if (Directory.Exists(workspaceRoot)) Directory.Delete(workspaceRoot, recursive: true); }
+      catch { }
+    }
   }
 
-  public Task DisposeAsync()
+  private static async Task RunMatrixCaseAsync(string appBinary, string workspaceRoot, string querySourceFile)
   {
-    try { if (Directory.Exists(_workspaceRoot)) Directory.Delete(_workspaceRoot, recursive: true); }
-    catch { }
-    return Task.CompletedTask;
-  }
-
-  [Fact]
-  public async Task Profiler_AttachesToRealEfApp_EmitsSqlBucketAttributedToUserCallSite()
-  {
-    using var app = SpawnApp();
+    using var app = SpawnApp(appBinary, workspaceRoot);
     var pid = app.WaitForReady(TimeSpan.FromSeconds(10));
 
     var notifications = new RecordingNotificationService();
@@ -89,7 +92,7 @@ public sealed class ProfilerEfSqlTests : IAsyncLifetime
 
     // And ideally the attributed file should be the one we know issues queries.
     Assert.Contains(attributed, b =>
-      string.Equals(Path.GetFullPath(b.File), Path.GetFullPath(_querySourceFile), StringComparison.OrdinalIgnoreCase));
+      string.Equals(Path.GetFullPath(b.File), Path.GetFullPath(querySourceFile), StringComparison.OrdinalIgnoreCase));
   }
 
   private static async Task WaitForStateAsync(RecordingNotificationService notifications, string state, TimeSpan timeout)
@@ -106,14 +109,14 @@ public sealed class ProfilerEfSqlTests : IAsyncLifetime
       $"Sql notifications: {notifications.SqlNotifications}, sample notifications: {notifications.SampleNotifications}.");
   }
 
-  private SpawnedApp SpawnApp()
+  private static SpawnedApp SpawnApp(string appBinary, string workspaceRoot)
   {
-    var psi = new ProcessStartInfo("dotnet", $"\"{_appBinary}\"")
+    var psi = new ProcessStartInfo("dotnet", $"\"{appBinary}\"")
     {
       RedirectStandardOutput = true,
       RedirectStandardError = true,
       UseShellExecute = false,
-      WorkingDirectory = _workspaceRoot,
+      WorkingDirectory = workspaceRoot,
     };
     var process = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start EfTarget");
     var app = new SpawnedApp(process);
@@ -121,13 +124,13 @@ public sealed class ProfilerEfSqlTests : IAsyncLifetime
     return app;
   }
 
-  private static void ScaffoldEfApp(string root, out string querySourceFile, out int queryLine)
+  private static void ScaffoldEfApp(string root, string tfm, string efVersion, out string querySourceFile, out int queryLine)
   {
-    File.WriteAllText(Path.Combine(root, "EfTarget.csproj"), """
+    File.WriteAllText(Path.Combine(root, "EfTarget.csproj"), $"""
       <Project Sdk="Microsoft.NET.Sdk">
         <PropertyGroup>
           <OutputType>Exe</OutputType>
-          <TargetFramework>net10.0</TargetFramework>
+          <TargetFramework>{tfm}</TargetFramework>
           <Nullable>enable</Nullable>
           <ImplicitUsings>enable</ImplicitUsings>
           <RootNamespace>EfTarget</RootNamespace>
@@ -135,7 +138,7 @@ public sealed class ProfilerEfSqlTests : IAsyncLifetime
           <DebugType>portable</DebugType>
         </PropertyGroup>
         <ItemGroup>
-          <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.0" />
+          <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="{efVersion}" />
         </ItemGroup>
       </Project>
       """);

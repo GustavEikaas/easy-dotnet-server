@@ -32,10 +32,13 @@ public sealed class ProfilerService(INotificationService notifications, ILogger<
   private CancellationTokenSource? _cts;
   private Task? _runTask;
 
-  // method full name (as it appears in TraceEvent frame names, "Class.Method") -> (file, line)
-  // Built lazily by scanning PDBs of candidate modules. For the spike we attribute at method
-  // granularity (first sequence point); per-IL-offset precision is the next layer.
-  private readonly ConcurrentDictionary<string, (string File, int Line)> _methodLookup = new(StringComparer.Ordinal);
+  // method full name (as it appears in TraceEvent frame names, "Class.Method") -> sequence
+  // points sorted by IL offset. At resolve time we pick the SP whose IL offset is the largest
+  // value <= the frame's IL offset, which lands the attribution on the actual call line
+  // (e.g. the `await db.X.ToListAsync()` line) instead of the method's opening `{`.
+  private readonly ConcurrentDictionary<string, MethodLineMap> _methodLookup = new(StringComparer.Ordinal);
+
+  private sealed record MethodLineMap(string File, (int ILOffset, int Line)[] Points);
 
   // Continuous mode chunk size. Each iteration: open session, collect for this duration,
   // stop, process, emit cumulative totals. ~1s of overhead per chunk for rundown+conversion.
@@ -241,18 +244,33 @@ public sealed class ProfilerService(INotificationService notifications, ILogger<
             {
               // Spec format documented in DiagnosticSourceEventSource.cs:
               //   Listener/EventName[@ActivityName]:[transform[;transform]*]
-              // No explicit transforms: rely on implicit transforms, which enumerate all
-              // top-level properties of the payload (CommandExecutedEventData) by name. EF
-              // surfaces the formatted SQL as a flat `LogCommandText` string — explicit nested
-              // paths like `Command.CommandText` return null because the bridge can't traverse
-              // DbCommand through reflection cleanly, and the bridge drops null values.
+              // EF 9+ surfaces the formatted SQL on a flat `LogCommandText` property; EF 8 has
+              // no such property and only exposes the raw `Command` (DbCommand). Listing
+              // explicit transforms disables implicit enumeration, so we name every field we
+              // need from BOTH shapes — fields the runtime type lacks fetch as null and the
+              // bridge drops them, so the same spec covers EF 8 and EF 10.
               // NOTE: do NOT add @Activity2Stop here. With that suffix the bridge emits via
               // event id 7 ("Activity2/Stop"), but TraceEvent fails to deserialize the
               // IEnumerable<KeyValuePair> Arguments payload for that event id — args arrive
               // empty. Plain event id 2 ("Event") works correctly.
+              // Two events per query:
+              //   * CommandExecuting fires SYNCHRONOUSLY on the calling thread, before any
+              //     await suspends — its captured stack contains the user's call site.
+              //   * CommandExecuted fires when the DB reply lands, on a Npgsql/IO continuation
+              //     thread — its stack has no user frame at all.
+              // We correlate them by CommandId (a Guid present on both event payloads). The
+              // Executing event gives us the file/line; the Executed event gives us the SQL
+              // text and Duration. Specs are newline-separated per DiagnosticSourceEventSource.
               ["FilterAndPayloadSpecs"] =
                 "Microsoft.EntityFrameworkCore/" +
-                "Microsoft.EntityFrameworkCore.Database.Command.CommandExecuted:"
+                "Microsoft.EntityFrameworkCore.Database.Command.CommandExecuting:" +
+                "CommandId=CommandId\n" +
+                "Microsoft.EntityFrameworkCore/" +
+                "Microsoft.EntityFrameworkCore.Database.Command.CommandExecuted:" +
+                "LogCommandText=LogCommandText;" +
+                "CommandText=Command.CommandText;" +
+                "Duration=Duration;" +
+                "CommandId=CommandId"
             })
       };
       var client = new DiagnosticsClient(pid);
@@ -310,7 +328,8 @@ public sealed class ProfilerService(INotificationService notifications, ILogger<
             stackIndex = stackSource.GetCallerIndex(stackIndex);
             continue;
           }
-          if (TryResolveFrame(frameName, out var fl))
+          var ilOffset = GetFrameIlOffset(stackSource, frameIdx, traceLog);
+          if (TryResolveFrame(frameName, ilOffset, out var fl))
           {
             counts.TryGetValue(fl, out var c);
             counts[fl] = c + 1;
@@ -337,12 +356,20 @@ public sealed class ProfilerService(INotificationService notifications, ILogger<
     }
   }
 
-  // Pulls EF Core CommandExecuted events out of the trace, walks the call stack the runtime
-  // captured at the moment each event fired, and produces resolved ProfilerSqlEvent records.
-  // No time-window correlation — the event's own stack is the authoritative call site.
+  // Pulls EF Core Command events out of the trace and produces resolved ProfilerSqlEvent records.
+  //
+  // Two-step correlation by CommandId:
+  //   1. CommandExecuting fires synchronously on the calling thread; its captured stack has the
+  //      user's call site. We resolve and stash (CommandId -> file/line) when we see it.
+  //   2. CommandExecuted fires asynchronously on an IO continuation thread with no user frames
+  //      on the stack but carries the SQL text and Duration. We look up the previously-stashed
+  //      file/line by CommandId, then emit.
+  // Falls back to walking the Executed event's own stack if no Executing event was seen for the
+  // command (e.g., the trace started mid-query).
   private List<ProfilerSqlEvent> ExtractSqlEvents(TraceLog traceLog, MutableTraceEventStackSource stackSource)
   {
     var results = new List<ProfilerSqlEvent>();
+    var callSiteByCommandId = new Dictionary<string, (string File, int Line)>(StringComparer.Ordinal);
     var efEventsSeen = 0;
     var stackResolved = 0;
     try
@@ -354,14 +381,37 @@ public sealed class ProfilerService(INotificationService notifications, ILogger<
         // EventName field, regardless of which EventSource event id (Event vs Activity2Stop)
         // is used on the wire. Filter on this so spec changes don't break us.
         var payloadEventName = ev.PayloadByName("EventName") as string;
-        if (payloadEventName != "Microsoft.EntityFrameworkCore.Database.Command.CommandExecuted") continue;
-        efEventsSeen++;
+        var isExecuting = payloadEventName == "Microsoft.EntityFrameworkCore.Database.Command.CommandExecuting";
+        var isExecuted = payloadEventName == "Microsoft.EntityFrameworkCore.Database.Command.CommandExecuted";
+        if (!isExecuting && !isExecuted) continue;
 
         var args = ev.PayloadByName("Arguments");
         if (args is not System.Collections.IEnumerable enumerable) continue;
 
+        // For CommandExecuting: capture (CommandId -> resolved call site) for later correlation.
+        if (isExecuting)
+        {
+          string? executingCommandId = null;
+          foreach (var pair in enumerable)
+          {
+            if (pair is not IDictionary<string, object> d) continue;
+            d.TryGetValue("Key", out var kObj);
+            d.TryGetValue("Value", out var vObj);
+            if (kObj as string == "CommandId") { executingCommandId = vObj as string; break; }
+          }
+          if (string.IsNullOrEmpty(executingCommandId)) continue;
+          var (file, line) = ResolveEventCallSite(ev, stackSource, traceLog);
+          if (file != "<unknown>")
+            callSiteByCommandId[executingCommandId!] = (file, line);
+          continue;
+        }
+
+        // From here on: CommandExecuted.
+        efEventsSeen++;
+
         string? sql = null;
         string? parameters = null;
+        string? commandId = null;
         double elapsedMs = 0;
         foreach (var pair in enumerable)
         {
@@ -378,7 +428,11 @@ public sealed class ProfilerService(INotificationService notifications, ILogger<
           if (key is null) continue;
           // Top-level property names on EF Core's CommandExecutedEventData. The bridge's
           // implicit transforms surface each one with the property name as the key.
-          if (key == "LogCommandText") sql = value;
+          // LogCommandText is the EF 9+ flat formatted-SQL property; CommandText comes from the
+          // explicit `Command.CommandText` transform we add for EF 8 (which lacks LogCommandText).
+          // Whichever the runtime emitted, take it.
+          if ((key == "LogCommandText" || key == "CommandText") && !string.IsNullOrEmpty(value)) sql = value;
+          else if (key == "CommandId") commandId = value;
           else if (key == "Duration" && value is not null)
           {
             // EF emits Duration as a TimeSpan formatted string e.g. "00:00:00.0030056".
@@ -392,10 +446,23 @@ public sealed class ProfilerService(INotificationService notifications, ILogger<
         }
         if (string.IsNullOrEmpty(sql)) continue;
 
-        // Walk the event's own captured call stack to find the first user frame.
-        var (file, line) = ResolveEventCallSite(ev, stackSource);
-        if (file != "<unknown>") stackResolved++;
-        results.Add(new ProfilerSqlEvent(file, line, sql!, parameters, elapsedMs));
+        // Prefer the call site captured at CommandExecuting time (synchronous, user thread).
+        // Fall back to walking this event's own stack only if we never saw a paired Executing
+        // event for this command id.
+        string resolvedFile;
+        int resolvedLine;
+        if (commandId is not null && callSiteByCommandId.TryGetValue(commandId, out var stashed))
+        {
+          resolvedFile = stashed.File;
+          resolvedLine = stashed.Line;
+          callSiteByCommandId.Remove(commandId);
+        }
+        else
+        {
+          (resolvedFile, resolvedLine) = ResolveEventCallSite(ev, stackSource, traceLog);
+        }
+        if (resolvedFile != "<unknown>") stackResolved++;
+        results.Add(new ProfilerSqlEvent(resolvedFile, resolvedLine, sql!, parameters, elapsedMs));
       }
     }
     catch (Exception ex)
@@ -410,12 +477,17 @@ public sealed class ProfilerService(INotificationService notifications, ILogger<
   }
 
   [ThreadStatic] private static int _eventStackDiagThisChunk;
-  internal static void ResetSqlStackDiagCounter() => _eventStackDiagThisChunk = 0;
+  [ThreadStatic] private static int _unresolvedStackDumpsThisChunk;
+  internal static void ResetSqlStackDiagCounter()
+  {
+    _eventStackDiagThisChunk = 0;
+    _unresolvedStackDumpsThisChunk = 0;
+  }
 
   // Walks the call stack captured with this event (TraceLog attaches stacks to EventPipe events
   // automatically) skipping EF/BCL infrastructure frames until we hit a frame we have PDB data
   // for. Returns ("<unknown>", 0) when the event has no stack or no user frame can be resolved.
-  private (string File, int Line) ResolveEventCallSite(TraceEvent ev, MutableTraceEventStackSource stackSource)
+  private (string File, int Line) ResolveEventCallSite(TraceEvent ev, MutableTraceEventStackSource stackSource, TraceLog traceLog)
   {
     var traceLogStackIdx = ev.CallStackIndex();
 
@@ -447,7 +519,8 @@ public sealed class ProfilerService(INotificationService notifications, ILogger<
     var stack = stackSource.GetCallStack(traceLogStackIdx, ev);
     while (stack != StackSourceCallStackIndex.Invalid)
     {
-      var frameName = stackSource.GetFrameName(stackSource.GetFrameIndex(stack), false);
+      var frameIdx = stackSource.GetFrameIndex(stack);
+      var frameName = stackSource.GetFrameName(frameIdx, false);
       if (frameName.StartsWith("Thread (", StringComparison.Ordinal)) break;
       if (frameName == "CPU_TIME" || frameName == "BLOCKED_TIME" || frameName == "UNMANAGED_CODE_TIME"
           || SqlAggregator.IsInfrastructureFrame(frameName))
@@ -455,8 +528,24 @@ public sealed class ProfilerService(INotificationService notifications, ILogger<
         stack = stackSource.GetCallerIndex(stack);
         continue;
       }
-      if (TryResolveFrame(frameName, out var fl)) return fl;
+      var ilOffset = GetFrameIlOffset(stackSource, frameIdx, traceLog);
+      if (TryResolveFrame(frameName, ilOffset, out var fl)) return fl;
       stack = stackSource.GetCallerIndex(stack);
+    }
+    // Couldn't resolve a user frame. Dump the full stack the first few times per chunk so we
+    // can see *why* (frame names that should have indexed but didn't, or stacks that bottom out
+    // entirely in infrastructure / EF internals — typical for async ToListAsync continuations).
+    if (++_unresolvedStackDumpsThisChunk <= 5)
+    {
+      var dump = stackSource.GetCallStack(traceLogStackIdx, ev);
+      var frames = new List<string>();
+      while (dump != StackSourceCallStackIndex.Invalid && frames.Count < 200)
+      {
+        frames.Add(stackSource.GetFrameName(stackSource.GetFrameIndex(dump), false));
+        dump = stackSource.GetCallerIndex(dump);
+      }
+      log.LogInformation("UNRESOLVED SQL event stack ({Depth} frames):\n  {Frames}",
+          frames.Count, string.Join("\n  ", frames));
     }
     return ("<unknown>", 0);
   }
@@ -464,21 +553,69 @@ public sealed class ProfilerService(INotificationService notifications, ILogger<
   // Frame name format from MutableTraceEventStackSource (verboseName=false) is typically:
   //   "moduleSimpleName!Namespace.Class.Method"
   // For top-level statements: "EasyDotnet.MyItemtest!Program.<<Main>$>g__HotA|0_0"
-  private bool TryResolveFrame(string frameName, out (string File, int Line) fileLine)
+  // For generic methods: "Namespace.Class.Method[T](args)"
+  // For generic types: "Namespace.Class`1[T].Method(args)"
+  private bool TryResolveFrame(string frameName, int ilOffset, out (string File, int Line) fileLine)
   {
     fileLine = default;
     var bang = frameName.IndexOf('!');
     var afterBang = bang >= 0 ? frameName[(bang + 1)..] : frameName;
-    // Frame names end with the method's signature, e.g. "Foo.Bar(int32, class System.String)".
-    // Strip the parameter list to match our PDB key which is just "Foo.Bar".
+    // Strip the parameter list — "Foo.Bar(int32, string)" → "Foo.Bar".
     var paren = afterBang.IndexOf('(');
     var key = paren >= 0 ? afterBang[..paren] : afterBang;
-    if (_methodLookup.TryGetValue(key, out var hit))
+    // Strip generic instantiations the JIT/TraceEvent inserts (`[T]`, `[T1,T2]`). PDB keys are
+    // built from metadata and have no instantiation suffix, so without this generic methods and
+    // methods declared on generic types never match.
+    key = StripGenericInstantiations(key);
+    if (!_methodLookup.TryGetValue(key, out var map) || map.Points.Length == 0) return false;
+
+    // Pick the sequence point whose IL offset is the largest value <= the frame's IL offset.
+    // This is the standard PDB lookup pattern: the SP "covers" all IL up to the next SP, so the
+    // last SP at-or-before the frame's offset is the source line currently executing. If we
+    // don't have an IL offset (pseudo-frame, missing symbol info) fall back to the first SP,
+    // which historically was the method's opening brace.
+    var chosenLine = map.Points[0].Line;
+    if (ilOffset >= 0)
     {
-      fileLine = hit;
-      return true;
+      for (var i = map.Points.Length - 1; i >= 0; i--)
+      {
+        if (map.Points[i].ILOffset <= ilOffset)
+        {
+          chosenLine = map.Points[i].Line;
+          break;
+        }
+      }
     }
-    return false;
+    fileLine = (map.File, chosenLine);
+    return true;
+  }
+
+  // Pulls the IL offset off a stack frame by going through the TraceEventStackSource →
+  // CodeAddress → TraceLog method. Returns -1 for pseudo-frames (CPU_TIME etc.) and any frame
+  // the resolver couldn't attach a CodeAddress to (native, unresolved JIT).
+  private static int GetFrameIlOffset(MutableTraceEventStackSource stackSource, StackSourceFrameIndex frameIdx, TraceLog traceLog)
+  {
+    try
+    {
+      var codeAddrIdx = stackSource.GetFrameCodeAddress(frameIdx);
+      if (codeAddrIdx == Microsoft.Diagnostics.Tracing.Etlx.CodeAddressIndex.Invalid) return -1;
+      return traceLog.CodeAddresses.ILOffset(codeAddrIdx);
+    }
+    catch { return -1; }
+  }
+
+  private static string StripGenericInstantiations(string name)
+  {
+    if (name.IndexOf('[') < 0) return name;
+    var sb = new System.Text.StringBuilder(name.Length);
+    var depth = 0;
+    foreach (var c in name)
+    {
+      if (c == '[') { depth++; continue; }
+      if (c == ']') { if (depth > 0) depth--; continue; }
+      if (depth == 0) sb.Append(c);
+    }
+    return sb.ToString();
   }
 
   private void TryIndexPdb(string modulePath)
@@ -523,28 +660,37 @@ public sealed class ProfilerService(INotificationService notifications, ILogger<
           var methodDefHandle = dbgHandle.ToDefinitionHandle();
           if (methodDefHandle.IsNil) continue;
 
-          // Walk sequence points, take the first non-hidden one as the method's "head" line.
-          // Drop entries whose source file doesn't exist on the local filesystem: third-party
-          // PDBs (NuGet packages built on other machines, source-link "/_/src/..." deterministic
-          // paths) point at paths that don't resolve here. Without this we'd emit virtual text
-          // requests for files the editor will never have open.
-          (string File, int Line)? head = null;
+          // Collect every non-hidden sequence point. We need the full table so we can map a
+          // frame's IL offset onto the source line where the call site actually appears (e.g.
+          // an `await ToListAsync(...)` four lines into the method body) rather than the method
+          // entry. Deterministic source paths (CI, containers, `<Deterministic>true</...>`)
+          // don't resolve on this machine — pick a file that exists if possible, otherwise
+          // accept whatever the PDB embedded and let the editor side ignore it.
+          var rawPoints = new List<(int ILOffset, int Line, string File)>();
           foreach (var sp in dbgInfo.GetSequencePoints())
           {
             if (sp.IsHidden || sp.StartLine == 0) continue;
             var doc = pdb.GetDocument(sp.Document);
             var name = pdb.GetString(doc.Name);
             if (string.IsNullOrEmpty(name)) continue;
-            if (!File.Exists(name)) continue;
-            head = (name, sp.StartLine);
-            break;
+            rawPoints.Add((sp.Offset, sp.StartLine, name));
           }
-          if (head is null) continue;
+          if (rawPoints.Count == 0) continue;
+
+          var preferredFile = rawPoints.Select(p => p.File).FirstOrDefault(File.Exists)
+                              ?? rawPoints[0].File;
+          // Keep only SPs from the chosen file. Mixed-file methods (partials, source-link
+          // remappings) are rare; one consistent file simplifies the line-pick step.
+          var points = rawPoints
+              .Where(p => p.File == preferredFile)
+              .OrderBy(p => p.ILOffset)
+              .Select(p => (p.ILOffset, p.Line))
+              .ToArray();
 
           // Build the method's full name to match frame names.
           var fullName = BuildMethodFullName(peReader, methodDefHandle);
           if (string.IsNullOrEmpty(fullName)) continue;
-          _methodLookup[fullName] = head.Value;
+          _methodLookup[fullName] = new MethodLineMap(preferredFile, points);
         }
       }
       finally
