@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace EasyDotnet.IDE.Services;
@@ -10,6 +12,7 @@ public sealed record ProfilerSqlEvent(
     double ElapsedMs);
 
 public sealed record ProfilerSqlBucket(
+    string BucketId,
     string File,
     int Line,
     string SqlSample,
@@ -48,7 +51,8 @@ public static class SqlAggregator
     var byKey = new Dictionary<(string File, int Line, string Key), ProfilerSqlBucket>();
     foreach (var ev in events)
     {
-      var key = (ev.File, ev.Line, NormalizeForKey(ev.Sql));
+      var normalized = NormalizeForKey(ev.Sql);
+      var key = (ev.File, ev.Line, normalized);
       if (byKey.TryGetValue(key, out var existing))
       {
         var elapsed = (long)ev.ElapsedMs;
@@ -66,11 +70,27 @@ public static class SqlAggregator
       {
         var elapsed = (long)ev.ElapsedMs;
         byKey[key] = new ProfilerSqlBucket(
+            ComputeBucketId(ev.File, ev.Line, normalized),
             ev.File, ev.Line, ev.Sql, ev.Parameters,
             Count: 1, TotalMs: elapsed, MaxMs: elapsed);
       }
     }
     return byKey.Values.ToArray();
+  }
+
+  /// <summary>
+  /// Stable identifier for a bucket — used by the server to track which buckets have already
+  /// been emitted to the client, and by the client to key its own state. Identity is
+  /// (file, line, normalized SQL); whitespace and literal-value differences between two
+  /// otherwise-identical queries collapse onto the same id.
+  /// </summary>
+  public static string ComputeBucketId(string file, int line, string normalizedSql)
+  {
+    var input = $"{file}|{line}|{normalizedSql}";
+    var hash = SHA256.HashData(Encoding.UTF8.GetBytes(input));
+    var sb = new StringBuilder(16);
+    for (var i = 0; i < 8; i++) sb.Append(hash[i].ToString("x2"));
+    return sb.ToString();
   }
 
   /// <summary>

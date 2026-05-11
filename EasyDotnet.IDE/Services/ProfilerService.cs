@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics.Tracing;
 using System.Reflection.Metadata;
-using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
 using EasyDotnet.IDE.Interfaces;
 using Microsoft.Diagnostics.NETCore.Client;
@@ -13,41 +12,55 @@ using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.IDE.Services;
 
-public sealed record ProfilerSampleDelta(string File, int Line, long Samples, long ApproxMs);
 public sealed record ProfilerStartRequest(int Pid, double? DurationSeconds = null);
 public sealed record ProfilerStartResponse(int Pid, double DurationSeconds);
 
-
 /// <summary>
-/// Single-chunk profiler spike. Mirrors dotnet-stack report:
-///   open EventPipeSession (SampleProfiler) → stream to temp .nettrace → stop after duration
-///   → TraceLog → MutableTraceEventStackSource → SampleProfilerThreadTimeComputer
-///   → walk samples, attribute top managed frame to (file, line) via portable PDBs.
-/// Continuous profiling = wrap this in a rolling loop (next iteration of the spike).
+/// EF-only profiler. Continuously chunks (~2 s) EventPipe captures of EF Core's DiagnosticSource
+/// bridge to a temp .nettrace, converts to .etlx via TraceLog, then walks events offline —
+/// correlating CommandExecuting (sync, user-thread stack) with CommandExecuted (async, carries
+/// SQL + Duration) by CommandId. User call sites resolve through MutableTraceEventStackSource +
+/// PDB sequence points. Coalesced buckets are emitted to the client via the dedup flush loop:
+/// only changed counters are sent, and only for files the editor currently has open. Opening a
+/// new buffer triggers a re-emit of its cumulative state.
+///
+/// We use the offline TraceLog path rather than TraceLog.CreateFromEventPipeSession (live) because
+/// the real-time path silently fails to decode self-describing DiagnosticSource bridge payloads
+/// in modern .NET — events arrive with empty PayloadValues. Chunk latency is ChunkDuration plus
+/// ~1 s of rundown + ETLX conversion overhead.
 /// </summary>
-public sealed class ProfilerService(INotificationService notifications, ILogger<ProfilerService> log) : IAsyncDisposable
+public sealed class ProfilerService(
+    INotificationService notifications,
+    IOpenBufferService openBuffers,
+    ILogger<ProfilerService> log) : IAsyncDisposable
 {
   private readonly object _gate = new();
   private bool _running;
   private CancellationTokenSource? _cts;
   private Task? _runTask;
+  private EventPipeSession? _session;
 
-  // method full name (as it appears in TraceEvent frame names, "Class.Method") -> sequence
-  // points sorted by IL offset. At resolve time we pick the SP whose IL offset is the largest
-  // value <= the frame's IL offset, which lands the attribution on the actual call line
-  // (e.g. the `await db.X.ToListAsync()` line) instead of the method's opening `{`.
-  private readonly ConcurrentDictionary<string, MethodLineMap> _methodLookup = new(StringComparer.Ordinal);
-
+  // method full name -> sequence points sorted by IL offset. Cached across the whole session.
+  // Pick the SP whose IL offset is the largest value <= the frame's IL offset to land on the
+  // call site rather than the method's opening `{`.
   private sealed record MethodLineMap(string File, (int ILOffset, int Line)[] Points);
+  private readonly ConcurrentDictionary<string, MethodLineMap> _methodLookup = new(StringComparer.Ordinal);
+  private readonly ConcurrentDictionary<string, byte> _indexedModules = new(StringComparer.OrdinalIgnoreCase);
 
-  // Continuous mode chunk size. Each iteration: open session, collect for this duration,
-  // stop, process, emit cumulative totals. ~1s of overhead per chunk for rundown+conversion.
-  private static readonly TimeSpan ContinuousChunkDuration = TimeSpan.FromSeconds(2);
+  // Bucket state — owned by the dispatch thread. We protect via _bucketsLock since the flush
+  // loop runs on a separate thread.
+  private readonly object _bucketsLock = new();
+  private readonly Dictionary<string, ProfilerSqlBucket> _allBuckets = new(StringComparer.Ordinal);
+  private readonly Dictionary<string, BucketSnapshot> _lastSent = new(StringComparer.Ordinal);
+  private readonly Dictionary<string, (string File, int Line)> _callSiteByCommandId =
+      new(StringComparer.Ordinal);
+
+  private static readonly TimeSpan FlushInterval = TimeSpan.FromMilliseconds(250);
+
+  private readonly record struct BucketSnapshot(long Count, long TotalMs, long MaxMs);
 
   public Task<ProfilerStartResponse> StartAsync(int pid, double? durationSeconds = null)
   {
-    // null or non-positive -> continuous mode (rolling chunks until StopAsync).
-    // positive -> single-chunk snapshot mode.
     TimeSpan? singleShot = (durationSeconds is double s && s > 0) ? TimeSpan.FromSeconds(s) : null;
     lock (_gate)
     {
@@ -55,13 +68,11 @@ public sealed class ProfilerService(INotificationService notifications, ILogger<
       _running = true;
       _cts = new CancellationTokenSource();
       var token = _cts.Token;
-      _runTask = singleShot.HasValue
-          ? Task.Run(() => RunSingleShotAsync(pid, singleShot.Value, token))
-          : Task.Run(() => RunContinuousAsync(pid, ContinuousChunkDuration, token));
+      _runTask = Task.Run(() => RunAsync(pid, singleShot, token));
     }
     var reportSec = singleShot?.TotalSeconds ?? 0.0;
     log.LogInformation("Profiler started: pid={Pid} mode={Mode}", pid,
-        singleShot.HasValue ? $"single-shot {reportSec:F1}s" : $"continuous {ContinuousChunkDuration.TotalSeconds:F1}s/chunk");
+        singleShot.HasValue ? $"single-shot {reportSec:F1}s" : "continuous");
     return Task.FromResult(new ProfilerStartResponse(pid, reportSec));
   }
 
@@ -69,42 +80,103 @@ public sealed class ProfilerService(INotificationService notifications, ILogger<
   {
     CancellationTokenSource? cts;
     Task? task;
+    EventPipeSession? session;
     lock (_gate)
     {
       cts = _cts;
       task = _runTask;
+      session = _session;
       _cts = null;
       _runTask = null;
+      _session = null;
       _running = false;
     }
+    // Defensive: idempotent if RunAsync's finally already ran.
+    openBuffers.BufferOpened -= OnBufferOpened;
     cts?.Cancel();
+    // Stopping the session is what makes TraceLogEventSource.Process() return.
+    if (session != null)
+    {
+      try { await session.StopAsync(CancellationToken.None); } catch { }
+    }
     if (task != null)
     {
       try { await task; } catch { }
     }
     cts?.Dispose();
+    lock (_bucketsLock)
+    {
+      _allBuckets.Clear();
+      _lastSent.Clear();
+      _callSiteByCommandId.Clear();
+    }
     _methodLookup.Clear();
+    _indexedModules.Clear();
+    Interlocked.Exchange(ref _diagAnyEventSeen, 0);
+    Interlocked.Exchange(ref _diagDiagSourceEventSeen, 0);
+    Interlocked.Exchange(ref _diagExecutingSeen, 0);
+    Interlocked.Exchange(ref _diagExecutedSeen, 0);
+    Interlocked.Exchange(ref _diagCallSiteResolved, 0);
+    Interlocked.Exchange(ref _diagDroppedClosedBuffer, 0);
+    Interlocked.Exchange(ref _diagDroppedNoCallSite, 0);
+    Interlocked.Exchange(ref _diagBucketsAdded, 0);
   }
 
-  private const double MsPerSample = 10.0;
+  // Chunked offline ingest: open EventPipe → write to temp .nettrace → after chunk duration,
+  // stop session → convert to .etlx → walk traceLog.Events → process EF events → restart.
+  // The TraceLog real-time path silently breaks payload decoding for the DS bridge in modern
+  // .NET (events arrive with empty PayloadValues); the offline TraceLog has always worked.
+  // Per-chunk latency = ChunkDuration + ~1s for rundown/convert.
+  private static readonly TimeSpan ChunkDuration = TimeSpan.FromSeconds(2);
 
-  private sealed record ChunkResult(
-      long TotalSamples,
-      long Attributed,
-      Dictionary<(string File, int Line), long> Counts,
-      IReadOnlyList<ProfilerSqlBucket> SqlBuckets);
-
-
-  private async Task RunSingleShotAsync(int pid, TimeSpan duration, CancellationToken ct)
+  private async Task RunAsync(int pid, TimeSpan? duration, CancellationToken ct)
   {
+    var modeMessage = duration.HasValue
+        ? $"pid={pid} mode=single-shot duration={duration.Value.TotalSeconds:F1}s"
+        : $"pid={pid} mode=continuous";
     try
     {
-      await notifications.NotifyProfilerState("started", $"pid={pid} mode=single-shot duration={duration.TotalSeconds:F1}s");
-      var result = await CollectAndProcessChunkAsync(pid, duration, ct);
-      EmitDeltas(result.Counts);
-      EmitSqlBuckets(result.SqlBuckets);
+      await notifications.NotifyProfilerState("started", modeMessage);
+
+      // Hook buffer opens so freshly-opened files get a flush of their cumulative buckets.
+      openBuffers.BufferOpened += OnBufferOpened;
+
+      using var flushCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+      var flushTask = Task.Run(() => FlushLoopAsync(flushCts.Token));
+
+      try
+      {
+        if (duration.HasValue)
+        {
+          await ProcessChunkAsync(pid, duration.Value, ct);
+        }
+        else
+        {
+          while (!ct.IsCancellationRequested)
+          {
+            try { await ProcessChunkAsync(pid, ChunkDuration, ct); }
+            catch (OperationCanceledException) { break; }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+              log.LogWarning(ex, "Profiler chunk failed; ending session");
+              break;
+            }
+          }
+        }
+      }
+      finally
+      {
+        openBuffers.BufferOpened -= OnBufferOpened;
+        flushCts.Cancel();
+        try { await flushTask; } catch { }
+      }
+
+      Flush(); // emit any final buckets that didn't make the last interval
+
+      int bucketCount;
+      lock (_bucketsLock) bucketCount = _allBuckets.Count;
       await notifications.NotifyProfilerState("stopped",
-          $"samples={result.TotalSamples} attributed={result.Attributed} buckets={result.Counts.Count} sql={result.SqlBuckets.Count}");
+          ct.IsCancellationRequested ? "cancelled" : $"buckets={bucketCount}");
     }
     catch (OperationCanceledException)
     {
@@ -112,155 +184,52 @@ public sealed class ProfilerService(INotificationService notifications, ILogger<
     }
     catch (Exception ex)
     {
-      log.LogError(ex, "Profiler single-shot failed");
-      await notifications.NotifyProfilerState("error", ex.Message);
+      log.LogError(ex, "Profiler session failed");
+      try { await notifications.NotifyProfilerState("error", ex.Message); } catch { }
     }
     finally
     {
-      lock (_gate) { _running = false; _runTask = null; _cts = null; }
-    }
-  }
-
-  private async Task RunContinuousAsync(int pid, TimeSpan chunkDuration, CancellationToken ct)
-  {
-    var totals = new Dictionary<(string File, int Line), long>();
-    var sqlTotals = new Dictionary<(string File, int Line, string Key), ProfilerSqlBucket>();
-    var chunkIndex = 0;
-    var totalSamplesAllChunks = 0L;
-    try
-    {
-      await notifications.NotifyProfilerState("started",
-          $"pid={pid} mode=continuous chunk={chunkDuration.TotalSeconds:F1}s");
-
-      while (!ct.IsCancellationRequested)
+      lock (_gate)
       {
-        chunkIndex++;
-        ChunkResult chunk;
-        try
-        {
-          chunk = await CollectAndProcessChunkAsync(pid, chunkDuration, ct);
-        }
-        catch (OperationCanceledException) { break; }
-        catch (Exception ex) when (!ct.IsCancellationRequested)
-        {
-          // If the target process died, the next attach will fail — log and exit the loop.
-          log.LogWarning(ex, "Profiler chunk {N} failed, ending continuous session", chunkIndex);
-          break;
-        }
-
-        totalSamplesAllChunks += chunk.TotalSamples;
-        foreach (var (k, v) in chunk.Counts)
-        {
-          totals.TryGetValue(k, out var c);
-          totals[k] = c + v;
-        }
-
-        log.LogInformation("Profiler chunk {N}: chunkSamples={CS} chunkBuckets={CB} cumulativeSamples={TS} cumulativeBuckets={TB}",
-            chunkIndex, chunk.TotalSamples, chunk.Counts.Count, totalSamplesAllChunks, totals.Count);
-
-        if (totals.Count > 0)
-        {
-          EmitDeltas(totals);
-        }
-
-        foreach (var b in chunk.SqlBuckets)
-        {
-          var key = (b.File, b.Line, SqlAggregator.NormalizeForKey(b.SqlSample));
-          if (sqlTotals.TryGetValue(key, out var existing))
-          {
-            sqlTotals[key] = existing with
-            {
-              Count = existing.Count + b.Count,
-              TotalMs = existing.TotalMs + b.TotalMs,
-              MaxMs = Math.Max(existing.MaxMs, b.MaxMs),
-              SqlSample = b.SqlSample,
-              ParametersSample = b.ParametersSample ?? existing.ParametersSample,
-            };
-          }
-          else
-          {
-            sqlTotals[key] = b;
-          }
-        }
-        if (sqlTotals.Count > 0)
-        {
-          EmitSqlBuckets(sqlTotals.Values.ToArray());
-        }
+        _running = false;
+        _runTask = null;
+        _cts = null;
+        _session = null;
       }
-
-      await notifications.NotifyProfilerState("stopped",
-          $"chunks={chunkIndex} cumulativeSamples={totalSamplesAllChunks} buckets={totals.Count} sql={sqlTotals.Count}");
-    }
-    catch (Exception ex)
-    {
-      log.LogError(ex, "Profiler continuous mode failed");
-      await notifications.NotifyProfilerState("error", ex.Message);
-    }
-    finally
-    {
-      lock (_gate) { _running = false; _runTask = null; _cts = null; }
     }
   }
 
-  private void EmitDeltas(Dictionary<(string File, int Line), long> counts)
-  {
-    var deltas = counts.Select(kv =>
-        new ProfilerSampleDelta(kv.Key.File, kv.Key.Line, kv.Value, (long)(kv.Value * MsPerSample))).ToArray();
-    _ = notifications.NotifyProfilerSamples(deltas);
-  }
+  // Diagnostic counters — interlocked so the flush thread can read consistent values without
+  // taking the buckets lock. Logged periodically so it's obvious whether events are reaching us.
+  private long _diagAnyEventSeen;
+  private long _diagDiagSourceEventSeen;
+  private long _diagExecutingSeen;
+  private long _diagExecutedSeen;
+  private long _diagCallSiteResolved;
+  private long _diagDroppedClosedBuffer;
+  private long _diagDroppedNoCallSite;
+  private long _diagBucketsAdded;
 
-  private void EmitSqlBuckets(IReadOnlyList<ProfilerSqlBucket> buckets)
-  {
-    if (buckets.Count == 0) return;
-    _ = notifications.NotifyProfilerSqlQueries(buckets.ToArray());
-  }
+  // Set only during a chunk's offline processing pass. Used by ResolveCallSite to walk the
+  // stack via MutableTraceEventStackSource (the same path the original code used and that
+  // works for self-describing DiagnosticSource bridge events).
+  private TraceLog? _activeTraceLog;
+  private MutableTraceEventStackSource? _activeStackSource;
 
-  private async Task<ChunkResult> CollectAndProcessChunkAsync(int pid, TimeSpan duration, CancellationToken ct)
+  private async Task ProcessChunkAsync(int pid, TimeSpan duration, CancellationToken ct)
   {
     var nettrace = Path.Combine(Path.GetTempPath(), $"easydotnet-profiler-{pid}-{Guid.NewGuid():N}.nettrace");
     string? etlx = null;
     try
     {
-      // 1. Collect: open EventPipe, stream to file until duration elapses or ct is cancelled,
-      // then stop session and await rundown.
-      // Two providers: the standard sample profiler for CPU stacks, plus the DiagnosticSource→
-      // EventPipe bridge filtered to EF Core's CommandExecuted event. The FilterAndPayloadSpecs
-      // string names the payload fields we want plucked from the DiagnosticListener payload —
-      // leading "-" before a field name means "implicit (don't list)"; without it the field is
-      // explicit. We list ElapsedMilliseconds explicitly because the bridge otherwise omits it.
       var providers = new[]
       {
-        new EventPipeProvider("Microsoft-DotNETCore-SampleProfiler", EventLevel.Informational),
         new EventPipeProvider(
             "Microsoft-Diagnostics-DiagnosticSource",
             EventLevel.Verbose,
-            // Keywords from System.Diagnostics.DiagnosticSourceEventSource.Keywords:
-            //   Events                  = 0x2    (enables FilterAndPayloadSpecs parsing)
-            //   IgnoreShortCutKeywords  = 0x800  (skip auto-injected AspNetCore/EF shortcut specs)
-            // We want exactly our spec, so set both. The built-in EF shortcut targets
-            // BeforeExecuteCommand/AfterExecuteCommand which EF Core doesn't actually emit.
             keywords: 0x2 | 0x800,
             arguments: new Dictionary<string, string>
             {
-              // Spec format documented in DiagnosticSourceEventSource.cs:
-              //   Listener/EventName[@ActivityName]:[transform[;transform]*]
-              // EF 9+ surfaces the formatted SQL on a flat `LogCommandText` property; EF 8 has
-              // no such property and only exposes the raw `Command` (DbCommand). Listing
-              // explicit transforms disables implicit enumeration, so we name every field we
-              // need from BOTH shapes — fields the runtime type lacks fetch as null and the
-              // bridge drops them, so the same spec covers EF 8 and EF 10.
-              // NOTE: do NOT add @Activity2Stop here. With that suffix the bridge emits via
-              // event id 7 ("Activity2/Stop"), but TraceEvent fails to deserialize the
-              // IEnumerable<KeyValuePair> Arguments payload for that event id — args arrive
-              // empty. Plain event id 2 ("Event") works correctly.
-              // Two events per query:
-              //   * CommandExecuting fires SYNCHRONOUSLY on the calling thread, before any
-              //     await suspends — its captured stack contains the user's call site.
-              //   * CommandExecuted fires when the DB reply lands, on a Npgsql/IO continuation
-              //     thread — its stack has no user frame at all.
-              // We correlate them by CommandId (a Guid present on both event payloads). The
-              // Executing event gives us the file/line; the Executed event gives us the SQL
-              // text and Duration. Specs are newline-separated per DiagnosticSourceEventSource.
               ["FilterAndPayloadSpecs"] =
                 "Microsoft.EntityFrameworkCore/" +
                 "Microsoft.EntityFrameworkCore.Database.Command.CommandExecuting:" +
@@ -273,81 +242,50 @@ public sealed class ProfilerService(INotificationService notifications, ILogger<
                 "CommandId=CommandId"
             })
       };
+
       var client = new DiagnosticsClient(pid);
-      using (var session = await client.StartEventPipeSessionAsync(providers, requestRundown: true, token: ct).ConfigureAwait(false))
+      EventPipeSession session;
+      using (session = await client.StartEventPipeSessionAsync(providers, requestRundown: true, token: ct).ConfigureAwait(false))
       using (var fs = File.Create(nettrace))
       {
+        lock (_gate) { _session = session; }
         var copy = session.EventStream.CopyToAsync(fs, ct);
         try { await Task.Delay(duration, ct); }
         catch (OperationCanceledException) { }
         try { await session.StopAsync(CancellationToken.None); } catch { }
         try { await copy; } catch { }
       }
+      lock (_gate) { _session = null; }
 
-      // 2. Convert: nettrace → etlx (TraceLog).
+      // Offline TraceLog: decodes self-describing DS bridge payloads correctly (the real-time
+      // wrapper does not in modern .NET).
       etlx = TraceLog.CreateFromEventPipeDataFile(nettrace);
-
-      // 3. Process: build stack source via SampleProfilerThreadTimeComputer (canonical pattern
-      // from dotnet-stack and dotnet-trace report).
       using var symbolReader = new SymbolReader(TextWriter.Null) { SymbolPath = SymbolPath.MicrosoftSymbolServerPath };
       using var traceLog = new TraceLog(etlx);
       var stackSource = new MutableTraceEventStackSource(traceLog) { OnlyManagedCodeStacks = true };
-      var computer = new SampleProfilerThreadTimeComputer(traceLog, symbolReader);
-      computer.GenerateThreadTimeStacks(stackSource);
 
-      // Pre-build (and reuse across chunks) full-name → (file, line) lookup from PDBs.
+      // Pre-index PDBs for every module loaded in this chunk. Cheap because the cache survives
+      // across chunks and most modules are already indexed after the first one.
       foreach (var moduleFile in traceLog.ModuleFiles)
       {
         if (string.IsNullOrEmpty(moduleFile.FilePath)) continue;
-        TryIndexPdb(moduleFile.FilePath);
+        if (_indexedModules.TryAdd(moduleFile.FilePath, 0)) TryIndexPdb(moduleFile.FilePath);
       }
-      // Diagnostic: list non-BCL methods we indexed.
-      var userMethods = _methodLookup.Keys
-          .Where(k => !k.StartsWith("System.", StringComparison.Ordinal)
-                   && !k.StartsWith("Microsoft.", StringComparison.Ordinal)
-                   && !k.StartsWith("Internal.", StringComparison.Ordinal))
-          .Take(30).ToArray();
-      log.LogInformation("PDB indexed (non-BCL) methods: count={Count} sample=[{Sample}]",
-          userMethods.Length, string.Join(", ", userMethods));
 
-      // 4. Iterate samples: walk up to first non-pseudo frame, attribute to (file, line).
-      var counts = new Dictionary<(string File, int Line), long>();
-      var totalSamples = 0L;
-      var attributed = 0L;
-      stackSource.ForEach(sample =>
+      _activeTraceLog = traceLog;
+      _activeStackSource = stackSource;
+      try
       {
-        totalSamples++;
-        var stackIndex = sample.StackIndex;
-        while (stackIndex != StackSourceCallStackIndex.Invalid)
+        foreach (var ev in traceLog.Events)
         {
-          var frameIdx = stackSource.GetFrameIndex(stackIndex);
-          var frameName = stackSource.GetFrameName(frameIdx, false);
-          if (frameName.StartsWith("Thread (", StringComparison.Ordinal)) break;
-          if (frameName == "CPU_TIME" || frameName == "BLOCKED_TIME" || frameName == "UNMANAGED_CODE_TIME")
-          {
-            stackIndex = stackSource.GetCallerIndex(stackIndex);
-            continue;
-          }
-          var ilOffset = GetFrameIlOffset(stackSource, frameIdx, traceLog);
-          if (TryResolveFrame(frameName, ilOffset, out var fl))
-          {
-            counts.TryGetValue(fl, out var c);
-            counts[fl] = c + 1;
-            attributed++;
-            break;
-          }
-          stackIndex = stackSource.GetCallerIndex(stackIndex);
+          OnEvent(ev);
         }
-      });
-
-      // 5. Extract EF Core SQL events. The DiagnosticSource→EventPipe bridge captures a real
-      // managed call stack on each event (no time-window correlation needed) — we walk that
-      // stack via stackSource.GetCallStack and find the first user frame.
-      ResetSqlStackDiagCounter();
-      var sqlEvents = ExtractSqlEvents(traceLog, stackSource);
-      var sqlBuckets = SqlAggregator.Aggregate(sqlEvents);
-
-      return new ChunkResult(totalSamples, attributed, counts, sqlBuckets);
+      }
+      finally
+      {
+        _activeTraceLog = null;
+        _activeStackSource = null;
+      }
     }
     finally
     {
@@ -356,224 +294,299 @@ public sealed class ProfilerService(INotificationService notifications, ILogger<
     }
   }
 
-  // Pulls EF Core Command events out of the trace and produces resolved ProfilerSqlEvent records.
-  //
-  // Two-step correlation by CommandId:
-  //   1. CommandExecuting fires synchronously on the calling thread; its captured stack has the
-  //      user's call site. We resolve and stash (CommandId -> file/line) when we see it.
-  //   2. CommandExecuted fires asynchronously on an IO continuation thread with no user frames
-  //      on the stack but carries the SQL text and Duration. We look up the previously-stashed
-  //      file/line by CommandId, then emit.
-  // Falls back to walking the Executed event's own stack if no Executing event was seen for the
-  // command (e.g., the trace started mid-query).
-  private List<ProfilerSqlEvent> ExtractSqlEvents(TraceLog traceLog, MutableTraceEventStackSource stackSource)
+  private void OnEvent(TraceEvent ev)
   {
-    var results = new List<ProfilerSqlEvent>();
-    var callSiteByCommandId = new Dictionary<string, (string File, int Line)>(StringComparer.Ordinal);
-    var efEventsSeen = 0;
-    var stackResolved = 0;
+    Interlocked.Increment(ref _diagAnyEventSeen);
+    if (ev.ProviderName != "Microsoft-Diagnostics-DiagnosticSource") return;
+    Interlocked.Increment(ref _diagDiagSourceEventSeen);
+
+    var payloadEventName = ev.PayloadByName("EventName") as string;
+    var isExecuting = payloadEventName == "Microsoft.EntityFrameworkCore.Database.Command.CommandExecuting";
+    var isExecuted = payloadEventName == "Microsoft.EntityFrameworkCore.Database.Command.CommandExecuted";
+    if (!isExecuting && !isExecuted) return;
+
+    if (ev.PayloadByName("Arguments") is not System.Collections.IEnumerable enumerable) return;
+
+    if (isExecuting)
+    {
+      Interlocked.Increment(ref _diagExecutingSeen);
+      var commandId = ExtractCommandId(enumerable);
+      if (string.IsNullOrEmpty(commandId)) return;
+
+      // Always resolve and stash the call site here — the user frame is on this thread's stack.
+      // We do NOT filter on open-buffer at this point; the filter is applied at emit time so
+      // opening a buffer between Executing and Executed (or after) still surfaces the event.
+      var (file, line) = ResolveCallSite(ev);
+      if (file != "<unknown>") Interlocked.Increment(ref _diagCallSiteResolved);
+      lock (_bucketsLock)
+      {
+        _callSiteByCommandId[commandId!] = (file, line);
+      }
+      return;
+    }
+
+    // CommandExecuted
+    Interlocked.Increment(ref _diagExecutedSeen);
+    string? sql = null;
+    string? commandId2 = null;
+    double elapsedMs = 0;
+    foreach (var pair in enumerable)
+    {
+      if (pair is not IDictionary<string, object> dict) continue;
+      dict.TryGetValue("Key", out var keyObj);
+      dict.TryGetValue("Value", out var valObj);
+      var key = keyObj as string;
+      var value = valObj as string;
+      if (key is null) continue;
+      if ((key == "LogCommandText" || key == "CommandText") && !string.IsNullOrEmpty(value)) sql = value;
+      else if (key == "CommandId") commandId2 = value;
+      else if (key == "Duration" && value is not null)
+      {
+        if (TimeSpan.TryParse(value, out var ts)) elapsedMs = ts.TotalMilliseconds;
+        else if (double.TryParse(value, System.Globalization.NumberStyles.Float,
+                   System.Globalization.CultureInfo.InvariantCulture, out var ms)) elapsedMs = ms;
+      }
+    }
+    if (string.IsNullOrEmpty(sql) || string.IsNullOrEmpty(commandId2)) return;
+
+    (string File, int Line) callSite;
+    lock (_bucketsLock)
+    {
+      if (!_callSiteByCommandId.Remove(commandId2!, out callSite))
+      {
+        Interlocked.Increment(ref _diagDroppedNoCallSite);
+        return;
+      }
+    }
+
+    // Capture every event regardless of buffer state. The open-buffer filter is applied at
+    // emit time (Flush) so opening a buffer later re-emits the cumulative state for that file.
+    // Unresolved call sites still get a bucket so we can count them under "<unknown>" if a
+    // future UI wants to surface them; the flush filter just won't emit unless that file is open.
+    AddToBuckets(callSite.File, callSite.Line, sql!, elapsedMs);
+    Interlocked.Increment(ref _diagBucketsAdded);
+  }
+
+  private static string? ExtractCommandId(System.Collections.IEnumerable enumerable)
+  {
+    foreach (var pair in enumerable)
+    {
+      if (pair is not IDictionary<string, object> d) continue;
+      d.TryGetValue("Key", out var kObj);
+      d.TryGetValue("Value", out var vObj);
+      if (kObj as string == "CommandId") return vObj as string;
+    }
+    return null;
+  }
+
+  private void AddToBuckets(string file, int line, string sql, double elapsedMs)
+  {
+    var normalized = SqlAggregator.NormalizeForKey(sql);
+    var bucketId = SqlAggregator.ComputeBucketId(file, line, normalized);
+    var elapsed = (long)elapsedMs;
+    lock (_bucketsLock)
+    {
+      if (_allBuckets.TryGetValue(bucketId, out var existing))
+      {
+        _allBuckets[bucketId] = existing with
+        {
+          Count = existing.Count + 1,
+          TotalMs = existing.TotalMs + elapsed,
+          MaxMs = Math.Max(existing.MaxMs, elapsed),
+          SqlSample = sql,
+        };
+      }
+      else
+      {
+        _allBuckets[bucketId] = new ProfilerSqlBucket(
+            BucketId: bucketId,
+            File: file, Line: line,
+            SqlSample: sql, ParametersSample: null,
+            Count: 1, TotalMs: elapsed, MaxMs: elapsed);
+      }
+    }
+  }
+
+  private async Task FlushLoopAsync(CancellationToken ct)
+  {
+    var lastDiagLog = DateTime.UtcNow;
     try
     {
-      foreach (var ev in traceLog.Events)
+      while (!ct.IsCancellationRequested)
       {
-        if (ev.ProviderName != "Microsoft-Diagnostics-DiagnosticSource") continue;
-        // The bridge writes the original DiagnosticSource event name into the payload's
-        // EventName field, regardless of which EventSource event id (Event vs Activity2Stop)
-        // is used on the wire. Filter on this so spec changes don't break us.
-        var payloadEventName = ev.PayloadByName("EventName") as string;
-        var isExecuting = payloadEventName == "Microsoft.EntityFrameworkCore.Database.Command.CommandExecuting";
-        var isExecuted = payloadEventName == "Microsoft.EntityFrameworkCore.Database.Command.CommandExecuted";
-        if (!isExecuting && !isExecuted) continue;
+        try { await Task.Delay(FlushInterval, ct); }
+        catch (OperationCanceledException) { break; }
+        Flush();
 
-        var args = ev.PayloadByName("Arguments");
-        if (args is not System.Collections.IEnumerable enumerable) continue;
-
-        // For CommandExecuting: capture (CommandId -> resolved call site) for later correlation.
-        if (isExecuting)
+        // Unconditional heartbeat every 5s. Logging even when counts are zero is the whole
+        // point — if events aren't arriving at all, we need to see "any=0 diagSource=0".
+        if (DateTime.UtcNow - lastDiagLog >= TimeSpan.FromSeconds(5))
         {
-          string? executingCommandId = null;
-          foreach (var pair in enumerable)
-          {
-            if (pair is not IDictionary<string, object> d) continue;
-            d.TryGetValue("Key", out var kObj);
-            d.TryGetValue("Value", out var vObj);
-            if (kObj as string == "CommandId") { executingCommandId = vObj as string; break; }
-          }
-          if (string.IsNullOrEmpty(executingCommandId)) continue;
-          var (file, line) = ResolveEventCallSite(ev, stackSource, traceLog);
-          if (file != "<unknown>")
-            callSiteByCommandId[executingCommandId!] = (file, line);
-          continue;
+          log.LogInformation(
+              "Profiler heartbeat: any={Any} diagSource={Ds} executing={Executing} executed={Executed} callSiteResolved={Resolved} bucketsAdded={Added} droppedClosedBuffer={ClosedBuf} droppedNoCallSite={NoCs} openBuffers={Open}",
+              Interlocked.Read(ref _diagAnyEventSeen),
+              Interlocked.Read(ref _diagDiagSourceEventSeen),
+              Interlocked.Read(ref _diagExecutingSeen),
+              Interlocked.Read(ref _diagExecutedSeen),
+              Interlocked.Read(ref _diagCallSiteResolved),
+              Interlocked.Read(ref _diagBucketsAdded),
+              Interlocked.Read(ref _diagDroppedClosedBuffer),
+              Interlocked.Read(ref _diagDroppedNoCallSite),
+              openBuffers.Snapshot().Count);
+          lastDiagLog = DateTime.UtcNow;
         }
-
-        // From here on: CommandExecuted.
-        efEventsSeen++;
-
-        string? sql = null;
-        string? parameters = null;
-        string? commandId = null;
-        double elapsedMs = 0;
-        foreach (var pair in enumerable)
-        {
-          // TraceEvent surfaces each KeyValuePair from the bridge's Arguments payload as a
-          // DynamicTraceEventData+StructValue instance — a 2-entry IDictionary<string, object>
-          // with entries "Key" -> name and "Value" -> stringified value. It implements the
-          // GENERIC IDictionary<string, object>, NOT the non-generic IDictionary, so we have
-          // to access via the generic interface.
-          if (pair is not IDictionary<string, object> dict) continue;
-          dict.TryGetValue("Key", out var keyObj);
-          dict.TryGetValue("Value", out var valObj);
-          var key = keyObj as string;
-          var value = valObj as string;
-          if (key is null) continue;
-          // Top-level property names on EF Core's CommandExecutedEventData. The bridge's
-          // implicit transforms surface each one with the property name as the key.
-          // LogCommandText is the EF 9+ flat formatted-SQL property; CommandText comes from the
-          // explicit `Command.CommandText` transform we add for EF 8 (which lacks LogCommandText).
-          // Whichever the runtime emitted, take it.
-          if ((key == "LogCommandText" || key == "CommandText") && !string.IsNullOrEmpty(value)) sql = value;
-          else if (key == "CommandId") commandId = value;
-          else if (key == "Duration" && value is not null)
-          {
-            // EF emits Duration as a TimeSpan formatted string e.g. "00:00:00.0030056".
-            if (TimeSpan.TryParse(value, out var ts)) elapsedMs = ts.TotalMilliseconds;
-            else if (double.TryParse(value, System.Globalization.NumberStyles.Float,
-                       System.Globalization.CultureInfo.InvariantCulture, out var ms)) elapsedMs = ms;
-          }
-          // EF only includes parameter values when sensitive-data logging is enabled on the
-          // DbContext. LogParameterValues is the boolean indicating that mode. We can't get
-          // actual values from outside the app, so leave `parameters` null.
-        }
-        if (string.IsNullOrEmpty(sql)) continue;
-
-        // Prefer the call site captured at CommandExecuting time (synchronous, user thread).
-        // Fall back to walking this event's own stack only if we never saw a paired Executing
-        // event for this command id.
-        string resolvedFile;
-        int resolvedLine;
-        if (commandId is not null && callSiteByCommandId.TryGetValue(commandId, out var stashed))
-        {
-          resolvedFile = stashed.File;
-          resolvedLine = stashed.Line;
-          callSiteByCommandId.Remove(commandId);
-        }
-        else
-        {
-          (resolvedFile, resolvedLine) = ResolveEventCallSite(ev, stackSource, traceLog);
-        }
-        if (resolvedFile != "<unknown>") stackResolved++;
-        results.Add(new ProfilerSqlEvent(resolvedFile, resolvedLine, sql!, parameters, elapsedMs));
       }
     }
     catch (Exception ex)
     {
-      log.LogDebug(ex, "ExtractSqlEvents failed");
+      log.LogDebug(ex, "Flush loop terminated");
     }
-    if (efEventsSeen > 0)
-    {
-      log.LogDebug("Profiler chunk: ef={Ef} stack-resolved={Resolved}", efEventsSeen, stackResolved);
-    }
-    return results;
   }
 
-  [ThreadStatic] private static int _eventStackDiagThisChunk;
-  [ThreadStatic] private static int _unresolvedStackDumpsThisChunk;
-  internal static void ResetSqlStackDiagCounter()
+  private void Flush()
   {
-    _eventStackDiagThisChunk = 0;
-    _unresolvedStackDumpsThisChunk = 0;
-  }
-
-  // Walks the call stack captured with this event (TraceLog attaches stacks to EventPipe events
-  // automatically) skipping EF/BCL infrastructure frames until we hit a frame we have PDB data
-  // for. Returns ("<unknown>", 0) when the event has no stack or no user frame can be resolved.
-  private (string File, int Line) ResolveEventCallSite(TraceEvent ev, MutableTraceEventStackSource stackSource, TraceLog traceLog)
-  {
-    var traceLogStackIdx = ev.CallStackIndex();
-
-    // Per-chunk diagnostic (first 2 events per chunk): dump whether we got a real stack and,
-    // if so, the top frames so we can see why nothing resolves to user code.
-    if (++_eventStackDiagThisChunk <= 2)
+    List<ProfilerSqlBucket>? changed = null;
+    lock (_bucketsLock)
     {
-      if (traceLogStackIdx == Microsoft.Diagnostics.Tracing.Etlx.CallStackIndex.Invalid)
+      foreach (var (id, bucket) in _allBuckets)
       {
-        log.LogInformation("SQL event has no stack (CallStackIndex=Invalid)");
+        // Emit-time filter: skip buckets whose file the editor doesn't currently have open.
+        // This is the only place buffer state is consulted — ingest captures everything.
+        if (!openBuffers.IsOpen(bucket.File)) continue;
+
+        var snap = new BucketSnapshot(bucket.Count, bucket.TotalMs, bucket.MaxMs);
+        if (_lastSent.TryGetValue(id, out var prev) && prev == snap) continue;
+        _lastSent[id] = snap;
+        (changed ??= new List<ProfilerSqlBucket>()).Add(bucket);
       }
-      else
+    }
+    if (changed != null && changed.Count > 0)
+    {
+      _ = notifications.NotifyProfilerSqlQueries(changed.ToArray());
+    }
+  }
+
+  // Fires when the editor opens a file. Clears any cached "last-sent" snapshots for buckets in
+  // that file so the next flush re-emits the full cumulative state — the user sees the history
+  // of queries that ran while the buffer was closed.
+  private void OnBufferOpened(string path)
+  {
+    int cleared = 0;
+    HashSet<string>? allFilesSnapshot = null;
+    lock (_bucketsLock)
+    {
+      foreach (var (id, bucket) in _allBuckets)
       {
-        var dumpStack = stackSource.GetCallStack(traceLogStackIdx, ev);
-        var frames = new List<string>();
-        while (dumpStack != StackSourceCallStackIndex.Invalid && frames.Count < 200)
+        if (string.Equals(bucket.File, path, StringComparison.Ordinal)
+            || (OperatingSystem.IsWindows()
+                && string.Equals(bucket.File, path, StringComparison.OrdinalIgnoreCase)))
         {
-          frames.Add(stackSource.GetFrameName(stackSource.GetFrameIndex(dumpStack), false));
-          dumpStack = stackSource.GetCallerIndex(dumpStack);
+          _lastSent.Remove(id);
+          cleared++;
         }
-        log.LogInformation("SQL event stack ({Depth} frames):\n{Frames}",
-            frames.Count, string.Join("\n  ", frames));
+      }
+      if (cleared == 0 && _allBuckets.Count > 0)
+      {
+        allFilesSnapshot = new HashSet<string>(_allBuckets.Values.Select(b => b.File), StringComparer.Ordinal);
       }
     }
+    if (cleared > 0)
+    {
+      log.LogInformation("Profiler: buffer opened, cleared {N} bucket snapshot(s) for {Path}", cleared, path);
+    }
+    else if (allFilesSnapshot != null)
+    {
+      log.LogInformation(
+          "Profiler: buffer opened with no matching buckets. opened={Opened} cachedFiles=[{Files}]",
+          path, string.Join(" | ", allFilesSnapshot.Take(20)));
+    }
+  }
 
+  // Per-chunk counter — first 2 SQL events of each chunk dump their full stack walk so we can
+  // see what frames TraceLog gave us and which ones our resolver picked / skipped.
+  [ThreadStatic] private static int _stackDiagThisChunk;
+
+  // Walks the captured call stack via MutableTraceEventStackSource (offline TraceLog path).
+  // Skips EF/BCL infrastructure frames; returns the first frame our PDB cache resolves.
+  // ("<unknown>", 0) means no user frame on this stack — e.g. continuation thread post-await.
+  private (string File, int Line) ResolveCallSite(TraceEvent ev)
+  {
+    var traceLog = _activeTraceLog;
+    var stackSource = _activeStackSource;
+    if (traceLog == null || stackSource == null) return ("<unknown>", 0);
+
+    var traceLogStackIdx = ev.CallStackIndex();
     if (traceLogStackIdx == Microsoft.Diagnostics.Tracing.Etlx.CallStackIndex.Invalid)
       return ("<unknown>", 0);
 
+    var diagDump = ++_stackDiagThisChunk <= 2;
+    var diagLines = diagDump ? new List<string>() : null;
+
     var stack = stackSource.GetCallStack(traceLogStackIdx, ev);
+    (string File, int Line) chosen = ("<unknown>", 0);
     while (stack != StackSourceCallStackIndex.Invalid)
     {
       var frameIdx = stackSource.GetFrameIndex(stack);
       var frameName = stackSource.GetFrameName(frameIdx, false);
       if (frameName.StartsWith("Thread (", StringComparison.Ordinal)) break;
-      if (frameName == "CPU_TIME" || frameName == "BLOCKED_TIME" || frameName == "UNMANAGED_CODE_TIME"
-          || SqlAggregator.IsInfrastructureFrame(frameName))
-      {
-        stack = stackSource.GetCallerIndex(stack);
-        continue;
-      }
+      var isInfra = frameName == "CPU_TIME" || frameName == "BLOCKED_TIME"
+          || frameName == "UNMANAGED_CODE_TIME" || SqlAggregator.IsInfrastructureFrame(frameName);
       var ilOffset = GetFrameIlOffset(stackSource, frameIdx, traceLog);
-      if (TryResolveFrame(frameName, ilOffset, out var fl)) return fl;
+
+      string tag;
+      if (isInfra)
+      {
+        tag = "infra";
+      }
+      else if (TryResolveFrame(frameName, ilOffset, out var fl))
+      {
+        tag = $"RESOLVED -> {fl.File}:{fl.Line}";
+        if (chosen.File == "<unknown>") chosen = fl;
+      }
+      else
+      {
+        tag = "no-pdb-match";
+      }
+      diagLines?.Add($"  [{tag}] ilOffset={ilOffset} {frameName}");
+
+      if (!diagDump && chosen.File != "<unknown>") return chosen;
       stack = stackSource.GetCallerIndex(stack);
     }
-    // Couldn't resolve a user frame. Dump the full stack the first few times per chunk so we
-    // can see *why* (frame names that should have indexed but didn't, or stacks that bottom out
-    // entirely in infrastructure / EF internals — typical for async ToListAsync continuations).
-    if (++_unresolvedStackDumpsThisChunk <= 5)
+
+    if (diagDump && diagLines != null && diagLines.Count > 0)
     {
-      var dump = stackSource.GetCallStack(traceLogStackIdx, ev);
-      var frames = new List<string>();
-      while (dump != StackSourceCallStackIndex.Invalid && frames.Count < 200)
-      {
-        frames.Add(stackSource.GetFrameName(stackSource.GetFrameIndex(dump), false));
-        dump = stackSource.GetCallerIndex(dump);
-      }
-      log.LogInformation("UNRESOLVED SQL event stack ({Depth} frames):\n  {Frames}",
-          frames.Count, string.Join("\n  ", frames));
+      log.LogInformation("Stack dump (chunk event #{N}) chose={Chose}:\n{Frames}",
+          _stackDiagThisChunk, chosen.File == "<unknown>" ? "<unknown>" : $"{chosen.File}:{chosen.Line}",
+          string.Join("\n", diagLines));
     }
-    return ("<unknown>", 0);
+    return chosen;
   }
 
-  // Frame name format from MutableTraceEventStackSource (verboseName=false) is typically:
-  //   "moduleSimpleName!Namespace.Class.Method"
-  // For top-level statements: "EasyDotnet.MyItemtest!Program.<<Main>$>g__HotA|0_0"
-  // For generic methods: "Namespace.Class.Method[T](args)"
-  // For generic types: "Namespace.Class`1[T].Method(args)"
+  private static int GetFrameIlOffset(MutableTraceEventStackSource stackSource, StackSourceFrameIndex frameIdx, TraceLog traceLog)
+  {
+    try
+    {
+      var codeAddrIdx = stackSource.GetFrameCodeAddress(frameIdx);
+      if (codeAddrIdx == Microsoft.Diagnostics.Tracing.Etlx.CodeAddressIndex.Invalid) return -1;
+      return traceLog.CodeAddresses.ILOffset(codeAddrIdx);
+    }
+    catch { return -1; }
+  }
+
+  // Frame name format from TraceCodeAddress.FullMethodName is "Namespace.Class.Method".
+  // For top-level statements: "Program.<<Main>$>g__HotA|0_0"
+  // Generic methods may appear as "Namespace.Class.Method[T]".
   private bool TryResolveFrame(string frameName, int ilOffset, out (string File, int Line) fileLine)
   {
     fileLine = default;
     var bang = frameName.IndexOf('!');
     var afterBang = bang >= 0 ? frameName[(bang + 1)..] : frameName;
-    // Strip the parameter list — "Foo.Bar(int32, string)" → "Foo.Bar".
     var paren = afterBang.IndexOf('(');
     var key = paren >= 0 ? afterBang[..paren] : afterBang;
-    // Strip generic instantiations the JIT/TraceEvent inserts (`[T]`, `[T1,T2]`). PDB keys are
-    // built from metadata and have no instantiation suffix, so without this generic methods and
-    // methods declared on generic types never match.
+    // PDB keys have no instantiation suffix — strip `[T]` etc. so generics match.
     key = StripGenericInstantiations(key);
     if (!_methodLookup.TryGetValue(key, out var map) || map.Points.Length == 0) return false;
 
-    // Pick the sequence point whose IL offset is the largest value <= the frame's IL offset.
-    // This is the standard PDB lookup pattern: the SP "covers" all IL up to the next SP, so the
-    // last SP at-or-before the frame's offset is the source line currently executing. If we
-    // don't have an IL offset (pseudo-frame, missing symbol info) fall back to the first SP,
-    // which historically was the method's opening brace.
     var chosenLine = map.Points[0].Line;
     if (ilOffset >= 0)
     {
@@ -588,20 +601,6 @@ public sealed class ProfilerService(INotificationService notifications, ILogger<
     }
     fileLine = (map.File, chosenLine);
     return true;
-  }
-
-  // Pulls the IL offset off a stack frame by going through the TraceEventStackSource →
-  // CodeAddress → TraceLog method. Returns -1 for pseudo-frames (CPU_TIME etc.) and any frame
-  // the resolver couldn't attach a CodeAddress to (native, unresolved JIT).
-  private static int GetFrameIlOffset(MutableTraceEventStackSource stackSource, StackSourceFrameIndex frameIdx, TraceLog traceLog)
-  {
-    try
-    {
-      var codeAddrIdx = stackSource.GetFrameCodeAddress(frameIdx);
-      if (codeAddrIdx == Microsoft.Diagnostics.Tracing.Etlx.CodeAddressIndex.Invalid) return -1;
-      return traceLog.CodeAddresses.ILOffset(codeAddrIdx);
-    }
-    catch { return -1; }
   }
 
   private static string StripGenericInstantiations(string name)
@@ -640,8 +639,6 @@ public sealed class ProfilerService(INotificationService notifications, ILogger<
       }
       if (pdb == null) return;
 
-      // We also need the PE metadata (the .dll) to resolve method names from method tokens.
-      MetadataReader? peReader = null;
       Stream? peStream = null;
       PEReader? pe = null;
       try
@@ -649,7 +646,7 @@ public sealed class ProfilerService(INotificationService notifications, ILogger<
         peStream = File.OpenRead(modulePath);
         pe = new PEReader(peStream);
         if (!pe.HasMetadata) return;
-        peReader = pe.GetMetadataReader();
+        var peReader = pe.GetMetadataReader();
 
         foreach (var dbgHandle in pdb.MethodDebugInformation)
         {
@@ -660,12 +657,6 @@ public sealed class ProfilerService(INotificationService notifications, ILogger<
           var methodDefHandle = dbgHandle.ToDefinitionHandle();
           if (methodDefHandle.IsNil) continue;
 
-          // Collect every non-hidden sequence point. We need the full table so we can map a
-          // frame's IL offset onto the source line where the call site actually appears (e.g.
-          // an `await ToListAsync(...)` four lines into the method body) rather than the method
-          // entry. Deterministic source paths (CI, containers, `<Deterministic>true</...>`)
-          // don't resolve on this machine — pick a file that exists if possible, otherwise
-          // accept whatever the PDB embedded and let the editor side ignore it.
           var rawPoints = new List<(int ILOffset, int Line, string File)>();
           foreach (var sp in dbgInfo.GetSequencePoints())
           {
@@ -677,17 +668,17 @@ public sealed class ProfilerService(INotificationService notifications, ILogger<
           }
           if (rawPoints.Count == 0) continue;
 
+          // Deterministic source paths (CI, containers) don't resolve on this machine — prefer
+          // a file that actually exists locally, otherwise accept whatever the PDB has and let
+          // the editor side ignore mismatches.
           var preferredFile = rawPoints.Select(p => p.File).FirstOrDefault(File.Exists)
                               ?? rawPoints[0].File;
-          // Keep only SPs from the chosen file. Mixed-file methods (partials, source-link
-          // remappings) are rare; one consistent file simplifies the line-pick step.
           var points = rawPoints
               .Where(p => p.File == preferredFile)
               .OrderBy(p => p.ILOffset)
               .Select(p => (p.ILOffset, p.Line))
               .ToArray();
 
-          // Build the method's full name to match frame names.
           var fullName = BuildMethodFullName(peReader, methodDefHandle);
           if (string.IsNullOrEmpty(fullName)) continue;
           _methodLookup[fullName] = new MethodLineMap(preferredFile, points);
@@ -715,10 +706,8 @@ public sealed class ProfilerService(INotificationService notifications, ILogger<
     return $"{qualifiedType}.{methodName}";
   }
 
-  // Walks up nested type declarations so e.g. an async state machine
-  //   `EfTarget.Runner.<RunOneAsync>d__0`
-  // produces "EfTarget.Runner+<RunOneAsync>d__0" — matching the frame name format
-  // TraceEvent's MutableTraceEventStackSource emits.
+  // Async state machines etc. appear as nested types — produce e.g.
+  // "EfTarget.Runner+<RunOneAsync>d__0" to match TraceCodeAddress.FullMethodName.
   private static string BuildTypeFullName(MetadataReader reader, TypeDefinitionHandle typeHandle)
   {
     var typeDef = reader.GetTypeDefinition(typeHandle);

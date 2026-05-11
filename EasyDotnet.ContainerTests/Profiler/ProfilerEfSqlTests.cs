@@ -79,7 +79,9 @@ public sealed class ProfilerEfSqlTests : IAsyncLifetime
 
     var notifications = new RecordingNotificationService();
     var logger = new CapturingLogger<ProfilerService>();
-    await using var profiler = new ProfilerService(notifications, logger);
+    var openBuffers = new AlwaysOpenBufferService();
+    openBuffers.OnBufferOpened(querySourceFile);
+    await using var profiler = new ProfilerService(notifications, openBuffers, logger);
 
     await profiler.StartAsync(pid, durationSeconds: ProfilerDuration.TotalSeconds);
     try
@@ -98,7 +100,7 @@ public sealed class ProfilerEfSqlTests : IAsyncLifetime
       $"\nApp stdout:\n{app.SnapshotStdout()}" +
       $"\nApp stderr:\n{app.SnapshotStderr()}" +
       $"\nState transitions: {string.Join(" | ", notifications.States.Select(s => $"{s.State}:{s.Message}"))}" +
-      $"\nSample notifications: {notifications.SampleNotifications}, SQL notifications: {notifications.SqlNotifications}" +
+      $"\nSQL notifications: {notifications.SqlNotifications}" +
       $"\nProfiler log:\n{logger.Snapshot()}";
 
     var buckets = notifications.LastSqlBuckets;
@@ -132,7 +134,7 @@ public sealed class ProfilerEfSqlTests : IAsyncLifetime
     throw new TimeoutException(
       $"Profiler never reached state '{state}' within {timeout.TotalSeconds:F0}s. " +
       $"States seen: {string.Join(", ", notifications.States.Select(s => s.State))}. " +
-      $"Sql notifications: {notifications.SqlNotifications}, sample notifications: {notifications.SampleNotifications}.");
+      $"Sql notifications: {notifications.SqlNotifications}.");
   }
 
   private static SpawnedApp SpawnApp(string appBinary, string workspaceRoot)
@@ -311,21 +313,46 @@ public sealed class ProfilerEfSqlTests : IAsyncLifetime
   {
     public ConcurrentBag<(string State, string? Message)> States { get; } = new();
     public List<IReadOnlyList<ProfilerSqlBucket>> SqlEmissions { get; } = new();
-    public IReadOnlyList<ProfilerSqlBucket>? LastSqlBuckets => SqlEmissions.LastOrDefault();
+    // Cumulative view: dedup flushes only send changed buckets, so the "latest" set the test
+    // expects to see is the union keyed by BucketId, with the most recent values.
+    public IReadOnlyList<ProfilerSqlBucket>? LastSqlBuckets
+    {
+      get
+      {
+        lock (SqlEmissions)
+        {
+          if (SqlEmissions.Count == 0) return null;
+          var byId = new Dictionary<string, ProfilerSqlBucket>(StringComparer.Ordinal);
+          foreach (var emission in SqlEmissions)
+            foreach (var b in emission)
+              byId[b.BucketId] = b;
+          return byId.Values.ToArray();
+        }
+      }
+    }
     public int SqlNotifications => SqlEmissions.Count;
-    public int SampleNotifications { get; private set; }
 
     public Task NotifyProfilerSqlQueries(ProfilerSqlBucket[] buckets)
     {
       lock (SqlEmissions) SqlEmissions.Add(buckets);
       return Task.CompletedTask;
     }
-    public Task NotifyProfilerSamples(ProfilerSampleDelta[] deltas) { SampleNotifications++; return Task.CompletedTask; }
     public Task NotifyProfilerState(string state, string? message = null) { States.Add((state, message)); return Task.CompletedTask; }
 
     public Task NotifyProjectChanged(string projectPath, string? targetFrameworkMoniker = null, string configuration = "Debug") => Task.CompletedTask;
     public Task NotifyUpdateAvailable(Version currentVersion, Version availableVersion, string updateType) => Task.CompletedTask;
     public Task NotifyActiveProjectChanged(string? projectPath, string? projectName, string? launchProfile) => Task.CompletedTask;
     public Task NotifyRunningProcessesChangedAsync(RunningSessionInfo[] projects) => Task.CompletedTask;
+  }
+
+  private sealed class AlwaysOpenBufferService : IOpenBufferService
+  {
+    private readonly HashSet<string> _open = new(StringComparer.OrdinalIgnoreCase);
+    public event Action<string>? BufferOpened;
+    public event Action<string>? BufferClosed;
+    public void OnBufferOpened(string path) { lock (_open) { if (_open.Add(Path.GetFullPath(path))) BufferOpened?.Invoke(path); } }
+    public void OnBufferClosed(string path) { lock (_open) { if (_open.Remove(Path.GetFullPath(path))) BufferClosed?.Invoke(path); } }
+    public bool IsOpen(string path) { lock (_open) return _open.Contains(Path.GetFullPath(path)); }
+    public IReadOnlySet<string> Snapshot() { lock (_open) return new HashSet<string>(_open, StringComparer.OrdinalIgnoreCase); }
   }
 }

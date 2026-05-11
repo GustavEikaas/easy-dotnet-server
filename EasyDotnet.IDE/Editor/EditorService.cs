@@ -101,12 +101,13 @@ public class EditorService(
         try
         {
           var pid = await session.WaitForPidAsync(CancellationToken.None);
-          if (request.UseProfiler)
+          // Profiling decision is server-internal: attach automatically when the target's
+          // deps.json references EF Core.
+          if (EfCoreDetector.ReferencesEfCore(request.Project.ProjectDepsFilePath))
           {
-            // Attach the profiler BEFORE releasing the hook so we capture every JIT and
-            // sample from t=0. The session runs until the user process exits (durationSeconds=null);
-            // WorkspaceService.DispatchRunAsync calls ProfilerService.StopAsync on exit, which
-            // finalizes the trace and emits per-line deltas.
+            // Attach BEFORE releasing the hook so the EF DiagnosticSource bridge is live before
+            // any query fires. Session runs until the user process exits; WorkspaceService
+            // calls ProfilerService.StopAsync on exit to flush the final buckets.
             try { await profilerService.StartAsync(pid, durationSeconds: null); }
             catch (Exception) { /* fall through; resume the app even if profiler attach failed */ }
           }
