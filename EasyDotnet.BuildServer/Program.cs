@@ -40,7 +40,6 @@ static class Program
     try
     {
       var instances = MSBuildLocator.QueryVisualStudioInstances().ToList();
-
       var bestInstance = instances
           .OrderByDescending(i => i.Version)
           .FirstOrDefault();
@@ -49,12 +48,42 @@ static class Program
       {
         throw new Exception("[Error] No Visual Studio instances found.");
       }
+      var msbuildPath = bestInstance.MSBuildPath;
+      var appBaseDir = AppDomain.CurrentDomain.BaseDirectory;
+      AppDomain.CurrentDomain.AssemblyResolve += (_, resolveArgs) =>
+      {
+        var assemblyName = new System.Reflection.AssemblyName(resolveArgs.Name);
+        var fileName = assemblyName.Name + ".dll";
+
+        // Prefer assemblies we ship next to the .exe before falling back to
+        // VS's MSBuild folder. This matters when MSBuild was compiled against
+        // a higher version of e.g. System.Collections.Immutable than what we
+        // target — without this, normal probing fails on the version mismatch
+        // and we'd end up loading a stale copy from MSBuild\Current\Bin that
+        // is missing newer APIs (FrozenSet.Create(...,ReadOnlySpan<T>) etc.).
+        var localCandidate = Path.Combine(appBaseDir, fileName);
+        if (File.Exists(localCandidate))
+        {
+          Console.Error.WriteLine($"[Info] Resolved {assemblyName.Name} from {localCandidate} (local)");
+          return System.Reflection.Assembly.LoadFrom(localCandidate);
+        }
+
+        var msbuildCandidate = Path.Combine(msbuildPath, fileName);
+        if (File.Exists(msbuildCandidate))
+        {
+          Console.Error.WriteLine($"[Info] Resolved {assemblyName.Name} from {msbuildCandidate}");
+          return System.Reflection.Assembly.LoadFrom(msbuildCandidate);
+        }
+        return null;
+      };
+
 
       MSBuildLocator.RegisterInstance(bestInstance);
 
       Console.Error.WriteLine($"[Info] BuildServer running on .NET Framework {Environment.Version}");
       Console.Error.WriteLine($"[Info] Registered MSBuild: {bestInstance.Name} (v{bestInstance.Version})");
       Console.Error.WriteLine($"[Info] MSBuild Path: {bestInstance.MSBuildPath}");
+
       return new MsBuildInstance(bestInstance.Name, $"net{bestInstance.Version.Major}.0", bestInstance.Version, bestInstance.MSBuildPath, bestInstance.VisualStudioRootPath, MsBuildInstanceOrigin.VisualStudio);
     }
     catch (Exception ex)

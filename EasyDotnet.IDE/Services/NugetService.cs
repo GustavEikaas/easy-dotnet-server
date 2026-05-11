@@ -1,5 +1,6 @@
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Models.MsBuild.Project;
+using EasyDotnet.Nuget;
 using Microsoft.Extensions.Logging;
 using NuGet.Common;
 using NuGet.Configuration;
@@ -13,7 +14,12 @@ namespace EasyDotnet.Services;
 
 public sealed record RestoreResult(bool Success, IAsyncEnumerable<string> Errors, IAsyncEnumerable<string> Warnings);
 
-public class NugetService(IClientService clientService, ILogger<NugetService> logger, IProcessQueue processLimiter)
+public class NugetService(
+    IClientService clientService,
+    ILogger<NugetService> logger,
+    IProcessQueue processLimiter,
+    INugetSearchService searchService,
+    INugetSettingsProvider settingsProvider)
 {
 
   private static (string Command, string Arguments) GetCommandAndArguments(
@@ -44,106 +50,24 @@ public class NugetService(IClientService clientService, ILogger<NugetService> lo
     return new RestoreResult(success && errors.Count == 0, errors.AsAsyncEnumerable(), warnings);
   }
 
-  public ISettings GetSettings() => Settings.LoadDefaultSettings(
-        root:
-          clientService.ProjectInfo?.RootDir ??
-            (clientService.ProjectInfo?.SolutionFile != null ?
-              Path.GetDirectoryName(Path.GetFullPath(clientService.ProjectInfo.SolutionFile)) :
-                Directory.GetCurrentDirectory()));
+  public ISettings GetSettings() => settingsProvider.GetSettings();
 
-  public List<PackageSource> GetSources()
-  {
-    var sourceProvider = new PackageSourceProvider(GetSettings());
-    var sources = sourceProvider.LoadPackageSources();
-    return [.. sources];
-  }
+  public List<PackageSource> GetSources() => searchService.GetSources();
 
-  public async Task<IEnumerable<NuGetVersion>> GetPackageVersionsAsync(
+  public Task<IReadOnlyList<NuGetVersion>> GetPackageVersionsAsync(
       string packageId,
       CancellationToken cancellationToken,
       bool includePrerelease = false,
       List<string>? sourceNames = null)
-  {
-    DefaultCredentialServiceUtility.SetupDefaultCredentialService(NullLogger.Instance, nonInteractive: true);
-    var nugetLogger = NullLogger.Instance;
+      => searchService.GetVersionsAsync(packageId, includePrerelease, cancellationToken, sourceNames);
 
-    using var cache = new SourceCacheContext();
-
-    var sources = (sourceNames is { Count: > 0 }
-        ? GetSources().Where(s => sourceNames.Contains(s.Name))
-        : GetSources())
-        .ToList();
-
-    var versionTasks = sources.Select(async source =>
-    {
-      try
-      {
-        var repo = Repository.Factory.GetCoreV3(source.Source);
-        var resource = await repo.GetResourceAsync<FindPackageByIdResource>(cancellationToken);
-        var versions = await resource.GetAllVersionsAsync(packageId, cache, nugetLogger, cancellationToken);
-
-        return [.. versions.Where(v => includePrerelease || !v.IsPrerelease)];
-      }
-      catch (Exception e)
-      {
-        logger.LogError("Failed to get package versions in source {name}: {ex}", source.Name, e);
-        return Enumerable.Empty<NuGetVersion>();
-      }
-    });
-
-    var versionLists = await Task.WhenAll(versionTasks);
-
-    return versionLists
-        .SelectMany(v => v)
-        .Distinct()
-        .OrderByDescending(v => v);
-  }
-
-  public async Task<Dictionary<string, IEnumerable<IPackageSearchMetadata>>> SearchAllSourcesByNameAsync(
-        string searchTerm,
-        CancellationToken cancellationToken,
-        int take = 10,
-        bool includePrerelease = false,
-        List<string>? sourceNames = null)
-  {
-    DefaultCredentialServiceUtility.SetupDefaultCredentialService(NullLogger.Instance, nonInteractive: true);
-    var provider = Repository.Provider.GetCoreV3();
-
-    var sourceProvider = new PackageSourceProvider(GetSettings());
-    var allSources = sourceProvider.LoadPackageSources().Where(s => s.IsEnabled);
-
-    var selectedSources = sourceNames == null ? allSources : allSources.Where(s => sourceNames.Contains(s.Name, StringComparer.OrdinalIgnoreCase));
-
-    var taskMap = selectedSources.ToDictionary(
-        source => source.Name,
-        async source =>
-        {
-          try
-          {
-            var repo = new SourceRepository(source, provider);
-            var search = await repo.GetResourceAsync<PackageSearchResource>();
-
-            return await search.SearchAsync(
-                    searchTerm,
-                    new SearchFilter(includePrerelease),
-                    skip: 0,
-                    take: take,
-                    log: NullLogger.Instance,
-                    cancellationToken: cancellationToken);
-          }
-          catch (Exception e)
-          {
-            logger.LogError("Failed to search packages in source {name}: {ex}", source.Name, e);
-            return [];
-          }
-        });
-
-    await Task.WhenAll(taskMap.Values);
-
-    return taskMap.ToDictionary(
-        kvp => kvp.Key,
-        kvp => kvp.Value.Result);
-  }
+  public Task<IReadOnlyDictionary<string, IReadOnlyList<IPackageSearchMetadata>>> SearchAllSourcesByNameAsync(
+      string searchTerm,
+      CancellationToken cancellationToken,
+      int take = 10,
+      bool includePrerelease = false,
+      List<string>? sourceNames = null)
+      => searchService.SearchAllSourcesAsync(searchTerm, take, includePrerelease, cancellationToken, sourceNames);
 
   public async Task<bool> PushPackageAsync(List<string> packages, string sourceUrl, string? apiKey)
   {

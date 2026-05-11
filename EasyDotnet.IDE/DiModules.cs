@@ -31,6 +31,7 @@ using EasyDotnet.IDE.TestRunner.Service;
 using EasyDotnet.IDE.TestRunner.Store;
 using EasyDotnet.IDE.Utils;
 using EasyDotnet.IDE.Workspace.Services;
+using EasyDotnet.Nuget;
 using EasyDotnet.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -97,6 +98,7 @@ public static class DiModules
     services.AddSingleton<WorkspacePreBuildService>();
     services.AddSingleton<WorkspaceSessionRegistry>();
     services.AddSingleton<WorkspaceDebugAttachService>();
+    services.AddSingleton<WorkspaceStopService>();
     services.AddSingleton<NodeRegistry>();
     services.AddSingleton<StatusDispatcher>();
     services.AddSingleton<DetailStore>();
@@ -104,7 +106,8 @@ public static class DiModules
     services.AddSingleton<GlobalOperationLock>();
     services.AddSingleton<OperationExecutor>();
     services.AddSingleton<AdapterResolver>();
-    services.AddSingleton<VsTestAdapter>();
+    services.AddTransient<VsTestAdapter>();
+    services.AddSingleton<Func<VsTestAdapter>>(x => () => x.GetRequiredService<VsTestAdapter>());
     services.AddSingleton<MtpAdapter>();
     services.AddSingleton<MtpClientFactory>();
 
@@ -117,6 +120,16 @@ public static class DiModules
     services.AddTransient<ILaunchProfileService, LaunchProfileService>();
     services.AddTransient<INotificationService, NotificationService>();
     services.AddTransient<NugetService>();
+    services.AddTransient<INugetSettingsProvider>(sp =>
+    {
+      var clientService = sp.GetRequiredService<IClientService>();
+      return new DefaultNugetSettingsProvider(() =>
+          clientService.ProjectInfo?.RootDir ??
+            (clientService.ProjectInfo?.SolutionFile != null
+              ? Path.GetDirectoryName(Path.GetFullPath(clientService.ProjectInfo.SolutionFile))
+              : null));
+    });
+    services.AddTransient<INugetSearchService, NugetSearchService>();
     services.AddPackageManager();
     services.AddTransient<OutdatedService>();
     services.AddTransient<GlobalJsonService>();

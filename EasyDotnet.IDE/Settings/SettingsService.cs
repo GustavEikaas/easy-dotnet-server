@@ -15,6 +15,7 @@ public class SettingsService(
     IClientService clientService,
     ILaunchProfileService launchProfileService,
     IBuildHostManager buildHostManager,
+    INotificationService notifications,
     ILogger<SettingsService> logger)
 {
 
@@ -78,6 +79,7 @@ public class SettingsService(
 
     settings.Defaults.StartupProject = projectPath;
     SaveSolutionSettings(sln, settings);
+    _ = PushActiveProjectChangedAsync();
   }
 
   public string? GetDefaultStartupProject()
@@ -163,6 +165,26 @@ public class SettingsService(
     var settings = GetOrCreateProjectSettings(projectPath);
     settings.LaunchProfile = launchProfile;
     SaveProjectSettings(projectPath, settings);
+
+    if (string.Equals(projectPath, GetDefaultStartupProject(), StringComparison.Ordinal))
+    {
+      _ = PushActiveProjectChangedAsync();
+    }
+  }
+
+  public Task PushActiveProjectChangedAsync()
+  {
+    var startupProject = GetDefaultStartupProject();
+    string? launchProfile = null;
+    string? projectName = null;
+
+    if (startupProject is not null)
+    {
+      projectName = Path.GetFileNameWithoutExtension(startupProject);
+      launchProfile = GetOrCreateProjectSettings(startupProject).LaunchProfile;
+    }
+
+    return notifications.NotifyActiveProjectChanged(startupProject, projectName, launchProfile);
   }
 
   public async Task<ProjectSettings?> GetValidatedProjectSettings(string projectPath, CancellationToken cancellationToken)

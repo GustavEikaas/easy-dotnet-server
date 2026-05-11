@@ -2,35 +2,40 @@ using System.IO.Pipes;
 using System.Text.Json;
 using EasyDotnet.AppWrapper;
 using EasyDotnet.AppWrapper.Contracts;
+using Spectre.Console;
 using StreamJsonRpc;
 
 var pipeName = ParsePipe(args) ?? throw new InvalidOperationException("No --pipe argument provided.");
 
 await using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
 
-Console.Error.WriteLine($"[AppWrapper] Connecting to pipe: {pipeName}");
-await ConnectWithRetryAsync(pipe, TimeSpan.FromSeconds(10));
-Console.Error.WriteLine("[AppWrapper] Connected.");
-
-var formatter = new SystemTextJsonFormatter
-{
-  JsonSerializerOptions = new JsonSerializerOptions
+var (rpc, handler) = await AnsiConsole.Status()
+  .StartAsync("Connecting...", async ctx =>
   {
-    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-  }
-};
+    await ConnectWithRetryAsync(pipe, TimeSpan.FromSeconds(10));
+    ctx.Status = "Connected.";
 
-var rpc = new JsonRpc(new HeaderDelimitedMessageHandler(pipe, pipe, formatter));
-var handler = new AppWrapperHandler(rpc);
-rpc.AddLocalRpcTarget(handler);
-rpc.StartListening();
+    var formatter = new SystemTextJsonFormatter
+    {
+      JsonSerializerOptions = new JsonSerializerOptions
+      {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+      }
+    };
 
-await rpc.NotifyWithParameterObjectAsync("appWrapper/initialize", new AppWrapperInitInfo(Environment.ProcessId));
-Console.Error.WriteLine("[AppWrapper] Initialized. Waiting for commands.");
+    var rpc = new JsonRpc(new HeaderDelimitedMessageHandler(pipe, pipe, formatter));
+    var handler = new AppWrapperHandler(rpc);
+    rpc.AddLocalRpcTarget(handler);
+    rpc.StartListening();
+
+    ctx.Status = "Initialized.";
+    await rpc.NotifyWithParameterObjectAsync("appWrapper/initialize", new AppWrapperInitInfo(Environment.ProcessId));
+
+    return (rpc, handler);
+  });
 
 await rpc.Completion;
 
-Console.Error.WriteLine("[AppWrapper] IDE connection closed. Tearing down.");
 handler.KillCurrentProcess();
 
 static string? ParsePipe(string[] args)

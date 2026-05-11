@@ -1,9 +1,10 @@
+using EasyDotnet.ProjXLanguageServer.Services;
 using Microsoft.VisualStudio.LanguageServer.Protocol;
 using StreamJsonRpc;
 
 namespace EasyDotnet.ProjXLanguageServer.Handlers;
 
-public class InitializeHandler : BaseController
+public class InitializeHandler(ISemanticTokensService semanticTokensService) : BaseController
 {
   [JsonRpcMethod("initialize", UseSingleObjectParameterDeserialization = true)]
   public Task<InitializeResult> InitializeAsync(InitializeParams param)
@@ -15,12 +16,27 @@ public class InitializeHandler : BaseController
         CompletionProvider = new CompletionOptions
         {
           ResolveProvider = true,
-          TriggerCharacters = ["<"]
+          TriggerCharacters = ["<", ">", "\""]
         },
         TextDocumentSync = new TextDocumentSyncOptions
         {
           OpenClose = true,
           Change = TextDocumentSyncKind.Full
+        },
+        HoverProvider = true,
+        DefinitionProvider = true,
+        CodeActionProvider = true,
+        DocumentFormattingProvider = true,
+        SignatureHelpProvider = new SignatureHelpOptions
+        {
+          TriggerCharacters = ["\"", "="],
+          RetriggerCharacters = ["\""],
+        },
+        SemanticTokensOptions = new SemanticTokensOptions
+        {
+          Legend = semanticTokensService.Legend,
+          Full = true,
+          Range = false,
         }
       }
     };
@@ -31,7 +47,6 @@ public class InitializeHandler : BaseController
   [JsonRpcMethod("initialized")]
   public void Initialized(InitializedParams param)
   {
-
   }
 
   [JsonRpcMethod("shutdown")]

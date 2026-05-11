@@ -7,9 +7,9 @@ namespace EasyDotnet.IDE.TestRunner.Adapters;
 /// VsTestAdapters are kept alive (warm wrapper) until the project is invalidated.
 /// MtpAdapters are stateless and created fresh per call.
 /// </summary>
-public class AdapterResolver(MtpAdapter mtpAdapter, VsTestAdapter vsTestAdapter)
+public class AdapterResolver(MtpAdapter mtpAdapter, Func<VsTestAdapter> vsTestAdapterFactory)
 {
-  // Keyed by project node ID — one warm VsTestAdapter per project TFM
+  // Keyed by project path + TFM — one warm VsTestAdapter per project variant.
   private readonly Dictionary<string, VsTestAdapter> _vsTestAdapters = [];
 
   public ITestAdapter Resolve(ValidatedDotnetProject project)
@@ -19,10 +19,11 @@ public class AdapterResolver(MtpAdapter mtpAdapter, VsTestAdapter vsTestAdapter)
       return mtpAdapter;
     }
 
-    if (!_vsTestAdapters.TryGetValue(project.ProjectFullPath, out var adapter))
+    var key = BuildKey(project.ProjectFullPath, project.TargetFramework);
+    if (!_vsTestAdapters.TryGetValue(key, out var adapter))
     {
-      _vsTestAdapters[project.ProjectFullPath] = vsTestAdapter;
-      return vsTestAdapter;
+      adapter = vsTestAdapterFactory();
+      _vsTestAdapters[key] = adapter;
     }
 
     return adapter;
@@ -34,8 +35,18 @@ public class AdapterResolver(MtpAdapter mtpAdapter, VsTestAdapter vsTestAdapter)
   /// </summary>
   public async Task InvalidateAsync(string projectPath)
   {
-    if (_vsTestAdapters.Remove(projectPath, out var adapter))
-      await adapter.DisposeAsync();
+    var prefix = BuildPrefix(projectPath);
+    var keys = _vsTestAdapters.Keys
+        .Where(k => k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        .ToList();
+
+    foreach (var key in keys)
+    {
+      if (_vsTestAdapters.Remove(key, out var adapter))
+      {
+        await adapter.DisposeAsync();
+      }
+    }
   }
 
   public async Task InvalidateAllAsync()
@@ -44,4 +55,10 @@ public class AdapterResolver(MtpAdapter mtpAdapter, VsTestAdapter vsTestAdapter)
       await adapter.DisposeAsync();
     _vsTestAdapters.Clear();
   }
+
+  private static string BuildKey(string projectPath, string targetFramework) =>
+      $"{projectPath}::{targetFramework}";
+
+  private static string BuildPrefix(string projectPath) =>
+      $"{projectPath}::";
 }

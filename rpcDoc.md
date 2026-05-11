@@ -74,6 +74,13 @@
 
 **Returns:** `Task`
 
+### `workspace/stop`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | WorkspaceStopRequest |   |
+
+**Returns:** `Task`
+
 ### `workspace/test`
 | Parameter | Type | Optional |
 |-----------|------|----------|
@@ -159,7 +166,7 @@
 |-----------|------|----------|
 | request | SyncFileRequest |   |
 
-**Returns:** `SyncFileResult`
+**Returns:** `Task<SyncFileResult>`
 
 ---
 

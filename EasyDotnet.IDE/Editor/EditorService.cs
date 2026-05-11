@@ -66,7 +66,7 @@ public class EditorService(
 
   public async Task<Guid> StartRunProjectAsync(RunProjectRequest request, CancellationToken ct = default)
   {
-    var guid = editorProcessManagerService.RegisterJob(TerminalSlot.LongRunning);
+    var guid = editorProcessManagerService.RegisterJob();
     var session = startupHookService.CreateSession(request.EnvironmentVariables);
 
     var command = BuildRunCommand(request, session.EnvironmentVariables);
@@ -80,13 +80,15 @@ public class EditorService(
       }
       else
       {
-        await jsonRpc.InvokeWithParameterObjectAsync("runCommandManaged", new TrackedJob(guid, command), ct);
+        var projectName = request.Project.ProjectName ?? Path.GetFileNameWithoutExtension(request.Project.MSBuildProjectFullPath);
+        var slotId = $"run:{projectName}";
+        await jsonRpc.InvokeWithParameterObjectAsync("runCommandManaged", new TrackedJob(guid, command, slotId), ct);
       }
     }
     catch (Exception e)
     {
       await session.DisposeAsync();
-      editorProcessManagerService.SetFailedToStart(guid, TerminalSlot.LongRunning, e.Message);
+      editorProcessManagerService.SetFailedToStart(guid, null, e.Message);
       throw;
     }
 

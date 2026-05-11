@@ -194,8 +194,12 @@ public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService c
   {
     public static string GetBuildServerFramework()
     {
+#if DEBUG
+      return Path.Join(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!, "../../../../EasyDotnet.BuildServer/bin/Debug/net472/EasyDotnet.BuildServer.exe");
+#else
       var basedir = GetBaseDir();
       return Path.Combine(basedir, "net472", "EasyDotnet.BuildServer.exe");
+#endif
     }
 
     public static string GetBuildServerCore()
