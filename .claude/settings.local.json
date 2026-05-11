@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:rafaelldi.github.io)",
+      "Read(//tmp/check_ef/**)",
+      "Bash(dotnet run *)"
+    ]
+  }
+}

@@ -12,6 +12,7 @@ public sealed record RunningProcessesChangedNotification(RunningSessionInfo[] Pr
 public sealed record RunningSessionInfo(string Name, bool IsDebugging);
 public sealed record ProfilerSamplesNotification(ProfilerSampleDelta[] Deltas);
 public sealed record ProfilerStateNotification(string State, string? Message);
+public sealed record ProfilerSqlQueriesNotification(ProfilerSqlBucket[] Buckets);
 
 public class NotificationService(JsonRpc jsonRpc) : INotificationService
 {
@@ -32,4 +33,7 @@ public class NotificationService(JsonRpc jsonRpc) : INotificationService
 
   [RpcNotification("profiler/state")]
   public async Task NotifyProfilerState(string state, string? message = null) => await jsonRpc.NotifyWithParameterObjectAsync("profiler/state", new ProfilerStateNotification(state, message));
+
+  [RpcNotification("profiler/sql-queries")]
+  public async Task NotifyProfilerSqlQueries(ProfilerSqlBucket[] buckets) => await jsonRpc.NotifyWithParameterObjectAsync("profiler/sql-queries", new ProfilerSqlQueriesNotification(buckets));
 }

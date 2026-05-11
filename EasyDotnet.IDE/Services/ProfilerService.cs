@@ -17,6 +17,7 @@ public sealed record ProfilerSampleDelta(string File, int Line, long Samples, lo
 public sealed record ProfilerStartRequest(int Pid, double? DurationSeconds = null);
 public sealed record ProfilerStartResponse(int Pid, double DurationSeconds);
 
+
 /// <summary>
 /// Single-chunk profiler spike. Mirrors dotnet-stack report:
 ///   open EventPipeSession (SampleProfiler) → stream to temp .nettrace → stop after duration
@@ -84,7 +85,12 @@ public sealed class ProfilerService(INotificationService notifications, ILogger<
 
   private const double MsPerSample = 10.0;
 
-  private sealed record ChunkResult(long TotalSamples, long Attributed, Dictionary<(string File, int Line), long> Counts);
+  private sealed record ChunkResult(
+      long TotalSamples,
+      long Attributed,
+      Dictionary<(string File, int Line), long> Counts,
+      IReadOnlyList<ProfilerSqlBucket> SqlBuckets);
+
 
   private async Task RunSingleShotAsync(int pid, TimeSpan duration, CancellationToken ct)
   {
@@ -93,8 +99,9 @@ public sealed class ProfilerService(INotificationService notifications, ILogger<
       await notifications.NotifyProfilerState("started", $"pid={pid} mode=single-shot duration={duration.TotalSeconds:F1}s");
       var result = await CollectAndProcessChunkAsync(pid, duration, ct);
       EmitDeltas(result.Counts);
+      EmitSqlBuckets(result.SqlBuckets);
       await notifications.NotifyProfilerState("stopped",
-          $"samples={result.TotalSamples} attributed={result.Attributed} buckets={result.Counts.Count}");
+          $"samples={result.TotalSamples} attributed={result.Attributed} buckets={result.Counts.Count} sql={result.SqlBuckets.Count}");
     }
     catch (OperationCanceledException)
     {
@@ -114,6 +121,7 @@ public sealed class ProfilerService(INotificationService notifications, ILogger<
   private async Task RunContinuousAsync(int pid, TimeSpan chunkDuration, CancellationToken ct)
   {
     var totals = new Dictionary<(string File, int Line), long>();
+    var sqlTotals = new Dictionary<(string File, int Line, string Key), ProfilerSqlBucket>();
     var chunkIndex = 0;
     var totalSamplesAllChunks = 0L;
     try
@@ -151,10 +159,34 @@ public sealed class ProfilerService(INotificationService notifications, ILogger<
         {
           EmitDeltas(totals);
         }
+
+        foreach (var b in chunk.SqlBuckets)
+        {
+          var key = (b.File, b.Line, SqlAggregator.NormalizeForKey(b.SqlSample));
+          if (sqlTotals.TryGetValue(key, out var existing))
+          {
+            sqlTotals[key] = existing with
+            {
+              Count = existing.Count + b.Count,
+              TotalMs = existing.TotalMs + b.TotalMs,
+              MaxMs = Math.Max(existing.MaxMs, b.MaxMs),
+              SqlSample = b.SqlSample,
+              ParametersSample = b.ParametersSample ?? existing.ParametersSample,
+            };
+          }
+          else
+          {
+            sqlTotals[key] = b;
+          }
+        }
+        if (sqlTotals.Count > 0)
+        {
+          EmitSqlBuckets(sqlTotals.Values.ToArray());
+        }
       }
 
       await notifications.NotifyProfilerState("stopped",
-          $"chunks={chunkIndex} cumulativeSamples={totalSamplesAllChunks} buckets={totals.Count}");
+          $"chunks={chunkIndex} cumulativeSamples={totalSamplesAllChunks} buckets={totals.Count} sql={sqlTotals.Count}");
     }
     catch (Exception ex)
     {
@@ -174,6 +206,12 @@ public sealed class ProfilerService(INotificationService notifications, ILogger<
     _ = notifications.NotifyProfilerSamples(deltas);
   }
 
+  private void EmitSqlBuckets(IReadOnlyList<ProfilerSqlBucket> buckets)
+  {
+    if (buckets.Count == 0) return;
+    _ = notifications.NotifyProfilerSqlQueries(buckets.ToArray());
+  }
+
   private async Task<ChunkResult> CollectAndProcessChunkAsync(int pid, TimeSpan duration, CancellationToken ct)
   {
     var nettrace = Path.Combine(Path.GetTempPath(), $"easydotnet-profiler-{pid}-{Guid.NewGuid():N}.nettrace");
@@ -182,7 +220,41 @@ public sealed class ProfilerService(INotificationService notifications, ILogger<
     {
       // 1. Collect: open EventPipe, stream to file until duration elapses or ct is cancelled,
       // then stop session and await rundown.
-      var providers = new[] { new EventPipeProvider("Microsoft-DotNETCore-SampleProfiler", EventLevel.Informational) };
+      // Two providers: the standard sample profiler for CPU stacks, plus the DiagnosticSource→
+      // EventPipe bridge filtered to EF Core's CommandExecuted event. The FilterAndPayloadSpecs
+      // string names the payload fields we want plucked from the DiagnosticListener payload —
+      // leading "-" before a field name means "implicit (don't list)"; without it the field is
+      // explicit. We list ElapsedMilliseconds explicitly because the bridge otherwise omits it.
+      var providers = new[]
+      {
+        new EventPipeProvider("Microsoft-DotNETCore-SampleProfiler", EventLevel.Informational),
+        new EventPipeProvider(
+            "Microsoft-Diagnostics-DiagnosticSource",
+            EventLevel.Verbose,
+            // Keywords from System.Diagnostics.DiagnosticSourceEventSource.Keywords:
+            //   Events                  = 0x2    (enables FilterAndPayloadSpecs parsing)
+            //   IgnoreShortCutKeywords  = 0x800  (skip auto-injected AspNetCore/EF shortcut specs)
+            // We want exactly our spec, so set both. The built-in EF shortcut targets
+            // BeforeExecuteCommand/AfterExecuteCommand which EF Core doesn't actually emit.
+            keywords: 0x2 | 0x800,
+            arguments: new Dictionary<string, string>
+            {
+              // Spec format documented in DiagnosticSourceEventSource.cs:
+              //   Listener/EventName[@ActivityName]:[transform[;transform]*]
+              // No explicit transforms: rely on implicit transforms, which enumerate all
+              // top-level properties of the payload (CommandExecutedEventData) by name. EF
+              // surfaces the formatted SQL as a flat `LogCommandText` string — explicit nested
+              // paths like `Command.CommandText` return null because the bridge can't traverse
+              // DbCommand through reflection cleanly, and the bridge drops null values.
+              // NOTE: do NOT add @Activity2Stop here. With that suffix the bridge emits via
+              // event id 7 ("Activity2/Stop"), but TraceEvent fails to deserialize the
+              // IEnumerable<KeyValuePair> Arguments payload for that event id — args arrive
+              // empty. Plain event id 2 ("Event") works correctly.
+              ["FilterAndPayloadSpecs"] =
+                "Microsoft.EntityFrameworkCore/" +
+                "Microsoft.EntityFrameworkCore.Database.Command.CommandExecuted:"
+            })
+      };
       var client = new DiagnosticsClient(pid);
       using (var session = await client.StartEventPipeSessionAsync(providers, requestRundown: true, token: ct).ConfigureAwait(false))
       using (var fs = File.Create(nettrace))
@@ -211,6 +283,14 @@ public sealed class ProfilerService(INotificationService notifications, ILogger<
         if (string.IsNullOrEmpty(moduleFile.FilePath)) continue;
         TryIndexPdb(moduleFile.FilePath);
       }
+      // Diagnostic: list non-BCL methods we indexed.
+      var userMethods = _methodLookup.Keys
+          .Where(k => !k.StartsWith("System.", StringComparison.Ordinal)
+                   && !k.StartsWith("Microsoft.", StringComparison.Ordinal)
+                   && !k.StartsWith("Internal.", StringComparison.Ordinal))
+          .Take(30).ToArray();
+      log.LogInformation("PDB indexed (non-BCL) methods: count={Count} sample=[{Sample}]",
+          userMethods.Length, string.Join(", ", userMethods));
 
       // 4. Iterate samples: walk up to first non-pseudo frame, attribute to (file, line).
       var counts = new Dictionary<(string File, int Line), long>();
@@ -241,13 +321,144 @@ public sealed class ProfilerService(INotificationService notifications, ILogger<
         }
       });
 
-      return new ChunkResult(totalSamples, attributed, counts);
+      // 5. Extract EF Core SQL events. The DiagnosticSource→EventPipe bridge captures a real
+      // managed call stack on each event (no time-window correlation needed) — we walk that
+      // stack via stackSource.GetCallStack and find the first user frame.
+      ResetSqlStackDiagCounter();
+      var sqlEvents = ExtractSqlEvents(traceLog, stackSource);
+      var sqlBuckets = SqlAggregator.Aggregate(sqlEvents);
+
+      return new ChunkResult(totalSamples, attributed, counts, sqlBuckets);
     }
     finally
     {
       try { if (File.Exists(nettrace)) File.Delete(nettrace); } catch { }
       try { if (etlx != null && File.Exists(etlx)) File.Delete(etlx); } catch { }
     }
+  }
+
+  // Pulls EF Core CommandExecuted events out of the trace, walks the call stack the runtime
+  // captured at the moment each event fired, and produces resolved ProfilerSqlEvent records.
+  // No time-window correlation — the event's own stack is the authoritative call site.
+  private List<ProfilerSqlEvent> ExtractSqlEvents(TraceLog traceLog, MutableTraceEventStackSource stackSource)
+  {
+    var results = new List<ProfilerSqlEvent>();
+    var efEventsSeen = 0;
+    var stackResolved = 0;
+    try
+    {
+      foreach (var ev in traceLog.Events)
+      {
+        if (ev.ProviderName != "Microsoft-Diagnostics-DiagnosticSource") continue;
+        // The bridge writes the original DiagnosticSource event name into the payload's
+        // EventName field, regardless of which EventSource event id (Event vs Activity2Stop)
+        // is used on the wire. Filter on this so spec changes don't break us.
+        var payloadEventName = ev.PayloadByName("EventName") as string;
+        if (payloadEventName != "Microsoft.EntityFrameworkCore.Database.Command.CommandExecuted") continue;
+        efEventsSeen++;
+
+        var args = ev.PayloadByName("Arguments");
+        if (args is not System.Collections.IEnumerable enumerable) continue;
+
+        string? sql = null;
+        string? parameters = null;
+        double elapsedMs = 0;
+        foreach (var pair in enumerable)
+        {
+          // TraceEvent surfaces each KeyValuePair from the bridge's Arguments payload as a
+          // DynamicTraceEventData+StructValue instance — a 2-entry IDictionary<string, object>
+          // with entries "Key" -> name and "Value" -> stringified value. It implements the
+          // GENERIC IDictionary<string, object>, NOT the non-generic IDictionary, so we have
+          // to access via the generic interface.
+          if (pair is not IDictionary<string, object> dict) continue;
+          dict.TryGetValue("Key", out var keyObj);
+          dict.TryGetValue("Value", out var valObj);
+          var key = keyObj as string;
+          var value = valObj as string;
+          if (key is null) continue;
+          // Top-level property names on EF Core's CommandExecutedEventData. The bridge's
+          // implicit transforms surface each one with the property name as the key.
+          if (key == "LogCommandText") sql = value;
+          else if (key == "Duration" && value is not null)
+          {
+            // EF emits Duration as a TimeSpan formatted string e.g. "00:00:00.0030056".
+            if (TimeSpan.TryParse(value, out var ts)) elapsedMs = ts.TotalMilliseconds;
+            else if (double.TryParse(value, System.Globalization.NumberStyles.Float,
+                       System.Globalization.CultureInfo.InvariantCulture, out var ms)) elapsedMs = ms;
+          }
+          // EF only includes parameter values when sensitive-data logging is enabled on the
+          // DbContext. LogParameterValues is the boolean indicating that mode. We can't get
+          // actual values from outside the app, so leave `parameters` null.
+        }
+        if (string.IsNullOrEmpty(sql)) continue;
+
+        // Walk the event's own captured call stack to find the first user frame.
+        var (file, line) = ResolveEventCallSite(ev, stackSource);
+        if (file != "<unknown>") stackResolved++;
+        results.Add(new ProfilerSqlEvent(file, line, sql!, parameters, elapsedMs));
+      }
+    }
+    catch (Exception ex)
+    {
+      log.LogDebug(ex, "ExtractSqlEvents failed");
+    }
+    if (efEventsSeen > 0)
+    {
+      log.LogDebug("Profiler chunk: ef={Ef} stack-resolved={Resolved}", efEventsSeen, stackResolved);
+    }
+    return results;
+  }
+
+  [ThreadStatic] private static int _eventStackDiagThisChunk;
+  internal static void ResetSqlStackDiagCounter() => _eventStackDiagThisChunk = 0;
+
+  // Walks the call stack captured with this event (TraceLog attaches stacks to EventPipe events
+  // automatically) skipping EF/BCL infrastructure frames until we hit a frame we have PDB data
+  // for. Returns ("<unknown>", 0) when the event has no stack or no user frame can be resolved.
+  private (string File, int Line) ResolveEventCallSite(TraceEvent ev, MutableTraceEventStackSource stackSource)
+  {
+    var traceLogStackIdx = ev.CallStackIndex();
+
+    // Per-chunk diagnostic (first 2 events per chunk): dump whether we got a real stack and,
+    // if so, the top frames so we can see why nothing resolves to user code.
+    if (++_eventStackDiagThisChunk <= 2)
+    {
+      if (traceLogStackIdx == Microsoft.Diagnostics.Tracing.Etlx.CallStackIndex.Invalid)
+      {
+        log.LogInformation("SQL event has no stack (CallStackIndex=Invalid)");
+      }
+      else
+      {
+        var dumpStack = stackSource.GetCallStack(traceLogStackIdx, ev);
+        var frames = new List<string>();
+        while (dumpStack != StackSourceCallStackIndex.Invalid && frames.Count < 200)
+        {
+          frames.Add(stackSource.GetFrameName(stackSource.GetFrameIndex(dumpStack), false));
+          dumpStack = stackSource.GetCallerIndex(dumpStack);
+        }
+        log.LogInformation("SQL event stack ({Depth} frames):\n{Frames}",
+            frames.Count, string.Join("\n  ", frames));
+      }
+    }
+
+    if (traceLogStackIdx == Microsoft.Diagnostics.Tracing.Etlx.CallStackIndex.Invalid)
+      return ("<unknown>", 0);
+
+    var stack = stackSource.GetCallStack(traceLogStackIdx, ev);
+    while (stack != StackSourceCallStackIndex.Invalid)
+    {
+      var frameName = stackSource.GetFrameName(stackSource.GetFrameIndex(stack), false);
+      if (frameName.StartsWith("Thread (", StringComparison.Ordinal)) break;
+      if (frameName == "CPU_TIME" || frameName == "BLOCKED_TIME" || frameName == "UNMANAGED_CODE_TIME"
+          || SqlAggregator.IsInfrastructureFrame(frameName))
+      {
+        stack = stackSource.GetCallerIndex(stack);
+        continue;
+      }
+      if (TryResolveFrame(frameName, out var fl)) return fl;
+      stack = stackSource.GetCallerIndex(stack);
+    }
+    return ("<unknown>", 0);
   }
 
   // Frame name format from MutableTraceEventStackSource (verboseName=false) is typically:
@@ -313,6 +524,10 @@ public sealed class ProfilerService(INotificationService notifications, ILogger<
           if (methodDefHandle.IsNil) continue;
 
           // Walk sequence points, take the first non-hidden one as the method's "head" line.
+          // Drop entries whose source file doesn't exist on the local filesystem: third-party
+          // PDBs (NuGet packages built on other machines, source-link "/_/src/..." deterministic
+          // paths) point at paths that don't resolve here. Without this we'd emit virtual text
+          // requests for files the editor will never have open.
           (string File, int Line)? head = null;
           foreach (var sp in dbgInfo.GetSequencePoints())
           {
@@ -320,6 +535,7 @@ public sealed class ProfilerService(INotificationService notifications, ILogger<
             var doc = pdb.GetDocument(sp.Document);
             var name = pdb.GetString(doc.Name);
             if (string.IsNullOrEmpty(name)) continue;
+            if (!File.Exists(name)) continue;
             head = (name, sp.StartLine);
             break;
           }
@@ -348,13 +564,24 @@ public sealed class ProfilerService(INotificationService notifications, ILogger<
   private static string BuildMethodFullName(MetadataReader reader, MethodDefinitionHandle handle)
   {
     var method = reader.GetMethodDefinition(handle);
-    var typeHandle = method.GetDeclaringType();
-    var typeDef = reader.GetTypeDefinition(typeHandle);
-    var ns = reader.GetString(typeDef.Namespace);
-    var typeName = reader.GetString(typeDef.Name);
+    var qualifiedType = BuildTypeFullName(reader, method.GetDeclaringType());
     var methodName = reader.GetString(method.Name);
-    var qualifiedType = string.IsNullOrEmpty(ns) ? typeName : $"{ns}.{typeName}";
     return $"{qualifiedType}.{methodName}";
+  }
+
+  // Walks up nested type declarations so e.g. an async state machine
+  //   `EfTarget.Runner.<RunOneAsync>d__0`
+  // produces "EfTarget.Runner+<RunOneAsync>d__0" — matching the frame name format
+  // TraceEvent's MutableTraceEventStackSource emits.
+  private static string BuildTypeFullName(MetadataReader reader, TypeDefinitionHandle typeHandle)
+  {
+    var typeDef = reader.GetTypeDefinition(typeHandle);
+    var typeName = reader.GetString(typeDef.Name);
+    var declaringType = typeDef.GetDeclaringType();
+    if (!declaringType.IsNil)
+      return BuildTypeFullName(reader, declaringType) + "+" + typeName;
+    var ns = reader.GetString(typeDef.Namespace);
+    return string.IsNullOrEmpty(ns) ? typeName : $"{ns}.{typeName}";
   }
 
   private sealed class EmbeddedPortablePdbProvider : IDisposable

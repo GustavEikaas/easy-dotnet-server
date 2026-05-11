@@ -10,4 +10,5 @@ public interface INotificationService
   Task NotifyRunningProcessesChangedAsync(RunningSessionInfo[] projects);
   Task NotifyProfilerSamples(ProfilerSampleDelta[] deltas);
   Task NotifyProfilerState(string state, string? message = null);
+  Task NotifyProfilerSqlQueries(ProfilerSqlBucket[] buckets);
 }
