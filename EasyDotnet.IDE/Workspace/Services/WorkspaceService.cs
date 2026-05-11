@@ -21,6 +21,7 @@ public class WorkspaceService(
     WorkspaceBuildHostManager buildHostManager,
     IDebugOrchestrator debugOrchestrator,
     IDebugStrategyFactory debugStrategyFactory,
+    ProfilerService profilerService,
     ILogger<WorkspaceService> logger)
 {
   public async Task RunAsync(WorkspaceRunRequest request, CancellationToken ct)
@@ -238,6 +239,10 @@ public class WorkspaceService(
       {
         sessionRegistry.Release(sessionKey);
         _ = NotifyRunningSessionsAsync();
+        // Always attempt the stop — the profiler may have auto-attached even when the caller
+        // didn't pass UseProfiler=true. StopAsync is a no-op if nothing's running.
+        try { await profilerService.StopAsync(); }
+        catch (Exception ex) { logger.LogWarning(ex, "Profiler stop failed for {ProjectName}", project.ProjectName); }
       }
     }, CancellationToken.None);
   }

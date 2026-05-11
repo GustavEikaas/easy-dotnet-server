@@ -10,6 +10,8 @@ public sealed record ProjectChangedNotification(string ProjectPath, string? Targ
 public sealed record ActiveProjectChangedNotification(string? ProjectPath, string? ProjectName, string? LaunchProfile);
 public sealed record RunningProcessesChangedNotification(RunningSessionInfo[] Projects);
 public sealed record RunningSessionInfo(string Name, bool IsDebugging);
+public sealed record ProfilerStateNotification(string State, string? Message);
+public sealed record ProfilerSqlQueriesNotification(ProfilerSqlBucket[] Buckets);
 
 public class NotificationService(JsonRpc jsonRpc) : INotificationService
 {
@@ -24,4 +26,10 @@ public class NotificationService(JsonRpc jsonRpc) : INotificationService
 
   [RpcNotification("runningProcesses/changed")]
   public async Task NotifyRunningProcessesChangedAsync(RunningSessionInfo[] projects) => await jsonRpc.NotifyWithParameterObjectAsync("runningProcesses/changed", new RunningProcessesChangedNotification(projects));
+
+  [RpcNotification("profiler/state")]
+  public async Task NotifyProfilerState(string state, string? message = null) => await jsonRpc.NotifyWithParameterObjectAsync("profiler/state", new ProfilerStateNotification(state, message));
+
+  [RpcNotification("profiler/sql-queries")]
+  public async Task NotifyProfilerSqlQueries(ProfilerSqlBucket[] buckets) => await jsonRpc.NotifyWithParameterObjectAsync("profiler/sql-queries", new ProfilerSqlQueriesNotification(buckets));
 }

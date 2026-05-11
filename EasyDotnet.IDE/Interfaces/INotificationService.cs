@@ -8,4 +8,6 @@ public interface INotificationService
   Task NotifyUpdateAvailable(Version currentVersion, Version availableVersion, string updateType);
   Task NotifyActiveProjectChanged(string? projectPath, string? projectName, string? launchProfile);
   Task NotifyRunningProcessesChangedAsync(RunningSessionInfo[] projects);
+  Task NotifyProfilerState(string state, string? message = null);
+  Task NotifyProfilerSqlQueries(ProfilerSqlBucket[] buckets);
 }

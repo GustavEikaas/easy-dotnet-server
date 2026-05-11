@@ -7,6 +7,7 @@ using EasyDotnet.IDE.Models.Client.Prompt;
 using EasyDotnet.IDE.Models.Client.Quickfix;
 using EasyDotnet.IDE.Picker;
 using EasyDotnet.IDE.Picker.Models;
+using EasyDotnet.IDE.Services;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Editor;
@@ -18,6 +19,7 @@ public class EditorService(
   IClientService clientService,
   IAppWrapperManager appWrapperManager,
   IPickerService pickerService,
+  ProfilerService profilerService,
   JsonRpc jsonRpc) : IEditorService
 {
   public async Task DisplayError(string message) =>
@@ -99,6 +101,16 @@ public class EditorService(
         try
         {
           var pid = await session.WaitForPidAsync(CancellationToken.None);
+          // Profiling decision is server-internal: attach automatically when the target's
+          // deps.json references EF Core.
+          if (EfCoreDetector.ReferencesEfCore(request.Project.ProjectDepsFilePath))
+          {
+            // Attach BEFORE releasing the hook so the EF DiagnosticSource bridge is live before
+            // any query fires. Session runs until the user process exits; WorkspaceService
+            // calls ProfilerService.StopAsync on exit to flush the final buckets.
+            try { await profilerService.StartAsync(pid, durationSeconds: null); }
+            catch (Exception) { /* fall through; resume the app even if profiler attach failed */ }
+          }
           session.Resume();
           request.OnPidReceived?.Invoke(pid);
         }
