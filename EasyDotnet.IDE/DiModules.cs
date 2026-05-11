@@ -4,8 +4,10 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using DotNetOutdated.Core.Services;
 using EasyDotnet.Debugger;
+using EasyDotnet.Debugger.Services;
 using EasyDotnet.IDE.AppWrapper;
 using EasyDotnet.IDE.BuildHost;
+using EasyDotnet.IDE.Dap;
 using EasyDotnet.IDE.DebuggerStrategies;
 using EasyDotnet.IDE.Editor;
 using EasyDotnet.IDE.EntityFramework;
@@ -69,6 +71,7 @@ public static class DiModules
     services.AddSingleton<TemplateEngineService>();
     services.AddSingleton<IDebugSessionManager, DebugSessionManager>();
     services.AddSingleton<IDebugOrchestrator, DebugOrchestrator>();
+    services.AddSingleton<IVariableLocationResolver, VariableLocationResolver>();
     services.AddSingleton<IAppPathsService, AppPathsService>();
     services.AddSingleton<UpdateCheckerService>();
     services.AddSingleton<SettingsFileResolver>();

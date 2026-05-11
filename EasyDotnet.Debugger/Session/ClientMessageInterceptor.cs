@@ -11,7 +11,8 @@ public class ClientMessageInterceptor(
   ValueConverterService valueConverterService,
   Func<InterceptableAttachRequest, Task<InterceptableAttachRequest>> attachRequestRewriter,
   Action<int> onDebugeeProcessStarted,
-  Action onConfigurationDone
+  Action onConfigurationDone,
+  FrameSourceTracker? frameSourceTracker = null
   ) : IDapMessageInterceptor
 {
   private static readonly JsonSerializerOptions LoggingOptions = new()
@@ -31,6 +32,7 @@ public class ClientMessageInterceptor(
       {
         InterceptableAttachRequest attachReq => await HandleAttachRequestAsync(attachReq),
         InterceptableVariablesRequest varReq => await HandleVariablesRequestAsync(varReq, proxy, cancellationToken),
+        ScopesRequest scopesReq => HandleScopesRequest(scopesReq, proxy),
         SetBreakpointsRequest bpReq => HandleBreakpointsRequest(bpReq),
         Request req => LogAndPassthrough(req),
         _ => throw new Exception($"Unsupported DAP message from client: {message}")
@@ -63,6 +65,7 @@ public class ClientMessageInterceptor(
   {
     if (request.Arguments?.VariablesReference is not null)
     {
+      TrackVariablesRequest(request, proxy);
       var converter = valueConverterService.TryGetConverterFor(request.Arguments.VariablesReference);
       if (converter is not null)
       {
@@ -98,6 +101,49 @@ public class ClientMessageInterceptor(
     logger.LogDebug("[CLIENT] Set breakpoints: {request}",
       JsonSerializer.Serialize(request, LoggingOptions));
     return request;
+  }
+
+  private ScopesRequest HandleScopesRequest(ScopesRequest request, IDebuggerProxy proxy)
+  {
+    if (frameSourceTracker is not null && request.Arguments is not null)
+    {
+      try
+      {
+        var originalSeq = proxy.PeekOriginalSeq(request.Seq);
+        if (originalSeq is not null)
+        {
+          frameSourceTracker.RecordScopesRequest(originalSeq.Value, request.Arguments.FrameId);
+        }
+      }
+      catch (Exception ex)
+      {
+        logger.LogDebug(ex, "HandleScopesRequest tracking failed");
+      }
+    }
+
+    logger.LogDebug("[CLIENT] Scopes request: frameId={frameId}", request.Arguments?.FrameId);
+    return request;
+  }
+
+  private void TrackVariablesRequest(InterceptableVariablesRequest request, IDebuggerProxy proxy)
+  {
+    if (frameSourceTracker is null || request.Arguments is null)
+    {
+      return;
+    }
+
+    try
+    {
+      var originalSeq = proxy.PeekOriginalSeq(request.Seq);
+      if (originalSeq is not null)
+      {
+        frameSourceTracker.RecordVariablesRequest(originalSeq.Value, request.Arguments.VariablesReference);
+      }
+    }
+    catch (Exception ex)
+    {
+      logger.LogDebug(ex, "TrackVariablesRequest failed");
+    }
   }
 
   private Request LogAndPassthrough(Request request)
