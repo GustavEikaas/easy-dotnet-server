@@ -1,36 +1,64 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using DotNet.Testcontainers.Builders;
+using DotNet.Testcontainers.Containers;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace EasyDotnet.IntegrationTests.Profiler;
+namespace EasyDotnet.ContainerTests.Profiler;
 
-// End-to-end profiler test: scaffold a tiny EF Core sqlite app, build it, spawn it as a real
-// process, attach the profiler, assert that SQL events flow AND that at least one is
-// attributed back to the user call site in the spawned app's source.
+// End-to-end profiler test against a REAL async DB driver (Npgsql → Postgres in a Testcontainer).
 //
-// This is the test that drove the iteration on the EF Core SQL bucket feature — keep it as a
-// regression guard for the FilterAndPayloadSpecs string, the payload key names, and the call
-// stack resolution.
-public sealed class ProfilerEfSqlTests
+// Why this lives in ContainerTests and not IntegrationTests: SQLite completes its async APIs
+// synchronously — the user frame is always on the stack when EF Core's `CommandExecuted` event
+// fires, so the broken case (continuation thread with no user frame at all) cannot be reproduced
+// with SQLite. Npgsql does true async I/O on a socket completion thread, which is the only way
+// to exercise the CommandExecuting→CommandExecuted correlation path in ProfilerService.
+public sealed class ProfilerEfSqlTests : IAsyncLifetime
 {
   private static readonly TimeSpan ProfilerDuration = TimeSpan.FromSeconds(8);
+  private const string PgUser = "postgres";
+  private const string PgPassword = "postgres";
+  private const string PgDb = "easydotnet";
 
-  // Matrix: prove the call-site resolution path works against multiple EF Core / TFM combos.
-  // The user reports it works in this xunit harness but fails in a real EF 10 app — repro must
-  // cover both the LTS we get most reports for (EF 8 / net8.0) and the current major (EF 10 /
-  // net10.0).
+  private IContainer _postgres = null!;
+  private string _connectionString = null!;
+
+  public async Task InitializeAsync()
+  {
+    _postgres = new ContainerBuilder("postgres:16-alpine")
+      .WithEnvironment("POSTGRES_USER", PgUser)
+      .WithEnvironment("POSTGRES_PASSWORD", PgPassword)
+      .WithEnvironment("POSTGRES_DB", PgDb)
+      .WithPortBinding(5432, assignRandomHostPort: true)
+      .WithWaitStrategy(Wait.ForUnixContainer()
+        .UntilCommandIsCompleted("pg_isready", "-U", PgUser, "-d", PgDb))
+      .Build();
+    await _postgres.StartAsync();
+    var hostPort = _postgres.GetMappedPublicPort(5432);
+    _connectionString =
+      $"Host=127.0.0.1;Port={hostPort};Username={PgUser};Password={PgPassword};Database={PgDb}";
+  }
+
+  public Task DisposeAsync() => _postgres.DisposeAsync().AsTask();
+
+  // Matrix: prove the call-site resolution path works across EF Core majors. EF 8 is the LTS
+  // and the most-reported version; EF 10 is the current major. Both must resolve user frames
+  // even though Npgsql delivers the CommandExecuted event on a continuation thread with zero
+  // user frames on the stack — that is the whole point of subscribing to CommandExecuting.
   [Theory]
-  [InlineData("net8.0", "8.0.0")]
+  [InlineData("net8.0", "8.0.4")]
   [InlineData("net10.0", "10.0.0")]
-  public async Task Profiler_AttachesToRealEfApp_EmitsSqlBucketAttributedToUserCallSite(string tfm, string efVersion)
+  public async Task Profiler_AttachesToRealEfApp_EmitsSqlBucketAttributedToUserCallSite(
+    string tfm, string npgsqlEfVersion)
   {
     var workspaceRoot = Path.Combine(Path.GetTempPath(), $"ProfilerEfTest_{Guid.NewGuid():N}");
     Directory.CreateDirectory(workspaceRoot);
     try
     {
-      ScaffoldEfApp(workspaceRoot, tfm, efVersion, out var querySourceFile, out _);
+      ScaffoldEfApp(workspaceRoot, tfm, npgsqlEfVersion, _connectionString,
+                    out var querySourceFile, out _);
       DotnetBuild(workspaceRoot);
       var appBinary = Path.Combine(workspaceRoot, "bin", "Debug", tfm, "EfTarget.dll");
       Assert.True(File.Exists(appBinary), $"Built binary not found at {appBinary}");
@@ -47,7 +75,7 @@ public sealed class ProfilerEfSqlTests
   private static async Task RunMatrixCaseAsync(string appBinary, string workspaceRoot, string querySourceFile)
   {
     using var app = SpawnApp(appBinary, workspaceRoot);
-    var pid = app.WaitForReady(TimeSpan.FromSeconds(10));
+    var pid = app.WaitForReady(TimeSpan.FromSeconds(30));
 
     var notifications = new RecordingNotificationService();
     var logger = new CapturingLogger<ProfilerService>();
@@ -56,8 +84,7 @@ public sealed class ProfilerEfSqlTests
     await profiler.StartAsync(pid, durationSeconds: ProfilerDuration.TotalSeconds);
     try
     {
-      // The app issues a query every 100ms. With 8s of collection we expect dozens of events.
-      await WaitForStateAsync(notifications, "stopped", ProfilerDuration + TimeSpan.FromSeconds(15));
+      await WaitForStateAsync(notifications, "stopped", ProfilerDuration + TimeSpan.FromSeconds(20));
     }
     catch (TimeoutException ex)
     {
@@ -78,19 +105,18 @@ public sealed class ProfilerEfSqlTests
     Assert.True(buckets is not null, "No profiler/sql-queries notification fired." + diagnostic);
     Assert.True(buckets!.Count > 0, "profiler/sql-queries fired with empty bucket list." + diagnostic);
 
-    // At least one bucket should carry the SELECT we know the app issues.
     Assert.Contains(buckets!, b => b.SqlSample.Contains("SELECT", StringComparison.OrdinalIgnoreCase)
-                                && b.SqlSample.Contains("Things", StringComparison.OrdinalIgnoreCase));
+                                && b.SqlSample.Contains("things", StringComparison.OrdinalIgnoreCase));
 
-    // Attribution: at least one bucket must resolve to a real user file. If they're all
-    // "<unknown>" the stack-resolution path is broken.
+    // The critical assertion. With Npgsql delivering CommandExecuted on a continuation thread
+    // (no user frame on the stack), this only passes if the CommandExecuting correlation path
+    // works. Regressing the correlation makes every bucket attribute to "<unknown>".
     var attributed = buckets!.Where(b => b.File != "<unknown>").ToArray();
     Assert.True(attributed.Length > 0,
       "All SQL buckets are <unknown> — call-site resolution failed for every event. " +
       $"Total buckets: {buckets!.Count}, samples: {string.Join(" | ", buckets!.Take(3).Select(b => b.SqlSample))}" +
       diagnostic);
 
-    // And ideally the attributed file should be the one we know issues queries.
     Assert.Contains(attributed, b =>
       string.Equals(Path.GetFullPath(b.File), Path.GetFullPath(querySourceFile), StringComparison.OrdinalIgnoreCase));
   }
@@ -124,8 +150,13 @@ public sealed class ProfilerEfSqlTests
     return app;
   }
 
-  private static void ScaffoldEfApp(string root, string tfm, string efVersion, out string querySourceFile, out int queryLine)
+  private static void ScaffoldEfApp(
+    string root, string tfm, string npgsqlEfVersion, string connectionString,
+    out string querySourceFile, out int queryLine)
   {
+    // Only reference Npgsql.EntityFrameworkCore.PostgreSQL — Microsoft.EntityFrameworkCore comes
+    // in transitively at the version Npgsql requires, avoiding NU1605 downgrade errors when the
+    // two are pinned to mismatched patch levels.
     File.WriteAllText(Path.Combine(root, "EfTarget.csproj"), $"""
       <Project Sdk="Microsoft.NET.Sdk">
         <PropertyGroup>
@@ -138,13 +169,13 @@ public sealed class ProfilerEfSqlTests
           <DebugType>portable</DebugType>
         </PropertyGroup>
         <ItemGroup>
-          <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="{efVersion}" />
+          <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="{npgsqlEfVersion}" />
         </ItemGroup>
       </Project>
       """);
 
     querySourceFile = Path.Combine(root, "Program.cs");
-    var src = """
+    var src = $$""""
       using Microsoft.EntityFrameworkCore;
 
       namespace EfTarget;
@@ -159,7 +190,7 @@ public sealed class ProfilerEfSqlTests
       {
           public DbSet<Thing> Things => Set<Thing>();
           protected override void OnConfiguring(DbContextOptionsBuilder o) =>
-              o.UseSqlite("Data Source=:memory:");
+              o.UseNpgsql("{{connectionString}}");
       }
 
       public static class Runner
@@ -173,7 +204,6 @@ public sealed class ProfilerEfSqlTests
           public static async Task Main()
           {
               await using var db = new Db();
-              await db.Database.OpenConnectionAsync();
               await db.Database.EnsureCreatedAsync();
               db.Things.Add(new Thing { Name = "alpha" });
               await db.SaveChangesAsync();
@@ -189,10 +219,9 @@ public sealed class ProfilerEfSqlTests
               }
           }
       }
-      """;
+      """";
     File.WriteAllText(querySourceFile, src);
 
-    // Locate the QUERY-LINE marker so the test knows the expected (file, line) for attribution.
     queryLine = 0;
     var lines = src.Split('\n');
     for (var i = 0; i < lines.Length; i++)
@@ -294,7 +323,6 @@ public sealed class ProfilerEfSqlTests
     public Task NotifyProfilerSamples(ProfilerSampleDelta[] deltas) { SampleNotifications++; return Task.CompletedTask; }
     public Task NotifyProfilerState(string state, string? message = null) { States.Add((state, message)); return Task.CompletedTask; }
 
-    // Unused for this test:
     public Task NotifyProjectChanged(string projectPath, string? targetFrameworkMoniker = null, string configuration = "Debug") => Task.CompletedTask;
     public Task NotifyUpdateAvailable(Version currentVersion, Version availableVersion, string updateType) => Task.CompletedTask;
     public Task NotifyActiveProjectChanged(string? projectPath, string? projectName, string? launchProfile) => Task.CompletedTask;
