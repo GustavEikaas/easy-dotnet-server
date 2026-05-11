@@ -88,6 +88,8 @@ public static class DapMessageDeserializer
             return JsonSerializer.Deserialize<InterceptableVariablesRequest>(root.GetRawText(), options)!;
           case "setbreakpoints":
             return JsonSerializer.Deserialize<SetBreakpointsRequest>(root.GetRawText(), options)!;
+          case "completions":
+            return JsonSerializer.Deserialize<InterceptableCompletionsRequest>(root.GetRawText(), options)!;
         }
       }
 
