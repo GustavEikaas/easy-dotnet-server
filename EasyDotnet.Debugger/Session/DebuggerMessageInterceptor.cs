@@ -51,8 +51,8 @@ public class DebuggerMessageInterceptor(
 
   private Task<ProtocolMessage?> HandleResponse(Response response)
   {
-    valueConverterService.FormatEvaluateResponse(response);
     logger.LogDebug("[DEBUGGER] Response: {command}", response.Command);
+    valueConverterService.FormatEvaluateResponse(response);
     return Task.FromResult<ProtocolMessage?>(response);
   }
 
