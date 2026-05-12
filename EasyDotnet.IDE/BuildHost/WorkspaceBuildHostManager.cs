@@ -82,6 +82,41 @@ public class WorkspaceBuildHostManager(
     return null;
   }
 
+  public async Task<List<ValidatedDotnetProject>> GetProjectsFromDirectoryAsync(
+      string rootDir,
+      Func<ValidatedDotnetProject, bool>? filter = null,
+      int maxDepth = 3,
+      string configuration = "Debug",
+      CancellationToken ct = default)
+  {
+    var csprojFiles = Directory.EnumerateFiles(rootDir, "*.csproj", new EnumerationOptions
+    {
+      MaxRecursionDepth = maxDepth,
+      RecurseSubdirectories = true
+    });
+
+    var results = new List<ValidatedDotnetProject>();
+    var request = new GetProjectPropertiesBatchRequest([.. csprojFiles], configuration);
+
+    await foreach (var result in GetProjectPropertiesBatchAsync(request, ct))
+    {
+      if (result.Success && result.Project is not null)
+      {
+        if (filter is null || filter(result.Project)) { results.Add(result.Project); }
+      }
+      else if (!result.Success)
+      {
+        logger.LogWarning(
+            "Failed to evaluate {ProjectPath} ({TFM}): {Error}",
+            result.ProjectPath,
+            result.TargetFramework ?? "unknown",
+            result.Error?.Message);
+      }
+    }
+
+    return [.. results.DistinctBy(p => p.ProjectFullPath)];
+  }
+
   public async Task<List<ValidatedDotnetProject>> GetProjectsFromSolutionAsync(
       string solutionPath,
       Func<ValidatedDotnetProject, bool>? filter = null,

@@ -32,6 +32,7 @@ using EasyDotnet.IDE.TestRunner.Registry;
 using EasyDotnet.IDE.TestRunner.Service;
 using EasyDotnet.IDE.TestRunner.Store;
 using EasyDotnet.IDE.Utils;
+using EasyDotnet.IDE.UserSecrets.Services;
 using EasyDotnet.IDE.Workspace.Services;
 using EasyDotnet.Nuget;
 using EasyDotnet.Services;
@@ -120,6 +121,7 @@ public static class DiModules
     services.AddTransient<IMsBuildService, MsBuildService>();
     services.AddTransient<NewFileService>();
     services.AddTransient<UserSecretsService>();
+    services.AddTransient<UserSecretsFlowService>();
     services.AddTransient<EntityFrameworkService>();
     services.AddTransient<ILaunchProfileService, LaunchProfileService>();
     services.AddTransient<INotificationService, NotificationService>();
