@@ -1,5 +1,6 @@
 using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.IDE;
+using EasyDotnet.IDE.BuildHost;
 using EasyDotnet.IDE.Editor;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Models.Client;
@@ -157,11 +158,12 @@ public class WorkspaceBuildService(
     if (!await RestoreBeforeBuildQuickfixAsync(targetPath, name, ct))
       return false;
 
+    var tfm = await buildHostManager.ResolveSingleTfmAsync(targetPath, configuration, ct);
     List<BatchBuildResult> results;
     using (progressScopeFactory.Create($"{operationName}...", $"{operationName} {name}"))
     {
       results = await buildHostManager
-          .BatchBuildAsync(new BatchBuildRequest([targetPath], configuration, BuildTarget: buildTarget), ct)
+          .BatchBuildAsync(new BatchBuildRequest([targetPath], configuration, tfm, BuildTarget: buildTarget), ct)
           .ToListAsync(ct);
     }
 

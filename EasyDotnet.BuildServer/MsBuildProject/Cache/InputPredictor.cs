@@ -44,14 +44,30 @@ public sealed class InputPredictor
       dirs.Add(Path.GetFullPath(baseDir));
     }
 
-    return new PredictionResult(files.ToList(), dirs.ToList());
+    var outFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    foreach (var item in predictions.OutputFiles)
+    {
+      outFiles.Add(Normalize(item.Path, baseDir));
+    }
+    var outDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    foreach (var item in predictions.OutputDirectories)
+    {
+      outDirs.Add(Normalize(item.Path, baseDir));
+    }
+
+    return new PredictionResult(files.ToList(), dirs.ToList(), outFiles.ToList(), outDirs.ToList());
   }
 
   private static string Normalize(string path, string baseDir)
   {
-    var full = Path.IsPathRooted(path) ? path : Path.Combine(baseDir, path);
+    var p = path.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
+    var full = Path.IsPathRooted(p) ? p : Path.Combine(baseDir, p);
     return Path.GetFullPath(full);
   }
 
-  public sealed record PredictionResult(List<string> InputFiles, List<string> InputDirectories);
+  public sealed record PredictionResult(
+      List<string> InputFiles,
+      List<string> InputDirectories,
+      List<string> OutputFiles,
+      List<string> OutputDirectories);
 }

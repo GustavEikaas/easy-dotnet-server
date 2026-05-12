@@ -1,4 +1,5 @@
 using EasyDotnet.BuildServer.Contracts;
+using EasyDotnet.IDE.BuildHost;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Models.Client;
 using EasyDotnet.IDE.Models.Client.Debugger;
@@ -167,11 +168,12 @@ public class EditorService(
   public async Task<bool> BuildProject(string projectPath, CancellationToken cancellationToken)
   {
     var name = Path.GetFileNameWithoutExtension(projectPath);
+    var tfm = await buildHostManager.ResolveSingleTfmAsync(projectPath, "Debug", cancellationToken);
     List<BatchBuildResult> results;
     using (new ProgressScope(this, "Building", $"Building {name}"))
     {
       results = await buildHostManager
-          .BatchBuildAsync(new BatchBuildRequest([projectPath], "Debug"), cancellationToken)
+          .BatchBuildAsync(new BatchBuildRequest([projectPath], "Debug", tfm), cancellationToken)
           .ToListAsync(cancellationToken);
     }
 
