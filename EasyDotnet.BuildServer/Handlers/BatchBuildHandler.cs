@@ -1,13 +1,14 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using EasyDotnet.BuildServer.Contracts;
+using EasyDotnet.BuildServer.Logging;
 using EasyDotnet.BuildServer.MsBuildProject.Cache;
 using Microsoft.Build.Execution;
 using StreamJsonRpc;
 
 namespace EasyDotnet.BuildServer.Handlers;
 
-public class BatchBuildHandler(BuildFreshnessChecker freshnessChecker)
+public class BatchBuildHandler(BuildFreshnessChecker freshnessChecker, Logger logger)
 {
   [JsonRpcMethod("projects/batchBuild", UseSingleObjectParameterDeserialization = true)]
   public async IAsyncEnumerable<BatchBuildResult> BatchBuildAsync(
@@ -71,13 +72,25 @@ public class BatchBuildHandler(BuildFreshnessChecker freshnessChecker)
   private (BatchBuildResult? Hit, string? MissReason) TryFastUpToDate(string projectPath, BatchBuildRequest request)
   {
     var target = request.BuildTarget ?? "Build";
-    if (!string.Equals(target, "Build", StringComparison.OrdinalIgnoreCase)) return (null, null);
-    if (string.IsNullOrEmpty(request.TargetFramework)) return (null, null);
+    if (!string.Equals(target, "Build", StringComparison.OrdinalIgnoreCase))
+    {
+      logger.LogDebug("FUTD skipped: target={Target} for {Project}", target, projectPath);
+      return (null, null);
+    }
+    if (string.IsNullOrEmpty(request.TargetFramework))
+    {
+      logger.LogDebug("FUTD skipped: no TargetFramework specified for {Project}", projectPath);
+      return (null, null);
+    }
 
     try
     {
       var result = freshnessChecker.Check(projectPath, request.Configuration, request.TargetFramework!);
-      if (!result.IsUpToDate) return (null, result.Reason);
+      if (!result.IsUpToDate)
+      {
+        logger.LogInformation("FUTD declined: {Project} ({Tfm}) — {Reason}", projectPath, request.TargetFramework, result.Reason);
+        return (null, result.Reason);
+      }
 
       var hit = new BatchBuildResult(
           projectPath,

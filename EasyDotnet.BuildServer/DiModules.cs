@@ -21,12 +21,12 @@ public static class DiModule
 
     var inputPredictor = new InputPredictor();
     var propertyCache = new PropertyCache(inputPredictor, logger);
-    var freshnessChecker = new BuildFreshnessChecker(inputPredictor);
+    var freshnessChecker = new BuildFreshnessChecker(inputPredictor, logger);
 
     var watchHandler = new WatchHandler(instance);
     var projectPropertiesBatchHandler = new ProjectPropertiesBatchHandler(propertyCache, instance);
     var restoreHandler = new RestoreHandler();
-    var batchBuildHandler = new BatchBuildHandler(freshnessChecker);
+    var batchBuildHandler = new BatchBuildHandler(freshnessChecker, logger);
     var singleFileConvertHandler = new SingleFileConvertHandler(restoreHandler, projectPropertiesBatchHandler, logger);
     var diagnosticsHandler = new DiagnosticsHandler(instance, propertyCache);
     var packageReferenceHandler = new PackageReferenceHandler();

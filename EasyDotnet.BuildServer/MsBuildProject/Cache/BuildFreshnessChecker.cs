@@ -1,3 +1,4 @@
+using EasyDotnet.BuildServer.Logging;
 using Microsoft.Build.Evaluation;
 using Microsoft.Build.Execution;
 
@@ -5,7 +6,7 @@ namespace EasyDotnet.BuildServer.MsBuildProject.Cache;
 
 public sealed record BuildFreshnessResult(bool IsUpToDate, string? Reason);
 
-public sealed class BuildFreshnessChecker(InputPredictor predictor)
+public sealed class BuildFreshnessChecker(InputPredictor predictor, Logger logger)
 {
   public BuildFreshnessResult Check(string projectPath, string? configuration, string targetFramework)
   {
@@ -31,37 +32,29 @@ public sealed class BuildFreshnessChecker(InputPredictor predictor)
       var disable = project.GetPropertyValue("DisableFastUpToDateCheck");
       if (string.Equals(disable, "true", StringComparison.OrdinalIgnoreCase))
       {
+        logger.LogInformation("FUTD disabled by project: {Project} ({Tfm})", projectPath, targetFramework);
         return new BuildFreshnessResult(false, "DisableFastUpToDateCheck=true");
       }
 
+      var enable = project.GetPropertyValue("EnableFastUpToDateCheck");
+      if (!string.Equals(enable, "true", StringComparison.OrdinalIgnoreCase))
+      {
+        return new BuildFreshnessResult(false, "EnableFastUpToDateCheck=true");
+      }
+
+      var targetPath = project.GetPropertyValue("TargetPath");
+      if (string.IsNullOrEmpty(targetPath))
+      {
+        return new BuildFreshnessResult(false, "Project has no TargetPath");
+      }
+      if (!File.Exists(targetPath))
+      {
+        return new BuildFreshnessResult(false, $"TargetPath missing: {targetPath}");
+      }
+      var outputTicks = File.GetLastWriteTimeUtc(targetPath).Ticks;
+
       var instance = project.CreateProjectInstance(ProjectInstanceSettings.ImmutableWithFastItemLookup);
       var prediction = predictor.Predict(instance);
-
-      var outputs = new List<string>(prediction.OutputFiles);
-      foreach (var d in prediction.OutputDirectories)
-      {
-        if (!Directory.Exists(d))
-        {
-          return new BuildFreshnessResult(false, $"Output directory missing: {d}");
-        }
-        outputs.AddRange(Directory.EnumerateFiles(d));
-      }
-
-      if (outputs.Count == 0)
-      {
-        return new BuildFreshnessResult(false, "No predicted outputs");
-      }
-
-      long minOutputTicks = long.MaxValue;
-      foreach (var o in outputs)
-      {
-        if (!File.Exists(o))
-        {
-          return new BuildFreshnessResult(false, $"Output missing: {o}");
-        }
-        var t = File.GetLastWriteTimeUtc(o).Ticks;
-        if (t < minOutputTicks) minOutputTicks = t;
-      }
 
       long maxInputTicks = long.MinValue;
       string? newestInput = null;
@@ -81,11 +74,12 @@ public sealed class BuildFreshnessChecker(InputPredictor predictor)
         }
       }
 
-      if (maxInputTicks > minOutputTicks)
+      if (maxInputTicks > outputTicks)
       {
-        return new BuildFreshnessResult(false, $"Input newer than output: {newestInput}");
+        return new BuildFreshnessResult(false, $"Input newer than TargetPath: {newestInput}");
       }
 
+      logger.LogInformation("FUTD up-to-date: {Project} ({Tfm}) TargetPath={TargetPath}", projectPath, targetFramework, targetPath);
       return new BuildFreshnessResult(true, null);
     }
     finally
