@@ -17,24 +17,6 @@ public class NugetController(IClientService clientService, NugetService nugetSer
     return result;
   }
 
-  [JsonRpcMethod("nuget/list-sources")]
-  public IAsyncEnumerable<NugetSourceResponse> GetSources()
-  {
-    clientService.ThrowIfNotInitialized();
-
-    var sources = nugetService.GetSources();
-    return sources.Select(x => x.ToResponse()).ToBatchedAsyncEnumerable(50);
-  }
-
-  [JsonRpcMethod("nuget/push")]
-  public async Task<NugetPushResponse> PushPackages(List<string> packagePaths, string source, string? apiKey = null)
-  {
-    clientService.ThrowIfNotInitialized();
-
-    var sources = await nugetService.PushPackageAsync(packagePaths, source, apiKey);
-    return new NugetPushResponse(sources);
-  }
-
   [JsonRpcMethod("nuget/get-package-versions")]
   public async Task<IAsyncEnumerable<string>> GetPackageVersions(string packageId, List<string>? sources = null, bool includePrerelease = false)
   {
