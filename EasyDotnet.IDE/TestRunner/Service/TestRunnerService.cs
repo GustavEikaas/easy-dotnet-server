@@ -402,7 +402,6 @@ public class TestRunnerService(
       if (project is not null)
       {
         await adapterResolver.InvalidateAsync(project.ProjectFullPath);
-        buildHost.InvalidateCache(project.ProjectFullPath);
         projectsByPath[project.ProjectFullPath] = [project];
       }
 

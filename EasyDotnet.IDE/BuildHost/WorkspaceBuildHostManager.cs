@@ -9,7 +9,6 @@ namespace EasyDotnet.IDE.BuildHost;
 public class WorkspaceBuildHostManager(
     ISolutionService solutionService,
     IBuildHostManager innerManager,
-    ProjectEvaluationCache cache,
     ILogger<WorkspaceBuildHostManager> logger) : IBuildHostManager
 {
   public async Task PreloadProjectsAsync(
@@ -22,45 +21,10 @@ public class WorkspaceBuildHostManager(
     await GetProjectPropertiesBatchAsync(request, ct).ToListAsync(ct);
   }
 
-  public async IAsyncEnumerable<ProjectEvaluationResult> GetProjectPropertiesBatchAsync(
+  public IAsyncEnumerable<ProjectEvaluationResult> GetProjectPropertiesBatchAsync(
       GetProjectPropertiesBatchRequest request,
-      [EnumeratorCancellation] CancellationToken ct)
-  {
-    var config = request.Configuration ?? "Debug";
-    var missingPaths = new List<string>();
-    var ownedTcs = new Dictionary<string, TaskCompletionSource<List<ProjectEvaluationResult>>>();
-    var pendingTasks = new List<Task<List<ProjectEvaluationResult>>>();
-
-    foreach (var path in request.ProjectPaths)
-    {
-      var (tcs, isNew) = cache.GetOrRegister(path, config);
-      if (isNew)
-      {
-        missingPaths.Add(path);
-        ownedTcs[path] = tcs;
-      }
-      else
-      {
-        pendingTasks.Add(tcs.Task);
-      }
-    }
-
-    var fetchTask = missingPaths.Count > 0 ? ExecuteBatchFetchAsync(missingPaths, config, ct) : null;
-
-    foreach (var task in pendingTasks)
-    {
-      foreach (var result in await task) { yield return result; }
-    }
-
-    if (fetchTask is not null)
-    {
-      await fetchTask;
-      foreach (var path in missingPaths)
-      {
-        foreach (var result in await ownedTcs[path].Task) { yield return result; }
-      }
-    }
-  }
+      CancellationToken ct) =>
+      innerManager.GetProjectPropertiesBatchAsync(request, ct);
 
   public async Task<ValidatedDotnetProject?> GetProjectAsync(
       string projectPath,
@@ -125,20 +89,11 @@ public class WorkspaceBuildHostManager(
           configuration,
           ct);
 
-  public async IAsyncEnumerable<RestoreResult> RestoreNugetPackagesAsync(
+  public IAsyncEnumerable<RestoreResult> RestoreNugetPackagesAsync(
       RestoreRequest request,
-      [EnumeratorCancellation] CancellationToken ct)
-  {
-    await foreach (var result in innerManager.RestoreNugetPackagesAsync(request, ct))
-    {
-      yield return result;
-    }
-    cache.Clear(CacheInvalidationReason.Restore);
-  }
+      CancellationToken ct) =>
+      innerManager.RestoreNugetPackagesAsync(request, ct);
 
-  /// <summary>
-  /// Restores NuGet packages for all projects in a solution.
-  /// </summary>
   public async IAsyncEnumerable<RestoreResult> RestoreNugetPackagesSolutionAsync(
       string solutionPath,
       [EnumeratorCancellation] CancellationToken ct = default)
@@ -154,15 +109,10 @@ public class WorkspaceBuildHostManager(
     }
   }
 
-  public async IAsyncEnumerable<BatchBuildResult> BatchBuildAsync(
+  public IAsyncEnumerable<BatchBuildResult> BatchBuildAsync(
       BatchBuildRequest request,
-      [EnumeratorCancellation] CancellationToken ct)
-  {
-    await foreach (var result in innerManager.BatchBuildAsync(request, ct))
-    {
-      yield return result;
-    }
-  }
+      CancellationToken ct) =>
+      innerManager.BatchBuildAsync(request, ct);
 
   public Task<GetWatchListResponse> GetProjectWatchListAsync(
       GetWatchListRequest request,
@@ -184,38 +134,6 @@ public class WorkspaceBuildHostManager(
   public Task<string[]> GetLogsAsync(CancellationToken cancellationToken) =>
       innerManager.GetLogsAsync(cancellationToken);
 
-  public void InvalidateCache(string projectPath, string config = "Debug") => cache.Invalidate(projectPath, config);
-
-  public void ClearCache() => cache.Clear(CacheInvalidationReason.ClearedAll);
-
   public void Dispose() => innerManager.Dispose();
   public ValueTask DisposeAsync() => innerManager.DisposeAsync();
-
-  private async Task ExecuteBatchFetchAsync(
-      List<string> paths,
-      string config,
-      CancellationToken ct)
-  {
-    var buckets = paths.ToDictionary(p => p, _ => new List<ProjectEvaluationResult>());
-
-    try
-    {
-      var request = new GetProjectPropertiesBatchRequest([.. paths], config);
-
-      await foreach (var result in innerManager.GetProjectPropertiesBatchAsync(request, ct))
-      {
-        if (buckets.TryGetValue(result.ProjectPath, out var list)) { list.Add(result); }
-      }
-
-      foreach (var path in paths)
-      {
-        cache.Complete(path, config, buckets[path]);
-      }
-    }
-    catch (Exception ex)
-    {
-      logger.LogError(ex, "Failed to evaluate MSBuild batch");
-      foreach (var path in paths) { cache.Fault(path, config, ex); }
-    }
-  }
 }
