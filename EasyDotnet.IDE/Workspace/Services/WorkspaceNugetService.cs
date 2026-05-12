@@ -156,9 +156,6 @@ public class WorkspaceNugetService(
       return null;
     }
 
-    if (sources.Count == 1)
-      return new NugetPushSource(sources[0].Name, sources[0].Source);
-
     var options = sources
         .Select(s => new SelectionOption(s.Name, $"{s.Name} ({s.Source})"))
         .ToArray();
