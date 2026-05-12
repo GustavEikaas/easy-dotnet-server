@@ -19,10 +19,17 @@ internal sealed class BuildServerProcess : IAsyncDisposable
     Stderr = stderr;
   }
 
-  public static async Task<BuildServerProcess> StartAsync(
+  public static Task<BuildServerProcess> StartAsync(
       string fileName,
       string[] leadingArgs,
       TimeSpan connectTimeout)
+      => StartAsync(fileName, leadingArgs, connectTimeout, environment: null);
+
+  public static async Task<BuildServerProcess> StartAsync(
+      string fileName,
+      string[] leadingArgs,
+      TimeSpan connectTimeout,
+      IReadOnlyDictionary<string, string?>? environment)
   {
     var pipeName = "ed-smoke-" + Guid.NewGuid().ToString("N");
 
@@ -38,6 +45,14 @@ internal sealed class BuildServerProcess : IAsyncDisposable
     psi.ArgumentList.Add("--pipe");
     psi.ArgumentList.Add(pipeName);
     psi.ArgumentList.Add("--log-level=information");
+
+    if (environment != null)
+    {
+      foreach (var kv in environment)
+      {
+        psi.Environment[kv.Key] = kv.Value;
+      }
+    }
 
     var stderr = new StringBuilder();
     var proc = new Process { StartInfo = psi, EnableRaisingEvents = true };

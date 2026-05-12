@@ -1,12 +1,13 @@
 using System.Runtime.CompilerServices;
 using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.BuildServer.MsBuildProject;
+using EasyDotnet.BuildServer.MsBuildProject.Cache;
 using Microsoft.Build.Evaluation;
 using StreamJsonRpc;
 
 namespace EasyDotnet.BuildServer.Handlers;
 
-public class ProjectPropertiesBatchHandler
+public class ProjectPropertiesBatchHandler(PropertyCache cache, MsBuildInstance msBuildInstance)
 {
   [JsonRpcMethod("project/get-properties-batch", UseSingleObjectParameterDeserialization = true)]
   public async IAsyncEnumerable<ProjectEvaluationResult> GetProjectPropertiesBatch(
@@ -128,25 +129,30 @@ public class ProjectPropertiesBatchHandler
       globalProps["TargetFramework"] = targetFramework!;
     }
 
-    var project = projectCollection.LoadProject(projectPath, globalProps, toolsVersion: null);
+    var key = PropertyCacheKey.Create(
+        projectPath,
+        globalProps["Configuration"],
+        targetFramework ?? string.Empty,
+        msBuildInstance.Version.ToString());
 
-    try
-    {
+    var entry = cache.GetOrEvaluate(
+        key,
+        projectCollection,
+        evaluate: () =>
+        {
+          var project = projectCollection.LoadProject(projectPath, globalProps, toolsVersion: null);
+          var props = ExtractProperties(project);
+          return (project, props);
+        },
+        CancellationToken.None);
 
+    var bag = new MsBuildPropertyBag(entry.Properties);
+    var dotnetProject = DotnetProjectDeserializer.FromBag(bag);
+    var validated = ValidatedDotnetProject.TryCreate(dotnetProject);
 
-      var propertyDictionary = ExtractProperties(project);
-      var bag = new MsBuildPropertyBag(propertyDictionary);
-      var dotnetProject = DotnetProjectDeserializer.FromBag(bag);
-      var validated = ValidatedDotnetProject.TryCreate(dotnetProject);
-
-      return validated is not null
-          ? new ProjectEvaluationResult(projectPath, request.Configuration, targetFramework, true, validated, null)
-          : new ProjectEvaluationResult(projectPath, request.Configuration, targetFramework, false, null, new ProjectEvaluationError("Project is missing required properties (TargetFramework, OutputType, etc.)", null, null));
-    }
-    finally
-    {
-      projectCollection.UnloadProject(project);
-    }
+    return validated is not null
+        ? new ProjectEvaluationResult(projectPath, request.Configuration, targetFramework, true, validated, null)
+        : new ProjectEvaluationResult(projectPath, request.Configuration, targetFramework, false, null, new ProjectEvaluationError("Project is missing required properties (TargetFramework, OutputType, etc.)", null, null));
   }
 
   private static IReadOnlyList<string> DetermineTargetFrameworks(Project project)

@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using EasyDotnet.BuildServer.Handlers;
 using EasyDotnet.BuildServer.Logging;
+using EasyDotnet.BuildServer.MsBuildProject.Cache;
 using StreamJsonRpc;
 
 namespace EasyDotnet.BuildServer;
@@ -18,12 +19,15 @@ public static class DiModule
 
     WriteLogHeader(logger);
 
+    var inputPredictor = new InputPredictor();
+    var propertyCache = new PropertyCache(inputPredictor, logger);
+
     var watchHandler = new WatchHandler(instance);
-    var projectPropertiesBatchHandler = new ProjectPropertiesBatchHandler();
+    var projectPropertiesBatchHandler = new ProjectPropertiesBatchHandler(propertyCache, instance);
     var restoreHandler = new RestoreHandler();
     var batchBuildHandler = new BatchBuildHandler();
     var singleFileConvertHandler = new SingleFileConvertHandler(restoreHandler, projectPropertiesBatchHandler, logger);
-    var diagnosticsHandler = new DiagnosticsHandler(instance);
+    var diagnosticsHandler = new DiagnosticsHandler(instance, propertyCache);
     var packageReferenceHandler = new PackageReferenceHandler();
     var serverHandler = new ServerHandler(logLevelState, logger);
 
