@@ -19,7 +19,8 @@ public sealed record CursorContext(
     IXmlElementSyntax? Element,
     string? ElementName,
     string? AttributeName,
-    string? ParentElementName);
+    string? ParentElementName,
+    IReadOnlyDictionary<string, string>? Attributes = null);
 
 public static class XmlContextResolver
 {
@@ -165,7 +166,8 @@ public static class XmlContextResolver
             owningElement,
             owningElement?.Name,
             attributeName,
-            FindParentName(owningElement));
+            FindParentName(owningElement),
+            CollectAttributes(owningElement));
       }
 
       var element = FindContainingElement(node);
@@ -226,6 +228,23 @@ public static class XmlContextResolver
       current = current.Parent;
     }
     return CursorContextKind.Unknown;
+  }
+
+  private static IReadOnlyDictionary<string, string>? CollectAttributes(IXmlElementSyntax? element)
+  {
+    if (element == null)
+    {
+      return null;
+    }
+    var dict = new Dictionary<string, string>(StringComparer.Ordinal);
+    foreach (var attr in element.Attributes)
+    {
+      if (!string.IsNullOrEmpty(attr.Name) && !dict.ContainsKey(attr.Name))
+      {
+        dict[attr.Name] = attr.Value ?? string.Empty;
+      }
+    }
+    return dict;
   }
 
   private static string? TryFindEnclosingAttributeName(SyntaxNode? node, int position)

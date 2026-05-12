@@ -9,7 +9,7 @@ public class CompletionHandler(
     ICompletionService completionService) : BaseController
 {
   [JsonRpcMethod("textDocument/completion", UseSingleObjectParameterDeserialization = true)]
-  public CompletionList GetCompletion(CompletionParams completionParams)
+  public async Task<CompletionList> GetCompletion(CompletionParams completionParams, CancellationToken cancellationToken)
   {
     var doc = documentManager.GetDocument(completionParams.TextDocument.Uri);
     if (doc == null)
@@ -17,7 +17,7 @@ public class CompletionHandler(
       return new CompletionList { Items = [] };
     }
 
-    var items = completionService.GetCompletions(doc, completionParams.Position.Line, completionParams.Position.Character);
-    return new CompletionList { Items = items };
+    var result = await completionService.GetCompletionsAsync(doc, completionParams.Position.Line, completionParams.Position.Character, cancellationToken);
+    return new CompletionList { Items = result.Items, IsIncomplete = result.IsIncomplete };
   }
 }

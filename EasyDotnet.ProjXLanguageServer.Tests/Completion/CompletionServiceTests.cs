@@ -5,7 +5,7 @@ namespace EasyDotnet.ProjXLanguageServer.Tests.Completion;
 
 public class CompletionServiceTests
 {
-  private static readonly CompletionService Sut = new();
+  private static readonly CompletionService Sut = CompletionTestFactory.Create();
 
   [Test]
   public async Task PropertyGroup_OffersTargetFramework()
@@ -13,7 +13,7 @@ public class CompletionServiceTests
     var text = "<Project>\n<PropertyGroup>\n@CURSOR\n</PropertyGroup>\n</Project>";
     var (line, character) = Docs.PositionAt(text, "@CURSOR");
     var clean = text.Replace("@CURSOR", string.Empty);
-    var items = Sut.GetCompletions(Docs.Make(clean), line, character);
+    var items = (await Sut.GetCompletionsAsync(Docs.Make(clean), line, character, default)).Items;
     await Assert.That(items.Any(i => i.Label == "TargetFramework")).IsTrue();
   }
 
@@ -23,7 +23,7 @@ public class CompletionServiceTests
     var text = "<Project>\n<ItemGroup>\n@CURSOR\n</ItemGroup>\n</Project>";
     var (line, character) = Docs.PositionAt(text, "@CURSOR");
     var clean = text.Replace("@CURSOR", string.Empty);
-    var items = Sut.GetCompletions(Docs.Make(clean), line, character);
+    var items = (await Sut.GetCompletionsAsync(Docs.Make(clean), line, character, default)).Items;
     await Assert.That(items.Any(i => i.Label == "PackageReference")).IsTrue();
   }
 
@@ -33,7 +33,7 @@ public class CompletionServiceTests
     var text = "<Project>\n@CURSOR\n</Project>";
     var (line, character) = Docs.PositionAt(text, "@CURSOR");
     var clean = text.Replace("@CURSOR", string.Empty);
-    var items = Sut.GetCompletions(Docs.Make(clean), line, character);
+    var items = (await Sut.GetCompletionsAsync(Docs.Make(clean), line, character, default)).Items;
     await Assert.That(items.Any(i => i.Label == "PropertyGroup")).IsTrue();
     await Assert.That(items.Any(i => i.Label == "ItemGroup")).IsTrue();
   }
@@ -44,7 +44,7 @@ public class CompletionServiceTests
     var text = "<Project>\n<PropertyGroup>\n<TargetFramework>@CURSOR</TargetFramework>\n</PropertyGroup>\n</Project>";
     var (line, character) = Docs.PositionAt(text, "@CURSOR");
     var clean = text.Replace("@CURSOR", string.Empty);
-    var items = Sut.GetCompletions(Docs.Make(clean), line, character);
+    var items = (await Sut.GetCompletionsAsync(Docs.Make(clean), line, character, default)).Items;
     await Assert.That(items.Any(i => i.Label == "net8.0")).IsTrue();
   }
 
@@ -54,7 +54,7 @@ public class CompletionServiceTests
     var text = "<Project>\n<PropertyGroup>\n<Nullable>@CURSOR</Nullable>\n</PropertyGroup>\n</Project>";
     var (line, character) = Docs.PositionAt(text, "@CURSOR");
     var clean = text.Replace("@CURSOR", string.Empty);
-    var items = Sut.GetCompletions(Docs.Make(clean), line, character);
+    var items = (await Sut.GetCompletionsAsync(Docs.Make(clean), line, character, default)).Items;
     await Assert.That(items.Any(i => i.Label == "enable")).IsTrue();
     await Assert.That(items.Any(i => i.Label == "disable")).IsTrue();
   }
@@ -65,7 +65,7 @@ public class CompletionServiceTests
     var text = "<Project>\n<PropertyGroup>\n<UserSecretsId>@CURSOR</UserSecretsId>\n</PropertyGroup>\n</Project>";
     var (line, character) = Docs.PositionAt(text, "@CURSOR");
     var clean = text.Replace("@CURSOR", string.Empty);
-    var items = Sut.GetCompletions(Docs.Make(clean), line, character);
+    var items = (await Sut.GetCompletionsAsync(Docs.Make(clean), line, character, default)).Items;
     await Assert.That(items.Length).IsEqualTo(1);
     await Assert.That(Guid.TryParse(items[0].InsertText, out _)).IsTrue();
   }
@@ -76,7 +76,7 @@ public class CompletionServiceTests
     var text = "<Project>\n<PropertyGroup>\n<Target@CURSOR\n</PropertyGroup>\n</Project>";
     var (line, character) = Docs.PositionAt(text, "@CURSOR");
     var clean = text.Replace("@CURSOR", string.Empty);
-    var items = Sut.GetCompletions(Docs.Make(clean), line, character);
+    var items = (await Sut.GetCompletionsAsync(Docs.Make(clean), line, character, default)).Items;
     await Assert.That(items.Any(i => i.Label == "TargetFramework")).IsTrue();
     await Assert.That(items.Any(i => i.Label == "TargetFrameworks")).IsTrue();
   }
@@ -87,7 +87,7 @@ public class CompletionServiceTests
     var text = "<Project>\n<PropertyGroup>\n<Tar@CURSOR\n</PropertyGroup>\n</Project>";
     var (line, character) = Docs.PositionAt(text, "@CURSOR");
     var clean = text.Replace("@CURSOR", string.Empty);
-    var items = Sut.GetCompletions(Docs.Make(clean), line, character);
+    var items = (await Sut.GetCompletionsAsync(Docs.Make(clean), line, character, default)).Items;
     await Assert.That(items.Any(i => i.Label == "TargetFramework")).IsTrue();
     await Assert.That(items.Any(i => i.Label == "TargetFrameworks")).IsTrue();
   }
@@ -97,7 +97,7 @@ public class CompletionServiceTests
   {
     var text = "@CURSOR";
     var (line, character) = Docs.PositionAt(text, "@CURSOR");
-    var items = Sut.GetCompletions(Docs.Make(string.Empty), line, character);
+    var items = (await Sut.GetCompletionsAsync(Docs.Make(string.Empty), line, character, default)).Items;
     await Assert.That(items.Length).IsEqualTo(0);
   }
 }

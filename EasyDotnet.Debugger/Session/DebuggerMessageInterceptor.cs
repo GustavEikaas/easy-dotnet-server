@@ -10,7 +10,9 @@ public class DebuggerMessageInterceptor(
   ILogger<DebuggerMessageInterceptor> logger,
   ValueConverterService valueConverterService,
   bool applyValueConverters,
-  Action<int> onDebugeeProcessStarted) : IDapMessageInterceptor
+  Action<int> onDebugeeProcessStarted,
+  FrameSourceTracker? frameSourceTracker = null,
+  IVariableLocationResolver? variableLocationResolver = null) : IDapMessageInterceptor
 
 {
   public async Task<ProtocolMessage?> InterceptAsync(
@@ -39,10 +41,14 @@ public class DebuggerMessageInterceptor(
   {
     logger.LogDebug("[DEBUGGER] Variables response");
 
+    valueConverterService.FormatInlineStringJsonVariables(response);
+
     if (applyValueConverters)
     {
       valueConverterService.RegisterVariablesReferences(response);
     }
+
+    TryDecorateVariablesWithLocations(response);
 
     return Task.FromResult<ProtocolMessage?>(response);
   }
@@ -50,7 +56,174 @@ public class DebuggerMessageInterceptor(
   private Task<ProtocolMessage?> HandleResponse(Response response)
   {
     logger.LogDebug("[DEBUGGER] Response: {command}", response.Command);
+
+    if (response.Command == "stackTrace")
+    {
+      TryCaptureStackTrace(response);
+    }
+    else if (response.Command == "scopes")
+    {
+      TryCaptureScopes(response);
+    }
+
+    valueConverterService.FormatEvaluateResponse(response);
+    AdvertiseCompletionsCapability(response);
     return Task.FromResult<ProtocolMessage?>(response);
+  }
+  private static void AdvertiseCompletionsCapability(Response response)
+  {
+    if (!response.Success || !string.Equals(response.Command, "initialize", StringComparison.OrdinalIgnoreCase))
+    {
+      return;
+    }
+
+    var body = response.Body is { ValueKind: JsonValueKind.Object }
+      ? JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(response.Body.Value.GetRawText()) ?? []
+      : [];
+
+    body["supportsCompletionsRequest"] = JsonSerializer.SerializeToElement(true);
+    response.Body = JsonSerializer.SerializeToElement(body);
+  }
+
+  private void TryCaptureStackTrace(Response response)
+  {
+    if (frameSourceTracker is null || response.Body is not JsonElement body || body.ValueKind != JsonValueKind.Object)
+    {
+      return;
+    }
+
+    try
+    {
+      if (!body.TryGetProperty("stackFrames", out var frames) || frames.ValueKind != JsonValueKind.Array)
+      {
+        return;
+      }
+
+      foreach (var frame in frames.EnumerateArray())
+      {
+        if (!frame.TryGetProperty("id", out var idEl) || !idEl.TryGetInt32(out var frameId))
+        {
+          continue;
+        }
+        if (!frame.TryGetProperty("source", out var srcEl) || srcEl.ValueKind != JsonValueKind.Object)
+        {
+          continue;
+        }
+        if (!srcEl.TryGetProperty("path", out var pathEl) || pathEl.ValueKind != JsonValueKind.String)
+        {
+          continue;
+        }
+        var path = pathEl.GetString();
+        if (string.IsNullOrEmpty(path))
+        {
+          continue;
+        }
+        var line = frame.TryGetProperty("line", out var lineEl) && lineEl.TryGetInt32(out var l) ? l : 1;
+        frameSourceTracker.RecordFrame(frameId, path, line);
+      }
+    }
+    catch (Exception ex)
+    {
+      logger.LogDebug(ex, "TryCaptureStackTrace failed");
+    }
+  }
+
+  private void TryCaptureScopes(Response response)
+  {
+    if (frameSourceTracker is null)
+    {
+      return;
+    }
+
+    try
+    {
+      var frameId = frameSourceTracker.TakeScopesFrameId(response.RequestSeq);
+      if (frameId is null)
+      {
+        return;
+      }
+
+      if (response.Body is not JsonElement body || body.ValueKind != JsonValueKind.Object)
+      {
+        return;
+      }
+      if (!body.TryGetProperty("scopes", out var scopes) || scopes.ValueKind != JsonValueKind.Array)
+      {
+        return;
+      }
+
+      foreach (var scope in scopes.EnumerateArray())
+      {
+        if (!scope.TryGetProperty("name", out var nameEl) || nameEl.ValueKind != JsonValueKind.String)
+        {
+          continue;
+        }
+        var name = nameEl.GetString();
+        if (!IsLocalsScopeName(name))
+        {
+          continue;
+        }
+        if (!scope.TryGetProperty("variablesReference", out var refEl) || !refEl.TryGetInt32(out var varRef))
+        {
+          continue;
+        }
+        frameSourceTracker.RecordLocalsScope(varRef, frameId.Value);
+      }
+    }
+    catch (Exception ex)
+    {
+      logger.LogDebug(ex, "TryCaptureScopes failed");
+    }
+  }
+
+  private static bool IsLocalsScopeName(string? name)
+    => name is not null && (name.Equals("Locals", StringComparison.OrdinalIgnoreCase) || name.Equals("Local", StringComparison.OrdinalIgnoreCase));
+
+  private void TryDecorateVariablesWithLocations(VariablesResponse response)
+  {
+    if (frameSourceTracker is null || variableLocationResolver is null || response.Body?.Variables is null)
+    {
+      return;
+    }
+
+    try
+    {
+      var varRef = frameSourceTracker.TakeVariablesRef(response.RequestSeq);
+      if (varRef is null)
+      {
+        return;
+      }
+      var source = frameSourceTracker.TryGetSourceForVarRef(varRef.Value);
+      if (source is null)
+      {
+        return;
+      }
+
+      var locations = variableLocationResolver.Resolve(source.Path, source.Line);
+      if (locations.Count == 0)
+      {
+        return;
+      }
+
+      foreach (var v in response.Body.Variables)
+      {
+        if (!locations.TryGetValue(v.Name, out var loc))
+        {
+          continue;
+        }
+        v.ExtraProperties ??= [];
+        v.ExtraProperties["location"] = JsonSerializer.SerializeToElement(new
+        {
+          path = loc.Path,
+          line = loc.Line,
+          column = loc.Column,
+        });
+      }
+    }
+    catch (Exception ex)
+    {
+      logger.LogDebug(ex, "TryDecorateVariablesWithLocations failed");
+    }
   }
 
   private Task<ProtocolMessage?> HandleEvent(Event evt)
@@ -59,6 +232,11 @@ public class DebuggerMessageInterceptor(
     if (evt.EventName == "stopped")
     {
       valueConverterService.ClearVariablesReferenceMap();
+      frameSourceTracker?.Clear();
+    }
+    else if (evt.EventName == "continued")
+    {
+      frameSourceTracker?.Clear();
     }
     else if (evt.EventName == "exited")
     {

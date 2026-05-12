@@ -10,7 +10,8 @@ public class DebugSessionFactory(ILoggerFactory loggerFactory) : IDebugSessionFa
 {
   public DebugSession Create(
     Func<InterceptableAttachRequest, IDebuggerProxy, Task<InterceptableAttachRequest>> attachRequestRewriter,
-    bool applyValueConverters)
+    bool applyValueConverters,
+    IVariableLocationResolver? variableLocationResolver = null)
   {
     var valueConverterService = new ValueConverterService(
       loggerFactory.CreateLogger<ValueConverterService>(),
@@ -24,18 +25,23 @@ public class DebugSessionFactory(ILoggerFactory loggerFactory) : IDebugSessionFa
 
     DebugSessionCoordinator? coordinator = null;
 
+    var frameSourceTracker = variableLocationResolver is not null ? new FrameSourceTracker() : null;
+
     var clientInterceptor = new ClientMessageInterceptor(
       loggerFactory.CreateLogger<ClientMessageInterceptor>(),
       valueConverterService,
       (a) => attachRequestRewriter(a, coordinator!.Proxy!),
       processId => coordinator?.NotifyDebugeeProcessStarted(processId),
-      () => coordinator?.NotifyConfigurationDone());
+      () => coordinator?.NotifyConfigurationDone(),
+      frameSourceTracker);
 
     var debuggerInterceptor = new DebuggerMessageInterceptor(
       loggerFactory.CreateLogger<DebuggerMessageInterceptor>(),
       valueConverterService,
       applyValueConverters,
-      processId => coordinator?.NotifyDebugeeProcessStarted(processId));
+      processId => coordinator?.NotifyDebugeeProcessStarted(processId),
+      frameSourceTracker,
+      variableLocationResolver);
 
     coordinator = new DebugSessionCoordinator(
      loggerFactory.CreateLogger<DebugSessionCoordinator>(),

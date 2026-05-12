@@ -178,7 +178,7 @@ public class SettingsService(
     string? launchProfile = null;
     string? projectName = null;
 
-    if (startupProject is not null)
+    if (startupProject is not null && File.Exists(startupProject))
     {
       projectName = Path.GetFileNameWithoutExtension(startupProject);
       launchProfile = GetOrCreateProjectSettings(startupProject).LaunchProfile;

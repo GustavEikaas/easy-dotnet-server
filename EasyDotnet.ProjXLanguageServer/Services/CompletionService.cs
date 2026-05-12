@@ -1,15 +1,19 @@
 using EasyDotnet.MsBuild;
+using EasyDotnet.Nuget;
 using EasyDotnet.ProjXLanguageServer.Utils;
+using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.LanguageServer.Protocol;
 
 namespace EasyDotnet.ProjXLanguageServer.Services;
 
+public sealed record CompletionResult(CompletionItem[] Items, bool IsIncomplete);
+
 public interface ICompletionService
 {
-  CompletionItem[] GetCompletions(CsprojDocument doc, int line, int character);
+  Task<CompletionResult> GetCompletionsAsync(CsprojDocument doc, int line, int character, CancellationToken cancellationToken);
 }
 
-public class CompletionService : ICompletionService
+public class CompletionService(INugetSearchService nugetSearch, ILogger<CompletionService> logger) : ICompletionService
 {
   private static readonly Dictionary<string, string[]> ValueCompletions = new(StringComparer.Ordinal)
   {
@@ -29,19 +33,112 @@ public class CompletionService : ICompletionService
     ["Configurations"] = ["Debug;Release"]
   };
 
-  public CompletionItem[] GetCompletions(CsprojDocument doc, int line, int character)
+  public async Task<CompletionResult> GetCompletionsAsync(CsprojDocument doc, int line, int character, CancellationToken cancellationToken)
   {
     var ctx = XmlContextResolver.Resolve(doc, line, character);
 
     return ctx.Kind switch
     {
-      CursorContextKind.ProjectRoot => GetProjectRootCompletions(),
-      CursorContextKind.PropertyGroup => GetPropertyGroupCompletions(),
-      CursorContextKind.ItemGroup => GetItemGroupCompletions(),
-      CursorContextKind.InsideElementText => GetInsideElementCompletions(ctx.ElementName),
-      CursorContextKind.InsideStartTag => GetStartTagCompletions(ctx.ParentElementName),
-      _ => [],
+      CursorContextKind.ProjectRoot => Static(GetProjectRootCompletions()),
+      CursorContextKind.PropertyGroup => Static(GetPropertyGroupCompletions()),
+      CursorContextKind.ItemGroup => Static(GetItemGroupCompletions()),
+      CursorContextKind.InsideElementText => Static(GetInsideElementCompletions(ctx.ElementName)),
+      CursorContextKind.InsideStartTag => Static(GetStartTagCompletions(ctx.ParentElementName)),
+      CursorContextKind.InsideAttributeValue => await GetAttributeValueCompletionsAsync(ctx, cancellationToken),
+      _ => Static([]),
     };
+  }
+
+  private static CompletionResult Static(CompletionItem[] items) => new(items, false);
+
+  private async Task<CompletionResult> GetAttributeValueCompletionsAsync(CursorContext ctx, CancellationToken cancellationToken)
+  {
+    if (ctx.ElementName != "PackageReference")
+    {
+      return Static([]);
+    }
+
+    try
+    {
+      switch (ctx.AttributeName)
+      {
+        case "Include":
+          {
+            var prefix = ctx.Attributes?.GetValueOrDefault("Include") ?? string.Empty;
+            if (prefix.Length < 1)
+            {
+              return Static([]);
+            }
+            var hits = await nugetSearch.SearchByPrefixAsync(prefix, take: 20, includePrerelease: false, cancellationToken);
+            var items = hits.Select(h => new CompletionItem
+            {
+              Label = h.Id,
+              Kind = CompletionItemKind.Module,
+              InsertText = h.Id,
+              Detail = string.IsNullOrEmpty(h.Authors) ? h.Version : $"{h.Version} — {h.Authors}",
+              Documentation = string.IsNullOrEmpty(h.Description)
+                ? null
+                : new MarkupContent { Kind = MarkupKind.Markdown, Value = h.Description }
+            }).ToArray();
+            return new CompletionResult(items, IsIncomplete: true);
+          }
+        case "Version":
+          {
+            var packageId = ctx.Attributes?.GetValueOrDefault("Include");
+            if (string.IsNullOrWhiteSpace(packageId))
+            {
+              return Static([]);
+            }
+            var versions = await nugetSearch.GetVersionsAsync(packageId, includePrerelease: true, cancellationToken);
+            var latestStable = versions.FirstOrDefault(v => !v.IsPrerelease);
+            var latestAny = versions.FirstOrDefault();
+
+            var items = new List<CompletionItem>(versions.Count + 2);
+            if (latestStable is not null)
+            {
+              items.Add(new CompletionItem
+              {
+                Label = "latest",
+                Kind = CompletionItemKind.Constant,
+                InsertText = latestStable.ToNormalizedString(),
+                Detail = $"latest stable ({latestStable.ToNormalizedString()})",
+                SortText = "00000"
+              });
+            }
+            if (latestAny is not null && latestAny.IsPrerelease && !latestAny.Equals(latestStable))
+            {
+              items.Add(new CompletionItem
+              {
+                Label = "latest-preview",
+                Kind = CompletionItemKind.Constant,
+                InsertText = latestAny.ToNormalizedString(),
+                Detail = $"latest prerelease ({latestAny.ToNormalizedString()})",
+                SortText = "00001"
+              });
+            }
+            items.AddRange(versions.Select((v, i) => new CompletionItem
+            {
+              Label = v.ToNormalizedString(),
+              Kind = CompletionItemKind.Value,
+              InsertText = v.ToNormalizedString(),
+              Detail = v.IsPrerelease ? "prerelease" : "release",
+              SortText = (i + 10).ToString("D5")
+            }));
+            return new CompletionResult(items.ToArray(), IsIncomplete: false);
+          }
+        default:
+          return Static([]);
+      }
+    }
+    catch (OperationCanceledException)
+    {
+      throw;
+    }
+    catch (Exception e)
+    {
+      logger.LogWarning(e, "NuGet completion failed for attribute {attr}", ctx.AttributeName);
+      return Static([]);
+    }
   }
 
   private static CompletionItem[] GetInsideElementCompletions(string? elementName) => elementName switch

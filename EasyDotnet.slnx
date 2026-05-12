@@ -17,6 +17,7 @@
   <Project Path="EasyDotnet.IntegrationTests/EasyDotnet.IntegrationTests.csproj" />
   <Project Path="EasyDotnet.MsBuild.Tests/EasyDotnet.MsBuild.Tests.csproj" />
   <Project Path="EasyDotnet.MsBuild/EasyDotnet.MsBuild.csproj" />
+  <Project Path="EasyDotnet.Nuget/EasyDotnet.Nuget.csproj" />
   <Project Path="EasyDotnet.ProjXLanguageServer.Tests/EasyDotnet.ProjXLanguageServer.Tests.csproj" />
   <Project Path="EasyDotnet.ProjXLanguageServer/EasyDotnet.ProjXLanguageServer.csproj" />
   <Project Path="EasyDotnet.RoslynLanguageServices/EasyDotnet.RoslynLanguageServices.csproj" />
