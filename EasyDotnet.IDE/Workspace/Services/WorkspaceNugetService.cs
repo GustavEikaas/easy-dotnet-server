@@ -23,7 +23,7 @@ public class WorkspaceNugetService(
 
   public async Task PackAsync(NugetPackRequest request, CancellationToken ct)
   {
-    var project = await ResolvePackableProjectAsync(request.FilePath, ct);
+    var project = await ResolvePackableProjectAsync(ct);
     if (project is null) return;
 
     await PackProjectAsync(project, ct);
@@ -31,7 +31,7 @@ public class WorkspaceNugetService(
 
   public async Task PackAndPushAsync(NugetPackRequest request, CancellationToken ct)
   {
-    var project = await ResolvePackableProjectAsync(request.FilePath, ct);
+    var project = await ResolvePackableProjectAsync(ct);
     if (project is null) return;
 
     if (!await PackProjectAsync(project, ct)) return;
@@ -70,7 +70,7 @@ public class WorkspaceNugetService(
           operationName: "Pack",
           ct);
 
-  private async Task<ValidatedDotnetProject?> ResolvePackableProjectAsync(string? filePath, CancellationToken ct)
+  private async Task<ValidatedDotnetProject?> ResolvePackableProjectAsync(CancellationToken ct)
   {
     var solutionFile = clientService.ProjectInfo?.SolutionFile;
 
@@ -89,12 +89,6 @@ public class WorkspaceNugetService(
     {
       await editorService.DisplayError("No packable projects found");
       return null;
-    }
-
-    if (filePath is not null)
-    {
-      var match = projects.FirstOrDefault(p => string.Equals(p.ProjectFullPath, filePath, StringComparison.OrdinalIgnoreCase));
-      if (match is not null) return match;
     }
 
     if (projects.Count == 1) return projects[0];
