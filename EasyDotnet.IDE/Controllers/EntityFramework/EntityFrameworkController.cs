@@ -4,6 +4,7 @@ using EasyDotnet.IDE.EntityFramework;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Models.Client;
 using EasyDotnet.IDE.Models.Client.Prompt;
+using EasyDotnet.IDE.Picker.Models;
 using EasyDotnet.IDE.Services;
 using StreamJsonRpc;
 
@@ -73,6 +74,51 @@ public class EntityFrameworkController(
       ["database", "update", selectedMigration.Id, "--project", efProject, "--startup-project", startupProject, "--context", dbContext, "--no-build"],
       ".",
       []), cancellationToken);
+  }
+
+  [JsonRpcMethod("ef/migrations-list")]
+  public async Task ListMigrations(CancellationToken cancellationToken)
+  {
+    var (efProject, startupProject, dbContext) = await PromptEfProjectInfoAsync(cancellationToken);
+    var success = await editorService.BuildProject(startupProject, cancellationToken);
+    if (!success) return;
+
+    List<Migration> migrations;
+    using (var listScope = progressScopeFactory.Create("Listing migrations", "Resolving migrations"))
+    {
+      migrations = await entityFrameworkService.ListMigrationsAsync(efProject, startupProject, dbContext, noBuild: true, cancellationToken: cancellationToken);
+    }
+
+    if (migrations.Count == 0)
+    {
+      await editorService.DisplayMessage("No migrations found");
+      return;
+    }
+
+    var projectDir = Path.GetDirectoryName(efProject)!;
+    var choices = migrations
+        .Select(m =>
+        {
+          var label = m.Applied ? $"✓ {m.Name}" : $"  {m.Name}";
+          return new PickerChoice<Migration>(m.Id, label, m);
+        })
+        .ToArray();
+
+    var selected = await editorService.RequestPickerAsync(
+        "Migrations",
+        choices,
+        (m, _) =>
+        {
+          var filePath = Path.Combine(projectDir, "Migrations", $"{m.SafeName ?? m.Name}.cs");
+          return Task.FromResult<PreviewResult>(new PreviewResult.File(filePath));
+        },
+        cancellationToken);
+
+    if (selected is null) return;
+
+    var selectedFileName = selected.SafeName ?? selected.Name;
+    var migrationFilePath = Path.Combine(projectDir, "Migrations", $"{selectedFileName}.cs");
+    await editorService.RequestOpenBuffer(migrationFilePath);
   }
 
   [JsonRpcMethod("ef/database-update")]

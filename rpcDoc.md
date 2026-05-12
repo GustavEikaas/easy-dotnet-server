@@ -504,6 +504,12 @@ _No parameters_
 
 **Returns:** `Task`
 
+### `ef/migrations-list`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+
+**Returns:** `Task`
+
 ### `ef/migrations-remove`
 | Parameter | Type | Optional |
 |-----------|------|----------|
