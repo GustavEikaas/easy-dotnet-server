@@ -42,13 +42,13 @@ public abstract class WorkspaceNugetPackAndPushTests<TContainer> : WorkspaceNuge
     await InitializeWorkspaceAsync(ws);
 
     var pushTask = BeginPackAndPush();
-    var buildMessage = await ReceiveDisplayMessageAsync();
+    var packMessage = await ReceiveDisplayMessageAsync();
     await ReceiveSelectionAsync(req =>
       Array.Find(req.Choices, c => c.Id == "local")?.Id ?? req.Choices[0].Id);
     var pushMessage = await ReceiveDisplayMessageAsync();
     await pushTask;
 
-    Assert.Equal("Build succeeded.", buildMessage);
+    Assert.Equal("Pack succeeded.", packMessage);
     Assert.Contains("Pushed Lib.PushOk.2.0.0.nupkg", pushMessage);
 
     var pushed = Directory.EnumerateFiles(ws.LocalNugetFeedDir!, "Lib.PushOk*.nupkg", SearchOption.AllDirectories);

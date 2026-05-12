@@ -22,13 +22,11 @@ public abstract class WorkspaceNugetPackTests<TContainer> : WorkspaceNugetTestBa
     await InitializeWorkspaceAsync(ws);
 
     var packTask = BeginPack();
-    var buildMessage = await ReceiveDisplayMessageAsync();
-    var packMessage = await ReceiveDisplayMessageAsync();
+    var message = await ReceiveDisplayMessageAsync();
     await packTask;
 
     Assert.Equal(0, SelectionCallCount);
-    Assert.Equal("Build succeeded.", buildMessage);
-    Assert.Equal("Packed Lib.Pack", packMessage);
+    Assert.Equal("Pack succeeded.", message);
 
     var nupkg = Path.Combine(ws.Project("Lib.Pack").Dir, "bin", "Release", "Lib.Pack.1.0.0.nupkg");
     Assert.True(File.Exists(nupkg), $"Expected nupkg at {nupkg}");

@@ -1,14 +1,12 @@
 using EasyDotnet.Controllers;
 using EasyDotnet.Controllers.Nuget;
 using EasyDotnet.IDE.Interfaces;
-using EasyDotnet.IDE.Workspace.Controllers;
-using EasyDotnet.IDE.Workspace.Services;
 using EasyDotnet.Services;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Controllers.Nuget;
 
-public class NugetController(IClientService clientService, NugetService nugetService, WorkspaceNugetService workspaceNugetService) : BaseController
+public class NugetController(IClientService clientService, NugetService nugetService) : BaseController
 {
   [JsonRpcMethod("nuget/restore")]
   public async Task<RestoreResult> RestorePackages(string targetPath)
@@ -17,20 +15,6 @@ public class NugetController(IClientService clientService, NugetService nugetSer
 
     var result = await nugetService.RestorePackagesAsync(targetPath, CancellationToken.None);
     return result;
-  }
-
-  [JsonRpcMethod("nuget/pack", UseSingleObjectParameterDeserialization = true)]
-  public async Task PackAsync(NugetPackRequest request, CancellationToken ct)
-  {
-    clientService.ThrowIfNotInitialized();
-    await workspaceNugetService.PackAsync(request, ct);
-  }
-
-  [JsonRpcMethod("nuget/pack-and-push", UseSingleObjectParameterDeserialization = true)]
-  public async Task PackAndPushAsync(NugetPackRequest request, CancellationToken ct)
-  {
-    clientService.ThrowIfNotInitialized();
-    await workspaceNugetService.PackAndPushAsync(request, ct);
   }
 
   [JsonRpcMethod("nuget/get-package-versions")]

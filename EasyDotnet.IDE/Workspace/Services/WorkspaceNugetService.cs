@@ -15,7 +15,6 @@ public class WorkspaceNugetService(
     WorkspaceBuildHostManager buildHostManager,
     WorkspaceBuildService buildService,
     NugetService nugetService,
-    IProcessQueue processQueue,
     IProgressScopeFactory progressScopeFactory,
     ILogger<WorkspaceNugetService> logger)
 {
@@ -27,9 +26,7 @@ public class WorkspaceNugetService(
     var project = await ResolvePackableProjectAsync(request.FilePath, ct);
     if (project is null) return;
 
-    if (!await BuildAndPackAsync(project, ct)) return;
-
-    await editorService.DisplayMessage($"Packed {project.ProjectName}");
+    await PackProjectAsync(project, ct);
   }
 
   public async Task PackAndPushAsync(NugetPackRequest request, CancellationToken ct)
@@ -37,7 +34,7 @@ public class WorkspaceNugetService(
     var project = await ResolvePackableProjectAsync(request.FilePath, ct);
     if (project is null) return;
 
-    if (!await BuildAndPackAsync(project, ct)) return;
+    if (!await PackProjectAsync(project, ct)) return;
 
     var packagePath = ResolvePackagePath(project);
     if (packagePath is null)
@@ -63,6 +60,15 @@ public class WorkspaceNugetService(
       await editorService.DisplayError($"Push failed: {ex.Message}");
     }
   }
+
+  private Task<bool> PackProjectAsync(ValidatedDotnetProject project, CancellationToken ct) =>
+      buildService.BuildQuickfixAsync(
+          project.ProjectFullPath,
+          project.ProjectName,
+          Configuration,
+          buildTarget: "Pack",
+          operationName: "Pack",
+          ct);
 
   private async Task<ValidatedDotnetProject?> ResolvePackableProjectAsync(string? filePath, CancellationToken ct)
   {
@@ -117,32 +123,6 @@ public class WorkspaceNugetService(
             .ToListAsync(ct))
             .Where(r => r.Success && r.Project?.IsPackable == true)
             .Select(r => r.Project!)];
-  }
-
-  private async Task<bool> BuildAndPackAsync(ValidatedDotnetProject project, CancellationToken ct)
-  {
-    if (!await buildService.BuildQuickfixAsync(project.ProjectFullPath, project.ProjectName, Configuration, ct))
-      return false;
-
-    using (progressScopeFactory.Create("Packing...", $"Packing {project.ProjectName}"))
-    {
-      var arguments = $"pack \"{project.ProjectFullPath}\" -c {Configuration} --no-build";
-      var (success, stdout, stderr) = await processQueue.RunProcessAsync(
-          "dotnet",
-          arguments,
-          new ProcessOptions(KillOnTimeout: true, CancellationTimeout: TimeSpan.FromMinutes(10)),
-          ct);
-
-      if (!success)
-      {
-        logger.LogWarning("dotnet pack failed. stdout={Stdout} stderr={Stderr}", stdout, stderr);
-        var message = !string.IsNullOrWhiteSpace(stderr) ? stderr : stdout;
-        await editorService.DisplayError($"Pack failed for {project.ProjectName}: {message}");
-        return false;
-      }
-    }
-
-    return true;
   }
 
   private static string? ResolvePackagePath(ValidatedDotnetProject project)

@@ -16,8 +16,8 @@ public abstract class WorkspaceNugetTestBase<TContainer> : WorkspaceBuildTestBas
   private static readonly TimeSpan PackScopeTimeout = TimeSpan.FromMinutes(5);
 
   protected Task BeginPack(string? filePath = null)
-    => BeginCall(Container.Rpc.NugetPackAsync(filePath), PackScopeTimeout);
+    => BeginCall(Container.Rpc.WorkspacePackAsync(filePath), PackScopeTimeout);
 
   protected Task BeginPackAndPush(string? filePath = null)
-    => BeginCall(Container.Rpc.NugetPackAndPushAsync(filePath), PackScopeTimeout);
+    => BeginCall(Container.Rpc.WorkspacePackAndPushAsync(filePath), PackScopeTimeout);
 }

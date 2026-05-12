@@ -7,9 +7,9 @@ namespace EasyDotnet.ContainerTests.Workspace.Nuget;
 /// </summary>
 public static class WorkspaceNugetExtensions
 {
-  public static Task NugetPackAsync(this JsonRpc rpc, string? filePath = null)
-    => rpc.InvokeWithParameterObjectAsync("nuget/pack", new { filePath });
+  public static Task WorkspacePackAsync(this JsonRpc rpc, string? filePath = null)
+    => rpc.InvokeWithParameterObjectAsync("workspace/pack", new { filePath });
 
-  public static Task NugetPackAndPushAsync(this JsonRpc rpc, string? filePath = null)
-    => rpc.InvokeWithParameterObjectAsync("nuget/pack-and-push", new { filePath });
+  public static Task WorkspacePackAndPushAsync(this JsonRpc rpc, string? filePath = null)
+    => rpc.InvokeWithParameterObjectAsync("workspace/pack-and-push", new { filePath });
 }
