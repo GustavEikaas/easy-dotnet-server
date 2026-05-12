@@ -143,16 +143,19 @@ public class WorkspaceBuildService(
       await editorService.DisplayError($"Build failed for {name} (exit code {exitCode})");
   }
 
-  private async Task RunBuildQuickfixAsync(string targetPath, string name, CancellationToken ct)
+  private Task RunBuildQuickfixAsync(string targetPath, string name, CancellationToken ct) =>
+      BuildQuickfixAsync(targetPath, name, "Debug", ct);
+
+  public async Task<bool> BuildQuickfixAsync(string targetPath, string name, string configuration, CancellationToken ct)
   {
     if (!await RestoreBeforeBuildQuickfixAsync(targetPath, name, ct))
-      return;
+      return false;
 
     List<BatchBuildResult> results;
     using (progressScopeFactory.Create("Building...", $"Building {name}"))
     {
       results = await buildHostManager
-          .BatchBuildAsync(new BatchBuildRequest([targetPath], "Debug"), ct)
+          .BatchBuildAsync(new BatchBuildRequest([targetPath], configuration), ct)
           .ToListAsync(ct);
     }
 
@@ -167,19 +170,20 @@ public class WorkspaceBuildService(
     if (errors.Count == 0 && warnings.Count == 0)
     {
       await editorService.DisplayMessage("Build succeeded.");
-      return;
+      return true;
     }
 
     if (errors.Count == 0)
     {
       await editorService.SetQuickFixListSilent([.. warnings]);
       await editorService.DisplayMessage($"Build succeeded — {warnings.Count} warning(s)");
-      return;
+      return true;
     }
 
     var items = errors.Concat(warnings).ToArray();
     await editorService.SetQuickFixList(items);
     await editorService.DisplayError($"Build FAILED — {errors.Count} error(s), {warnings.Count} warning(s)");
+    return false;
   }
 
   private async Task<bool> RestoreBeforeBuildQuickfixAsync(string targetPath, string name, CancellationToken ct)

@@ -1,12 +1,14 @@
 using EasyDotnet.Controllers;
 using EasyDotnet.Controllers.Nuget;
 using EasyDotnet.IDE.Interfaces;
+using EasyDotnet.IDE.Workspace.Controllers;
+using EasyDotnet.IDE.Workspace.Services;
 using EasyDotnet.Services;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Controllers.Nuget;
 
-public class NugetController(IClientService clientService, NugetService nugetService) : BaseController
+public class NugetController(IClientService clientService, NugetService nugetService, WorkspaceNugetService workspaceNugetService) : BaseController
 {
   [JsonRpcMethod("nuget/restore")]
   public async Task<RestoreResult> RestorePackages(string targetPath)
@@ -17,22 +19,18 @@ public class NugetController(IClientService clientService, NugetService nugetSer
     return result;
   }
 
-  [JsonRpcMethod("nuget/list-sources")]
-  public IAsyncEnumerable<NugetSourceResponse> GetSources()
+  [JsonRpcMethod("nuget/pack", UseSingleObjectParameterDeserialization = true)]
+  public async Task PackAsync(NugetPackRequest request, CancellationToken ct)
   {
     clientService.ThrowIfNotInitialized();
-
-    var sources = nugetService.GetSources();
-    return sources.Select(x => x.ToResponse()).ToBatchedAsyncEnumerable(50);
+    await workspaceNugetService.PackAsync(request, ct);
   }
 
-  [JsonRpcMethod("nuget/push")]
-  public async Task<NugetPushResponse> PushPackages(List<string> packagePaths, string source, string? apiKey = null)
+  [JsonRpcMethod("nuget/pack-and-push", UseSingleObjectParameterDeserialization = true)]
+  public async Task PackAndPushAsync(NugetPackRequest request, CancellationToken ct)
   {
     clientService.ThrowIfNotInitialized();
-
-    var sources = await nugetService.PushPackageAsync(packagePaths, source, apiKey);
-    return new NugetPushResponse(sources);
+    await workspaceNugetService.PackAndPushAsync(request, ct);
   }
 
   [JsonRpcMethod("nuget/get-package-versions")]
