@@ -60,6 +60,20 @@
 
 **Returns:** `Task`
 
+### `workspace/pack`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | NugetPackRequest |   |
+
+**Returns:** `Task`
+
+### `workspace/pack-and-push`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | NugetPackRequest |   |
+
+**Returns:** `Task`
+
 ### `workspace/restore`
 | Parameter | Type | Optional |
 |-----------|------|----------|
@@ -385,20 +399,6 @@ _No parameters_
 | includePrerelease | bool | ✅  |
 
 **Returns:** `Task<IAsyncEnumerable<string>>`
-
-### `nuget/list-sources`
-_No parameters_
-
-**Returns:** `IAsyncEnumerable<NugetSourceResponse>`
-
-### `nuget/push`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| packagePaths | List<string> |   |
-| source | string |   |
-| apiKey | string | ✅  |
-
-**Returns:** `Task<NugetPushResponse>`
 
 ### `nuget/restore`
 | Parameter | Type | Optional |
