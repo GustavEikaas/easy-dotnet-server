@@ -14,10 +14,26 @@ public sealed class InputPredictor
 
     var baseDir = instance.Directory;
 
+    var excluded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    foreach (var item in instance.Items)
+    {
+      if (!string.Equals(item.GetMetadataValue("ExcludedFromBuild"), "true", StringComparison.OrdinalIgnoreCase))
+      {
+        continue;
+      }
+      var p = item.GetMetadataValue("FullPath");
+      if (!string.IsNullOrEmpty(p))
+      {
+        excluded.Add(Path.GetFullPath(p));
+      }
+    }
+
     var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     foreach (var item in predictions.InputFiles)
     {
-      files.Add(Normalize(item.Path, baseDir));
+      var n = Normalize(item.Path, baseDir);
+      if (excluded.Contains(n)) continue;
+      files.Add(n);
     }
 
     if (!string.IsNullOrEmpty(instance.FullPath))
@@ -55,7 +71,7 @@ public sealed class InputPredictor
       outDirs.Add(Normalize(item.Path, baseDir));
     }
 
-    return new PredictionResult(files.ToList(), dirs.ToList(), outFiles.ToList(), outDirs.ToList());
+    return new PredictionResult([.. files], [.. dirs], [.. outFiles], [.. outDirs]);
   }
 
   private static string Normalize(string path, string baseDir)

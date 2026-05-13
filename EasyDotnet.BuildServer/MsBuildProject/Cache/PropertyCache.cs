@@ -13,8 +13,6 @@ public sealed class PropertyCache
 {
   private readonly InputPredictor _predictor;
   private readonly Logger _logger;
-  private readonly string _diskRoot;
-
   private readonly ConcurrentDictionary<PropertyCacheKey, PropertyCacheEntry> _memory = new();
   private readonly ConcurrentDictionary<PropertyCacheKey, SemaphoreSlim> _locks = new();
 
@@ -28,18 +26,18 @@ public sealed class PropertyCache
   {
     _predictor = predictor;
     _logger = logger;
-    _diskRoot = ResolveCacheRoot();
+    DiskRoot = ResolveCacheRoot();
     try
     {
-      Directory.CreateDirectory(_diskRoot);
+      Directory.CreateDirectory(DiskRoot);
     }
     catch (Exception ex)
     {
-      _logger.LogWarning("PropertyCache: could not create disk root {Root}: {Message}", _diskRoot, ex.Message);
+      _logger.LogWarning("PropertyCache: could not create disk root {Root}: {Message}", DiskRoot, ex.Message);
     }
   }
 
-  public string DiskRoot => _diskRoot;
+  public string DiskRoot { get; }
 
   public PropertyCacheStats Snapshot() => new(
       Interlocked.Read(ref _evaluations),
@@ -119,7 +117,7 @@ public sealed class PropertyCache
             key,
             propertiesCopy,
             manifest,
-            dirSet.ToList(),
+            [.. dirSet],
             DateTime.UtcNow.Ticks);
 
         _memory[key] = newEntry;
@@ -169,7 +167,7 @@ public sealed class PropertyCache
     return true;
   }
 
-  private string DiskPath(PropertyCacheKey key) => Path.Combine(_diskRoot, key.ToDiskFileName());
+  private string DiskPath(PropertyCacheKey key) => Path.Combine(DiskRoot, key.ToDiskFileName());
 
   private bool TryLoadFromDisk(PropertyCacheKey key, out PropertyCacheEntry? entry)
   {

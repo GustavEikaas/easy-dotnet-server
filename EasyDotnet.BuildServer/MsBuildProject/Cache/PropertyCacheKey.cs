@@ -23,7 +23,7 @@ public readonly record struct PropertyCacheKey(
   public string ToDiskFileName()
   {
     var raw = $"{ProjectFullPath}|{Configuration}|{TargetFramework}|{MsBuildVersion}";
-    return Sha256Hex(raw).Substring(0, 16) + ".props.json";
+    return Sha256Hex(raw)[..16] + ".props.json";
   }
 
   private static string Sha256Hex(string input)
