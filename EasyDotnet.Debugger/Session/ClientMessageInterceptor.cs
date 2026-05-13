@@ -431,17 +431,7 @@ public class ClientMessageInterceptor(
       }
       else
       {
-        JsonElement? body = null;
-        if (setExprResp.Body is { ValueKind: JsonValueKind.Object } setBody)
-        {
-          var remapped = new Dictionary<string, JsonElement>();
-          foreach (var prop in setBody.EnumerateObject())
-          {
-            var key = prop.Name == "value" ? "result" : prop.Name;
-            remapped[key] = prop.Value;
-          }
-          body = JsonSerializer.SerializeToElement(remapped, ProxyRequestOptions);
-        }
+        var body = BuildEvaluateAssignmentBody(setExprResp.Body, rhs);
 
         evaluateResponse = new Response
         {
@@ -472,6 +462,32 @@ public class ClientMessageInterceptor(
     }
 
     return null;
+  }
+
+  private static JsonElement BuildEvaluateAssignmentBody(JsonElement? setExpressionBody, string fallbackResult)
+  {
+    var remapped = new Dictionary<string, JsonElement>();
+
+    if (setExpressionBody is { ValueKind: JsonValueKind.Object } setBody)
+    {
+      foreach (var prop in setBody.EnumerateObject())
+      {
+        var key = prop.Name == "value" ? "result" : prop.Name;
+        remapped[key] = prop.Value.Clone();
+      }
+    }
+
+    if (!remapped.ContainsKey("result"))
+    {
+      remapped["result"] = JsonSerializer.SerializeToElement(fallbackResult, ProxyRequestOptions);
+    }
+
+    if (!remapped.ContainsKey("variablesReference"))
+    {
+      remapped["variablesReference"] = JsonSerializer.SerializeToElement(0, ProxyRequestOptions);
+    }
+
+    return JsonSerializer.SerializeToElement(remapped, ProxyRequestOptions);
   }
 
   private static (string Lhs, string Rhs)? TryParseAssignment(string expression)
