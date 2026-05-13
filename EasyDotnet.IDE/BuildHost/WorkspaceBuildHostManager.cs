@@ -1,24 +1,43 @@
 using System.Runtime.CompilerServices;
 using EasyDotnet.BuildServer.Contracts;
-using EasyDotnet.IDE;
 using EasyDotnet.IDE.Interfaces;
+using EasyDotnet.IDE.Workspace.BuildConfiguration;
 using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.IDE.BuildHost;
 
-public class WorkspaceBuildHostManager(
-    ISolutionService solutionService,
-    IBuildHostManager innerManager,
-    ProjectEvaluationCache cache,
-    ILogger<WorkspaceBuildHostManager> logger) : IBuildHostManager
+public class WorkspaceBuildHostManager : IBuildHostManager
 {
+  private readonly ISolutionService _solutionService;
+  private readonly IBuildHostManager _innerManager;
+  private readonly ProjectEvaluationCache _cache;
+  private readonly IWorkspaceBuildConfigurationService _workspaceBuildConfigurationService;
+  private readonly ILogger<WorkspaceBuildHostManager> _logger;
+
+  public WorkspaceBuildHostManager(
+      ISolutionService solutionService,
+      IBuildHostManager innerManager,
+      ProjectEvaluationCache cache,
+      IWorkspaceBuildConfigurationService workspaceBuildConfigurationService,
+      ILogger<WorkspaceBuildHostManager> logger)
+  {
+    _solutionService = solutionService;
+    _innerManager = innerManager;
+    _cache = cache;
+    _workspaceBuildConfigurationService = workspaceBuildConfigurationService;
+    _logger = logger;
+
+    workspaceBuildConfigurationService.ConfigurationChanged += _ => cache.Clear(CacheInvalidationReason.ClearedAll);
+  }
+
   public async Task PreloadProjectsAsync(
       List<string> projectPaths,
-      string configuration = "Debug",
+      string? configuration = null,
+      string? platform = null,
       CancellationToken ct = default)
   {
     if (projectPaths.Count == 0) { return; }
-    var request = new GetProjectPropertiesBatchRequest([.. projectPaths], configuration);
+    var request = new GetProjectPropertiesBatchRequest([.. projectPaths], configuration, platform);
     await GetProjectPropertiesBatchAsync(request, ct).ToListAsync(ct);
   }
 
@@ -26,49 +45,51 @@ public class WorkspaceBuildHostManager(
       GetProjectPropertiesBatchRequest request,
       [EnumeratorCancellation] CancellationToken ct)
   {
-    var config = request.Configuration ?? "Debug";
-    var missingPaths = new List<string>();
-    var ownedTcs = new Dictionary<string, TaskCompletionSource<List<ProjectEvaluationResult>>>();
-    var pendingTasks = new List<Task<List<ProjectEvaluationResult>>>();
+    var resolvedTargets = await ResolveTargetsAsync(request.ProjectPaths, request.Configuration, request.Platform, ct);
+    var fetchGroups = new Dictionary<(string Configuration, string Platform), List<string>>();
+    var tasksByTarget = new Dictionary<(string Path, string Configuration, string Platform), Task<List<ProjectEvaluationResult>>>();
 
-    foreach (var path in request.ProjectPaths)
+    foreach (var target in resolvedTargets)
     {
-      var (tcs, isNew) = cache.GetOrRegister(path, config);
+      var cacheKey = (target.TargetPath, target.Configuration, target.Platform ?? "");
+      var (tcs, isNew) = _cache.GetOrRegister(target.TargetPath, target.Configuration, target.Platform);
+      tasksByTarget[cacheKey] = tcs.Task;
+
       if (isNew)
       {
-        missingPaths.Add(path);
-        ownedTcs[path] = tcs;
-      }
-      else
-      {
-        pendingTasks.Add(tcs.Task);
+        var groupKey = (target.Configuration, target.Platform ?? "");
+        if (!fetchGroups.TryGetValue(groupKey, out var paths))
+        {
+          paths = [];
+          fetchGroups[groupKey] = paths;
+        }
+        paths.Add(target.TargetPath);
       }
     }
 
-    var fetchTask = missingPaths.Count > 0 ? ExecuteBatchFetchAsync(missingPaths, config, ct) : null;
+    var fetchTasks = fetchGroups
+        .Select(group => ExecuteBatchFetchAsync(group.Value, group.Key.Configuration, group.Key.Platform, ct))
+        .ToList();
 
-    foreach (var task in pendingTasks)
+    foreach (var target in resolvedTargets)
     {
-      foreach (var result in await task) { yield return result; }
-    }
-
-    if (fetchTask is not null)
-    {
-      await fetchTask;
-      foreach (var path in missingPaths)
+      foreach (var result in await tasksByTarget[(target.TargetPath, target.Configuration, target.Platform ?? "")])
       {
-        foreach (var result in await ownedTcs[path].Task) { yield return result; }
+        yield return result;
       }
     }
+
+    await Task.WhenAll(fetchTasks);
   }
 
   public async Task<ValidatedDotnetProject?> GetProjectAsync(
       string projectPath,
       string targetFramework,
-      string configuration = "Debug",
+      string? configuration = null,
+      string? platform = null,
       CancellationToken ct = default)
   {
-    var request = new GetProjectPropertiesBatchRequest([projectPath], configuration);
+    var request = new GetProjectPropertiesBatchRequest([projectPath], configuration, platform);
 
     await foreach (var result in GetProjectPropertiesBatchAsync(request, ct))
     {
@@ -78,7 +99,7 @@ public class WorkspaceBuildHostManager(
       }
     }
 
-    logger.LogWarning("Could not resolve {ProjectPath} for TFM {TFM}", projectPath, targetFramework);
+    _logger.LogWarning("Could not resolve {ProjectPath} for TFM {TFM}", projectPath, targetFramework);
     return null;
   }
 
@@ -86,7 +107,8 @@ public class WorkspaceBuildHostManager(
       string rootDir,
       Func<ValidatedDotnetProject, bool>? filter = null,
       int maxDepth = 3,
-      string configuration = "Debug",
+      string? configuration = null,
+      string? platform = null,
       CancellationToken ct = default)
   {
     var csprojFiles = Directory.EnumerateFiles(rootDir, "*.csproj", new EnumerationOptions
@@ -96,7 +118,7 @@ public class WorkspaceBuildHostManager(
     });
 
     var results = new List<ValidatedDotnetProject>();
-    var request = new GetProjectPropertiesBatchRequest([.. csprojFiles], configuration);
+    var request = new GetProjectPropertiesBatchRequest([.. csprojFiles], configuration, platform);
 
     await foreach (var result in GetProjectPropertiesBatchAsync(request, ct))
     {
@@ -106,7 +128,7 @@ public class WorkspaceBuildHostManager(
       }
       else if (!result.Success)
       {
-        logger.LogWarning(
+        _logger.LogWarning(
             "Failed to evaluate {ProjectPath} ({TFM}): {Error}",
             result.ProjectPath,
             result.TargetFramework ?? "unknown",
@@ -120,16 +142,17 @@ public class WorkspaceBuildHostManager(
   public async Task<List<ValidatedDotnetProject>> GetProjectsFromSolutionAsync(
       string solutionPath,
       Func<ValidatedDotnetProject, bool>? filter = null,
-      string configuration = "Debug",
+      string? configuration = null,
+      string? platform = null,
       CancellationToken ct = default)
   {
-    var solutionProjects = await solutionService.GetProjectsFromSolutionFile(solutionPath, ct);
+    var solutionProjects = await _solutionService.GetProjectsFromSolutionFile(solutionPath, ct);
     var projectPaths = solutionProjects.ConvertAll(x => x.AbsolutePath);
 
     if (projectPaths.Count == 0) { return []; }
 
     var results = new List<ValidatedDotnetProject>();
-    var request = new GetProjectPropertiesBatchRequest([.. projectPaths], configuration);
+    var request = new GetProjectPropertiesBatchRequest([.. projectPaths], configuration, platform);
 
     await foreach (var result in GetProjectPropertiesBatchAsync(request, ct))
     {
@@ -139,7 +162,7 @@ public class WorkspaceBuildHostManager(
       }
       else if (!result.Success)
       {
-        logger.LogWarning(
+        _logger.LogWarning(
             "Failed to evaluate {ProjectPath} ({TFM}): {Error}",
             result.ProjectPath,
             result.TargetFramework ?? "unknown",
@@ -152,23 +175,25 @@ public class WorkspaceBuildHostManager(
 
   public Task<List<ValidatedDotnetProject>> GetTestProjectsFromSolutionAsync(
       string solutionPath,
-      string configuration = "Debug",
+      string? configuration = null,
+      string? platform = null,
       CancellationToken ct = default) =>
       GetProjectsFromSolutionAsync(
           solutionPath,
           p => p.IsMTP || p.IsVsTest,
           configuration,
+          platform,
           ct);
 
   public async IAsyncEnumerable<RestoreResult> RestoreNugetPackagesAsync(
       RestoreRequest request,
       [EnumeratorCancellation] CancellationToken ct)
   {
-    await foreach (var result in innerManager.RestoreNugetPackagesAsync(request, ct))
+    await foreach (var result in _innerManager.RestoreNugetPackagesAsync(request, ct))
     {
       yield return result;
     }
-    cache.Clear(CacheInvalidationReason.Restore);
+    _cache.Clear(CacheInvalidationReason.Restore);
   }
 
   /// <summary>
@@ -178,7 +203,7 @@ public class WorkspaceBuildHostManager(
       string solutionPath,
       [EnumeratorCancellation] CancellationToken ct = default)
   {
-    var solutionProjects = await solutionService.GetProjectsFromSolutionFile(solutionPath, ct);
+    var solutionProjects = await _solutionService.GetProjectsFromSolutionFile(solutionPath, ct);
     var projectPaths = solutionProjects.ConvertAll(x => x.AbsolutePath);
 
     if (projectPaths.Count == 0) yield break;
@@ -193,64 +218,118 @@ public class WorkspaceBuildHostManager(
       BatchBuildRequest request,
       [EnumeratorCancellation] CancellationToken ct)
   {
-    await foreach (var result in innerManager.BatchBuildAsync(request, ct))
+    var resolvedTargets = await ResolveTargetsAsync(request.ProjectPaths, request.Configuration, request.Platform, ct);
+    var groups = resolvedTargets
+        .GroupBy(target => (target.Configuration, target.Platform), target => target.TargetPath)
+        .ToList();
+
+    foreach (var group in groups)
     {
-      yield return result;
+      var batchRequest = request with
+      {
+        ProjectPaths = [.. group],
+        Configuration = group.Key.Configuration,
+        Platform = group.Key.Platform
+      };
+
+      await foreach (var result in _innerManager.BatchBuildAsync(batchRequest, ct))
+      {
+        yield return result;
+      }
     }
   }
 
   public Task<GetWatchListResponse> GetProjectWatchListAsync(
       GetWatchListRequest request,
-      CancellationToken ct) =>
-      innerManager.GetProjectWatchListAsync(request, ct);
+      CancellationToken ct)
+  {
+    if (!string.IsNullOrWhiteSpace(request.Configuration) || !string.IsNullOrWhiteSpace(request.Platform))
+    {
+      return _innerManager.GetProjectWatchListAsync(request, ct);
+    }
+
+    return ResolveWatchListAsync(request.ProjectPath, ct);
+  }
 
   public Task<ConvertSingleFileResponse> ConvertFileToProjectAsync(string entryPointFilePath, CancellationToken cancellationToken) =>
-      innerManager.ConvertFileToProjectAsync(entryPointFilePath, cancellationToken);
+      _innerManager.ConvertFileToProjectAsync(entryPointFilePath, cancellationToken);
 
   public Task<BuildServerDiagnosticsResponse> GetBuildServerDiagnosticsAsync(CancellationToken cancellationToken) =>
-      innerManager.GetBuildServerDiagnosticsAsync(cancellationToken);
+      _innerManager.GetBuildServerDiagnosticsAsync(cancellationToken);
 
   public Task<InstalledPackageReference[]> ListPackageReferencesAsync(string projectPath, CancellationToken cancellationToken) =>
-      innerManager.ListPackageReferencesAsync(projectPath, cancellationToken);
+      _innerManager.ListPackageReferencesAsync(projectPath, cancellationToken);
 
   public Task SetLogLevelAsync(string level, CancellationToken cancellationToken) =>
-      innerManager.SetLogLevelAsync(level, cancellationToken);
+      _innerManager.SetLogLevelAsync(level, cancellationToken);
 
   public Task<string[]> GetLogsAsync(CancellationToken cancellationToken) =>
-      innerManager.GetLogsAsync(cancellationToken);
+      _innerManager.GetLogsAsync(cancellationToken);
 
-  public void InvalidateCache(string projectPath, string config = "Debug") => cache.Invalidate(projectPath, config);
+  public void InvalidateCache(string projectPath, string? config = null, string? platform = null) => _cache.Invalidate(projectPath, config, platform);
 
-  public void ClearCache() => cache.Clear(CacheInvalidationReason.ClearedAll);
+  public void ClearCache() => _cache.Clear(CacheInvalidationReason.ClearedAll);
 
-  public void Dispose() => innerManager.Dispose();
-  public ValueTask DisposeAsync() => innerManager.DisposeAsync();
+  public void Dispose() => _innerManager.Dispose();
+  public ValueTask DisposeAsync() => _innerManager.DisposeAsync();
 
   private async Task ExecuteBatchFetchAsync(
       List<string> paths,
       string config,
+      string? platform,
       CancellationToken ct)
   {
     var buckets = paths.ToDictionary(p => p, _ => new List<ProjectEvaluationResult>());
 
     try
     {
-      var request = new GetProjectPropertiesBatchRequest([.. paths], config);
+      var request = new GetProjectPropertiesBatchRequest([.. paths], config, platform);
 
-      await foreach (var result in innerManager.GetProjectPropertiesBatchAsync(request, ct))
+      await foreach (var result in _innerManager.GetProjectPropertiesBatchAsync(request, ct))
       {
         if (buckets.TryGetValue(result.ProjectPath, out var list)) { list.Add(result); }
       }
 
       foreach (var path in paths)
       {
-        cache.Complete(path, config, buckets[path]);
+        _cache.Complete(path, config, platform, buckets[path]);
       }
     }
     catch (Exception ex)
     {
-      logger.LogError(ex, "Failed to evaluate MSBuild batch");
-      foreach (var path in paths) { cache.Fault(path, config, ex); }
+      _logger.LogError(ex, "Failed to evaluate MSBuild batch");
+      foreach (var path in paths) { _cache.Fault(path, config, platform, ex); }
     }
+  }
+
+  private async Task<IReadOnlyList<ResolvedBuildConfiguration>> ResolveTargetsAsync(
+      IReadOnlyCollection<string> targetPaths,
+      string? configuration,
+      string? platform,
+      CancellationToken ct)
+  {
+    if (!string.IsNullOrWhiteSpace(configuration) || !string.IsNullOrWhiteSpace(platform))
+    {
+      var explicitConfiguration = configuration ?? "Debug";
+      var workspaceConfiguration = new WorkspaceBuildConfiguration(explicitConfiguration, platform);
+      return [.. targetPaths.Select(path => new ResolvedBuildConfiguration(
+          path,
+          workspaceConfiguration,
+          explicitConfiguration,
+          platform,
+          Build: true,
+          Deploy: false,
+          UsedProjectMapping: false))];
+    }
+
+    return await _workspaceBuildConfigurationService.ResolveTargetsAsync(targetPaths, ct);
+  }
+
+  private async Task<GetWatchListResponse> ResolveWatchListAsync(string projectPath, CancellationToken ct)
+  {
+    var resolved = await _workspaceBuildConfigurationService.ResolveTargetAsync(projectPath, ct);
+    return await _innerManager.GetProjectWatchListAsync(
+        new GetWatchListRequest(projectPath, resolved.Configuration, resolved.Platform),
+        ct);
   }
 }

@@ -68,6 +68,7 @@ public class WorkspaceNugetService(
           Configuration,
           buildTarget: "Pack",
           operationName: "Pack",
+          platform: null,
           ct);
 
   private async Task<ValidatedDotnetProject?> ResolvePackableProjectAsync(CancellationToken ct)
@@ -78,7 +79,7 @@ public class WorkspaceNugetService(
     if (solutionFile is not null)
     {
       projects = await buildHostManager.GetProjectsFromSolutionAsync(
-          solutionFile, p => p.IsPackable, Configuration, ct);
+          solutionFile, p => p.IsPackable, Configuration, ct: ct);
     }
     else
     {

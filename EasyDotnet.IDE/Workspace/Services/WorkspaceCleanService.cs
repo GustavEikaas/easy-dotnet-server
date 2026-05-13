@@ -12,8 +12,6 @@ public class WorkspaceCleanService(
     WorkspaceBuildService buildService,
     IEditorService editorService)
 {
-  private const string DefaultConfiguration = "Debug";
-
   public async Task CleanAsync(WorkspaceCleanRequest request, CancellationToken ct)
   {
     var solutionFile = clientService.ProjectInfo?.SolutionFile;
@@ -43,9 +41,10 @@ public class WorkspaceCleanService(
     await buildService.BuildQuickfixAsync(
         selected.Id,
         Path.GetFileName(selected.Id),
-        DefaultConfiguration,
+        configuration: null,
         buildTarget: "Clean",
         operationName: "Clean",
+        platform: null,
         ct,
         restoreBeforeOperation: false);
   }
@@ -68,9 +67,10 @@ public class WorkspaceCleanService(
       await buildService.BuildQuickfixAsync(
           projects[0].ProjectFullPath,
           Path.GetFileName(projects[0].ProjectFullPath),
-          DefaultConfiguration,
+          configuration: null,
           buildTarget: "Clean",
           operationName: "Clean",
+          platform: null,
           ct,
           restoreBeforeOperation: false);
       return;
@@ -86,9 +86,10 @@ public class WorkspaceCleanService(
     await buildService.BuildQuickfixAsync(
         selected.Id,
         Path.GetFileName(selected.Id),
-        DefaultConfiguration,
+        configuration: null,
         buildTarget: "Clean",
         operationName: "Clean",
+        platform: null,
         ct,
         restoreBeforeOperation: false);
   }

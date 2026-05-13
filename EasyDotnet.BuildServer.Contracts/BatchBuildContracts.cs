@@ -3,6 +3,7 @@ namespace EasyDotnet.BuildServer.Contracts;
 public sealed record BatchBuildRequest(
     string[] ProjectPaths,
     string? Configuration,
+    string? Platform = null,
     string? TargetFramework = null,
     string? BuildTarget = "Build"
 );

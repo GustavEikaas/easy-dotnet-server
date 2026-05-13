@@ -33,6 +33,7 @@ using EasyDotnet.IDE.TestRunner.Service;
 using EasyDotnet.IDE.TestRunner.Store;
 using EasyDotnet.IDE.UserSecrets.Services;
 using EasyDotnet.IDE.Utils;
+using EasyDotnet.IDE.Workspace.BuildConfiguration;
 using EasyDotnet.IDE.Workspace.Services;
 using EasyDotnet.Nuget;
 using EasyDotnet.Services;
@@ -94,6 +95,7 @@ public static class DiModules
     services.AddSingleton<ProjectEvaluationCache>();
 
     services.AddSingleton<TestRunnerService>();
+    services.AddSingleton<IWorkspaceBuildConfigurationService, WorkspaceBuildConfigurationService>();
     services.AddSingleton<WorkspaceService>();
     services.AddSingleton<WorkspaceProjectResolver>();
     services.AddSingleton<WorkspaceBuildService>();

@@ -40,7 +40,7 @@ public class WorkspacePreBuildService(
     try
     {
       buildResults = await buildHostManager.BatchBuildAsync(
-        new BatchBuildRequest([path], "Debug"), ct).ToListAsync(ct);
+        new BatchBuildRequest([path], Configuration: null), ct).ToListAsync(ct);
     }
     finally
     {

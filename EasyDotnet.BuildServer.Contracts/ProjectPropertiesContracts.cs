@@ -1,6 +1,6 @@
 namespace EasyDotnet.BuildServer.Contracts;
 
-public sealed record GetProjectPropertiesBatchRequest(string[] ProjectPaths, string? Configuration);
+public sealed record GetProjectPropertiesBatchRequest(string[] ProjectPaths, string? Configuration, string? Platform = null);
 
 public sealed record ProjectEvaluationResult(string ProjectPath, string? Configuration, string? TargetFramework, bool Success, ValidatedDotnetProject? Project, ProjectEvaluationError? Error);
 

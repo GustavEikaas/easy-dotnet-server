@@ -115,6 +115,19 @@ public class SettingsService(
     SaveSolutionSettings(sln, settings);
   }
 
+  public SolutionBuildConfigurationSettings? GetSolutionBuildConfiguration(string solutionPath)
+  {
+    var settings = GetOrCreateSolutionSettings(solutionPath);
+    return settings.BuildConfiguration;
+  }
+
+  public void SetSolutionBuildConfiguration(string solutionPath, SolutionBuildConfigurationSettings? configuration)
+  {
+    var settings = GetOrCreateSolutionSettings(solutionPath);
+    settings.BuildConfiguration = configuration;
+    SaveSolutionSettings(solutionPath, settings);
+  }
+
   #endregion
 
   #region Project Settings
