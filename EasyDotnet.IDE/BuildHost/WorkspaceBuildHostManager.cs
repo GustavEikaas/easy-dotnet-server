@@ -1,6 +1,5 @@
 using System.Runtime.CompilerServices;
 using EasyDotnet.BuildServer.Contracts;
-using EasyDotnet.IDE;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Workspace.BuildConfiguration;
 using Microsoft.Extensions.Logging;
@@ -9,11 +8,11 @@ namespace EasyDotnet.IDE.BuildHost;
 
 public class WorkspaceBuildHostManager : IBuildHostManager
 {
-  private readonly ISolutionService solutionService;
-  private readonly IBuildHostManager innerManager;
-  private readonly ProjectEvaluationCache cache;
-  private readonly IWorkspaceBuildConfigurationService workspaceBuildConfigurationService;
-  private readonly ILogger<WorkspaceBuildHostManager> logger;
+  private readonly ISolutionService _solutionService;
+  private readonly IBuildHostManager _innerManager;
+  private readonly ProjectEvaluationCache _cache;
+  private readonly IWorkspaceBuildConfigurationService _workspaceBuildConfigurationService;
+  private readonly ILogger<WorkspaceBuildHostManager> _logger;
 
   public WorkspaceBuildHostManager(
       ISolutionService solutionService,
@@ -22,11 +21,11 @@ public class WorkspaceBuildHostManager : IBuildHostManager
       IWorkspaceBuildConfigurationService workspaceBuildConfigurationService,
       ILogger<WorkspaceBuildHostManager> logger)
   {
-    this.solutionService = solutionService;
-    this.innerManager = innerManager;
-    this.cache = cache;
-    this.workspaceBuildConfigurationService = workspaceBuildConfigurationService;
-    this.logger = logger;
+    _solutionService = solutionService;
+    _innerManager = innerManager;
+    _cache = cache;
+    _workspaceBuildConfigurationService = workspaceBuildConfigurationService;
+    _logger = logger;
 
     workspaceBuildConfigurationService.ConfigurationChanged += _ => cache.Clear(CacheInvalidationReason.ClearedAll);
   }
@@ -53,7 +52,7 @@ public class WorkspaceBuildHostManager : IBuildHostManager
     foreach (var target in resolvedTargets)
     {
       var cacheKey = (target.TargetPath, target.Configuration, target.Platform ?? "");
-      var (tcs, isNew) = cache.GetOrRegister(target.TargetPath, target.Configuration, target.Platform);
+      var (tcs, isNew) = _cache.GetOrRegister(target.TargetPath, target.Configuration, target.Platform);
       tasksByTarget[cacheKey] = tcs.Task;
 
       if (isNew)
@@ -100,7 +99,7 @@ public class WorkspaceBuildHostManager : IBuildHostManager
       }
     }
 
-    logger.LogWarning("Could not resolve {ProjectPath} for TFM {TFM}", projectPath, targetFramework);
+    _logger.LogWarning("Could not resolve {ProjectPath} for TFM {TFM}", projectPath, targetFramework);
     return null;
   }
 
@@ -129,7 +128,7 @@ public class WorkspaceBuildHostManager : IBuildHostManager
       }
       else if (!result.Success)
       {
-        logger.LogWarning(
+        _logger.LogWarning(
             "Failed to evaluate {ProjectPath} ({TFM}): {Error}",
             result.ProjectPath,
             result.TargetFramework ?? "unknown",
@@ -147,7 +146,7 @@ public class WorkspaceBuildHostManager : IBuildHostManager
       string? platform = null,
       CancellationToken ct = default)
   {
-    var solutionProjects = await solutionService.GetProjectsFromSolutionFile(solutionPath, ct);
+    var solutionProjects = await _solutionService.GetProjectsFromSolutionFile(solutionPath, ct);
     var projectPaths = solutionProjects.ConvertAll(x => x.AbsolutePath);
 
     if (projectPaths.Count == 0) { return []; }
@@ -163,7 +162,7 @@ public class WorkspaceBuildHostManager : IBuildHostManager
       }
       else if (!result.Success)
       {
-        logger.LogWarning(
+        _logger.LogWarning(
             "Failed to evaluate {ProjectPath} ({TFM}): {Error}",
             result.ProjectPath,
             result.TargetFramework ?? "unknown",
@@ -190,11 +189,11 @@ public class WorkspaceBuildHostManager : IBuildHostManager
       RestoreRequest request,
       [EnumeratorCancellation] CancellationToken ct)
   {
-    await foreach (var result in innerManager.RestoreNugetPackagesAsync(request, ct))
+    await foreach (var result in _innerManager.RestoreNugetPackagesAsync(request, ct))
     {
       yield return result;
     }
-    cache.Clear(CacheInvalidationReason.Restore);
+    _cache.Clear(CacheInvalidationReason.Restore);
   }
 
   /// <summary>
@@ -204,7 +203,7 @@ public class WorkspaceBuildHostManager : IBuildHostManager
       string solutionPath,
       [EnumeratorCancellation] CancellationToken ct = default)
   {
-    var solutionProjects = await solutionService.GetProjectsFromSolutionFile(solutionPath, ct);
+    var solutionProjects = await _solutionService.GetProjectsFromSolutionFile(solutionPath, ct);
     var projectPaths = solutionProjects.ConvertAll(x => x.AbsolutePath);
 
     if (projectPaths.Count == 0) yield break;
@@ -233,7 +232,7 @@ public class WorkspaceBuildHostManager : IBuildHostManager
         Platform = group.Key.Platform
       };
 
-      await foreach (var result in innerManager.BatchBuildAsync(batchRequest, ct))
+      await foreach (var result in _innerManager.BatchBuildAsync(batchRequest, ct))
       {
         yield return result;
       }
@@ -246,33 +245,33 @@ public class WorkspaceBuildHostManager : IBuildHostManager
   {
     if (!string.IsNullOrWhiteSpace(request.Configuration) || !string.IsNullOrWhiteSpace(request.Platform))
     {
-      return innerManager.GetProjectWatchListAsync(request, ct);
+      return _innerManager.GetProjectWatchListAsync(request, ct);
     }
 
     return ResolveWatchListAsync(request.ProjectPath, ct);
   }
 
   public Task<ConvertSingleFileResponse> ConvertFileToProjectAsync(string entryPointFilePath, CancellationToken cancellationToken) =>
-      innerManager.ConvertFileToProjectAsync(entryPointFilePath, cancellationToken);
+      _innerManager.ConvertFileToProjectAsync(entryPointFilePath, cancellationToken);
 
   public Task<BuildServerDiagnosticsResponse> GetBuildServerDiagnosticsAsync(CancellationToken cancellationToken) =>
-      innerManager.GetBuildServerDiagnosticsAsync(cancellationToken);
+      _innerManager.GetBuildServerDiagnosticsAsync(cancellationToken);
 
   public Task<InstalledPackageReference[]> ListPackageReferencesAsync(string projectPath, CancellationToken cancellationToken) =>
-      innerManager.ListPackageReferencesAsync(projectPath, cancellationToken);
+      _innerManager.ListPackageReferencesAsync(projectPath, cancellationToken);
 
   public Task SetLogLevelAsync(string level, CancellationToken cancellationToken) =>
-      innerManager.SetLogLevelAsync(level, cancellationToken);
+      _innerManager.SetLogLevelAsync(level, cancellationToken);
 
   public Task<string[]> GetLogsAsync(CancellationToken cancellationToken) =>
-      innerManager.GetLogsAsync(cancellationToken);
+      _innerManager.GetLogsAsync(cancellationToken);
 
-  public void InvalidateCache(string projectPath, string? config = null, string? platform = null) => cache.Invalidate(projectPath, config, platform);
+  public void InvalidateCache(string projectPath, string? config = null, string? platform = null) => _cache.Invalidate(projectPath, config, platform);
 
-  public void ClearCache() => cache.Clear(CacheInvalidationReason.ClearedAll);
+  public void ClearCache() => _cache.Clear(CacheInvalidationReason.ClearedAll);
 
-  public void Dispose() => innerManager.Dispose();
-  public ValueTask DisposeAsync() => innerManager.DisposeAsync();
+  public void Dispose() => _innerManager.Dispose();
+  public ValueTask DisposeAsync() => _innerManager.DisposeAsync();
 
   private async Task ExecuteBatchFetchAsync(
       List<string> paths,
@@ -286,20 +285,20 @@ public class WorkspaceBuildHostManager : IBuildHostManager
     {
       var request = new GetProjectPropertiesBatchRequest([.. paths], config, platform);
 
-      await foreach (var result in innerManager.GetProjectPropertiesBatchAsync(request, ct))
+      await foreach (var result in _innerManager.GetProjectPropertiesBatchAsync(request, ct))
       {
         if (buckets.TryGetValue(result.ProjectPath, out var list)) { list.Add(result); }
       }
 
       foreach (var path in paths)
       {
-        cache.Complete(path, config, platform, buckets[path]);
+        _cache.Complete(path, config, platform, buckets[path]);
       }
     }
     catch (Exception ex)
     {
-      logger.LogError(ex, "Failed to evaluate MSBuild batch");
-      foreach (var path in paths) { cache.Fault(path, config, platform, ex); }
+      _logger.LogError(ex, "Failed to evaluate MSBuild batch");
+      foreach (var path in paths) { _cache.Fault(path, config, platform, ex); }
     }
   }
 
@@ -323,13 +322,13 @@ public class WorkspaceBuildHostManager : IBuildHostManager
           UsedProjectMapping: false))];
     }
 
-    return await workspaceBuildConfigurationService.ResolveTargetsAsync(targetPaths, ct);
+    return await _workspaceBuildConfigurationService.ResolveTargetsAsync(targetPaths, ct);
   }
 
   private async Task<GetWatchListResponse> ResolveWatchListAsync(string projectPath, CancellationToken ct)
   {
-    var resolved = await workspaceBuildConfigurationService.ResolveTargetAsync(projectPath, ct);
-    return await innerManager.GetProjectWatchListAsync(
+    var resolved = await _workspaceBuildConfigurationService.ResolveTargetAsync(projectPath, ct);
+    return await _innerManager.GetProjectWatchListAsync(
         new GetWatchListRequest(projectPath, resolved.Configuration, resolved.Platform),
         ct);
   }
