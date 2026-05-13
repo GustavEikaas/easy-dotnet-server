@@ -312,11 +312,12 @@ public class WorkspaceBuildHostManager : IBuildHostManager
     {
       var explicitConfiguration = configuration ?? "Debug";
       var workspaceConfiguration = new WorkspaceBuildConfiguration(explicitConfiguration, platform);
+      var projectPlatform = MsBuildPlatform.ToProjectPlatform(platform);
       return [.. targetPaths.Select(path => new ResolvedBuildConfiguration(
           path,
           workspaceConfiguration,
           explicitConfiguration,
-          platform,
+          projectPlatform,
           Build: true,
           Deploy: false,
           UsedProjectMapping: false))];
