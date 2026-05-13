@@ -1,7 +1,9 @@
 using System.Runtime.CompilerServices;
 using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.IDE.Interfaces;
+using EasyDotnet.IDE.Models.Solution;
 using EasyDotnet.IDE.Workspace.BuildConfiguration;
+using EasyDotnet.MsBuild;
 using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.IDE.BuildHost;
@@ -189,10 +191,26 @@ public class WorkspaceBuildHostManager : IBuildHostManager
       RestoreRequest request,
       [EnumeratorCancellation] CancellationToken ct)
   {
-    await foreach (var result in _innerManager.RestoreNugetPackagesAsync(request, ct))
+    var resolvedTargets = await ResolveTargetsAsync(request.ProjectPaths, request.Configuration, request.Platform, ct);
+    var groups = resolvedTargets
+        .GroupBy(target => (target.Configuration, target.Platform), target => target.TargetPath)
+        .ToList();
+
+    foreach (var group in groups)
     {
-      yield return result;
+      var restoreRequest = request with
+      {
+        ProjectPaths = [.. group],
+        Configuration = group.Key.Configuration,
+        Platform = group.Key.Platform
+      };
+
+      await foreach (var result in _innerManager.RestoreNugetPackagesAsync(restoreRequest, ct))
+      {
+        yield return result;
+      }
     }
+
     _cache.Clear(CacheInvalidationReason.Restore);
   }
 
@@ -220,6 +238,7 @@ public class WorkspaceBuildHostManager : IBuildHostManager
   {
     var resolvedTargets = await ResolveTargetsAsync(request.ProjectPaths, request.Configuration, request.Platform, ct);
     var groups = resolvedTargets
+        .Where(target => target.Build)
         .GroupBy(target => (target.Configuration, target.Platform), target => target.TargetPath)
         .ToList();
 
@@ -308,22 +327,23 @@ public class WorkspaceBuildHostManager : IBuildHostManager
       string? platform,
       CancellationToken ct)
   {
+    var expandedTargetPaths = await ExpandSolutionTargetsAsync(targetPaths, ct);
+
     if (!string.IsNullOrWhiteSpace(configuration) || !string.IsNullOrWhiteSpace(platform))
     {
       var explicitConfiguration = configuration ?? "Debug";
       var workspaceConfiguration = new WorkspaceBuildConfiguration(explicitConfiguration, platform);
-      var projectPlatform = MsBuildPlatform.ToProjectPlatform(platform);
-      return [.. targetPaths.Select(path => new ResolvedBuildConfiguration(
+      return [.. expandedTargetPaths.Select(path => new ResolvedBuildConfiguration(
           path,
           workspaceConfiguration,
           explicitConfiguration,
-          projectPlatform,
+          ResolveExplicitPlatform(path, platform),
           Build: true,
           Deploy: false,
           UsedProjectMapping: false))];
     }
 
-    return await _workspaceBuildConfigurationService.ResolveTargetsAsync(targetPaths, ct);
+    return await _workspaceBuildConfigurationService.ResolveTargetsAsync(expandedTargetPaths, ct);
   }
 
   private async Task<GetWatchListResponse> ResolveWatchListAsync(string projectPath, CancellationToken ct)
@@ -332,5 +352,31 @@ public class WorkspaceBuildHostManager : IBuildHostManager
     return await _innerManager.GetProjectWatchListAsync(
         new GetWatchListRequest(projectPath, resolved.Configuration, resolved.Platform),
         ct);
+  }
+
+  private static string? ResolveExplicitPlatform(string targetPath, string? platform) =>
+      FileTypes.IsAnySolutionFile(targetPath)
+          ? platform
+          : MsBuildPlatform.ToProjectPlatform(platform);
+
+  private async Task<IReadOnlyList<string>> ExpandSolutionTargetsAsync(
+      IReadOnlyCollection<string> targetPaths,
+      CancellationToken ct)
+  {
+    var expanded = new List<string>();
+
+    foreach (var targetPath in targetPaths)
+    {
+      if (!FileTypes.IsAnySolutionFile(targetPath))
+      {
+        expanded.Add(targetPath);
+        continue;
+      }
+
+      var solutionProjects = await _solutionService.GetProjectsFromSolutionFile(targetPath, ct);
+      expanded.AddRange(solutionProjects.OnlyDotnetProjects().Select(project => project.AbsolutePath));
+    }
+
+    return expanded;
   }
 }

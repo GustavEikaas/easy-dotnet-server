@@ -34,7 +34,7 @@ public class RestoreHandler
           continue;
         }
 
-        yield return await RestoreProjectAsync(projectPath, ct);
+        yield return await RestoreProjectAsync(projectPath, request.Configuration, request.Platform, ct);
       }
     }
     finally
@@ -43,7 +43,11 @@ public class RestoreHandler
     }
   }
 
-  private static Task<RestoreResult> RestoreProjectAsync(string projectPath, CancellationToken ct) =>
+  private static Task<RestoreResult> RestoreProjectAsync(
+      string projectPath,
+      string? configuration,
+      string? platform,
+      CancellationToken ct) =>
       Task.Run(() =>
       {
         var stopwatch = Stopwatch.StartNew();
@@ -52,6 +56,18 @@ public class RestoreHandler
         try
         {
           ct.ThrowIfCancellationRequested();
+
+          var globalProperties = new Dictionary<string, string>();
+
+          if (!string.IsNullOrEmpty(configuration))
+          {
+            globalProperties["Configuration"] = configuration!;
+          }
+
+          if (!string.IsNullOrEmpty(platform))
+          {
+            globalProperties["Platform"] = platform!;
+          }
 
           var logger = new DiagnosticLogger(diagnostics);
           var buildParameters = new BuildParameters
@@ -63,7 +79,7 @@ public class RestoreHandler
 
           var buildRequest = new BuildRequestData(
                 projectPath,
-                globalProperties: new Dictionary<string, string>(),
+                globalProperties: globalProperties,
                 toolsVersion: null,
                 targetsToBuild: ["Restore"],
                 hostServices: null);
