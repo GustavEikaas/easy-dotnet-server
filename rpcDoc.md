@@ -118,6 +118,16 @@
 
 ---
 
+## UserSecretsController
+
+### `user-secrets/open`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+
+**Returns:** `Task`
+
+---
+
 ## TestRunnerController
 
 ### `testrunner/cancel`
@@ -328,17 +338,6 @@ _No parameters_
 | request | SetLogLevelRequest |   |
 
 **Returns:** `Task`
-
----
-
-## UserSecretsController
-
-### `user-secrets/init`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| projectPath | string |   |
-
-**Returns:** `Task<ProjectUserSecretsInitResponse>`
 
 ---
 
