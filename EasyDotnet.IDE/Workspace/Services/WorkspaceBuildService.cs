@@ -20,8 +20,6 @@ public class WorkspaceBuildService(
     SettingsService settingsService,
     IWorkspaceBuildConfigurationService workspaceBuildConfigurationService)
 {
-  private const string DefaultConfiguration = "Debug";
-
   public async Task BuildProjectAsync(WorkspaceBuildRequest request, CancellationToken ct)
   {
     var solutionFile = clientService.ProjectInfo?.SolutionFile;
@@ -155,7 +153,7 @@ public class WorkspaceBuildService(
   }
 
   private Task RunBuildQuickfixAsync(string targetPath, string name, CancellationToken ct) =>
-      BuildQuickfixAsync(targetPath, name, DefaultConfiguration, buildTarget: "Build", operationName: "Build", null, ct);
+      BuildQuickfixAsync(targetPath, name, configuration: null, buildTarget: "Build", operationName: "Build", platform: null, ct);
 
   public async Task<bool> BuildQuickfixAsync(
       string targetPath,
