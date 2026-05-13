@@ -46,6 +46,13 @@
 
 **Returns:** `Task`
 
+### `workspace/clean`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | WorkspaceCleanRequest |   |
+
+**Returns:** `Task`
+
 ### `workspace/debug`
 | Parameter | Type | Optional |
 |-----------|------|----------|

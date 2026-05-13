@@ -68,6 +68,7 @@ public class WorkspaceNugetService(
           Configuration,
           buildTarget: "Pack",
           operationName: "Pack",
+          platform: null,
           ct);
 
   private async Task<ValidatedDotnetProject?> ResolvePackableProjectAsync(CancellationToken ct)
