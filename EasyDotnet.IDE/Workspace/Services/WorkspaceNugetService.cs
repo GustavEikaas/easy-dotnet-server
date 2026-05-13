@@ -78,7 +78,7 @@ public class WorkspaceNugetService(
     if (solutionFile is not null)
     {
       projects = await buildHostManager.GetProjectsFromSolutionAsync(
-          solutionFile, p => p.IsPackable, Configuration, ct);
+          solutionFile, p => p.IsPackable, Configuration, ct: ct);
     }
     else
     {

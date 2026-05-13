@@ -171,7 +171,7 @@ public class EditorService(
     using (new ProgressScope(this, "Building", $"Building {name}"))
     {
       results = await buildHostManager
-          .BatchBuildAsync(new BatchBuildRequest([projectPath], "Debug"), cancellationToken)
+          .BatchBuildAsync(new BatchBuildRequest([projectPath], Configuration: null), cancellationToken)
           .ToListAsync(cancellationToken);
     }
 

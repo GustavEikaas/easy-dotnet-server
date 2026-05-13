@@ -140,6 +140,17 @@ public class WorkspaceService(
       args.AddRange(["--launch-profile", target.LaunchProfileName]);
     }
 
+    if (!string.IsNullOrWhiteSpace(project.Raw.Configuration))
+    {
+      args.Add("-c");
+      args.Add(project.Raw.Configuration);
+    }
+
+    if (!string.IsNullOrWhiteSpace(project.Raw.Platform))
+    {
+      args.Add($"-p:Platform={project.Raw.Platform}");
+    }
+
     if (!string.IsNullOrEmpty(request.CliArgs))
     {
       args.Add("--");

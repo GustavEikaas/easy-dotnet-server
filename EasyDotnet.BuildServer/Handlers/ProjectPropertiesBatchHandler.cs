@@ -182,6 +182,11 @@ public class ProjectPropertiesBatchHandler
       ["GeneratePackageOnBuild"] = "false"
     };
 
+    if (!string.IsNullOrWhiteSpace(request.Platform))
+    {
+      globalProperties["Platform"] = request.Platform!;
+    }
+
     return new ProjectCollection(
         globalProperties,
         loggers: null,

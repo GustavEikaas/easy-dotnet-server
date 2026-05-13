@@ -28,6 +28,11 @@ public class WatchHandler(MsBuildInstance instance)
         ["Configuration"] = request.Configuration
       };
 
+      if (!string.IsNullOrWhiteSpace(request.Platform))
+      {
+        globalProperties["Platform"] = request.Platform!;
+      }
+
       using var projectCollection = new ProjectCollection(globalProperties);
       var project = projectCollection.LoadProject(request.ProjectPath);
 

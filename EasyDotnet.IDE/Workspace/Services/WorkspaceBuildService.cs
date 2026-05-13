@@ -6,6 +6,7 @@ using EasyDotnet.IDE.Models.Client;
 using EasyDotnet.IDE.Models.Client.Prompt;
 using EasyDotnet.IDE.Models.Client.Quickfix;
 using EasyDotnet.IDE.Settings;
+using EasyDotnet.IDE.Workspace.BuildConfiguration;
 using EasyDotnet.IDE.Workspace.Controllers;
 
 namespace EasyDotnet.IDE.Workspace.Services;
@@ -16,7 +17,8 @@ public class WorkspaceBuildService(
     IBuildHostManager buildHostManager,
     IEditorService editorService,
     IProgressScopeFactory progressScopeFactory,
-    SettingsService settingsService)
+    SettingsService settingsService,
+    IWorkspaceBuildConfigurationService workspaceBuildConfigurationService)
 {
   public async Task BuildProjectAsync(WorkspaceBuildRequest request, CancellationToken ct)
   {
@@ -129,6 +131,16 @@ public class WorkspaceBuildService(
   private async Task RunBuildInTerminalAsync(string targetPath, string name, string? buildArgs, CancellationToken ct)
   {
     var args = new List<string> { "build", targetPath };
+    var resolvedConfiguration = await workspaceBuildConfigurationService.ResolveTargetAsync(targetPath, ct);
+    if (!string.IsNullOrWhiteSpace(resolvedConfiguration.Configuration))
+    {
+      args.Add("-c");
+      args.Add(resolvedConfiguration.Configuration);
+    }
+    if (!string.IsNullOrWhiteSpace(resolvedConfiguration.Platform))
+    {
+      args.Add($"-p:Platform={resolvedConfiguration.Platform}");
+    }
     if (!string.IsNullOrWhiteSpace(buildArgs))
       args.Add(buildArgs);
 
@@ -144,15 +156,16 @@ public class WorkspaceBuildService(
   }
 
   private Task RunBuildQuickfixAsync(string targetPath, string name, CancellationToken ct) =>
-      BuildQuickfixAsync(targetPath, name, "Debug", buildTarget: "Build", operationName: "Build", ct);
+      BuildQuickfixAsync(targetPath, name, configuration: null, buildTarget: "Build", operationName: "Build", ct: ct);
 
   public async Task<bool> BuildQuickfixAsync(
       string targetPath,
       string name,
-      string configuration,
+      string? configuration,
       string buildTarget,
       string operationName,
-      CancellationToken ct)
+      CancellationToken ct,
+      string? platform = null)
   {
     if (!await RestoreBeforeBuildQuickfixAsync(targetPath, name, ct))
       return false;
@@ -161,7 +174,7 @@ public class WorkspaceBuildService(
     using (progressScopeFactory.Create($"{operationName}...", $"{operationName} {name}"))
     {
       results = await buildHostManager
-          .BatchBuildAsync(new BatchBuildRequest([targetPath], configuration, BuildTarget: buildTarget), ct)
+          .BatchBuildAsync(new BatchBuildRequest([targetPath], configuration, Platform: platform, BuildTarget: buildTarget), ct)
           .ToListAsync(ct);
     }
 
