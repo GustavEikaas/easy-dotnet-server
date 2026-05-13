@@ -1,5 +1,5 @@
 using EasyDotnet.BuildServer.Contracts;
-using EasyDotnet.IDE;
+using EasyDotnet.IDE.BuildHost;
 using EasyDotnet.IDE.Editor;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Models.Client;
@@ -13,11 +13,13 @@ namespace EasyDotnet.IDE.Workspace.Services;
 public class WorkspaceBuildService(
     IClientService clientService,
     ISolutionService solutionService,
-    IBuildHostManager buildHostManager,
+    WorkspaceBuildHostManager buildHostManager,
     IEditorService editorService,
     IProgressScopeFactory progressScopeFactory,
     SettingsService settingsService)
 {
+  private const string DefaultConfiguration = "Debug";
+
   public async Task BuildProjectAsync(WorkspaceBuildRequest request, CancellationToken ct)
   {
     var solutionFile = clientService.ProjectInfo?.SolutionFile;
@@ -83,28 +85,25 @@ public class WorkspaceBuildService(
 
   private async Task BuildProjectNoSolutionAsync(WorkspaceBuildRequest request, CancellationToken ct)
   {
-    var rootDir = clientService.RequireRootDir();
+    var projects = await buildHostManager.GetProjectsFromDirectoryAsync(
+        clientService.RequireRootDir(),
+        maxDepth: 3,
+        ct: ct);
 
-    var csprojFiles = Directory.EnumerateFiles(rootDir, "*.csproj", new EnumerationOptions
-    {
-      MaxRecursionDepth = 3,
-      RecurseSubdirectories = true
-    }).ToList();
-
-    if (csprojFiles.Count == 0)
+    if (projects.Count == 0)
     {
       await editorService.DisplayError("No project files found");
       return;
     }
 
-    if (csprojFiles.Count == 1)
+    if (projects.Count == 1)
     {
-      await ExecuteBuildAsync(csprojFiles[0], request, ct);
+      await ExecuteBuildAsync(projects[0].ProjectFullPath, request, ct);
       return;
     }
 
-    var options = csprojFiles
-        .Select(p => new SelectionOption(p, Path.GetFileNameWithoutExtension(p)))
+    var options = projects
+        .Select(p => new SelectionOption(p.ProjectFullPath, p.ProjectName))
         .ToArray();
 
     var selected = await editorService.RequestSelection("Pick project to build", options);
@@ -144,7 +143,7 @@ public class WorkspaceBuildService(
   }
 
   private Task RunBuildQuickfixAsync(string targetPath, string name, CancellationToken ct) =>
-      BuildQuickfixAsync(targetPath, name, "Debug", buildTarget: "Build", operationName: "Build", ct);
+      BuildQuickfixAsync(targetPath, name, DefaultConfiguration, buildTarget: "Build", operationName: "Build", ct);
 
   public async Task<bool> BuildQuickfixAsync(
       string targetPath,
@@ -152,9 +151,27 @@ public class WorkspaceBuildService(
       string configuration,
       string buildTarget,
       string operationName,
+      CancellationToken ct,
+      bool restoreBeforeOperation = true)
+      => await ExecuteBuildTargetQuickfixAsync(
+          targetPath,
+          name,
+          configuration,
+          buildTarget,
+          operationName,
+          restoreBeforeOperation,
+          ct);
+
+  private async Task<bool> ExecuteBuildTargetQuickfixAsync(
+      string targetPath,
+      string name,
+      string configuration,
+      string buildTarget,
+      string operationName,
+      bool restoreBeforeOperation,
       CancellationToken ct)
   {
-    if (!await RestoreBeforeBuildQuickfixAsync(targetPath, name, ct))
+    if (restoreBeforeOperation && !await RestoreBeforeBuildQuickfixAsync(targetPath, name, ct))
       return false;
 
     List<BatchBuildResult> results;

@@ -492,14 +492,22 @@ public sealed class TempProjectBuilder
 /// <summary>A single project inside a <see cref="TempWorkspace"/>.</summary>
 public sealed class TempProject
 {
+  public string Name { get; }
   public string Dir { get; }
   public string CsprojPath { get; }
 
   internal TempProject(string dir, string name)
   {
+    Name = name;
     Dir = dir;
     CsprojPath = Path.Combine(dir, $"{name}.csproj");
   }
+
+  public string OutputDllPath(string configuration = "Debug", string targetFramework = "net8.0") =>
+    Path.Combine(Dir, "bin", configuration, targetFramework, $"{Name}.dll");
+
+  public string IntermediateOutputDllPath(string configuration = "Debug", string targetFramework = "net8.0") =>
+    Path.Combine(Dir, "obj", configuration, targetFramework, $"{Name}.dll");
 
   /// <summary>Writes (or overwrites) <c>Properties/launchSettings.json</c> for this project.</summary>
   public void WriteLaunchSettings(string launchSettingsJson) =>

@@ -97,6 +97,7 @@ public static class DiModules
     services.AddSingleton<WorkspaceService>();
     services.AddSingleton<WorkspaceProjectResolver>();
     services.AddSingleton<WorkspaceBuildService>();
+    services.AddSingleton<WorkspaceCleanService>();
     services.AddSingleton<WorkspaceNugetService>();
     services.AddSingleton<WorkspaceRestoreService>();
     services.AddSingleton<WorkspaceTestService>();
