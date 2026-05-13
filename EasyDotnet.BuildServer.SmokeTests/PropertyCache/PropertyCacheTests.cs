@@ -1,8 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 using EasyDotnet.BuildServer.Contracts;
-using StreamJsonRpc;
 
 namespace EasyDotnet.BuildServer.SmokeTests.PropertyCache;
 

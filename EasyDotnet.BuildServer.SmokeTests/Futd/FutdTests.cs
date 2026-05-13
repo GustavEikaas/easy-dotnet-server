@@ -1,6 +1,5 @@
 using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.BuildServer.SmokeTests.PropertyCache;
-using StreamJsonRpc;
 
 namespace EasyDotnet.BuildServer.SmokeTests.Futd;
 
@@ -34,8 +33,7 @@ public sealed class FutdTests
 
   private static bool IsFutdHit(BatchBuildResult finished)
       => finished.Success == true
-         && finished.Output is not null
-         && finished.Output.Diagnostics.Any(d => d.Code == "ED-FUTD");
+         && finished.Output?.Diagnostics.Any(d => d.Code == "ED-FUTD") == true;
 
   [Theory]
   [MemberData(nameof(Targets))]

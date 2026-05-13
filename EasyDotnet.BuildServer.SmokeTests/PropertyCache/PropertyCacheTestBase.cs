@@ -1,11 +1,11 @@
 using System.Runtime.InteropServices;
 using EasyDotnet.BuildServer.Contracts;
-using StreamJsonRpc;
 
 namespace EasyDotnet.BuildServer.SmokeTests.PropertyCache;
 
 internal sealed class PropertyCacheHarness : IAsyncDisposable
 {
+  public const string CacheDirEnvVar = "EASYDOTNET_PROPERTY_CACHE_DIR";
   public string CacheDir { get; }
   public string WorkspaceDir { get; }
   private readonly string _exe;
@@ -30,7 +30,7 @@ internal sealed class PropertyCacheHarness : IAsyncDisposable
 
     var env = new Dictionary<string, string?>
     {
-      ["EASYDOTNET_PROPERTY_CACHE_DIR"] = cacheDir,
+      [CacheDirEnvVar] = cacheDir,
     };
     var srv = await BuildServerProcess.StartAsync(exe, leadingArgs, TimeSpan.FromSeconds(30), env);
     return new PropertyCacheHarness(cacheDir, workspaceDir, exe, leadingArgs, srv);
@@ -41,7 +41,7 @@ internal sealed class PropertyCacheHarness : IAsyncDisposable
     await Server.DisposeAsync();
     var env = new Dictionary<string, string?>
     {
-      ["EASYDOTNET_PROPERTY_CACHE_DIR"] = CacheDir,
+      [CacheDirEnvVar] = CacheDir,
     };
     Server = await BuildServerProcess.StartAsync(_exe, _leadingArgs, TimeSpan.FromSeconds(30), env);
   }
@@ -73,6 +73,7 @@ internal sealed class PropertyCacheHarness : IAsyncDisposable
   <PropertyGroup>
     <TargetFramework>{tfm}</TargetFramework>
     <OutputType>Library</OutputType>
+    <EnableFastUpToDateCheck>true</EnableFastUpToDateCheck>
     {extraPropertyGroupXml}
   </PropertyGroup>
 </Project>
@@ -91,6 +92,7 @@ internal sealed class PropertyCacheHarness : IAsyncDisposable
   <PropertyGroup>
     <TargetFrameworks>{tfms}</TargetFrameworks>
     <OutputType>Library</OutputType>
+    <EnableFastUpToDateCheck>true</EnableFastUpToDateCheck>
   </PropertyGroup>
 </Project>
 """);
