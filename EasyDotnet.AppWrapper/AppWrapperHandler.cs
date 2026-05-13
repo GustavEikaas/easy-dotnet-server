@@ -46,6 +46,10 @@ public class AppWrapperHandler
     var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
     _currentProcess = process;
 
+    Console.WriteLine();
+    AnsiConsole.MarkupLine($"[dim]{Markup.Escape(FormatCommandForDisplay(command))}[/]");
+    Console.WriteLine();
+
     process.Start();
 
     try
@@ -90,5 +94,23 @@ public class AppWrapperHandler
     Console.Error.WriteLine("[AppWrapper] Terminate requested by IDE.");
     KillCurrentProcess();
     return Task.CompletedTask;
+  }
+
+  private static string FormatCommandForDisplay(RunAppCommand command) =>
+    string.Join(" ", new[] { command.Executable }.Concat(command.Arguments).Select(QuoteForDisplay));
+
+  private static string QuoteForDisplay(string value)
+  {
+    if (value.Length == 0)
+    {
+      return "\"\"";
+    }
+
+    if (!value.Any(char.IsWhiteSpace) && !value.Contains('"'))
+    {
+      return value;
+    }
+
+    return $"\"{value.Replace("\"", "\\\"")}\"";
   }
 }
