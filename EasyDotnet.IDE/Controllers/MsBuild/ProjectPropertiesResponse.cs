@@ -30,20 +30,13 @@ public sealed record DotnetProjectV1(
     bool IsMultiTarget,
     bool IsNetFramework,
     bool UseIISExpress,
-    string RunCommand,
-    string BuildCommand,
-    string TestCommand,
     bool IsAspireHost,
     Version? AspireHostingSdkVersion
 );
 
 public static class DotnetProjectExtensions
 {
-  public static DotnetProjectV1 ToResponse(
-      this DotnetProject project,
-      string runCommand,
-      string buildCommand,
-      string testCommand)
+  public static DotnetProjectV1 ToResponse(this DotnetProject project)
   {
     var nugetVersion = project.Version?.ToString();
     var targetFrameworkVersion = project.TargetFrameworkVersion;
@@ -80,9 +73,6 @@ public static class DotnetProjectExtensions
         IsMultiTarget: project.TargetFrameworks?.Length > 1,
         IsNetFramework: isNetFramework,
         UseIISExpress: useIISExpress,
-        RunCommand: runCommand,
-        BuildCommand: buildCommand,
-        TestCommand: testCommand,
         IsAspireHost: project.IsAspireHost,
         AspireHostingSdkVersion: aspireSdkVersion
     );
