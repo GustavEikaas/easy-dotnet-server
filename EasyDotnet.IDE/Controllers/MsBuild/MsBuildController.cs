@@ -29,7 +29,7 @@ public class MsBuildController(IClientService clientService, IMsBuildService msB
     clientService.ThrowIfNotInitialized();
     var project = await msBuild.GetOrSetProjectPropertiesAsync(request.TargetPath, request.TargetFramework, request.ConfigurationOrDefault);
 
-    return project.ToResponse(await msBuild.BuildRunCommand(project), await msBuild.BuildBuildCommand(project), await msBuild.BuildTestCommand(project));
+    return project.ToResponse();
   }
 
   [JsonRpcMethod("msbuild/list-project-reference")]
