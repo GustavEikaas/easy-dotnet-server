@@ -28,7 +28,7 @@ public sealed class WorkspaceBuildHostManagerTests
             Deploy: false,
             UsedProjectMapping: true));
 
-    await manager.RestoreNugetPackagesAsync(new RestoreRequest([solutionPath]), CancellationToken.None).ToListAsync();
+    await manager.RestoreNugetPackagesAsync(new RestoreRequest([solutionPath]), CancellationToken.None).ToListAsync(CancellationToken.None);
 
     await Assert.That(inner.RestoreRequests.Count).IsEqualTo(1);
     await Assert.That(inner.RestoreRequests[0].ProjectPaths).IsEquivalentTo([projectPath]);
@@ -54,7 +54,7 @@ public sealed class WorkspaceBuildHostManagerTests
             Deploy: false,
             UsedProjectMapping: true));
 
-    await manager.BatchBuildAsync(new BatchBuildRequest([solutionPath], Configuration: null), CancellationToken.None).ToListAsync();
+    await manager.BatchBuildAsync(new BatchBuildRequest([solutionPath], Configuration: null), CancellationToken.None).ToListAsync(CancellationToken.None);
 
     await Assert.That(inner.BuildRequests.Count).IsEqualTo(1);
     await Assert.That(inner.BuildRequests[0].ProjectPaths).IsEquivalentTo([projectPath]);
@@ -79,7 +79,7 @@ public sealed class WorkspaceBuildHostManagerTests
             Deploy: false,
             UsedProjectMapping: true));
 
-    await manager.RestoreNugetPackagesAsync(new RestoreRequest([projectPath]), CancellationToken.None).ToListAsync();
+    await manager.RestoreNugetPackagesAsync(new RestoreRequest([projectPath]), CancellationToken.None).ToListAsync(CancellationToken.None);
 
     await Assert.That(inner.RestoreRequests.Count).IsEqualTo(1);
     await Assert.That(inner.RestoreRequests[0].ProjectPaths).IsEquivalentTo([projectPath]);
@@ -103,7 +103,9 @@ public sealed class WorkspaceBuildHostManagerTests
   private sealed class StubWorkspaceBuildConfigurationService(
       ResolvedBuildConfiguration resolvedConfiguration) : IWorkspaceBuildConfigurationService
   {
+#pragma warning disable CS0067
     public event Action<WorkspaceBuildConfigurationChangedEventArgs>? ConfigurationChanged;
+#pragma warning restore CS0067
 
     public Task<WorkspaceBuildConfiguration> GetActiveConfigurationAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult(resolvedConfiguration.WorkspaceConfiguration);
