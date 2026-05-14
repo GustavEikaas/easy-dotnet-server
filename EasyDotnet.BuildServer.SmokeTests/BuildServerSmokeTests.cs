@@ -1,6 +1,5 @@
 using System.Runtime.InteropServices;
 using EasyDotnet.BuildServer.Contracts;
-using StreamJsonRpc;
 
 namespace EasyDotnet.BuildServer.SmokeTests;
 

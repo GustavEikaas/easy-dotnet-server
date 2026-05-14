@@ -5,3 +5,9 @@ public record BuildServerDiagnosticsResponse(
     int RuntimeVersionMajor,
     string MsBuildVersion,
     string MsBuildPath);
+
+public record PropertyCacheDiagnosticsResponse(
+    long Evaluations,
+    long MemoryHits,
+    long DiskHits,
+    string DiskRoot);

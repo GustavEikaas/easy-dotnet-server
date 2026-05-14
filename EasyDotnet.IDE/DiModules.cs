@@ -91,8 +91,8 @@ public static class DiModules
     services.AddSingleton<AppWrapperPipeListener>();
     services.AddSingleton<BuildHostFactory>();
     services.AddSingleton<IBuildHostManager, BuildHostManager>();
-    services.AddSingleton<WorkspaceBuildHostManager>();
     services.AddSingleton<ProjectEvaluationCache>();
+    services.AddSingleton<WorkspaceBuildHostManager>();
 
     services.AddSingleton<TestRunnerService>();
     services.AddSingleton<IWorkspaceBuildConfigurationService, WorkspaceBuildConfigurationService>();
