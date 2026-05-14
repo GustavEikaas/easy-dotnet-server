@@ -433,13 +433,6 @@ _No parameters_
 
 **Returns:** `Task<bool>`
 
-### `msbuild/build`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| request | BuildRequest |   |
-
-**Returns:** `Task<BuildResultResponse>`
-
 ### `msbuild/list-package-reference`
 | Parameter | Type | Optional |
 |-----------|------|----------|
