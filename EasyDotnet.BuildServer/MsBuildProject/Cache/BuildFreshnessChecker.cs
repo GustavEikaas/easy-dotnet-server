@@ -108,6 +108,13 @@ public sealed class BuildFreshnessChecker(InputPredictor predictor, Logger logge
 
       void ConsiderInput(string path)
       {
+        if (IsSamePath(path, project.FullPath))
+        {
+          var projectTicks = File.GetLastWriteTimeUtc(project.FullPath).Ticks;
+          if (projectTicks > maxInputTicks) { maxInputTicks = projectTicks; newestInput = project.FullPath; }
+          return;
+        }
+
         if (!File.Exists(path))
         {
           newestInput ??= path;
@@ -455,6 +462,21 @@ public sealed class BuildFreshnessChecker(InputPredictor predictor, Logger logge
     }
 
     return Path.GetFullPath(Path.IsPathRooted(value) ? value : Path.Combine(baseDirectory, value));
+  }
+
+  private static bool IsSamePath(string left, string right)
+  {
+    try
+    {
+      return string.Equals(
+          Path.GetFullPath(left).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+          Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+          StringComparison.OrdinalIgnoreCase);
+    }
+    catch
+    {
+      return false;
+    }
   }
 
   private static bool IsIncludedInBuild(ProjectItemInstance item) =>
