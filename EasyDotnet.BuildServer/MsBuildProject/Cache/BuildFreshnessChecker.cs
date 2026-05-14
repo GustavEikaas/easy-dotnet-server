@@ -12,16 +12,6 @@ public sealed class BuildFreshnessChecker(InputPredictor predictor, Logger logge
 {
   private readonly ConcurrentDictionary<BuildFreshnessKey, SuccessfulBuildState> _successfulBuilds = new();
 
-  private static readonly string[] DesignTimeCollectionTargets =
-  [
-      "CollectAnalyzersDesignTime",
-      "CollectResolvedCompilationReferencesDesignTime",
-      "CollectUpToDateCheckInputDesignTime",
-      "CollectUpToDateCheckOutputDesignTime",
-      "CollectUpToDateCheckBuiltDesignTime",
-      "CollectCopyToOutputDirectoryItemDesignTime",
-  ];
-
   public BuildFreshnessResult Check(string projectPath, string? configuration, string? platform, string targetFramework)
   {
     var globalProperties = CreateGlobalProperties(configuration, platform, targetFramework);
@@ -303,7 +293,7 @@ public sealed class BuildFreshnessChecker(InputPredictor predictor, Logger logge
       return "CollectUpToDateCheckBuiltDesignTime unavailable";
     }
 
-    if (data.HasProjectReferences && !data.HasResolvedCompilationReferenceCollection)
+    if (data.HasProjectReferences && !data.HasResolvedCompilationReferenceCoverage)
     {
       return "ProjectReference present but CollectResolvedCompilationReferencesDesignTime unavailable";
     }
@@ -314,28 +304,8 @@ public sealed class BuildFreshnessChecker(InputPredictor predictor, Logger logge
   private static DesignTimeData CollectDesignTimeData(ProjectInstance instance)
   {
     var hasBuiltOutputCollection = instance.Targets.ContainsKey("CollectUpToDateCheckBuiltDesignTime");
-    var hasResolvedCompilationReferenceCollection = instance.Targets.ContainsKey("CollectResolvedCompilationReferencesDesignTime");
     var hasProjectReferences = instance.GetItems("ProjectReference").Any(IsIncludedInBuild);
-
-    var targetsToBuild = new List<string>();
-    foreach (var target in DesignTimeCollectionTargets)
-    {
-      if (instance.Targets.ContainsKey(target))
-      {
-        targetsToBuild.Add(target);
-      }
-    }
-
-    AddExistingDependsOnTargets(instance, targetsToBuild, "CollectUpToDateCheckInputDesignTimeDependsOn");
-    AddExistingDependsOnTargets(instance, targetsToBuild, "CollectUpToDateCheckOutputDesignTimeDependsOn");
-    AddExistingDependsOnTargets(instance, targetsToBuild, "CollectUpToDateCheckBuiltDesignTimeDependsOn");
-
-    IDictionary<string, TargetResult> targetOutputs = new Dictionary<string, TargetResult>(StringComparer.OrdinalIgnoreCase);
-    if (targetsToBuild.Count > 0 && !instance.Build([.. targetsToBuild.Distinct(StringComparer.OrdinalIgnoreCase)], loggers: null, out targetOutputs))
-    {
-      var failedTargets = string.Join(", ", targetOutputs.Where(kv => kv.Value.ResultCode == TargetResultCode.Failure).Select(kv => kv.Key));
-      throw new InvalidOperationException($"Design-time FUTD target collection failed: {failedTargets}");
-    }
+    var hasResolvedCompilationReferenceCoverage = !hasProjectReferences;
 
     var inputs = new List<string>();
     var outputs = new List<string>();
@@ -343,20 +313,24 @@ public sealed class BuildFreshnessChecker(InputPredictor predictor, Logger logge
     var copyItems = new List<CopyToOutputItem>();
     var outputDirectory = GetOutputDirectory(instance);
 
-    foreach (var item in GetTargetItems(targetOutputs, "CollectAnalyzersDesignTime"))
+    foreach (var item in instance.GetItems("Analyzer"))
     {
       AddItemPath(inputs, item, "ResolvedPath", instance.Directory);
       AddItemPath(inputs, item, null, instance.Directory);
     }
 
-    foreach (var item in GetTargetItems(targetOutputs, "CollectResolvedCompilationReferencesDesignTime"))
+    if (TryBuildTarget(instance, "CollectResolvedCompilationReferencesDesignTime", out var resolvedReferences))
     {
-      AddItemPath(inputs, item, "ResolvedPath", instance.Directory);
-      AddItemPath(inputs, item, "OriginalPath", instance.Directory);
-      AddItemPath(inputs, item, "CopyUpToDateMarker", instance.Directory);
+      hasResolvedCompilationReferenceCoverage = true;
+      foreach (var item in resolvedReferences)
+      {
+        AddItemPath(inputs, item, "ResolvedPath", instance.Directory);
+        AddItemPath(inputs, item, "OriginalPath", instance.Directory);
+        AddItemPath(inputs, item, "CopyUpToDateMarker", instance.Directory);
+      }
     }
 
-    foreach (var item in GetTargetItems(targetOutputs, "CollectUpToDateCheckInputDesignTime"))
+    foreach (var item in BuildTargetAndDependsOnTargets(instance, "CollectUpToDateCheckInputDesignTime", "CollectUpToDateCheckInputDesignTimeDependsOn"))
     {
       AddItemPath(inputs, item, null, instance.Directory);
     }
@@ -365,7 +339,7 @@ public sealed class BuildFreshnessChecker(InputPredictor predictor, Logger logge
       AddItemPath(inputs, item, null, instance.Directory);
     }
 
-    foreach (var item in GetTargetItems(targetOutputs, "CollectUpToDateCheckOutputDesignTime"))
+    foreach (var item in BuildTargetAndDependsOnTargets(instance, "CollectUpToDateCheckOutputDesignTime", "CollectUpToDateCheckOutputDesignTimeDependsOn"))
     {
       AddItemPath(outputs, item, null, instance.Directory);
     }
@@ -374,7 +348,7 @@ public sealed class BuildFreshnessChecker(InputPredictor predictor, Logger logge
       AddItemPath(outputs, item, null, instance.Directory);
     }
 
-    foreach (var item in GetTargetItems(targetOutputs, "CollectUpToDateCheckBuiltDesignTime"))
+    foreach (var item in BuildTargetAndDependsOnTargets(instance, "CollectUpToDateCheckBuiltDesignTime", "CollectUpToDateCheckBuiltDesignTimeDependsOn"))
     {
       var built = GetItemPath(item, null, instance.Directory);
       if (built is null) continue;
@@ -391,7 +365,7 @@ public sealed class BuildFreshnessChecker(InputPredictor predictor, Logger logge
       builtItems.Add((built, original));
     }
 
-    foreach (var item in GetTargetItems(targetOutputs, "CollectCopyToOutputDirectoryItemDesignTime"))
+    foreach (var item in BuildTargetAndDependsOnTargets(instance, "CollectCopyToOutputDirectoryItemDesignTime", null))
     {
       AddCopyToOutputItem(copyItems, item, instance.Directory, outputDirectory, preserveSourceRelativePath: false);
     }
@@ -407,35 +381,58 @@ public sealed class BuildFreshnessChecker(InputPredictor predictor, Logger logge
         builtItems,
         copyItems,
         hasBuiltOutputCollection,
-        hasResolvedCompilationReferenceCollection,
+        hasResolvedCompilationReferenceCoverage,
         hasProjectReferences);
   }
 
-  private static void AddExistingDependsOnTargets(ProjectInstance instance, List<string> targetsToBuild, string propertyName)
+  private static IEnumerable<ITaskItem> BuildTargetAndDependsOnTargets(ProjectInstance instance, string targetName, string? dependsOnPropertyName)
   {
-    foreach (var target in instance.GetPropertyValue(propertyName).Split([';'], StringSplitOptions.RemoveEmptyEntries).Select(t => t.Trim()))
+    if (TryBuildTarget(instance, targetName, out var items))
     {
-      if (instance.Targets.ContainsKey(target))
-      {
-        targetsToBuild.Add(target);
-      }
+      return items;
     }
-  }
 
-  private static IEnumerable<ITaskItem> GetTargetItems(IDictionary<string, TargetResult> targetOutputs, string targetName)
-  {
-    if (!targetOutputs.TryGetValue(targetName, out var result))
+    if (dependsOnPropertyName is null)
     {
       return [];
     }
 
-    if (result.ResultCode != TargetResultCode.Success && result.ResultCode != TargetResultCode.Skipped)
+    var result = new List<ITaskItem>();
+    foreach (var target in instance.GetPropertyValue(dependsOnPropertyName).Split([';'], StringSplitOptions.RemoveEmptyEntries).Select(t => t.Trim()))
     {
-      throw new InvalidOperationException($"Design-time FUTD target failed: {targetName}");
+      if (ShouldSkipFallbackDependsOnTarget(target)) continue;
+      if (!TryBuildTarget(instance, target, out var targetItems)) continue;
+      result.AddRange(targetItems);
     }
 
-    return result.Items;
+    return result;
   }
+
+  private static bool TryBuildTarget(ProjectInstance instance, string targetName, out IReadOnlyCollection<ITaskItem> items)
+  {
+    items = [];
+    if (!instance.Targets.ContainsKey(targetName))
+    {
+      return false;
+    }
+
+    if (!instance.Build([targetName], loggers: null, out var targetOutputs))
+    {
+      return false;
+    }
+
+    if (!targetOutputs.TryGetValue(targetName, out var result) || result.ResultCode == TargetResultCode.Failure)
+    {
+      return false;
+    }
+
+    items = result.Items;
+    return true;
+  }
+
+  private static bool ShouldSkipFallbackDependsOnTarget(string targetName) =>
+      string.Equals(targetName, "CompileDesignTime", StringComparison.OrdinalIgnoreCase)
+      || string.Equals(targetName, "ResolveAssemblyReferences", StringComparison.OrdinalIgnoreCase);
 
   private static void AddItemPath(List<string> result, ITaskItem item, string? metadataName, string baseDirectory)
   {
@@ -588,7 +585,7 @@ public sealed class BuildFreshnessChecker(InputPredictor predictor, Logger logge
       List<(string Built, string? Original)> BuiltItems,
       List<CopyToOutputItem> CopyItems,
       bool HasBuiltOutputCollection,
-      bool HasResolvedCompilationReferenceCollection,
+      bool HasResolvedCompilationReferenceCoverage,
       bool HasProjectReferences);
 
   private sealed record CopyToOutputItem(
