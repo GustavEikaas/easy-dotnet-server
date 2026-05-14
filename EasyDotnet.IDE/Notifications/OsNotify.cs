@@ -4,10 +4,10 @@ namespace EasyDotnet.IDE.Notifications;
 
 internal static class OsNotify
 {
-  public static void TryNotifyTestRunFinished(ILogger logger, int passed, int failed, int skipped, int cancelled)
+  public static void TryNotifyTestRunFinished(ILogger logger, int passed, int failed, int skipped, int cancelled, int inconclusive)
   {
     const string title = "Tests finished";
-    var body = $"Passed: {passed}  Failed: {failed}  Skipped: {skipped}  Cancelled: {cancelled}";
+    var body = $"Passed: {passed}  Failed: {failed}  Skipped: {skipped}  Inconclusive: {inconclusive}  Cancelled: {cancelled}";
     try
     {
       if (OperatingSystem.IsLinux())
