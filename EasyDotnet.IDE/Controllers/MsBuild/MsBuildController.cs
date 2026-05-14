@@ -12,16 +12,6 @@ namespace EasyDotnet.IDE.Controllers.MsBuild;
 
 public class MsBuildController(IClientService clientService, IMsBuildService msBuild) : BaseController
 {
-  [JsonRpcMethod("msbuild/build")]
-  [Obsolete]
-  public async Task<BuildResultResponse> Build(BuildRequest request)
-  {
-    clientService.ThrowIfNotInitialized();
-    var result = await msBuild.RequestBuildAsync(request.TargetPath, request.TargetFramework, request.BuildArgs, request.Configuration);
-
-    return new(result.Success, result.Errors.AsAsyncEnumerable(), result.Warnings.AsAsyncEnumerable());
-  }
-
   [JsonRpcMethod("msbuild/project-properties")]
   [Obsolete]
   public async Task<DotnetProjectV1> QueryProjectProperties(ProjectPropertiesRequest request)
