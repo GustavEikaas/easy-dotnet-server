@@ -16,7 +16,8 @@ public record TestRunnerStatus(
     int TotalPassed,
     int TotalFailed,
     int TotalSkipped,
-    int TotalCancelled
+    int TotalCancelled,
+    int TotalInconclusive = 0
 );
 
 [JsonConverter(typeof(StringEnumConverter))]
@@ -32,5 +33,6 @@ public enum OverallStatus
   Killing,
   Killed,
   Failed,
+  Inconclusive,
   Passed
 }

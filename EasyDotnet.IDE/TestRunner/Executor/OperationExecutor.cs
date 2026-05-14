@@ -498,6 +498,7 @@ public class OperationExecutor(
       "passed" => new TestNodeStatus.Passed(duration),
       "failed" => new TestNodeStatus.Failed(duration, result.ErrorMessage),
       "skipped" => new TestNodeStatus.Skipped(""),
+      "none" => new TestNodeStatus.Inconclusive(""),
       _ => new TestNodeStatus.Failed(duration, result.ErrorMessage)
     };
 
@@ -533,10 +534,11 @@ public class OperationExecutor(
       }
 
       var hasFailed = scopedLeaves.Any(n => detailStore.Get(n.Id)?.Outcome == "failed");
-      var hasSkipped = !hasFailed && scopedLeaves.Any(n => detailStore.Get(n.Id)?.Outcome == "skipped");
+      var hasInconclusive = !hasFailed && scopedLeaves.Any(n => detailStore.Get(n.Id)?.Outcome == "none");
+      var hasSkipped = !hasFailed && !hasInconclusive && scopedLeaves.Any(n => detailStore.Get(n.Id)?.Outcome == "skipped");
 
-      logger.LogDebug("Bubble parent {ParentId}: hasFailed={HasFailed} hasSkipped={HasSkipped}",
-          parentId, hasFailed, hasSkipped);
+      logger.LogDebug("Bubble parent {ParentId}: hasFailed={HasFailed} hasInconclusive={HasInconclusive} hasSkipped={HasSkipped}",
+          parentId, hasFailed, hasInconclusive, hasSkipped);
 
       var maxDuration = scopedLeaves
           .Select(n => detailStore.Get(n.Id)?.DurationMs ?? 0)
@@ -546,9 +548,11 @@ public class OperationExecutor(
 
       TestNodeStatus aggregateStatus = hasFailed
           ? new TestNodeStatus.Failed(durationDisplay, [])
-          : hasSkipped
-              ? new TestNodeStatus.Skipped("")
-              : new TestNodeStatus.Passed(durationDisplay);
+          : hasInconclusive
+              ? new TestNodeStatus.Inconclusive("")
+              : hasSkipped
+                  ? new TestNodeStatus.Skipped("")
+                  : new TestNodeStatus.Passed(durationDisplay);
 
       await dispatcher.SendStatusAsync(parentId, aggregateStatus, operationId: operationId);
       parentId = registry.Get(parentId)?.ParentId;
@@ -609,7 +613,7 @@ public class OperationExecutor(
 
       if (forceRunnerStatus)
       {
-        var (running, passed, failed, skipped, cancelled) = counter.Snapshot();
+        var (running, passed, failed, skipped, cancelled, inconclusive) = counter.Snapshot();
         await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
             IsLoading: true,
             CurrentOperation: debug ? "Debugging" : "Running",
@@ -619,7 +623,8 @@ public class OperationExecutor(
             TotalPassed: passed,
             TotalFailed: failed,
             TotalSkipped: skipped,
-            TotalCancelled: cancelled), operationId: operationId);
+            TotalCancelled: cancelled,
+            TotalInconclusive: inconclusive), operationId: operationId);
       }
     }
   }
@@ -668,6 +673,8 @@ public class OperationExecutor(
 
         if (string.Equals(detail?.Outcome, "failed", StringComparison.OrdinalIgnoreCase))
           state.Failed++;
+        else if (string.Equals(detail?.Outcome, "none", StringComparison.OrdinalIgnoreCase))
+          state.Inconclusive++;
         else if (string.Equals(detail?.Outcome, "skipped", StringComparison.OrdinalIgnoreCase))
           state.Skipped++;
 
@@ -699,6 +706,7 @@ public class OperationExecutor(
     {
       var durationDisplay = FormatDuration(state.MaxDurationMs);
       if (state.Failed > 0) return new TestNodeStatus.Failed(durationDisplay, []);
+      if (state.Inconclusive > 0) return new TestNodeStatus.Inconclusive("");
       if (state.Skipped > 0) return new TestNodeStatus.Skipped("");
       return new TestNodeStatus.Passed(durationDisplay);
     }
@@ -708,6 +716,7 @@ public class OperationExecutor(
       public int Total { get; set; }
       public int Completed { get; set; }
       public int Failed { get; set; }
+      public int Inconclusive { get; set; }
       public int Skipped { get; set; }
       public long MaxDurationMs { get; set; }
       public bool EmittedTerminal { get; set; }
