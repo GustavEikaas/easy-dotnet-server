@@ -146,9 +146,10 @@ public class WorkspaceService(
       args.Add(project.Raw.Configuration);
     }
 
-    if (!string.IsNullOrWhiteSpace(project.Raw.Platform))
+    var projectPlatform = BuildConfiguration.MsBuildPlatform.ToProjectPlatform(project.Raw.Platform);
+    if (!string.IsNullOrWhiteSpace(projectPlatform))
     {
-      args.Add($"-p:Platform={project.Raw.Platform}");
+      args.Add($"-p:Platform={projectPlatform}");
     }
 
     if (!string.IsNullOrEmpty(request.CliArgs))

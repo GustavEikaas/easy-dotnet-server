@@ -127,7 +127,7 @@ public sealed class WorkspaceBuildConfigurationService(
           fullPath,
           activeWorkspaceConfiguration,
           activeWorkspaceConfiguration.BuildType,
-          activeWorkspaceConfiguration.Platform,
+          MsBuildPlatform.ToProjectPlatform(activeWorkspaceConfiguration.Platform),
           Build: true,
           Deploy: false,
           UsedProjectMapping: false);
@@ -141,7 +141,7 @@ public sealed class WorkspaceBuildConfigurationService(
         fullPath,
         activeWorkspaceConfiguration,
         buildType ?? activeWorkspaceConfiguration.BuildType,
-        platform ?? activeWorkspaceConfiguration.Platform,
+        MsBuildPlatform.ToProjectPlatform(platform ?? activeWorkspaceConfiguration.Platform),
         build,
         deploy,
         UsedProjectMapping: true);

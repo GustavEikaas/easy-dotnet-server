@@ -159,7 +159,7 @@ public class WorkspaceTestService(
       args.Add(project.TargetFramework);
     }
 
-    AppendBuildConfigurationArguments(args, project.Raw.Configuration, project.Raw.Platform);
+    AppendBuildConfigurationArguments(args, project.Raw.Configuration, MsBuildPlatform.ToProjectPlatform(project.Raw.Platform));
     args.Add("--no-restore");
     args.Add("--no-build");
 
