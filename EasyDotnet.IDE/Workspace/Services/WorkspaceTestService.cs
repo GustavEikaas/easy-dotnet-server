@@ -6,6 +6,7 @@ using EasyDotnet.IDE.Models.Client;
 using EasyDotnet.IDE.Models.Client.Prompt;
 using EasyDotnet.IDE.Settings;
 using EasyDotnet.IDE.Utils;
+using EasyDotnet.IDE.Workspace.BuildConfiguration;
 using EasyDotnet.IDE.Workspace.Controllers;
 
 namespace EasyDotnet.IDE.Workspace.Services;
@@ -16,7 +17,8 @@ public class WorkspaceTestService(
     WorkspaceBuildHostManager buildHostManager,
     SettingsService settingsService,
     GlobalJsonService globalJsonService,
-    WorkspacePreBuildService preBuildService)
+    WorkspacePreBuildService preBuildService,
+    IWorkspaceBuildConfigurationService workspaceBuildConfigurationService)
 {
   private const string SolutionOptionId = "__solution__";
 
@@ -157,6 +159,7 @@ public class WorkspaceTestService(
       args.Add(project.TargetFramework);
     }
 
+    AppendBuildConfigurationArguments(args, project.Raw.Configuration, MsBuildPlatform.ToProjectPlatform(project.Raw.Platform));
     args.Add("--no-restore");
     args.Add("--no-build");
 
@@ -187,6 +190,8 @@ public class WorkspaceTestService(
       args.Add(solutionFile);
     }
 
+    var workspaceConfiguration = await workspaceBuildConfigurationService.GetActiveConfigurationAsync(ct);
+    AppendBuildConfigurationArguments(args, workspaceConfiguration.BuildType, workspaceConfiguration.Platform);
     args.Add("--no-restore");
     args.Add("--no-build");
 
@@ -212,5 +217,19 @@ public class WorkspaceTestService(
         return result.Project;
     }
     return null;
+  }
+
+  private static void AppendBuildConfigurationArguments(List<string> args, string? configuration, string? platform)
+  {
+    if (!string.IsNullOrWhiteSpace(configuration))
+    {
+      args.Add("-c");
+      args.Add(configuration);
+    }
+
+    if (!string.IsNullOrWhiteSpace(platform))
+    {
+      args.Add($"-p:Platform={platform}");
+    }
   }
 }

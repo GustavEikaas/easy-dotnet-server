@@ -168,12 +168,12 @@ public class EditorService(
   public async Task<bool> BuildProject(string projectPath, CancellationToken cancellationToken)
   {
     var name = Path.GetFileNameWithoutExtension(projectPath);
-    var tfm = await buildHostManager.ResolveSingleTfmAsync(projectPath, "Debug", cancellationToken);
+    var tfm = await buildHostManager.ResolveSingleTfmAsync(projectPath, configuration: null, platform: null, ct: cancellationToken);
     List<BatchBuildResult> results;
     using (new ProgressScope(this, "Building", $"Building {name}"))
     {
       results = await buildHostManager
-          .BatchBuildAsync(new BatchBuildRequest([projectPath], "Debug", tfm), cancellationToken)
+          .BatchBuildAsync(new BatchBuildRequest([projectPath], Configuration: null, Platform: null, TargetFramework: tfm), cancellationToken)
           .ToListAsync(cancellationToken);
     }
 

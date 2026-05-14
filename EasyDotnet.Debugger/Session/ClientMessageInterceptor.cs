@@ -36,6 +36,7 @@ public class ClientMessageInterceptor(
         InterceptableCompletionsRequest complReq => await HandleCompletionsRequestAsync(complReq, proxy, cancellationToken),
         ScopesRequest scopesReq => HandleScopesRequest(scopesReq, proxy),
         SetBreakpointsRequest bpReq => HandleBreakpointsRequest(bpReq),
+        Request req when req.Command == "evaluate" => await HandleEvaluateRequestAsync(req, proxy, cancellationToken),
         Request req => LogAndPassthrough(req),
         _ => throw new Exception($"Unsupported DAP message from client: {message}")
       };
@@ -354,6 +355,252 @@ public class ClientMessageInterceptor(
     }
 
     return results;
+  }
+
+  private async Task<ProtocolMessage?> HandleEvaluateRequestAsync(
+    Request request,
+    IDebuggerProxy proxy,
+    CancellationToken cancellationToken)
+  {
+    if (request.Arguments is not { ValueKind: JsonValueKind.Object } args)
+    {
+      return LogAndPassthrough(request);
+    }
+
+    var contextKind = args.TryGetProperty("context", out var ctxEl) && ctxEl.ValueKind == JsonValueKind.String
+      ? ctxEl.GetString()
+      : null;
+    if (contextKind != "repl")
+    {
+      return LogAndPassthrough(request);
+    }
+
+    var expression = args.TryGetProperty("expression", out var exprEl) && exprEl.ValueKind == JsonValueKind.String
+      ? exprEl.GetString()
+      : null;
+    if (string.IsNullOrEmpty(expression))
+    {
+      return LogAndPassthrough(request);
+    }
+
+    var parsed = TryParseAssignment(expression);
+    if (parsed is null)
+    {
+      return LogAndPassthrough(request);
+    }
+
+    var (lhs, rhs) = parsed.Value;
+    int? frameId = args.TryGetProperty("frameId", out var frameEl) && frameEl.ValueKind == JsonValueKind.Number
+      ? frameEl.GetInt32()
+      : null;
+
+    var context = proxy.GetAndRemoveContext(request.Seq)
+      ?? throw new Exception("Proxy request not found for evaluate");
+
+    try
+    {
+      var setExprReq = new Request
+      {
+        Seq = 0,
+        Type = "request",
+        Command = "setExpression",
+        Arguments = JsonSerializer.SerializeToElement(new
+        {
+          expression = lhs,
+          value = rhs,
+          frameId
+        }, ProxyRequestOptions)
+      };
+
+      logger.LogDebug("[CLIENT] Rewriting evaluate assignment: lhs={lhs} rhs={rhs}", lhs, rhs);
+      var setExprResp = await proxy.RunInternalRequestAsync(setExprReq, cancellationToken);
+
+      Response evaluateResponse;
+      if (!setExprResp.Success)
+      {
+        evaluateResponse = new Response
+        {
+          Seq = 0,
+          Type = "response",
+          RequestSeq = context.OriginalSeq,
+          Success = false,
+          Command = "evaluate",
+          Message = setExprResp.Message,
+          Body = null
+        };
+      }
+      else
+      {
+        var body = BuildEvaluateAssignmentBody(setExprResp.Body, rhs);
+
+        evaluateResponse = new Response
+        {
+          Seq = 0,
+          Type = "response",
+          RequestSeq = context.OriginalSeq,
+          Success = true,
+          Command = "evaluate",
+          Body = body
+        };
+      }
+
+      await proxy.WriteProxyToClientAsync(evaluateResponse, cancellationToken);
+    }
+    catch (Exception ex)
+    {
+      logger.LogWarning(ex, "[CLIENT] evaluate->setExpression rewrite failed");
+      await proxy.WriteProxyToClientAsync(new Response
+      {
+        Seq = 0,
+        Type = "response",
+        RequestSeq = context.OriginalSeq,
+        Success = false,
+        Command = "evaluate",
+        Message = ex.Message,
+        Body = null
+      }, cancellationToken);
+    }
+
+    return null;
+  }
+
+  private static JsonElement BuildEvaluateAssignmentBody(JsonElement? setExpressionBody, string fallbackResult)
+  {
+    var remapped = new Dictionary<string, JsonElement>();
+
+    if (setExpressionBody is { ValueKind: JsonValueKind.Object } setBody)
+    {
+      foreach (var prop in setBody.EnumerateObject())
+      {
+        var key = prop.Name == "value" ? "result" : prop.Name;
+        remapped[key] = prop.Value.Clone();
+      }
+    }
+
+    if (!remapped.ContainsKey("result"))
+    {
+      remapped["result"] = JsonSerializer.SerializeToElement(fallbackResult, ProxyRequestOptions);
+    }
+
+    if (!remapped.ContainsKey("variablesReference"))
+    {
+      remapped["variablesReference"] = JsonSerializer.SerializeToElement(0, ProxyRequestOptions);
+    }
+
+    return JsonSerializer.SerializeToElement(remapped, ProxyRequestOptions);
+  }
+
+  private static (string Lhs, string Rhs)? TryParseAssignment(string expression)
+  {
+    var depth = 0;
+    var i = 0;
+    while (i < expression.Length)
+    {
+      var c = expression[i];
+
+      if (c == '"' || c == '\'')
+      {
+        var quote = c;
+        i++;
+        while (i < expression.Length && expression[i] != quote)
+        {
+          if (expression[i] == '\\' && i + 1 < expression.Length)
+          {
+            i += 2;
+            continue;
+          }
+          i++;
+        }
+        if (i < expression.Length)
+        {
+          i++;
+        }
+        continue;
+      }
+
+      if (c == '(' || c == '[' || c == '{')
+      {
+        depth++;
+      }
+      else if (c == ')' || c == ']' || c == '}')
+      {
+        if (depth > 0)
+        {
+          depth--;
+        }
+      }
+      else if (c == '=' && depth == 0)
+      {
+        var prev = i > 0 ? expression[i - 1] : '\0';
+        var next = i + 1 < expression.Length ? expression[i + 1] : '\0';
+        if (next == '=')
+        {
+          i += 2;
+          continue;
+        }
+        if (next == '>' || prev == '!' || prev == '<' || prev == '>')
+        {
+          i++;
+          continue;
+        }
+
+        var lhs = expression[..i].Trim();
+        var rhs = expression[(i + 1)..].Trim();
+        if (lhs.Length == 0 || rhs.Length == 0)
+        {
+          return null;
+        }
+        if (!IsValidAssignmentTarget(lhs))
+        {
+          return null;
+        }
+        return (lhs, rhs);
+      }
+
+      i++;
+    }
+    return null;
+  }
+
+  private static bool IsValidAssignmentTarget(string lhs)
+  {
+    if (lhs.Length == 0 || lhs.Contains(".."))
+    {
+      return false;
+    }
+
+    var first = lhs[0];
+    if (!(first == '_' || char.IsLetter(first)))
+    {
+      return false;
+    }
+
+    var bracketDepth = 0;
+    foreach (var c in lhs)
+    {
+      if (c == '[')
+      {
+        bracketDepth++;
+      }
+      else if (c == ']')
+      {
+        if (bracketDepth == 0)
+        {
+          return false;
+        }
+        bracketDepth--;
+      }
+      else if (bracketDepth > 0)
+      {
+        // any char allowed inside indexer
+      }
+      else if (!(char.IsLetterOrDigit(c) || c == '_' || c == '.'))
+      {
+        return false;
+      }
+    }
+
+    return bracketDepth == 0;
   }
 
   private SetBreakpointsRequest HandleBreakpointsRequest(SetBreakpointsRequest request)

@@ -36,12 +36,12 @@ public class WorkspacePreBuildService(
     }
 
     await editorService.SendProgressStart(token, "Building...", $"Building {name}");
-    var tfm = await buildHostManager.ResolveSingleTfmAsync(path, "Debug", ct);
+    var tfm = await buildHostManager.ResolveSingleTfmAsync(path, configuration: null, platform: null, ct: ct);
     List<BatchBuildResult> buildResults;
     try
     {
       buildResults = await buildHostManager.BatchBuildAsync(
-        new BatchBuildRequest([path], "Debug", tfm), ct).ToListAsync(ct);
+        new BatchBuildRequest([path], Configuration: null, Platform: null, TargetFramework: tfm), ct).ToListAsync(ct);
     }
     finally
     {

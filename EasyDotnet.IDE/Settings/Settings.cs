@@ -26,6 +26,7 @@ public class SolutionSettings : IVersionedSettings
   public int Version { get; set; } = 1;
   public required SettingsMetadata Metadata { get; set; }
   public DefaultProjects? Defaults { get; set; }
+  public SolutionBuildConfigurationSettings? BuildConfiguration { get; set; }
 }
 
 /// <summary>
@@ -50,4 +51,12 @@ public class ProjectSettings : IVersionedSettings
   public string? TargetFramework { get; set; }
   public string? RunSettings { get; set; }
   public string? LaunchProfile { get; set; }
+}
+
+public class SolutionBuildConfigurationSettings
+{
+  public string? ActiveBuildType { get; set; }
+  public string? ActivePlatform { get; set; }
+  public string[]? KnownBuildTypes { get; set; }
+  public string[]? KnownPlatforms { get; set; }
 }

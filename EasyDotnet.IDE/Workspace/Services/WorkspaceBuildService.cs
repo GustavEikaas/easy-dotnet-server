@@ -1,5 +1,4 @@
 using EasyDotnet.BuildServer.Contracts;
-using EasyDotnet.IDE;
 using EasyDotnet.IDE.BuildHost;
 using EasyDotnet.IDE.Editor;
 using EasyDotnet.IDE.Interfaces;
@@ -7,6 +6,7 @@ using EasyDotnet.IDE.Models.Client;
 using EasyDotnet.IDE.Models.Client.Prompt;
 using EasyDotnet.IDE.Models.Client.Quickfix;
 using EasyDotnet.IDE.Settings;
+using EasyDotnet.IDE.Workspace.BuildConfiguration;
 using EasyDotnet.IDE.Workspace.Controllers;
 
 namespace EasyDotnet.IDE.Workspace.Services;
@@ -14,10 +14,11 @@ namespace EasyDotnet.IDE.Workspace.Services;
 public class WorkspaceBuildService(
     IClientService clientService,
     ISolutionService solutionService,
-    IBuildHostManager buildHostManager,
+    WorkspaceBuildHostManager buildHostManager,
     IEditorService editorService,
     IProgressScopeFactory progressScopeFactory,
-    SettingsService settingsService)
+    SettingsService settingsService,
+    IWorkspaceBuildConfigurationService workspaceBuildConfigurationService)
 {
   public async Task BuildProjectAsync(WorkspaceBuildRequest request, CancellationToken ct)
   {
@@ -84,28 +85,25 @@ public class WorkspaceBuildService(
 
   private async Task BuildProjectNoSolutionAsync(WorkspaceBuildRequest request, CancellationToken ct)
   {
-    var rootDir = clientService.RequireRootDir();
+    var projects = await buildHostManager.GetProjectsFromDirectoryAsync(
+        clientService.RequireRootDir(),
+        maxDepth: 3,
+        ct: ct);
 
-    var csprojFiles = Directory.EnumerateFiles(rootDir, "*.csproj", new EnumerationOptions
-    {
-      MaxRecursionDepth = 3,
-      RecurseSubdirectories = true
-    }).ToList();
-
-    if (csprojFiles.Count == 0)
+    if (projects.Count == 0)
     {
       await editorService.DisplayError("No project files found");
       return;
     }
 
-    if (csprojFiles.Count == 1)
+    if (projects.Count == 1)
     {
-      await ExecuteBuildAsync(csprojFiles[0], request, ct);
+      await ExecuteBuildAsync(projects[0].ProjectFullPath, request, ct);
       return;
     }
 
-    var options = csprojFiles
-        .Select(p => new SelectionOption(p, Path.GetFileNameWithoutExtension(p)))
+    var options = projects
+        .Select(p => new SelectionOption(p.ProjectFullPath, p.ProjectName))
         .ToArray();
 
     var selected = await editorService.RequestSelection("Pick project to build", options);
@@ -130,6 +128,16 @@ public class WorkspaceBuildService(
   private async Task RunBuildInTerminalAsync(string targetPath, string name, string? buildArgs, CancellationToken ct)
   {
     var args = new List<string> { "build", targetPath };
+    var resolvedConfiguration = await workspaceBuildConfigurationService.ResolveTargetAsync(targetPath, ct);
+    if (!string.IsNullOrWhiteSpace(resolvedConfiguration.Configuration))
+    {
+      args.Add("-c");
+      args.Add(resolvedConfiguration.Configuration);
+    }
+    if (!string.IsNullOrWhiteSpace(resolvedConfiguration.Platform))
+    {
+      args.Add($"-p:Platform={resolvedConfiguration.Platform}");
+    }
     if (!string.IsNullOrWhiteSpace(buildArgs))
       args.Add(buildArgs);
 
@@ -145,25 +153,46 @@ public class WorkspaceBuildService(
   }
 
   private Task RunBuildQuickfixAsync(string targetPath, string name, CancellationToken ct) =>
-      BuildQuickfixAsync(targetPath, name, "Debug", buildTarget: "Build", operationName: "Build", ct);
+      BuildQuickfixAsync(targetPath, name, configuration: null, buildTarget: "Build", operationName: "Build", platform: null, ct);
 
   public async Task<bool> BuildQuickfixAsync(
       string targetPath,
       string name,
-      string configuration,
+      string? configuration,
       string buildTarget,
       string operationName,
+      string? platform,
+      CancellationToken ct,
+      bool restoreBeforeOperation = true)
+      => await ExecuteBuildTargetQuickfixAsync(
+          targetPath,
+          name,
+          configuration,
+          buildTarget,
+          operationName,
+          platform,
+          restoreBeforeOperation,
+          ct);
+
+  private async Task<bool> ExecuteBuildTargetQuickfixAsync(
+      string targetPath,
+      string name,
+      string? configuration,
+      string buildTarget,
+      string operationName,
+      string? platform,
+      bool restoreBeforeOperation,
       CancellationToken ct)
   {
-    if (!await RestoreBeforeBuildQuickfixAsync(targetPath, name, ct))
+    if (restoreBeforeOperation && !await RestoreBeforeBuildQuickfixAsync(targetPath, name, ct))
       return false;
 
-    var tfm = await buildHostManager.ResolveSingleTfmAsync(targetPath, configuration, ct);
+    var tfm = await buildHostManager.ResolveSingleTfmAsync(targetPath, configuration, platform, ct);
     List<BatchBuildResult> results;
     using (progressScopeFactory.Create($"{operationName}...", $"{operationName} {name}"))
     {
       results = await buildHostManager
-          .BatchBuildAsync(new BatchBuildRequest([targetPath], configuration, tfm, BuildTarget: buildTarget), ct)
+          .BatchBuildAsync(new BatchBuildRequest([targetPath], configuration, Platform: platform, TargetFramework: tfm, BuildTarget: buildTarget), ct)
           .ToListAsync(ct);
     }
 
@@ -228,13 +257,12 @@ public class WorkspaceBuildService(
       IEnumerable<BuildDiagnostic> diagnostics,
       BuildDiagnosticSeverity severity,
       QuickFixItemType quickFixType) =>
-      diagnostics
+      [.. diagnostics
           .Where(d => d.Severity == severity)
           .Select(d => new QuickFixItem(
               FileName: d.File ?? "",
               LineNumber: d.LineNumber,
               ColumnNumber: d.ColumnNumber,
               Text: string.IsNullOrEmpty(d.Code) ? d.Message ?? "" : $"[{d.Code}] {d.Message}",
-              Type: quickFixType))
-          .ToList();
+              Type: quickFixType))];
 }
