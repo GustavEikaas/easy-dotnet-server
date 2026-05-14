@@ -149,7 +149,7 @@ public sealed class FutdTests
     File.WriteAllText(content, "v1");
     File.WriteAllText(csproj, File.ReadAllText(csproj).Replace("</Project>", """
 <ItemGroup>
-  <None Update="assets/data.txt" CopyToOutputDirectory="PreserveNewest" />
+  <None Update="assets/data.txt" CopyToOutputDirectory="PreserveNewest" TargetPath="assets/data.txt" />
 </ItemGroup>
 </Project>
 """));
