@@ -14,6 +14,11 @@ public sealed class BuildFreshnessChecker(InputPredictor predictor, Logger logge
 
   public BuildFreshnessResult Check(string projectPath, string? configuration, string? platform, string targetFramework)
   {
+    if (!IsSupportedRuntime)
+    {
+      return new BuildFreshnessResult(false, "FUTD is only enabled on the net8 build server");
+    }
+
     var globalProperties = CreateGlobalProperties(configuration, platform, targetFramework);
 
     var key = BuildFreshnessKey.Create(projectPath, globalProperties["Configuration"], platform, targetFramework);
@@ -220,6 +225,11 @@ public sealed class BuildFreshnessChecker(InputPredictor predictor, Logger logge
 
   public void RecordSuccessfulBuild(string projectPath, string? configuration, string? platform, string targetFramework, DateTime startedAtUtc)
   {
+    if (!IsSupportedRuntime)
+    {
+      return;
+    }
+
     var globalProperties = CreateGlobalProperties(configuration, platform, targetFramework);
     var key = BuildFreshnessKey.Create(projectPath, globalProperties["Configuration"], platform, targetFramework);
 
@@ -277,6 +287,13 @@ public sealed class BuildFreshnessChecker(InputPredictor predictor, Logger logge
 
     return globalProperties;
   }
+
+  private static bool IsSupportedRuntime =>
+#if NET8_0_OR_GREATER
+      true;
+#else
+      false;
+#endif
 
   private static HashSet<string> CreateInputSet(IEnumerable<string> inputFiles, IEnumerable<string> extraInputs)
   {

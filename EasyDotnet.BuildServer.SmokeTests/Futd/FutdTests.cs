@@ -6,6 +6,7 @@ namespace EasyDotnet.BuildServer.SmokeTests.Futd;
 public sealed class FutdTests
 {
   public static IEnumerable<object[]> Targets() => PropertyCacheHarness.Targets();
+  public static IEnumerable<object[]> FutdTargets() => PropertyCacheHarness.Targets().Where(t => string.Equals((string)t[0], "net8.0", StringComparison.OrdinalIgnoreCase));
 
   private static async Task RestoreAsync(BuildServerProcess srv, string projectPath)
   {
@@ -40,7 +41,7 @@ public sealed class FutdTests
          && finished.Output?.Diagnostics.Any(d => d.Code == "ED-FUTD") == true;
 
   [Theory]
-  [MemberData(nameof(Targets))]
+  [MemberData(nameof(FutdTargets))]
   public async Task Second_Build_Is_Futd(string tfm, string exe, string[] leadingArgs)
   {
     _ = tfm;
@@ -59,7 +60,7 @@ public sealed class FutdTests
   }
 
   [Theory]
-  [MemberData(nameof(Targets))]
+  [MemberData(nameof(FutdTargets))]
   public async Task Touching_Source_Triggers_Real_Build(string tfm, string exe, string[] leadingArgs)
   {
     _ = tfm;
@@ -79,7 +80,7 @@ public sealed class FutdTests
   }
 
   [Theory]
-  [MemberData(nameof(Targets))]
+  [MemberData(nameof(FutdTargets))]
   public async Task Deleting_Source_Triggers_Real_Build(string tfm, string exe, string[] leadingArgs)
   {
     _ = tfm;
@@ -99,7 +100,7 @@ public sealed class FutdTests
   }
 
   [Theory]
-  [MemberData(nameof(Targets))]
+  [MemberData(nameof(FutdTargets))]
   public async Task DesignTime_UpToDateCheckInput_Triggers_Real_Build(string tfm, string exe, string[] leadingArgs)
   {
     _ = tfm;
@@ -136,7 +137,7 @@ public sealed class FutdTests
   }
 
   [Theory]
-  [MemberData(nameof(Targets))]
+  [MemberData(nameof(FutdTargets))]
   public async Task CopyToOutputDirectory_Destination_Missing_Triggers_Real_Build(string tfm, string exe, string[] leadingArgs)
   {
     _ = tfm;
@@ -173,7 +174,7 @@ public sealed class FutdTests
   }
 
   [Theory]
-  [MemberData(nameof(Targets))]
+  [MemberData(nameof(FutdTargets))]
   public async Task Missing_Built_Output_Collection_Declines_Futd(string tfm, string exe, string[] leadingArgs)
   {
     _ = tfm;
@@ -202,7 +203,7 @@ public sealed class FutdTests
   }
 
   [Theory]
-  [MemberData(nameof(Targets))]
+  [MemberData(nameof(FutdTargets))]
   public async Task ProjectReference_Without_Reference_Collection_Declines_Futd(string tfm, string exe, string[] leadingArgs)
   {
     _ = tfm;
