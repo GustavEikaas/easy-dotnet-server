@@ -132,6 +132,7 @@ public class ProjectPropertiesBatchHandler(PropertyCache cache, MsBuildInstance 
     var key = PropertyCacheKey.Create(
         projectPath,
         globalProps["Configuration"],
+        globalProps.TryGetValue("Platform", out var platform) ? platform : null,
         targetFramework ?? string.Empty,
         msBuildInstance.Version.ToString());
 

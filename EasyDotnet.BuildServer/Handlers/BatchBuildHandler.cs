@@ -47,7 +47,9 @@ public class BatchBuildHandler(BuildFreshnessChecker freshnessChecker, Logger lo
         continue;
       }
 
+      var buildStartedAtUtc = DateTime.UtcNow;
       var real = await BuildProjectAsync(projectPath, request, ct);
+      RecordSuccessfulBuildState(projectPath, request, real, buildStartedAtUtc);
       if (missReason is not null && real.Output is not null)
       {
         var diags = new List<BuildDiagnostic>(real.Output.Diagnostics)
@@ -69,6 +71,32 @@ public class BatchBuildHandler(BuildFreshnessChecker freshnessChecker, Logger lo
     }
   }
 
+  private void RecordSuccessfulBuildState(string projectPath, BatchBuildRequest request, BatchBuildResult result, DateTime startedAtUtc)
+  {
+    if (result.Success != true)
+    {
+      return;
+    }
+
+    var target = request.BuildTarget ?? "Build";
+    if (!string.Equals(target, "Build", StringComparison.OrdinalIgnoreCase))
+    {
+      return;
+    }
+
+    if (string.IsNullOrEmpty(request.TargetFramework))
+    {
+      return;
+    }
+
+    freshnessChecker.RecordSuccessfulBuild(
+        projectPath,
+        request.Configuration,
+        request.Platform,
+        request.TargetFramework!,
+        startedAtUtc);
+  }
+
   private (BatchBuildResult? Hit, string? MissReason) TryFastUpToDate(string projectPath, BatchBuildRequest request)
   {
     var target = request.BuildTarget ?? "Build";
@@ -85,7 +113,7 @@ public class BatchBuildHandler(BuildFreshnessChecker freshnessChecker, Logger lo
 
     try
     {
-      var result = freshnessChecker.Check(projectPath, request.Configuration, request.TargetFramework!);
+      var result = freshnessChecker.Check(projectPath, request.Configuration, request.Platform, request.TargetFramework!);
       if (!result.IsUpToDate)
       {
         logger.LogInformation("FUTD declined: {Project} ({Tfm}) — {Reason}", projectPath, request.TargetFramework, result.Reason);

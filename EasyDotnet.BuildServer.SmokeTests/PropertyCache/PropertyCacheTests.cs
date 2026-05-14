@@ -118,6 +118,26 @@ public sealed class PropertyCacheTests
 
   [Theory]
   [MemberData(nameof(Targets))]
+  public async Task Platform_Produces_Separate_Entry(string tfm, string exe, string[] leadingArgs)
+  {
+    _ = tfm;
+    await using var h = await PropertyCacheHarness.StartAsync(exe, leadingArgs);
+    var csproj = h.CreateSingleTfmProject(
+        extraPropertyGroupXml: """
+    <PlatformTarget Condition="'$(Platform)' == 'x64'">x64</PlatformTarget>
+    <PlatformTarget Condition="'$(Platform)' == 'AnyCPU'">AnyCPU</PlatformTarget>
+""");
+
+    await h.EvaluateAsync(csproj, platform: "AnyCPU");
+    await h.EvaluateAsync(csproj, platform: "x64");
+
+    var stats = await h.GetStatsAsync();
+    Assert.Equal(2, stats.Evaluations);
+    Assert.Equal(2, Directory.GetFiles(h.CacheDir).Length);
+  }
+
+  [Theory]
+  [MemberData(nameof(Targets))]
   public async Task MultiTfm_Each_Tfm_Independent(string tfm, string exe, string[] leadingArgs)
   {
     _ = tfm;
@@ -187,6 +207,7 @@ public sealed class PropertyCacheTests
     var fakeFileName = ComputeDiskFileName(
         Path.GetFullPath(csproj),
         "Debug",
+        platform: null,
         "net8.0",
         diag.MsBuildVersion);
 
@@ -198,9 +219,9 @@ public sealed class PropertyCacheTests
     Assert.Equal(1, stats.Evaluations);
   }
 
-  private static string ComputeDiskFileName(string projectFullPath, string configuration, string targetFramework, string msBuildVersion)
+  private static string ComputeDiskFileName(string projectFullPath, string configuration, string? platform, string targetFramework, string msBuildVersion)
   {
-    var raw = $"{projectFullPath}|{configuration}|{targetFramework}|{msBuildVersion}";
+    var raw = $"{projectFullPath}|{configuration}|{platform ?? string.Empty}|{targetFramework}|{msBuildVersion}";
     using var sha = SHA256.Create();
     var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(raw));
     var sb = new StringBuilder(bytes.Length * 2);

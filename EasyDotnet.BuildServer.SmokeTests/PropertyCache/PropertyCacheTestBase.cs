@@ -49,9 +49,9 @@ internal sealed class PropertyCacheHarness : IAsyncDisposable
   public async Task<PropertyCacheDiagnosticsResponse> GetStatsAsync()
       => await Server.Rpc.InvokeAsync<PropertyCacheDiagnosticsResponse>("diagnostics/property-cache");
 
-  public async Task<List<ProjectEvaluationResult>> EvaluateAsync(string projectPath, string configuration = "Debug")
+  public async Task<List<ProjectEvaluationResult>> EvaluateAsync(string projectPath, string configuration = "Debug", string? platform = null)
   {
-    var request = new GetProjectPropertiesBatchRequest([projectPath], configuration);
+    var request = new GetProjectPropertiesBatchRequest([projectPath], configuration, platform);
     var stream = await Server.Rpc.InvokeWithParameterObjectAsync<IAsyncEnumerable<ProjectEvaluationResult>>(
         "project/get-properties-batch",
         request);
@@ -76,6 +76,11 @@ internal sealed class PropertyCacheHarness : IAsyncDisposable
     <EnableFastUpToDateCheck>true</EnableFastUpToDateCheck>
     {extraPropertyGroupXml}
   </PropertyGroup>
+  <Target Name="CollectUpToDateCheckBuiltDesignTime" Returns="@(UpToDateCheckBuilt)">
+    <ItemGroup>
+      <UpToDateCheckBuilt Include="$(TargetPath)" />
+    </ItemGroup>
+  </Target>
 </Project>
 """);
     File.WriteAllText(Path.Combine(dir, "Class1.cs"), "namespace App; public class Class1 { }");
@@ -94,6 +99,11 @@ internal sealed class PropertyCacheHarness : IAsyncDisposable
     <OutputType>Library</OutputType>
     <EnableFastUpToDateCheck>true</EnableFastUpToDateCheck>
   </PropertyGroup>
+  <Target Name="CollectUpToDateCheckBuiltDesignTime" Returns="@(UpToDateCheckBuilt)">
+    <ItemGroup>
+      <UpToDateCheckBuilt Include="$(TargetPath)" />
+    </ItemGroup>
+  </Target>
 </Project>
 """);
     File.WriteAllText(Path.Combine(dir, "Class1.cs"), "namespace App; public class Class1 { }");
