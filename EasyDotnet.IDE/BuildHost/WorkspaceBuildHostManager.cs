@@ -214,9 +214,6 @@ public class WorkspaceBuildHostManager : IBuildHostManager
     _cache.Clear(CacheInvalidationReason.Restore);
   }
 
-  /// <summary>
-  /// Restores NuGet packages for all projects in a solution.
-  /// </summary>
   public async IAsyncEnumerable<RestoreResult> RestoreNugetPackagesSolutionAsync(
       string solutionPath,
       [EnumeratorCancellation] CancellationToken ct = default)

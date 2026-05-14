@@ -402,7 +402,6 @@ public class TestRunnerService(
       if (project is not null)
       {
         await adapterResolver.InvalidateAsync(project.ProjectFullPath);
-        buildHost.InvalidateCache(project.ProjectFullPath);
         projectsByPath[project.ProjectFullPath] = [project];
       }
 
@@ -412,9 +411,12 @@ public class TestRunnerService(
         return new OperationResult(Success: true);
       }
 
+      var singlePath = projectsByPath.Keys.Single();
+      var tfm = await buildHost.ResolveSingleTfmAsync(singlePath, "Debug", token.Ct);
       var buildRequest = new BatchBuildRequest(
-          ProjectPaths: [.. projectsByPath.Keys],
-          Configuration: null);
+          ProjectPaths: [singlePath],
+          Configuration: "Debug",
+          TargetFramework: tfm);
 
       var discoverTasks = new List<Task>();
 

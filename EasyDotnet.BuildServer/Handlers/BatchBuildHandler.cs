@@ -1,12 +1,14 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using EasyDotnet.BuildServer.Contracts;
+using EasyDotnet.BuildServer.Logging;
+using EasyDotnet.BuildServer.MsBuildProject.Cache;
 using Microsoft.Build.Execution;
 using StreamJsonRpc;
 
 namespace EasyDotnet.BuildServer.Handlers;
 
-public class BatchBuildHandler
+public class BatchBuildHandler(BuildFreshnessChecker freshnessChecker, Logger logger)
 {
   [JsonRpcMethod("projects/batchBuild", UseSingleObjectParameterDeserialization = true)]
   public async IAsyncEnumerable<BatchBuildResult> BatchBuildAsync(
@@ -38,7 +40,108 @@ public class BatchBuildHandler
           ErrorMessage: null,
           Output: null);
 
-      yield return await BuildProjectAsync(projectPath, request, ct);
+      var (hit, missReason) = TryFastUpToDate(projectPath, request);
+      if (hit is not null)
+      {
+        yield return hit;
+        continue;
+      }
+
+      var buildStartedAtUtc = DateTime.UtcNow;
+      var real = await BuildProjectAsync(projectPath, request, ct);
+      RecordSuccessfulBuildState(projectPath, request, real, buildStartedAtUtc);
+      if (missReason is not null && real.Output is not null)
+      {
+        var diags = new List<BuildDiagnostic>(real.Output.Diagnostics)
+        {
+          new BuildDiagnostic(
+              File: null,
+              LineNumber: 0,
+              ColumnNumber: 0,
+              EndLineNumber: 0,
+              EndColumnNumber: 0,
+              Message: $"FUTD declined: {missReason}",
+              Code: "ED-FUTD-MISS",
+              ProjectFile: projectPath,
+              Severity: BuildDiagnosticSeverity.Message),
+        };
+        real = real with { Output = new BatchBuildOutput(real.Output.Duration, [.. diags]) };
+      }
+      yield return real;
+    }
+  }
+
+  private void RecordSuccessfulBuildState(string projectPath, BatchBuildRequest request, BatchBuildResult result, DateTime startedAtUtc)
+  {
+    if (result.Success != true)
+    {
+      return;
+    }
+
+    var target = request.BuildTarget ?? "Build";
+    if (!string.Equals(target, "Build", StringComparison.OrdinalIgnoreCase))
+    {
+      return;
+    }
+
+    if (string.IsNullOrEmpty(request.TargetFramework))
+    {
+      return;
+    }
+
+    freshnessChecker.RecordSuccessfulBuild(
+        projectPath,
+        request.Configuration,
+        request.Platform,
+        request.TargetFramework!,
+        startedAtUtc);
+  }
+
+  private (BatchBuildResult? Hit, string? MissReason) TryFastUpToDate(string projectPath, BatchBuildRequest request)
+  {
+    var target = request.BuildTarget ?? "Build";
+    if (!string.Equals(target, "Build", StringComparison.OrdinalIgnoreCase))
+    {
+      logger.LogDebug("FUTD skipped: target={Target} for {Project}", target, projectPath);
+      return (null, null);
+    }
+    if (string.IsNullOrEmpty(request.TargetFramework))
+    {
+      logger.LogDebug("FUTD skipped: no TargetFramework specified for {Project}", projectPath);
+      return (null, null);
+    }
+
+    try
+    {
+      var result = freshnessChecker.Check(projectPath, request.Configuration, request.Platform, request.TargetFramework!);
+      if (!result.IsUpToDate)
+      {
+        logger.LogInformation("FUTD declined: {Project} ({Tfm}) — {Reason}", projectPath, request.TargetFramework, result.Reason);
+        return (null, result.Reason);
+      }
+
+      var hit = new BatchBuildResult(
+          projectPath,
+          Kind: BatchBuildResultKind.Finished,
+          Success: true,
+          ErrorMessage: null,
+          Output: new BatchBuildOutput(
+              TimeSpan.Zero,
+              [new BuildDiagnostic(
+                  File: null,
+                  LineNumber: 0,
+                  ColumnNumber: 0,
+                  EndLineNumber: 0,
+                  EndColumnNumber: 0,
+                  Message: "Project is up-to-date (build skipped via FUTD). Set <DisableFastUpToDateCheck>true</DisableFastUpToDateCheck> to disable.",
+                  Code: "ED-FUTD",
+                  ProjectFile: projectPath,
+                  Severity: BuildDiagnosticSeverity.Message)]));
+      return (hit, null);
+    }
+    catch (Exception ex)
+    {
+      return (null, $"FUTD check threw: {ex.Message}");
     }
   }
 

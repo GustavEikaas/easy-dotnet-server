@@ -187,11 +187,12 @@ public class WorkspaceBuildService(
     if (restoreBeforeOperation && !await RestoreBeforeBuildQuickfixAsync(targetPath, name, ct))
       return false;
 
+    var tfm = await buildHostManager.ResolveSingleTfmAsync(targetPath, configuration, platform, ct);
     List<BatchBuildResult> results;
     using (progressScopeFactory.Create($"{operationName}...", $"{operationName} {name}"))
     {
       results = await buildHostManager
-          .BatchBuildAsync(new BatchBuildRequest([targetPath], configuration, Platform: platform, BuildTarget: buildTarget), ct)
+          .BatchBuildAsync(new BatchBuildRequest([targetPath], configuration, Platform: platform, TargetFramework: tfm, BuildTarget: buildTarget), ct)
           .ToListAsync(ct);
     }
 
