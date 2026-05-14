@@ -132,8 +132,57 @@ public sealed class WorkspaceBuildConfigurationServiceTests : IDisposable
     var resolved = await harness.Service.ResolveTargetAsync(project.ProjectPath);
 
     await Assert.That(resolved.Configuration).IsEqualTo("Release");
-    await Assert.That(resolved.Platform).IsEqualTo("Any CPU");
+    await Assert.That(resolved.Platform).IsNull();
     await Assert.That(resolved.UsedProjectMapping).IsTrue();
+  }
+
+  [Test]
+  public async Task ResolveTargetAsync_ProjectTarget_AnyCpuIsOmittedToAvoidBinAnyCpuOutput()
+  {
+    var project = CreateProject("AppAlpha");
+    var solutionFile = CreateSolutionFile(
+        "ProjectAnyCpu.sln",
+        [project],
+        configurationSection:
+        [
+          "\t\tDebug|Any CPU = Debug|Any CPU"
+        ],
+        projectConfigurationSection:
+        [
+          $"\t\t{{{project.ProjectGuid}}}.Debug|Any CPU.ActiveCfg = Debug|Any CPU",
+          $"\t\t{{{project.ProjectGuid}}}.Debug|Any CPU.Build.0 = Debug|Any CPU"
+        ]);
+
+    using var harness = CreateHarness(solutionFile);
+
+    var resolved = await harness.Service.ResolveTargetAsync(project.ProjectPath);
+
+    await Assert.That(resolved.Platform).IsNull();
+  }
+
+  [Test]
+  public async Task ResolveTargetAsync_SolutionTarget_KeepsAnyCpuForSolutionMetaproj()
+  {
+    var project = CreateProject("AppAlpha");
+    var solutionFile = CreateSolutionFile(
+        "SolutionAnyCpu.sln",
+        [project],
+        configurationSection:
+        [
+          "\t\tDebug|Any CPU = Debug|Any CPU"
+        ],
+        projectConfigurationSection:
+        [
+          $"\t\t{{{project.ProjectGuid}}}.Debug|Any CPU.ActiveCfg = Debug|Any CPU",
+          $"\t\t{{{project.ProjectGuid}}}.Debug|Any CPU.Build.0 = Debug|Any CPU"
+        ]);
+
+    using var harness = CreateHarness(solutionFile);
+
+    var resolved = await harness.Service.ResolveTargetAsync(solutionFile);
+
+    await Assert.That(resolved.Configuration).IsEqualTo("Debug");
+    await Assert.That(resolved.Platform).IsEqualTo("Any CPU");
   }
 
   [Test]
