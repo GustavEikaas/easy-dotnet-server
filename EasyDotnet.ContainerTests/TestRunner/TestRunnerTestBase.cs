@@ -28,6 +28,10 @@ public abstract class TestRunnerTestBase<TContainer> : ContainerTestBase<TContai
 
   private readonly ConcurrentDictionary<string, TestNodeDto> _nodes = new();
   private readonly ConcurrentDictionary<string, string> _lastStatusKind = new();
+  private int _singleStatusNotifications;
+  private int _batchStatusNotifications;
+  private int _batchedStatusUpdates;
+  private volatile RunnerStatusDto? _lastRunnerStatus;
 
   /// <summary>All nodes registered so far, keyed by <see cref="TestNodeDto.Id"/>.</summary>
   public IReadOnlyDictionary<string, TestNodeDto> Nodes => _nodes;
@@ -37,6 +41,11 @@ public abstract class TestRunnerTestBase<TContainer> : ContainerTestBase<TContai
   /// <c>updateStatusBatch</c> (e.g. <c>"Running"</c>, <c>"Passed"</c>, <c>"Failed"</c>).
   /// </summary>
   public IReadOnlyDictionary<string, string> LastStatusKind => _lastStatusKind;
+
+  protected int SingleStatusNotificationCount => _singleStatusNotifications;
+  protected int BatchStatusNotificationCount => _batchStatusNotifications;
+  protected int BatchedStatusUpdateCount => _batchedStatusUpdates;
+  protected RunnerStatusDto? LastRunnerStatus => _lastRunnerStatus;
 
   protected override void ConfigureRpc(JsonRpc rpc) =>
     rpc.AddLocalRpcTarget(new RpcHandlers(this), new JsonRpcTargetOptions { DisposeOnDisconnect = false });
@@ -84,6 +93,7 @@ public abstract class TestRunnerTestBase<TContainer> : ContainerTestBase<TContai
     [JsonRpcMethod("updateStatus", UseSingleObjectParameterDeserialization = true)]
     public void UpdateStatus(UpdateStatusPayload payload)
     {
+      Interlocked.Increment(ref owner._singleStatusNotifications);
       if (payload.Status is { } s) owner._lastStatusKind[payload.Id] = s.Type;
     }
 
@@ -91,6 +101,8 @@ public abstract class TestRunnerTestBase<TContainer> : ContainerTestBase<TContai
     public void UpdateStatusBatch(UpdateStatusBatchPayload payload)
     {
       if (payload.Updates is null) return;
+      Interlocked.Increment(ref owner._batchStatusNotifications);
+      Interlocked.Add(ref owner._batchedStatusUpdates, payload.Updates.Count);
       foreach (var u in payload.Updates)
       {
         if (u.Id is { } id && u.Status is { } s) owner._lastStatusKind[id] = s.Type;
@@ -98,7 +110,8 @@ public abstract class TestRunnerTestBase<TContainer> : ContainerTestBase<TContai
     }
 
     [JsonRpcMethod("testrunner/statusUpdate", UseSingleObjectParameterDeserialization = true)]
-    public void TestrunnerStatusUpdate(object _) { /* runner-level status, not asserted */ }
+    public void TestrunnerStatusUpdate(RunnerStatusDto status) =>
+      owner._lastRunnerStatus = status;
 
     [JsonRpcMethod("testrunner/isVisible")]
     public bool IsVisible() => true;
@@ -111,3 +124,14 @@ public abstract class TestRunnerTestBase<TContainer> : ContainerTestBase<TContai
   private sealed record UpdateStatusBatchPayload(List<StatusUpdate>? Updates);
   private sealed record StatusUpdate(string Id, StatusDto? Status, List<string>? AvailableActions);
 }
+
+public sealed record RunnerStatusDto(
+  bool IsLoading,
+  string? CurrentOperation,
+  string OverallStatus,
+  int TotalTests,
+  int TotalRunning,
+  int TotalPassed,
+  int TotalFailed,
+  int TotalSkipped,
+  int TotalCancelled);

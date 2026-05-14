@@ -9,6 +9,19 @@ namespace EasyDotnet.ContainerTests.TestRunner;
 public abstract class NUnitV3VsTestDiscoveryTests<TContainer> : TestRunnerTestBase<TContainer>
   where TContainer : ServerContainer, new()
 {
+  private const string ManyNUnitCases = """
+    using NUnit.Framework;
+
+    namespace Sample.NUnitV3Many;
+
+    [TestFixture]
+    public class ManyTests
+    {
+        [Test]
+        public void TestMethod([Range(1, 1000)] int p) => Assert.Pass();
+    }
+    """;
+
   [Fact]
   public async Task Discover_MultipleNamespacesInOneFile_EachAppearsAsItsOwnLeafNamespace()
   {
@@ -106,6 +119,49 @@ public abstract class NUnitV3VsTestDiscoveryTests<TContainer> : TestRunnerTestBa
 
     var subcases = Children(theoryGroup.Id).Where(n => n.Type.Type == NodeTypeNames.Subcase).ToList();
     Assert.Equal(2, subcases.Count);
+  }
+
+  [Fact]
+  public async Task Run_LargeParameterizedSuite_ReportsResultsViaBatches()
+  {
+    using var fixture = new TestProjectFixtureBuilder()
+      .WithName("Sample.NUnitV3Many")
+      .WithFramework(TestFrameworkKind.NUnitV3VsTest)
+      .WithFile("ManyTests.cs", ManyNUnitCases)
+      .Build();
+
+    await InitializeTestRunnerAsync(fixture);
+
+    var project = Assert.Single(NodesOfType(NodeTypeNames.Project));
+    var subcases = NodesOfType(NodeTypeNames.Subcase).ToList();
+    Assert.Equal(1000, subcases.Count);
+
+    var batchNotificationsBeforeRun = BatchStatusNotificationCount;
+    var batchedUpdatesBeforeRun = BatchedStatusUpdateCount;
+
+    await BeginCall(Container.Rpc.TestRunnerRunAsync(project.Id), TimeSpan.FromMinutes(2));
+
+    Assert.True(
+      BatchStatusNotificationCount > batchNotificationsBeforeRun,
+      "Expected the run to emit batched status notifications.");
+
+    Assert.True(
+      BatchedStatusUpdateCount - batchedUpdatesBeforeRun >= subcases.Count,
+      "Expected at least one batched terminal status update per test case.");
+
+    foreach (var subcase in subcases)
+    {
+      Assert.True(
+        LastStatusKind.TryGetValue(subcase.Id, out var status),
+        $"Missing status for {subcase.DisplayName}");
+      Assert.Equal("Passed", status);
+    }
+
+    var runnerStatus = LastRunnerStatus;
+    Assert.NotNull(runnerStatus);
+    Assert.False(runnerStatus.IsLoading);
+    Assert.Equal(1000, runnerStatus.TotalPassed);
+    Assert.Equal(0, runnerStatus.TotalFailed);
   }
 
   [Fact(Skip = "NUnit has no standard attribute to override the display name of a plain [Test]. " +
