@@ -14,6 +14,7 @@ public enum TestNodeStatusKind
   Failed,
   BuildFailed,
   Skipped,
+  Inconclusive,
   Faulted
 }
 

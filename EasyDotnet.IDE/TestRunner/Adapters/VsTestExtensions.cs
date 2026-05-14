@@ -103,7 +103,7 @@ public static class VsTestExtensions
         TestOutcome.Passed => "passed",
         TestOutcome.Failed => "failed",
         TestOutcome.Skipped => "skipped",
-        TestOutcome.None => "failed",
+        TestOutcome.None => "none",
         _ => null
       };
 

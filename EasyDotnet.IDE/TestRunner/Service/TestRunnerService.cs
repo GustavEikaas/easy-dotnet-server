@@ -1027,15 +1027,16 @@ public class TestRunnerService(
 
     token.Ct.ThrowIfCancellationRequested();
 
-    var (_, passed, failed, skipped, cancelled) = sharedCounter.Snapshot();
+    var (_, passed, failed, skipped, cancelled, inconclusive) = sharedCounter.Snapshot();
     await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
         IsLoading: false, CurrentOperation: null,
-        OverallStatus: failed > 0 ? OverallStatus.Failed : OverallStatus.Passed,
+        OverallStatus: failed > 0 ? OverallStatus.Failed : inconclusive > 0 ? OverallStatus.Inconclusive : OverallStatus.Passed,
         TotalTests: registry.GetLeafCount(), TotalRunning: 0,
         TotalPassed: passed, TotalFailed: failed,
-        TotalSkipped: skipped, TotalCancelled: cancelled), token.OperationId);
+        TotalSkipped: skipped, TotalCancelled: cancelled,
+        TotalInconclusive: inconclusive), token.OperationId);
 
-    await MaybeNotifyFinishedAsync(source, passed, failed, skipped, cancelled, token.Ct);
+    await MaybeNotifyFinishedAsync(source, passed, failed, skipped, cancelled, inconclusive, token.Ct);
 
     return new OperationResult(Success: failed == 0 && failedProjectIds.Count == 0);
   }
@@ -1119,16 +1120,17 @@ public class TestRunnerService(
 
     token.Ct.ThrowIfCancellationRequested();
 
-    var (_, passed, failed, skipped, cancelled) = counter.Snapshot();
+    var (_, passed, failed, skipped, cancelled, inconclusive) = counter.Snapshot();
 
     await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
         IsLoading: false, CurrentOperation: null,
-        OverallStatus: failed > 0 ? OverallStatus.Failed : OverallStatus.Passed,
+        OverallStatus: failed > 0 ? OverallStatus.Failed : inconclusive > 0 ? OverallStatus.Inconclusive : OverallStatus.Passed,
         TotalTests: registry.GetLeafCount(), TotalRunning: 0,
         TotalPassed: passed, TotalFailed: failed,
-        TotalSkipped: skipped, TotalCancelled: cancelled), token.OperationId);
+        TotalSkipped: skipped, TotalCancelled: cancelled,
+        TotalInconclusive: inconclusive), token.OperationId);
 
-    await MaybeNotifyFinishedAsync(source, passed, failed, skipped, cancelled, token.Ct);
+    await MaybeNotifyFinishedAsync(source, passed, failed, skipped, cancelled, inconclusive, token.Ct);
 
     return new OperationResult(Success: failed == 0);
   }
@@ -1156,12 +1158,13 @@ public class TestRunnerService(
       int failed,
       int skipped,
       int cancelled,
+      int inconclusive,
       CancellationToken ct)
   {
     if (clientService.ClientOptions?.EnableOsNotifications != true) return;
     if (NormalizeSource(source) == "buffer") return;
 
-    var total = passed + failed + skipped + cancelled;
+    var total = passed + failed + skipped + cancelled + inconclusive;
     if (total == 0) return;
 
     bool visible;
@@ -1177,7 +1180,7 @@ public class TestRunnerService(
 
     if (visible) return;
 
-    OsNotify.TryNotifyTestRunFinished(logger, passed, failed, skipped, cancelled);
+    OsNotify.TryNotifyTestRunFinished(logger, passed, failed, skipped, cancelled, inconclusive);
   }
 
   private TestRunnerStatus BuildIdleStatus() =>
@@ -1188,12 +1191,13 @@ public class TestRunnerService(
 
   private TestRunnerStatus BuildCancelledStatus()
   {
-    var (passed, failed, skipped, cancelled) = SnapshotLeafTotals();
+    var (passed, failed, skipped, cancelled, inconclusive) = SnapshotLeafTotals();
     return new TestRunnerStatus(
         IsLoading: false, CurrentOperation: null,
         OverallStatus: OverallStatus.Cancelled,
         TotalTests: registry.GetLeafCount(), TotalRunning: 0,
-        TotalPassed: passed, TotalFailed: failed, TotalSkipped: skipped, TotalCancelled: cancelled);
+        TotalPassed: passed, TotalFailed: failed, TotalSkipped: skipped, TotalCancelled: cancelled,
+        TotalInconclusive: inconclusive);
   }
 
   private TestRunnerStatus BuildCancellingStatus() =>
@@ -1262,12 +1266,13 @@ public class TestRunnerService(
     }
   }
 
-  private (int Passed, int Failed, int Skipped, int Cancelled) SnapshotLeafTotals()
+  private (int Passed, int Failed, int Skipped, int Cancelled, int Inconclusive) SnapshotLeafTotals()
   {
     var passed = 0;
     var failed = 0;
     var skipped = 0;
     var cancelled = 0;
+    var inconclusive = 0;
 
     foreach (var node in registry.GetAll())
     {
@@ -1286,13 +1291,16 @@ public class TestRunnerService(
         case TestNodeStatusKind.Skipped:
           skipped++;
           break;
+        case TestNodeStatusKind.Inconclusive:
+          inconclusive++;
+          break;
         case TestNodeStatusKind.Cancelled:
           cancelled++;
           break;
       }
     }
 
-    return (passed, failed, skipped, cancelled);
+    return (passed, failed, skipped, cancelled, inconclusive);
   }
 
   private static string FormatDuration(long ms) =>

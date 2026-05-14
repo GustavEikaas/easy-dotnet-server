@@ -6,6 +6,7 @@ public class RunProgressCounter(int totalTests)
   private int _failed;
   private int _skipped;
   private int _cancelled;
+  private int _inconclusive;
   private int _running = totalTests;
 
   public int TotalTests { get; } = totalTests;
@@ -19,9 +20,10 @@ public class RunProgressCounter(int totalTests)
       case "failed": Interlocked.Increment(ref _failed); break;
       case "skipped": Interlocked.Increment(ref _skipped); break;
       case "cancelled": Interlocked.Increment(ref _cancelled); break;
+      case "none": Interlocked.Increment(ref _inconclusive); break;
     }
   }
 
-  public (int Running, int Passed, int Failed, int Skipped, int Cancelled) Snapshot() =>
-      (Math.Max(0, _running), _passed, _failed, _skipped, _cancelled);
+  public (int Running, int Passed, int Failed, int Skipped, int Cancelled, int Inconclusive) Snapshot() =>
+      (Math.Max(0, _running), _passed, _failed, _skipped, _cancelled, _inconclusive);
 }

@@ -292,7 +292,7 @@ public class OperationExecutor(
           Stdout: result.Stdout));
 
       counter.Record(result.Outcome);
-      var (running, passed, failed, skipped, cancelled) = counter.Snapshot();
+      var (running, passed, failed, skipped, cancelled, inconclusive) = counter.Snapshot();
       await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
           IsLoading: true,
           CurrentOperation: debug ? "Debugging" : "Running",
@@ -302,7 +302,8 @@ public class OperationExecutor(
           TotalPassed: passed,
           TotalFailed: failed,
           TotalSkipped: skipped,
-          TotalCancelled: cancelled), operationId: token.OperationId);
+          TotalCancelled: cancelled,
+          TotalInconclusive: inconclusive), operationId: token.OperationId);
 
       var (status, actions) = BuildStatusAndActions(result);
       await dispatcher.SendStatusAsync(stableId, status, actions, operationId: token.OperationId);
@@ -341,7 +342,7 @@ public class OperationExecutor(
             Stdout: []));
 
         counter.Record("failed");
-        var (running, passed, failed, skipped, cancelled) = counter.Snapshot();
+        var (running, passed, failed, skipped, cancelled, inconclusive) = counter.Snapshot();
         await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
             IsLoading: true,
             CurrentOperation: debug ? "Debugging" : "Running",
@@ -351,7 +352,8 @@ public class OperationExecutor(
             TotalPassed: passed,
             TotalFailed: failed,
             TotalSkipped: skipped,
-            TotalCancelled: cancelled), operationId: token.OperationId);
+            TotalCancelled: cancelled,
+            TotalInconclusive: inconclusive), operationId: token.OperationId);
 
         await dispatcher.SendStatusAsync(stableId, new TestNodeStatus.Faulted("Test never reported status"), operationId: token.OperationId);
         await BubbleStatusAsync(stableId, leafIds, token.OperationId);
@@ -513,6 +515,7 @@ public class OperationExecutor(
       "passed" => new TestNodeStatus.Passed(duration),
       "failed" => new TestNodeStatus.Failed(duration, result.ErrorMessage),
       "skipped" => new TestNodeStatus.Skipped(""),
+      "none" => new TestNodeStatus.Inconclusive(""),
       _ => new TestNodeStatus.Failed(duration, result.ErrorMessage)
     };
 
@@ -548,10 +551,11 @@ public class OperationExecutor(
       }
 
       var hasFailed = scopedLeaves.Any(n => detailStore.Get(n.Id)?.Outcome == "failed");
-      var hasSkipped = !hasFailed && scopedLeaves.Any(n => detailStore.Get(n.Id)?.Outcome == "skipped");
+      var hasInconclusive = !hasFailed && scopedLeaves.Any(n => detailStore.Get(n.Id)?.Outcome == "none");
+      var hasSkipped = !hasFailed && !hasInconclusive && scopedLeaves.Any(n => detailStore.Get(n.Id)?.Outcome == "skipped");
 
-      logger.LogDebug("Bubble parent {ParentId}: hasFailed={HasFailed} hasSkipped={HasSkipped}",
-          parentId, hasFailed, hasSkipped);
+      logger.LogDebug("Bubble parent {ParentId}: hasFailed={HasFailed} hasInconclusive={HasInconclusive} hasSkipped={HasSkipped}",
+          parentId, hasFailed, hasInconclusive, hasSkipped);
 
       var maxDuration = scopedLeaves
           .Select(n => detailStore.Get(n.Id)?.DurationMs ?? 0)
@@ -561,9 +565,11 @@ public class OperationExecutor(
 
       TestNodeStatus aggregateStatus = hasFailed
           ? new TestNodeStatus.Failed(durationDisplay, [])
-          : hasSkipped
-              ? new TestNodeStatus.Skipped("")
-              : new TestNodeStatus.Passed(durationDisplay);
+          : hasInconclusive
+              ? new TestNodeStatus.Inconclusive("")
+              : hasSkipped
+                  ? new TestNodeStatus.Skipped("")
+                  : new TestNodeStatus.Passed(durationDisplay);
 
       await dispatcher.SendStatusAsync(parentId, aggregateStatus, operationId: operationId);
       parentId = registry.Get(parentId)?.ParentId;

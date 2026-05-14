@@ -73,4 +73,9 @@ public abstract record TestNodeStatus
   {
     public override TestNodeStatusKind Kind => TestNodeStatusKind.Skipped;
   }
+
+  public sealed record Inconclusive(string Reason) : TestNodeStatus
+  {
+    public override TestNodeStatusKind Kind => TestNodeStatusKind.Inconclusive;
+  }
 }
