@@ -82,7 +82,8 @@ public sealed class TestProjectFixtureBuilder
     var projectDir = Path.Combine(root, _projectName);
     Directory.CreateDirectory(projectDir);
 
-    var csprojPath = Path.Combine(projectDir, $"{_projectName}.csproj");
+    var projectExtension = _framework.Value is TestFrameworkKind.XUnitV2VsTestFSharp ? "fsproj" : "csproj";
+    var csprojPath = Path.Combine(projectDir, $"{_projectName}.{projectExtension}");
     File.WriteAllText(csprojPath, RenderCsproj(_framework.Value));
 
     foreach (var ns in _namespaces)
@@ -157,6 +158,23 @@ public sealed class TestProjectFixtureBuilder
           <IsPackable>false</IsPackable>
           <GenerateProgramFile>true</GenerateProgramFile>
         </PropertyGroup>
+        <ItemGroup>
+          <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+          <PackageReference Include="xunit" Version="2.9.2" />
+          <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+        </ItemGroup>
+      </Project>
+      """,
+    TestFrameworkKind.XUnitV2VsTestFSharp => """
+      <Project Sdk="Microsoft.NET.Sdk">
+        <PropertyGroup>
+          <TargetFramework>net8.0</TargetFramework>
+          <IsPackable>false</IsPackable>
+          <GenerateProgramFile>true</GenerateProgramFile>
+        </PropertyGroup>
+        <ItemGroup>
+          <Compile Include="Tests.fs" />
+        </ItemGroup>
         <ItemGroup>
           <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
           <PackageReference Include="xunit" Version="2.9.2" />
