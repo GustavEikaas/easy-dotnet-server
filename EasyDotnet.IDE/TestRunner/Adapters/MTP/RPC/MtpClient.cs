@@ -109,7 +109,7 @@ public sealed class MtpClient : IAsyncDisposable
 
     await foreach (var node in StreamRpcAsync("testing/runTests", new RunRequest(filter, runId), runId, cancellationToken))
     {
-      if (node.Node.ExecutionState != "in-progress" && node.Node.ExecutionState != "discovered")
+      if (node.Node.ExecutionState != "discovered")
         yield return node;
     }
   }
