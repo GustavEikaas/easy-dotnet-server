@@ -46,6 +46,7 @@ public sealed class MtpAdapter(
   public async Task RunAsync(
       ValidatedDotnetProject project,
       IReadOnlyList<string> nativeIds,
+      Func<string, Task> onStarted,
       Func<TestRunResult, Task> onResult,
       OperationControl control,
       CancellationToken ct)
@@ -60,6 +61,12 @@ public sealed class MtpAdapter(
 
     await foreach (var update in client.RunTestsAsync(filter, ct))
     {
+      if (update.Node.ExecutionState == "in-progress")
+      {
+        await onStarted(update.Node.Uid);
+        continue;
+      }
+
       TestRunResult? result;
       try { result = update.ToTestRunResult(); }
       catch (ArgumentOutOfRangeException ex)
@@ -74,6 +81,7 @@ public sealed class MtpAdapter(
   public async Task DebugAsync(
       ValidatedDotnetProject project,
       IReadOnlyList<string> nativeIds,
+      Func<string, Task> onStarted,
       Func<TestRunResult, Task> onResult,
       OperationControl control,
       CancellationToken ct)
@@ -113,6 +121,7 @@ public sealed class MtpAdapter(
 
     await MtpRunHandling.ForwardResultsOrCancelAsync(
         client.RunTestsAsync(filter, streamCts.Token),
+        onStarted,
         onResult,
         logger,
         abortRequested: () => Volatile.Read(ref debugSessionEnded) == 1,

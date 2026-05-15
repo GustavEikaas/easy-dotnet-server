@@ -90,28 +90,31 @@ public sealed class VsTestAdapter(
   public async Task RunAsync(
       ValidatedDotnetProject project,
       IReadOnlyList<string> nativeIds,
+      Func<string, Task> onStarted,
       Func<TestRunResult, Task> onResult,
       OperationControl control,
       CancellationToken ct)
   {
     var nativeGuids = nativeIds.Select(Guid.Parse).ToHashSet();
-    await RunCoreAsync(project, nativeGuids, onResult, attachDebugger: false, control, ct);
+    await RunCoreAsync(project, nativeGuids, onStarted, onResult, attachDebugger: false, control, ct);
   }
 
   public async Task DebugAsync(
       ValidatedDotnetProject project,
       IReadOnlyList<string> nativeIds,
+      Func<string, Task> onStarted,
       Func<TestRunResult, Task> onResult,
       OperationControl control,
       CancellationToken ct)
   {
     var nativeGuids = nativeIds.Select(Guid.Parse).ToHashSet();
-    await RunCoreAsync(project, nativeGuids, onResult, attachDebugger: true, control, ct);
+    await RunCoreAsync(project, nativeGuids, onStarted, onResult, attachDebugger: true, control, ct);
   }
 
   private async Task RunCoreAsync(
       ValidatedDotnetProject project,
       HashSet<Guid> nativeGuids,
+      Func<string, Task> onStarted,
       Func<TestRunResult, Task> onResult,
       bool attachDebugger,
       OperationControl control,
@@ -134,7 +137,7 @@ public sealed class VsTestAdapter(
         try { wrapper.CancelTestRun(); } catch { /* best effort */ }
       }
 
-      var channel = Channel.CreateUnbounded<TestRunResult>();
+      var channel = Channel.CreateUnbounded<VsTestRunEvent>();
 
       // Re-discover to get TestCase objects needed by VSTest run API.
       var discoveryHandler = new TestDiscoveryHandler(loggerFactory.CreateLogger<TestDiscoveryHandler>());
@@ -193,8 +196,17 @@ public sealed class VsTestAdapter(
 
       try
       {
-        await foreach (var result in channel.Reader.ReadAllAsync(runToken))
-          await onResult(result);
+        await foreach (var runEvent in channel.Reader.ReadAllAsync(runToken))
+        {
+          if (runEvent.StartedNativeId is { } startedNativeId)
+          {
+            await onStarted(startedNativeId);
+            continue;
+          }
+
+          if (runEvent.TestResult is { } result)
+            await onResult(result);
+        }
 
         await runTask;
       }
