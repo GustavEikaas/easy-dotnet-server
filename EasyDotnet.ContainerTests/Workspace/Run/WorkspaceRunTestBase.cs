@@ -86,29 +86,11 @@ public abstract class WorkspaceRunTestBase<TContainer> : ContainerTestBase<TCont
   protected async Task<TestPromptSelectionRequest> ReceiveSelectionAsync(
     Func<TestPromptSelectionRequest, string?> respond)
   {
-    var readTask = _selections.Reader.ReadAsync().AsTask();
-    var scope = _rpcScope;
-
-    if (scope is not null)
-    {
-      var timeout = Task.Delay(SelectionTimeout);
-      var winner = await Task.WhenAny(readTask, scope, timeout);
-      if (winner == timeout)
-        throw new XunitException(
-          $"Timed out after {SelectionTimeout.TotalSeconds:0}s waiting for promptSelection.{CollectPendingErrors()}");
-      if (winner == scope)
-      {
-        await scope; // surface any server-side exception first
-        throw new XunitException(
-          $"RPC scope completed before expected promptSelection arrived.{CollectPendingErrors()}");
-      }
-    }
-    else
-    {
-      await readTask.WaitAsync(SelectionTimeout);
-    }
-
-    var (req, tcs) = await readTask;
+    var (req, tcs) = await ReceiveAsync(
+      _selections.Reader,
+      "promptSelection",
+      SelectionTimeout,
+      CollectPendingErrors);
     tcs.SetResult(respond(req));
     return req;
   }
@@ -123,51 +105,12 @@ public abstract class WorkspaceRunTestBase<TContainer> : ContainerTestBase<TCont
   /// </summary>
   protected async Task<TestTrackedJob> ReceiveRunCommandAsync()
   {
-    var scope = _rpcScope;
-
-    if (scope is not null)
-    {
-      // Fast path: scope already complete. The item must already be in the channel
-      // (server fix guarantees runCommandManaged is dispatched before workspace/run returns).
-      // Use TryRead directly — do NOT start ReadAsync first, as it would eagerly consume
-      // the item from the channel and leave TryRead with nothing to read.
-      if (scope.IsCompleted)
-      {
-        if (_runCommands.Reader.TryRead(out var immediate))
-          return await CompleteJobAsync(immediate);
-        await scope; // surface any server-side exception first
-        throw new XunitException(
-          $"RPC scope completed without sending runCommandManaged.{CollectPendingErrors()}");
-      }
-
-      // Scope still running: race the channel read against the scope completing.
-      var readTask = _runCommands.Reader.ReadAsync().AsTask();
-      var timeout = Task.Delay(RunCommandTimeout);
-      var winner = await Task.WhenAny(readTask, scope, timeout);
-      if (winner == readTask)
-        return await CompleteJobAsync(await readTask);
-      if (winner == timeout)
-        throw new XunitException(
-          $"Timed out after {RunCommandTimeout.TotalMinutes:0} minutes waiting for runCommandManaged.{CollectPendingErrors()}");
-
-      // Scope won — item may have arrived at the same instant; try one last TryRead.
-      if (_runCommands.Reader.TryRead(out var buffered))
-        return await CompleteJobAsync(buffered);
-      await scope;
-      throw new XunitException(
-        $"RPC scope completed without sending runCommandManaged.{CollectPendingErrors()}");
-    }
-
-    try
-    {
-      var job = await _runCommands.Reader.ReadAsync().AsTask().WaitAsync(RunCommandTimeout);
-      return await CompleteJobAsync(job);
-    }
-    catch (TimeoutException)
-    {
-      throw new XunitException(
-        $"runCommandManaged not received within {RunCommandTimeout.TotalMinutes:0} minutes.{CollectPendingErrors()}");
-    }
+    var job = await ReceiveAsync(
+      _runCommands.Reader,
+      "runCommandManaged",
+      RunCommandTimeout,
+      CollectPendingErrors);
+    return await CompleteJobAsync(job);
   }
 
   /// <summary>
@@ -184,7 +127,11 @@ public abstract class WorkspaceRunTestBase<TContainer> : ContainerTestBase<TCont
   /// Waits for the next <c>displayError</c> notification and returns the message.
   /// </summary>
   protected async Task<string> ReceiveDisplayErrorAsync() =>
-    await _displayErrors.Reader.ReadAsync().AsTask().WaitAsync(SelectionTimeout);
+    await ReceiveAsync(
+      _displayErrors.Reader,
+      "displayError",
+      SelectionTimeout,
+      CollectPendingErrors);
 
   /// <summary>
   /// Returns true if no <c>runCommandManaged</c> call is already queued in the channel.
@@ -192,7 +139,7 @@ public abstract class WorkspaceRunTestBase<TContainer> : ContainerTestBase<TCont
   /// the server is done and no further reverse requests will arrive.
   /// </summary>
   protected bool RunCommandNotReceived() =>
-    !_runCommands.Reader.TryRead(out _);
+    IsNotReceived(_runCommands.Reader);
 
   /// <summary>
   /// Drains any pending <c>displayError</c> messages and formats them as a context suffix
