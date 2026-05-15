@@ -41,6 +41,7 @@ public class InitializeTests
     );
     Assert.NotNull(res.Capabilities.ServerSentNotifications);
     Assert.NotEmpty(res.Capabilities.ServerSentNotifications);
+    Assert.Contains("solution/projects-loaded", res.Capabilities.ServerSentNotifications);
     Assert.All(res.Capabilities.ServerSentNotifications, notification =>
         Assert.False(string.IsNullOrWhiteSpace(notification), "ServerSentNotifications must not contain null or empty values")
     );

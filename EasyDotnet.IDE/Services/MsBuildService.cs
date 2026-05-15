@@ -4,32 +4,23 @@ using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Models.MsBuild.Build;
 using EasyDotnet.IDE.Models.MsBuild.Project;
 using EasyDotnet.IDE.Models.MsBuild.SDK;
+using EasyDotnet.IDE.Sdk;
 using EasyDotnet.MsBuild;
-using Microsoft.Build.Locator;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace EasyDotnet.IDE.Services;
 
-public class MsBuildService(IVisualStudioLocator locator, IClientService clientService, IProcessQueue processQueue, IMemoryCache memoryCache, INotificationService notificationService, ISolutionService solutionService) : IMsBuildService
+public class MsBuildService(IVisualStudioLocator locator, IClientService clientService, IProcessQueue processQueue, IMemoryCache memoryCache, INotificationService notificationService, ISolutionService solutionService, SdkService sdkService) : IMsBuildService
 {
 
   private static readonly JsonSerializerOptions JsonSerializerOptions = new() { PropertyNameCaseInsensitive = true };
   private static string GetCacheKeyProperties(string projectPath, string? targetFrameworkMoniker, string configuration) => $"{projectPath}-{targetFrameworkMoniker ?? ""}-{configuration ?? ""}";
 
-  public SdkInstallation[] QuerySdkInstallations()
-  {
-    MSBuildLocator.AllowQueryAllRuntimeVersions = true;
-    var instances = MSBuildLocator.QueryVisualStudioInstances().Where(x => x.DiscoveryType == DiscoveryType.DotNetSdk).ToList();
-    return [.. instances.Select(x => new SdkInstallation(x.Name, $"net{x.Version.Major}.0", x.Version, x.MSBuildPath, x.VisualStudioRootPath))];
-  }
+  public SdkInstallation[] QuerySdkInstallations() => sdkService.QuerySdkInstallations();
 
-  public string GetVsTestPath()
-  {
-    var sdk = QuerySdkInstallations();
-    return Path.Join(sdk.ToList()[0].MSBuildPath, "vstest.console.dll");
-  }
+  public string GetVsTestPath() => sdkService.GetVsTestPath();
 
-  public string GetDotnetSdkBasePath() => Path.GetDirectoryName(Path.GetDirectoryName(QuerySdkInstallations().First().MSBuildPath))!;
+  public string GetDotnetSdkBasePath() => sdkService.GetDotnetSdkBasePath();
 
   public async Task<BuildResult> RequestBuildAsync(
          string targetPath,
