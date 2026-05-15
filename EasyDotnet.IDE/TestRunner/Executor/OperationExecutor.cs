@@ -243,9 +243,6 @@ public class OperationExecutor(
     var self = registry.Get(nodeId);
     if (self?.Type is NodeType.TestMethod or NodeType.Subcase) { leafNodes.Add(self); }
 
-    var runningStatus = debug ? (TestNodeStatus)new TestNodeStatus.Debugging() : new TestNodeStatus.Running();
-    await dispatcher.SendBatchStatusAsync(nodeId, runningStatus, registry, operationId: token.OperationId);
-
     var nativeIds = leafNodes
         .Select(n => registry.GetNativeId(n.Id))
         .Where(id => id is not null)
@@ -257,6 +254,8 @@ public class OperationExecutor(
       logger.LogWarning("No runnable tests found under node {NodeId}", nodeId);
       return sharedCounter ?? new RunProgressCounter(0);
     }
+
+    await dispatcher.SendBatchStatusAsync(nodeId, new TestNodeStatus.Queued(), registry, operationId: token.OperationId);
 
     var counter = sharedCounter ?? new RunProgressCounter(nativeIds.Count);
 
@@ -278,6 +277,26 @@ public class OperationExecutor(
 
     var expectedNativeIds = nativeIds.ToHashSet(StringComparer.Ordinal);
     var seenNativeIds = new HashSet<string>(StringComparer.Ordinal);
+    var startedNativeIds = new HashSet<string>(StringComparer.Ordinal);
+    var runningStatus = debug ? (TestNodeStatus)new TestNodeStatus.Debugging() : new TestNodeStatus.Running();
+
+    async Task OnStarted(string nativeId)
+    {
+      if (!expectedNativeIds.Contains(nativeId)) return;
+      if (!startedNativeIds.Add(nativeId)) return;
+
+      var stableId = registry.GetStableId(nativeId);
+      if (stableId is null)
+      {
+        logger.LogWarning("Received start for unknown native ID {NativeId}", nativeId);
+        return;
+      }
+
+      if (detailStore.Get(stableId) is not null) return;
+
+      await dispatcher.SendStatusAsync(stableId, runningStatus, operationId: token.OperationId);
+      await BubbleStatusAsync(stableId, leafIds, token.OperationId);
+    }
 
     async Task OnResult(TestRunResult result)
     {
@@ -307,9 +326,9 @@ public class OperationExecutor(
     }
 
     if (debug)
-      await adapter.DebugAsync(project, nativeIds, OnResult, control, token.Ct);
+      await adapter.DebugAsync(project, nativeIds, OnStarted, OnResult, control, token.Ct);
     else
-      await adapter.RunAsync(project, nativeIds, OnResult, control, token.Ct);
+      await adapter.RunAsync(project, nativeIds, OnStarted, OnResult, control, token.Ct);
 
     await resultBatch.FlushAsync(forceRunnerStatus: true);
 
@@ -538,12 +557,14 @@ public class OperationExecutor(
         continue;
       }
 
-      var hasFailed = scopedLeaves.Any(n => detailStore.Get(n.Id)?.Outcome == "failed");
-      var hasInconclusive = !hasFailed && scopedLeaves.Any(n => detailStore.Get(n.Id)?.Outcome == "none");
-      var hasSkipped = !hasFailed && !hasInconclusive && scopedLeaves.Any(n => detailStore.Get(n.Id)?.Outcome == "skipped");
+      var passed = scopedLeaves.Count(n => detailStore.Get(n.Id)?.Outcome == "passed");
+      var failed = scopedLeaves.Count(n => detailStore.Get(n.Id)?.Outcome == "failed");
+      var skipped = scopedLeaves.Count(n => detailStore.Get(n.Id)?.Outcome == "skipped");
+      var inconclusive = scopedLeaves.Count(n => detailStore.Get(n.Id)?.Outcome == "none");
 
-      logger.LogDebug("Bubble parent {ParentId}: hasFailed={HasFailed} hasInconclusive={HasInconclusive} hasSkipped={HasSkipped}",
-          parentId, hasFailed, hasInconclusive, hasSkipped);
+      logger.LogDebug(
+          "Bubble parent {ParentId}: passed={Passed} failed={Failed} skipped={Skipped} inconclusive={Inconclusive}",
+          parentId, passed, failed, skipped, inconclusive);
 
       var maxDuration = scopedLeaves
           .Select(n => detailStore.Get(n.Id)?.DurationMs ?? 0)
@@ -551,13 +572,12 @@ public class OperationExecutor(
           .Max();
       var durationDisplay = FormatDuration(maxDuration);
 
-      TestNodeStatus aggregateStatus = hasFailed
-          ? new TestNodeStatus.Failed(durationDisplay, [])
-          : hasInconclusive
-              ? new TestNodeStatus.Inconclusive("")
-              : hasSkipped
-                  ? new TestNodeStatus.Skipped("")
-                  : new TestNodeStatus.Passed(durationDisplay);
+      var aggregateStatus = TestStatusPriority.AggregateTerminalStatus(
+          passed,
+          failed,
+          skipped,
+          inconclusive,
+          durationDisplay);
 
       await dispatcher.SendStatusAsync(parentId, aggregateStatus, operationId: operationId);
       parentId = registry.Get(parentId)?.ParentId;
@@ -678,6 +698,8 @@ public class OperationExecutor(
 
         if (string.Equals(detail?.Outcome, "failed", StringComparison.OrdinalIgnoreCase))
           state.Failed++;
+        else if (string.Equals(detail?.Outcome, "passed", StringComparison.OrdinalIgnoreCase))
+          state.Passed++;
         else if (string.Equals(detail?.Outcome, "none", StringComparison.OrdinalIgnoreCase))
           state.Inconclusive++;
         else if (string.Equals(detail?.Outcome, "skipped", StringComparison.OrdinalIgnoreCase))
@@ -710,16 +732,19 @@ public class OperationExecutor(
     private static TestNodeStatus BuildAggregateStatus(ParentRunState state)
     {
       var durationDisplay = FormatDuration(state.MaxDurationMs);
-      if (state.Failed > 0) return new TestNodeStatus.Failed(durationDisplay, []);
-      if (state.Inconclusive > 0) return new TestNodeStatus.Inconclusive("");
-      if (state.Skipped > 0) return new TestNodeStatus.Skipped("");
-      return new TestNodeStatus.Passed(durationDisplay);
+      return TestStatusPriority.AggregateTerminalStatus(
+          state.Passed,
+          state.Failed,
+          state.Skipped,
+          state.Inconclusive,
+          durationDisplay);
     }
 
     private sealed class ParentRunState
     {
       public int Total { get; set; }
       public int Completed { get; set; }
+      public int Passed { get; set; }
       public int Failed { get; set; }
       public int Inconclusive { get; set; }
       public int Skipped { get; set; }

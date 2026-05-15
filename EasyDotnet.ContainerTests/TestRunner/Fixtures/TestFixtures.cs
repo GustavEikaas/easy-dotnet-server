@@ -235,6 +235,29 @@ public static class TestFixtures
     """;
 
   /// <summary>
+  /// Slow enough for run-stat updates to expose tests that have started but have
+  /// not yet reached a terminal result. Source shared between xUnit v2 and v3.
+  /// </summary>
+  public const string XUnitSlowTests = """
+    using System.Threading;
+    using Xunit;
+
+    namespace Sample.Slow;
+
+    public class SlowCases
+    {
+        [Fact]
+        public void A() => Thread.Sleep(1500);
+
+        [Fact]
+        public void B() => Thread.Sleep(1500);
+
+        [Fact]
+        public void C() => Thread.Sleep(1500);
+    }
+    """;
+
+  /// <summary>
   /// Expected 0-based line positions for <see cref="XUnitLocationMarker"/>.
   /// </summary>
   public static class XUnitLocationLines
