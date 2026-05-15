@@ -73,7 +73,11 @@ public abstract class WorkspaceTestTestBase<TContainer> : ContainerTestBase<TCon
   protected async Task<TestPromptSelectionRequest> ReceiveSelectionAsync(
     Func<TestPromptSelectionRequest, string?> respond)
   {
-    var (req, tcs) = await _selections.Reader.ReadAsync().AsTask().WaitAsync(SelectionTimeout);
+    var (req, tcs) = await ReceiveAsync(
+      _selections.Reader,
+      "promptSelection",
+      SelectionTimeout,
+      CollectPendingErrors);
     tcs.SetResult(respond(req));
     return req;
   }
@@ -84,17 +88,11 @@ public abstract class WorkspaceTestTestBase<TContainer> : ContainerTestBase<TCon
   /// </summary>
   protected async Task<TestTrackedJob> ReceiveRunCommandAsync()
   {
-    TestTrackedJob job;
-    try
-    {
-      job = await _runCommands.Reader.ReadAsync().AsTask().WaitAsync(RunCommandTimeout);
-    }
-    catch (TimeoutException)
-    {
-      var errors = CollectPendingErrors();
-      throw new XunitException(
-        $"runCommandManaged not received within {RunCommandTimeout.TotalMinutes:0} minutes.{errors}");
-    }
+    var job = await ReceiveAsync(
+      _runCommands.Reader,
+      "runCommandManaged",
+      RunCommandTimeout,
+      CollectPendingErrors);
 
     await Container.Rpc.NotifyWithParameterObjectAsync("processExited", new { job.JobId, exitCode = 0 });
     return job;
@@ -104,14 +102,18 @@ public abstract class WorkspaceTestTestBase<TContainer> : ContainerTestBase<TCon
   /// Waits for the next <c>displayError</c> notification and returns the message.
   /// </summary>
   protected async Task<string> ReceiveDisplayErrorAsync() =>
-    await _displayErrors.Reader.ReadAsync().AsTask().WaitAsync(SelectionTimeout);
+    await ReceiveAsync(
+      _displayErrors.Reader,
+      "displayError",
+      SelectionTimeout,
+      CollectPendingErrors);
 
   /// <summary>
   /// Returns true if no <c>runCommandManaged</c> call is already queued in the channel.
   /// Call this only after the <c>workspace/test</c> RPC task has completed.
   /// </summary>
   protected bool RunCommandNotReceived() =>
-    !_runCommands.Reader.TryRead(out _);
+    IsNotReceived(_runCommands.Reader);
 
   private string CollectPendingErrors()
   {

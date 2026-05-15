@@ -82,29 +82,11 @@ public abstract class WorkspaceBuildTestBase<TContainer> : ContainerTestBase<TCo
   protected async Task<TestPromptSelectionRequest> ReceiveSelectionAsync(
     Func<TestPromptSelectionRequest, string?> respond)
   {
-    var readTask = _selections.Reader.ReadAsync().AsTask();
-    var scope = _rpcScope;
-
-    if (scope is not null)
-    {
-      var timeout = Task.Delay(SelectionTimeout);
-      var winner = await Task.WhenAny(readTask, scope, timeout);
-      if (winner == timeout)
-        throw new XunitException(
-          $"Timed out after {SelectionTimeout.TotalSeconds:0}s waiting for promptSelection.{CollectPendingNotifications()}");
-      if (winner == scope)
-      {
-        await scope; // surface any server-side exception first
-        throw new XunitException(
-          $"RPC scope completed before expected promptSelection arrived.{CollectPendingNotifications()}");
-      }
-    }
-    else
-    {
-      await readTask.WaitAsync(SelectionTimeout);
-    }
-
-    var (req, tcs) = await readTask;
+    var (req, tcs) = await ReceiveAsync(
+      _selections.Reader,
+      "promptSelection",
+      SelectionTimeout,
+      CollectPendingNotifications);
     tcs.SetResult(respond(req));
     return req;
   }
@@ -116,45 +98,12 @@ public abstract class WorkspaceBuildTestBase<TContainer> : ContainerTestBase<TCo
   /// </summary>
   protected async Task<TestTrackedJob> ReceiveRunCommandAsync(int exitCode = 0)
   {
-    var scope = _rpcScope;
-
-    if (scope is not null)
-    {
-      if (scope.IsCompleted)
-      {
-        if (_runCommands.Reader.TryRead(out var immediate))
-          return await CompleteJobAsync(immediate, exitCode);
-        await scope;
-        throw new XunitException(
-          $"RPC scope completed without sending runCommandManaged.{CollectPendingNotifications()}");
-      }
-
-      var readTask = _runCommands.Reader.ReadAsync().AsTask();
-      var timeout = Task.Delay(RunCommandTimeout);
-      var winner = await Task.WhenAny(readTask, scope, timeout);
-      if (winner == readTask)
-        return await CompleteJobAsync(await readTask, exitCode);
-      if (winner == timeout)
-        throw new XunitException(
-          $"Timed out after {RunCommandTimeout.TotalMinutes:0} minutes waiting for runCommandManaged.{CollectPendingNotifications()}");
-
-      if (_runCommands.Reader.TryRead(out var buffered))
-        return await CompleteJobAsync(buffered, exitCode);
-      await scope;
-      throw new XunitException(
-        $"RPC scope completed without sending runCommandManaged.{CollectPendingNotifications()}");
-    }
-
-    try
-    {
-      var job = await _runCommands.Reader.ReadAsync().AsTask().WaitAsync(RunCommandTimeout);
-      return await CompleteJobAsync(job, exitCode);
-    }
-    catch (TimeoutException)
-    {
-      throw new XunitException(
-        $"runCommandManaged not received within {RunCommandTimeout.TotalMinutes:0} minutes.{CollectPendingNotifications()}");
-    }
+    var job = await ReceiveAsync(
+      _runCommands.Reader,
+      "runCommandManaged",
+      RunCommandTimeout,
+      CollectPendingNotifications);
+    return await CompleteJobAsync(job, exitCode);
   }
 
   /// <summary>Waits for the next <c>displayError</c> notification and returns the message.</summary>
@@ -178,21 +127,21 @@ public abstract class WorkspaceBuildTestBase<TContainer> : ContainerTestBase<TCo
   /// Call this only after the active RPC scope has completed.
   /// </summary>
   protected bool RunCommandNotReceived() =>
-    !_runCommands.Reader.TryRead(out _);
+    IsNotReceived(_runCommands.Reader);
 
   /// <summary>
   /// Returns true if no <c>quickfix/set</c> notification is queued in the channel.
   /// Call this only after the active RPC scope has completed.
   /// </summary>
   protected bool QuickFixSetNotReceived() =>
-    !_quickFixSets.Reader.TryRead(out _);
+    IsNotReceived(_quickFixSets.Reader);
 
   /// <summary>
   /// Returns true if no <c>quickfix/set-silent</c> notification is queued in the channel.
   /// Call this only after the active RPC scope has completed.
   /// </summary>
   protected bool QuickFixSetSilentNotReceived() =>
-    !_quickFixSetsSilent.Reader.TryRead(out _);
+    IsNotReceived(_quickFixSetsSilent.Reader);
 
   private async Task<TestTrackedJob> CompleteJobAsync(TestTrackedJob job, int exitCode)
   {
@@ -201,59 +150,12 @@ public abstract class WorkspaceBuildTestBase<TContainer> : ContainerTestBase<TCo
   }
 
   private async Task<T> ReceiveNotificationAsync<T>(ChannelReader<T> reader, string notificationName)
-  {
-    var scope = _rpcScope;
-
-    if (scope is not null)
-    {
-      if (scope.IsCompleted)
-      {
-        if (reader.TryRead(out var immediate))
-          return immediate;
-
-        try
-        {
-          return await reader.ReadAsync().AsTask().WaitAsync(NotificationAfterScopeTimeout);
-        }
-        catch (TimeoutException)
-        {
-          await scope;
-          throw new XunitException(
-            $"RPC scope completed without sending {notificationName}.{CollectPendingNotifications()}");
-        }
-      }
-
-      var readTask = reader.ReadAsync().AsTask();
-      var winner = await Task.WhenAny(readTask, scope);
-      if (winner == readTask)
-        return await readTask;
-
-      // Scope may complete at the same instant the notification is delivered.
-      if (readTask.IsCompletedSuccessfully)
-        return readTask.Result;
-
-      try
-      {
-        return await readTask.WaitAsync(NotificationAfterScopeTimeout);
-      }
-      catch (TimeoutException)
-      {
-        await scope;
-        throw new XunitException(
-          $"RPC scope completed without sending {notificationName}.{CollectPendingNotifications()}");
-      }
-    }
-
-    try
-    {
-      return await reader.ReadAsync().AsTask().WaitAsync(NotificationTimeout);
-    }
-    catch (TimeoutException)
-    {
-      throw new XunitException(
-        $"{notificationName} not received within {NotificationTimeout.TotalMinutes:0} minutes.{CollectPendingNotifications()}");
-    }
-  }
+    => await ReceiveAsync(
+      reader,
+      notificationName,
+      NotificationTimeout,
+      CollectPendingNotifications,
+      NotificationAfterScopeTimeout);
 
   private string CollectPendingNotifications()
   {

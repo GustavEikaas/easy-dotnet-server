@@ -44,6 +44,8 @@ public abstract class WorkspaceDebugAttachTestBase<TContainer> : ContainerTestBa
 
   private static readonly TimeSpan RunTimeout = TimeSpan.FromMinutes(3);
   private static readonly TimeSpan PickerTimeout = TimeSpan.FromSeconds(30);
+  private static readonly TimeSpan DebugAttachTimeout = TimeSpan.FromMinutes(1);
+  private static readonly TimeSpan ProcessExitTimeout = TimeSpan.FromSeconds(10);
 
   private Task? _pidInjectionTask;
 
@@ -65,14 +67,14 @@ public abstract class WorkspaceDebugAttachTestBase<TContainer> : ContainerTestBa
   /// so <see cref="ReceiveRunJobAsync"/> can be called immediately afterwards.
   /// </summary>
   protected Task BeginRun(bool useDefault = false) =>
-    BeginCall(Container.Rpc.WorkspaceRunAsync(useDefault));
+    BeginCall(Container.Rpc.WorkspaceRunAsync(useDefault), RunTimeout);
 
   /// <summary>
   /// Starts a <c>workspace/debug-attach</c> call, registers it as the active RPC scope, and
   /// returns the task. <see cref="ReceivePickerAsync"/> races against this scope.
   /// </summary>
   protected Task BeginDebugAttach() =>
-    BeginCall(Container.Rpc.WorkspaceDebugAttachAsync());
+    BeginCall(Container.Rpc.WorkspaceDebugAttachAsync(), DebugAttachTimeout);
 
   /// <summary>
   /// Waits for the next <c>runCommandManaged</c> call, then waits for the startup hook pipe
@@ -81,9 +83,23 @@ public abstract class WorkspaceDebugAttachTestBase<TContainer> : ContainerTestBa
   /// </summary>
   protected async Task<TestTrackedJob> ReceiveRunJobAsync()
   {
-    var job = await _runJobs.Reader.ReadAsync().AsTask().WaitAsync(RunTimeout);
-    if (_pidInjectionTask is not null)
-      await _pidInjectionTask;
+    var job = await ReceiveAsync(
+      _runJobs.Reader,
+      "runCommandManaged",
+      RunTimeout,
+      CollectPendingErrors);
+
+    try
+    {
+      if (_pidInjectionTask is not null)
+        await _pidInjectionTask.WaitAsync(RunTimeout);
+    }
+    catch (Exception ex)
+    {
+      throw new XunitException(
+        $"runCommandManaged was received, but startup-hook PID injection failed: {ex.Message}.{CollectPendingErrors()}");
+    }
+
     return job;
   }
 
@@ -104,36 +120,45 @@ public abstract class WorkspaceDebugAttachTestBase<TContainer> : ContainerTestBa
   /// </summary>
   protected async Task<TestPickerRequest> ReceivePickerAsync(Func<TestPickerRequest, string[]?> respond)
   {
-    var readTask = _pickers.Reader.ReadAsync().AsTask();
-    var scope = _rpcScope;
-
-    if (scope is not null)
-    {
-      var timeout = Task.Delay(PickerTimeout);
-      var winner = await Task.WhenAny(readTask, scope, timeout);
-      if (winner == timeout)
-        throw new XunitException(
-          $"Timed out after {PickerTimeout.TotalSeconds:0}s waiting for picker/pick.{CollectPendingErrors()}");
-      if (winner == scope)
-      {
-        await scope; // surface any server-side exception first
-        throw new XunitException(
-          $"RPC scope completed before expected picker/pick arrived.{CollectPendingErrors()}");
-      }
-    }
-    else
-    {
-      await readTask.WaitAsync(PickerTimeout);
-    }
-
-    var (req, tcs) = await readTask;
+    var (req, tcs) = await ReceiveAsync(
+      _pickers.Reader,
+      "picker/pick",
+      PickerTimeout,
+      CollectPendingErrors);
     tcs.SetResult(respond(req));
     return req;
   }
 
   /// <summary>Waits for the next <c>displayError</c> notification and returns the message.</summary>
   protected async Task<string> ReceiveDisplayErrorAsync() =>
-    await _displayErrors.Reader.ReadAsync().AsTask().WaitAsync(PickerTimeout);
+    await ReceiveAsync(
+      _displayErrors.Reader,
+      "displayError",
+      PickerTimeout,
+      CollectPendingErrors);
+
+  protected async Task<TestPickerRequest?> DebugAttachUntilProjectAbsentAsync(string projectName)
+  {
+    var deadline = DateTimeOffset.UtcNow + ProcessExitTimeout;
+
+    while (DateTimeOffset.UtcNow < deadline)
+    {
+      var debugAttachTask = BeginDebugAttach();
+      var (picker, error) = await ReceivePickerOrErrorAsync(_ => null);
+      await debugAttachTask;
+
+      if (error is not null)
+        return null;
+
+      if (picker is not null && !picker.Choices.Any(c => c.Display.Contains(projectName)))
+        return picker;
+
+      await Task.Delay(100);
+    }
+
+    throw new XunitException(
+      $"Timed out after {ProcessExitTimeout.TotalSeconds:0}s waiting for {projectName} to disappear from debug-attach picker.{CollectPendingErrors()}");
+  }
 
   /// <summary>
   /// Races between a <c>picker/pick</c> reverse request and a <c>displayError</c> notification.
@@ -162,7 +187,6 @@ public abstract class WorkspaceDebugAttachTestBase<TContainer> : ContainerTestBa
 
     if (winner == scope)
     {
-      await scope;
       // Scope may complete at the same instant as delivery — do one final check.
       if (pickerTask.IsCompletedSuccessfully)
       {
@@ -172,6 +196,21 @@ public abstract class WorkspaceDebugAttachTestBase<TContainer> : ContainerTestBa
       }
       if (errorTask.IsCompletedSuccessfully)
         return (null, errorTask.Result);
+
+      try
+      {
+        var (req, tcs) = await pickerTask.WaitAsync(TimeSpan.FromSeconds(5));
+        tcs.SetResult(respond(req));
+        return (req, null);
+      }
+      catch (TimeoutException)
+      {
+      }
+
+      if (errorTask.IsCompletedSuccessfully)
+        return (null, errorTask.Result);
+
+      await scope;
       throw new XunitException(
         $"RPC scope completed before picker/pick or displayError arrived.{CollectPendingErrors()}");
     }
