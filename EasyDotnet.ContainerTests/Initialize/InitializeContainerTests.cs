@@ -1,6 +1,6 @@
+using System.Threading.Channels;
 using EasyDotnet.ContainerTests.Docker;
 using EasyDotnet.ContainerTests.Scaffold;
-using System.Threading.Channels;
 using StreamJsonRpc;
 
 namespace EasyDotnet.ContainerTests.Initialize;
