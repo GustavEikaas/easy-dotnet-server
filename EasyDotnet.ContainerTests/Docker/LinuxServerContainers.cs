@@ -4,15 +4,20 @@ namespace EasyDotnet.ContainerTests.Docker;
 
 public abstract class LinuxServerContainer(string image) : ServerContainer
 {
+  private readonly string _homePath = $"/tmp/easydotnet-home-{Guid.NewGuid():N}";
+
   protected override string Image => image;
   protected override string TmpMountPath => "/tmp";
 
   protected override ContainerBuilder ConfigureContainer(ContainerBuilder builder) =>
     builder
       .WithCreateParameterModifier(p => p.User = GetHostUserSpec())
-      .WithEnvironment("HOME", "/tmp")
-      .WithEnvironment("XDG_DATA_HOME", "/tmp/.local/share")
-      .WithEnvironment("XDG_CONFIG_HOME", "/tmp/.config")
+      .WithEnvironment("HOME", _homePath)
+      .WithEnvironment("DOTNET_CLI_HOME", _homePath)
+      .WithEnvironment("XDG_DATA_HOME", $"{_homePath}/.local/share")
+      .WithEnvironment("XDG_CONFIG_HOME", $"{_homePath}/.config")
+      .WithEnvironment("NUGET_PACKAGES", $"{_homePath}/.nuget/packages")
+      .WithEnvironment("DOTNET_SKIP_FIRST_TIME_EXPERIENCE", "1")
       .WithEnvironment("DOTNET_CLI_TELEMETRY_OPTOUT", "1")
       .WithEnvironment("DOTNET_NOLOGO", "1");
 
