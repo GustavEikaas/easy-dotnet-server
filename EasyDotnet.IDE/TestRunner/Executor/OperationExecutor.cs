@@ -180,7 +180,8 @@ public class OperationExecutor(
       discoveryComplete = true;
       callbackLock.Release();
 
-      CollapseNamespaces(projectNodeId, pendingEmit);
+      if (!IsFSharpProject(project))
+        CollapseNamespaces(projectNodeId, pendingEmit);
 
       foreach (var node in pendingEmit.ToList())
         await dispatcher.SendRegisterTestAsync(node, token.OperationId);
@@ -223,6 +224,10 @@ public class OperationExecutor(
 
     return [.. parts.Skip(rootParts.Length)];
   }
+
+  private static bool IsFSharpProject(ValidatedDotnetProject project) =>
+      string.Equals(project.Raw.Language, "fsharp", StringComparison.OrdinalIgnoreCase)
+      || project.ProjectFullPath.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase);
 
   public async Task<RunProgressCounter> RunNodeAsync(
     string nodeId,

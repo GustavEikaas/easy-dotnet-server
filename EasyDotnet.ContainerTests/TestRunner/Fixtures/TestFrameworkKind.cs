@@ -17,6 +17,9 @@ public enum TestFrameworkKind
   /// <summary>xUnit v2 via VSTest. Matches EasyDotnet.IntegrationTests pinned versions (xunit 2.9.2 + xunit.runner.visualstudio 2.8.2).</summary>
   XUnitV2VsTest,
 
+  /// <summary>F# xUnit v2 via VSTest. Packages match <see cref="XUnitV2VsTest"/>.</summary>
+  XUnitV2VsTestFSharp,
+
   /// <summary>xUnit v3 via MTP. Packages: xunit.v3 (meta) with OutputType=Exe.</summary>
   XUnitV3Mtp,
 

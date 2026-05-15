@@ -124,6 +124,23 @@ public static class TestFixtures
     """;
 
   /// <summary>
+  /// F# xUnit repro for issue #413: mixing a method name containing <c>.</c> with
+  /// a method name without <c>.</c> can produce duplicate discovery node IDs.
+  /// </summary>
+  public const string FSharpXUnitMixedDottedNames = """
+    module Tests
+    open Xunit
+
+    [<Fact>]
+    let ``test1`` () =
+        Assert.True true
+
+    [<Fact>]
+    let ``test.2`` () =
+        Assert.True true
+    """;
+
+  /// <summary>
   /// One xUnit <c>[Theory]</c> with two <c>[InlineData]</c> rows. Source is shared
   /// between xUnit v2 and v3. Each row should surface as a Subcase under a TheoryGroup
   /// named after the method.
