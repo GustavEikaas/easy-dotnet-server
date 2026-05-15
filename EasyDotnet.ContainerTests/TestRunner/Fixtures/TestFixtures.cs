@@ -188,30 +188,6 @@ public static class TestFixtures
     """;
 
   /// <summary>
-  /// Slow enough for VSTest <c>ActiveTests</c> run-stat updates to expose tests that
-  /// have started but have not yet reached a terminal result.
-  /// </summary>
-  public const string NUnitSlowTests = """
-    using System.Threading;
-    using NUnit.Framework;
-
-    namespace Sample.Slow
-    {
-        public class SlowCases
-        {
-            [Test]
-            public void A() => Thread.Sleep(1500);
-
-            [Test]
-            public void B() => Thread.Sleep(1500);
-
-            [Test]
-            public void C() => Thread.Sleep(1500);
-        }
-    }
-    """;
-
-  /// <summary>
   /// Deterministic source layout used to pin TestSourceLocator line-number output.
   /// Source shared between xUnit v2 and v3 (same attribute syntax).
   /// <para>
@@ -238,6 +214,29 @@ public static class TestFixtures
     {
         [Fact]
         public void M() { }
+    }
+    """;
+
+  /// <summary>
+  /// Slow enough for run-stat updates to expose tests that have started but have
+  /// not yet reached a terminal result. Source shared between xUnit v2 and v3.
+  /// </summary>
+  public const string XUnitSlowTests = """
+    using System.Threading;
+    using Xunit;
+
+    namespace Sample.Slow;
+
+    public class SlowCases
+    {
+        [Fact]
+        public void A() => Thread.Sleep(1500);
+
+        [Fact]
+        public void B() => Thread.Sleep(1500);
+
+        [Fact]
+        public void C() => Thread.Sleep(1500);
     }
     """;
 

@@ -164,30 +164,6 @@ public abstract class NUnitV3VsTestDiscoveryTests<TContainer> : TestRunnerTestBa
     Assert.Equal(0, runnerStatus.TotalFailed);
   }
 
-  [Fact]
-  public async Task Run_SlowSuite_ReportsQueuedThenRunningBeforeTerminalStatus()
-  {
-    using var fixture = new TestProjectFixtureBuilder()
-      .WithName("Sample.NUnitV3Slow")
-      .WithFramework(TestFrameworkKind.NUnitV3VsTest)
-      .WithFile("SlowTests.cs", TestFixtures.NUnitSlowTests)
-      .Build();
-
-    await InitializeTestRunnerAsync(fixture);
-
-    var project = Assert.Single(NodesOfType(NodeTypeNames.Project));
-    var methods = NodesOfType(NodeTypeNames.TestMethod).ToList();
-    Assert.Equal(3, methods.Count);
-
-    await BeginCall(Container.Rpc.TestRunnerRunAsync(project.Id), TimeSpan.FromMinutes(2));
-
-    var methodWithRunning = methods.FirstOrDefault(method =>
-      StatusHistory.TryGetValue(method.Id, out var history) &&
-      HistoryContainsInOrder(history, "Queued", "Running", "Passed"));
-
-    Assert.NotNull(methodWithRunning);
-  }
-
   [Fact(Skip = "NUnit has no standard attribute to override the display name of a plain [Test]. " +
                "Per-case names are only configurable via [TestCase(TestName=...)] or TestCaseSource, " +
                "both of which are covered by the parameterised-tests bucket.")]
@@ -197,19 +173,6 @@ public abstract class NUnitV3VsTestDiscoveryTests<TContainer> : TestRunnerTestBa
     string.Join("\n", Nodes.Values
       .OrderBy(n => n.Id)
       .Select(n => $"  [{n.Type.Type}] {n.Id} (display='{n.DisplayName}', parent={n.ParentId})"));
-
-  private static bool HistoryContainsInOrder(IEnumerable<string> history, params string[] expected)
-  {
-    var index = 0;
-    foreach (var status in history)
-    {
-      if (status != expected[index]) continue;
-      index++;
-      if (index == expected.Length) return true;
-    }
-
-    return false;
-  }
 }
 
 public sealed class NUnitV3VsTestDiscoverySdk10Linux : NUnitV3VsTestDiscoveryTests<Sdk10LinuxContainer>;
