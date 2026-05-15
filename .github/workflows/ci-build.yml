@@ -23,13 +23,10 @@ jobs:
         run: dotnet format ./EasyDotnet.slnx --verify-no-changes
 
       - name: Build
-        run: dotnet build 
-
-      - name: ContainerTests
-        run: dotnet test EasyDotnet.ContainerTests 
+        run: dotnet build --no-restore
 
       - name: Generate RPC docs
-        run: dotnet run --project ./EasyDotnet.IDE/EasyDotnet.IDE.csproj -- generate-rpc-docs --format markdown
+        run: dotnet run --no-build --no-restore --project ./EasyDotnet.IDE/EasyDotnet.IDE.csproj -- generate-rpc-docs --format markdown
 
       - name: Check for uncommitted changes (rpcDoc.md)
         run: |
@@ -43,3 +40,5 @@ jobs:
             exit 1
           fi
 
+      - name: ContainerTests
+        run: dotnet test EasyDotnet.ContainerTests 
