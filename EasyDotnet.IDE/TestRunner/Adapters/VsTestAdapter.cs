@@ -1,9 +1,9 @@
 using System.IO.Abstractions;
-using System.Threading;
 using System.Threading.Channels;
 using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.IDE.DebuggerStrategies;
 using EasyDotnet.IDE.Interfaces;
+using EasyDotnet.IDE.Sdk;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.Settings;
 using EasyDotnet.IDE.TestRunner.Adapters.VSTest;
@@ -22,7 +22,7 @@ namespace EasyDotnet.IDE.TestRunner.Adapters;
 /// The global operation lock makes the old VsTestService semaphore redundant.
 /// </summary>
 public sealed class VsTestAdapter(
-    IMsBuildService msBuildService,
+    SdkService sdkService,
     IEditorService editorService,
     IDebugStrategyFactory debugStrategyFactory,
     IDebugOrchestrator debugOrchestrator,
@@ -53,7 +53,7 @@ public sealed class VsTestAdapter(
       var wrapper = EnsureWrapper();
       control.RegisterKill(() => KillWrapperAsync(wrapper));
 
-      using var _ = ct.Register(() =>
+      await using var _ = ct.Register(() =>
       {
         try { wrapper.CancelDiscovery(); } catch { /* best effort */ }
       });
@@ -238,15 +238,9 @@ public sealed class VsTestAdapter(
   private VsTestConsoleWrapper EnsureWrapper()
   {
     if (_wrapper is not null) return _wrapper;
-    var vsTestPath = GetVsTestPath();
+    var vsTestPath = sdkService.GetVsTestPath();
     _wrapper = new VsTestConsoleWrapper(vsTestPath);
     return _wrapper;
-  }
-
-  private string GetVsTestPath()
-  {
-    var sdk = msBuildService.QuerySdkInstallations();
-    return Path.Join(sdk.ToList()[0].MSBuildPath, "vstest.console.dll");
   }
 
   private DebuggerTestHostLauncher CreateDebuggerLauncher(
