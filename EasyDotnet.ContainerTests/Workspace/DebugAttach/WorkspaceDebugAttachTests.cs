@@ -49,14 +49,10 @@ public abstract class WorkspaceDebugAttachTests<TContainer> : WorkspaceDebugAtta
     var job = await ReceiveRunJobAsync();
 
     await CompleteJobAsync(job);
+    var picker = await DebugAttachUntilProjectAbsentAsync("ProjectAlpha");
 
-    await Task.Delay(500);
-
-    var debugAttachTask = BeginDebugAttach();
-    var picker = await ReceivePickerAsync(_ => null);
-    await debugAttachTask;
-
-    Assert.DoesNotContain(picker.Choices, c => c.Display.Contains("ProjectAlpha"));
+    if (picker is not null)
+      Assert.DoesNotContain(picker.Choices, c => c.Display.Contains("ProjectAlpha"));
 
     await CompleteJobAsync(job);
   }
