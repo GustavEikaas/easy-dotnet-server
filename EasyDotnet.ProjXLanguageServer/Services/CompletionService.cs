@@ -42,6 +42,7 @@ public class CompletionService(INugetSearchService nugetSearch, ILogger<Completi
       CursorContextKind.ProjectRoot => Static(GetProjectRootCompletions()),
       CursorContextKind.PropertyGroup => Static(GetPropertyGroupCompletions()),
       CursorContextKind.ItemGroup => Static(GetItemGroupCompletions()),
+      CursorContextKind.Target => Static(GetTargetCompletions()),
       CursorContextKind.InsideElementText => Static(GetInsideElementCompletions(ctx.ElementName)),
       CursorContextKind.InsideStartTag => Static(GetStartTagCompletions(ctx.ParentElementName)),
       CursorContextKind.InsideAttributeValue => await GetAttributeValueCompletionsAsync(ctx, cancellationToken),
@@ -53,6 +54,11 @@ public class CompletionService(INugetSearchService nugetSearch, ILogger<Completi
 
   private async Task<CompletionResult> GetAttributeValueCompletionsAsync(CursorContext ctx, CancellationToken cancellationToken)
   {
+    if (ctx.ElementName == "Project" && ctx.AttributeName == "Sdk")
+    {
+      return Static(GetSdkCompletions());
+    }
+
     if (ctx.ElementName != "PackageReference")
     {
       return Static([]);
@@ -146,6 +152,7 @@ public class CompletionService(INugetSearchService nugetSearch, ILogger<Completi
     "Project" => GetProjectRootCompletions(),
     "PropertyGroup" => GetPropertyGroupCompletions(),
     "ItemGroup" => GetItemGroupCompletions(),
+    "Target" => GetTargetCompletions(),
     _ => GetValueCompletions(elementName),
   };
 
@@ -154,6 +161,7 @@ public class CompletionService(INugetSearchService nugetSearch, ILogger<Completi
     "Project" => GetProjectRootCompletions(),
     "PropertyGroup" => GetPropertyGroupCompletions(),
     "ItemGroup" => GetItemGroupCompletions(),
+    "Target" => GetTargetCompletions(),
     _ => [],
   };
 
@@ -199,6 +207,20 @@ public class CompletionService(INugetSearchService nugetSearch, ILogger<Completi
     new CompletionItem { Label = "Target", Kind = CompletionItemKind.Class, InsertText = "Target Name=\"$1\">\n  $0\n</Target>", InsertTextFormat = InsertTextFormat.Snippet, Detail = "MSBuild Target" },
     new CompletionItem { Label = "Import", Kind = CompletionItemKind.Class, InsertText = "Import Project=\"$1\" />", InsertTextFormat = InsertTextFormat.Snippet, Detail = "MSBuild Import" },
     new CompletionItem { Label = "Choose", Kind = CompletionItemKind.Class, InsertText = "Choose>\n  <When Condition=\"$1\">\n    $0\n  </When>\n</Choose>", InsertTextFormat = InsertTextFormat.Snippet, Detail = "MSBuild Choose/When block" },
+  ];
+
+  private static CompletionItem[] GetTargetCompletions() =>
+  [
+    new CompletionItem { Label = "Message", Kind = CompletionItemKind.Function, InsertText = "Message Text=\"$1\" Importance=\"$2\" />", InsertTextFormat = InsertTextFormat.Snippet, Detail = "MSBuild Message task" },
+  ];
+
+  private static CompletionItem[] GetSdkCompletions() =>
+  [
+    new CompletionItem { Label = "Microsoft.NET.Sdk", Kind = CompletionItemKind.Module, InsertText = "Microsoft.NET.Sdk", Detail = ".NET SDK" },
+    new CompletionItem { Label = "Microsoft.NET.Sdk.Web", Kind = CompletionItemKind.Module, InsertText = "Microsoft.NET.Sdk.Web", Detail = "ASP.NET Core Web SDK" },
+    new CompletionItem { Label = "Microsoft.NET.Sdk.Razor", Kind = CompletionItemKind.Module, InsertText = "Microsoft.NET.Sdk.Razor", Detail = "Razor SDK" },
+    new CompletionItem { Label = "Microsoft.NET.Sdk.Worker", Kind = CompletionItemKind.Module, InsertText = "Microsoft.NET.Sdk.Worker", Detail = "Worker Service SDK" },
+    new CompletionItem { Label = "Microsoft.NET.Sdk.BlazorWebAssembly", Kind = CompletionItemKind.Module, InsertText = "Microsoft.NET.Sdk.BlazorWebAssembly", Detail = "Blazor WebAssembly SDK" },
   ];
 
   private static CompletionItem[] GetPropertyGroupCompletions() =>

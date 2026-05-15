@@ -9,6 +9,13 @@ public class RemoveProjectReferenceTests
 {
   private static readonly CodeActionService Sut = new(new UserSecretsResolver(new System.IO.Abstractions.TestingHelpers.MockFileSystem()));
 
+  private static Microsoft.VisualStudio.LanguageServer.Protocol.Range CursorAt(string text, string marker)
+  {
+    var (line, character) = Docs.PositionAt(text, marker);
+    var pos = new Position { Line = line, Character = character };
+    return new Microsoft.VisualStudio.LanguageServer.Protocol.Range { Start = pos, End = pos };
+  }
+
   private static string ApplyEdits(string original, TextEdit[] edits)
   {
     var doc = Docs.Make(original);
@@ -22,6 +29,41 @@ public class RemoveProjectReferenceTests
     foreach (var (start, end, text) in ordered)
       result = string.Concat(result.AsSpan(0, start), text, result.AsSpan(end));
     return result;
+  }
+
+  [Test]
+  public async Task ExistingProjectReference_OffersRemoveActionWithoutDiagnostics_AndAppliedEditDeletesElement()
+  {
+    var text =
+        "<Project>\n" +
+        "  <ItemGroup>\n" +
+        "    <ProjectReference Include=\"../Other/Other.csproj\" />\n" +
+        "    <ProjectReference @CURSORInclude=\"../Keep/Keep.csproj\" />\n" +
+        "  </ItemGroup>\n" +
+        "</Project>";
+    var range = CursorAt(text, "@CURSOR");
+    var clean = text.Replace("@CURSOR", string.Empty);
+
+    var actions = Sut.GetCodeActions(Docs.Make(clean), range, []);
+
+    var remove = actions.FirstOrDefault(a => a.Title == "Remove this ProjectReference");
+    await Assert.That(remove).IsNotNull();
+
+    var result = ApplyEdits(clean, remove!.Edit!.Changes!.Values.Single());
+    await Assert.That(result).Contains("Other.csproj");
+    await Assert.That(result).DoesNotContain("Keep.csproj");
+  }
+
+  [Test]
+  public async Task OutsideProjectReference_NoNonDiagnosticRemoveAction()
+  {
+    var text = "<Project>\n  <ItemGroup>\n    @CURSOR<PackageReference Include=\"X\" Version=\"1\" />\n  </ItemGroup>\n</Project>";
+    var range = CursorAt(text, "@CURSOR");
+    var clean = text.Replace("@CURSOR", string.Empty);
+
+    var actions = Sut.GetCodeActions(Docs.Make(clean), range, []);
+
+    await Assert.That(actions.Any(a => a.Title == "Remove this ProjectReference")).IsFalse();
   }
 
   [Test]
@@ -54,9 +96,9 @@ public class RemoveProjectReferenceTests
   }
 
   [Test]
-  public async Task NoDiagnostics_NoRemoveAction()
+  public async Task PackageReference_NoProjectReferenceRemoveAction()
   {
-    var text = "<Project>\n  <ItemGroup>\n    <ProjectReference Include=\"../X/X.csproj\" />\n  </ItemGroup>\n</Project>";
+    var text = "<Project>\n  <ItemGroup>\n    <PackageReference Include=\"X\" Version=\"1\" />\n  </ItemGroup>\n</Project>";
     var doc = Docs.Make(text, "/repo/Self/Self.csproj");
 
     var range = new Microsoft.VisualStudio.LanguageServer.Protocol.Range
