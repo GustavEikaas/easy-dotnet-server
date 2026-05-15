@@ -5,6 +5,8 @@ using EasyDotnet.IDE.Editor;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Models.Client;
 using EasyDotnet.IDE.Notifications;
+using EasyDotnet.IDE.Project.Services;
+using EasyDotnet.IDE.Sdk;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.Settings;
 using EasyDotnet.IDE.Utils;
@@ -16,9 +18,9 @@ namespace EasyDotnet.IDE.Controllers.Initialize;
 public class InitializeController(
   IClientService clientService,
   IVisualStudioLocator locator,
-  ISolutionService solutionService,
-  WorkspaceBuildHostManager workspaceBuildHostManager,
-  IMsBuildService msBuildService,
+  ProjectGraphService projectGraphService,
+  SdkService sdkService,
+  INotificationService notificationService,
   UpdateCheckerService updateCheckerService,
   IProgressScopeFactory progressScopeFactory,
   SettingsService settingsService,
@@ -49,7 +51,7 @@ public class InitializeController(
     clientService.ProjectInfo = request.ProjectInfo;
     if (clientService.ProjectInfo.SolutionFile is not null)
     {
-      PreloadSolutionProjects(clientService.ProjectInfo.SolutionFile);
+      LoadSolutionProjects(clientService.ProjectInfo.SolutionFile);
     }
     clientService.ClientInfo = request.ClientInfo;
 
@@ -64,7 +66,7 @@ public class InitializeController(
       DebuggerOptions = debuggerOptions with { BinaryPath = binaryPath }
     };
 
-    var supportsSingleFileExecution = msBuildService.QuerySdkInstallations().Any(x => x.Version.Major >= 10);
+    var supportsSingleFileExecution = sdkService.QuerySdkInstallations().Any(x => x.Version.Major >= 10);
     clientService.SupportsSingleFileExecution = supportsSingleFileExecution;
     _ = updateCheckerService.CheckForUpdates(CancellationToken.None);
     _ = settingsService.PushActiveProjectChangedAsync();
@@ -76,25 +78,18 @@ public class InitializeController(
         );
   }
 
-  private void PreloadSolutionProjects(string solutionFile)
+  private void LoadSolutionProjects(string solutionFile)
   {
     _ = Task.Run(async () =>
         {
           try
           {
-            var projects = await solutionService.GetProjectsFromSolutionFile(solutionFile, CancellationToken.None);
-            var projectNames = projects.ConvertAll(x => x.ProjectName);
-            logger.LogInformation("Preloading {Count} projects:\n{Projects}",
-                projectNames.Count,
-                string.Join("\n  - ", projectNames.Prepend("")));
-            await workspaceBuildHostManager.PreloadProjectsAsync([.. projects.Select(x => x.AbsolutePath)]);
-
-            logger.LogInformation("Finished loading projects:\n{Projects}",
-                string.Join("\n  - ", projectNames.Prepend("")));
+            await projectGraphService.LoadSolutionAsync(solutionFile, CancellationToken.None);
+            await notificationService.NotifySolutionProjectsLoaded();
           }
           catch (Exception e)
           {
-            logger.LogError(e, "Failed to preload projects");
+            logger.LogError(e, "Failed to load solution projects");
           }
 
         });

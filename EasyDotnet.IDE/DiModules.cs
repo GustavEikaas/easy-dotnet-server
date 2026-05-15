@@ -17,7 +17,9 @@ using EasyDotnet.IDE.NewFile;
 using EasyDotnet.IDE.PackageManager;
 using EasyDotnet.IDE.Picker;
 using EasyDotnet.IDE.ProcessExecution;
+using EasyDotnet.IDE.Project.Services;
 using EasyDotnet.IDE.ProjectReference.Services;
+using EasyDotnet.IDE.Sdk;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.Settings;
 using EasyDotnet.IDE.Solution.Services;
@@ -93,6 +95,8 @@ public static class DiModules
     services.AddSingleton<IBuildHostManager, BuildHostManager>();
     services.AddSingleton<ProjectEvaluationCache>();
     services.AddSingleton<WorkspaceBuildHostManager>();
+    services.AddSingleton<ProjectGraphService>();
+    services.AddSingleton<SdkService>();
 
     services.AddSingleton<TestRunnerService>();
     services.AddSingleton<IWorkspaceBuildConfigurationService, WorkspaceBuildConfigurationService>();

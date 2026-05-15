@@ -1,11 +1,19 @@
 using EasyDotnet.ContainerTests.Docker;
 using EasyDotnet.ContainerTests.Scaffold;
+using System.Threading.Channels;
+using StreamJsonRpc;
 
 namespace EasyDotnet.ContainerTests.Initialize;
 
 public abstract class InitializeContainerTests<TContainer> : ContainerTestBase<TContainer>
   where TContainer : ServerContainer, new()
 {
+  private readonly Channel<TestSolutionProjectsLoadedNotification> _projectsLoaded =
+    Channel.CreateUnbounded<TestSolutionProjectsLoadedNotification>();
+
+  protected override void ConfigureRpc(JsonRpc rpc) =>
+    rpc.AddLocalRpcTarget(new RpcHandlers(this), new JsonRpcTargetOptions { DisposeOnDisconnect = false });
+
   [Fact]
   public async Task Initialize_WithScaffoldedSolution_ReturnsCapabilities()
   {
@@ -25,6 +33,7 @@ public abstract class InitializeContainerTests<TContainer> : ContainerTestBase<T
       $"ServerInfo.Version '{response.ServerInfo.Version}' is not a valid version string");
     Assert.NotEmpty(response.Capabilities.Routes);
     Assert.NotEmpty(response.Capabilities.ServerSentNotifications);
+    Assert.Contains("solution/projects-loaded", response.Capabilities.ServerSentNotifications);
 
     if (Container.SdkMajorVersion == 10)
     {
@@ -33,6 +42,47 @@ public abstract class InitializeContainerTests<TContainer> : ContainerTestBase<T
     else
     {
       Assert.False(response.Capabilities.SupportsSingleFileExecution);
+    }
+  }
+
+  [Fact]
+  public async Task Initialize_WithScaffoldedSolution_NotifiesWhenProjectsLoaded()
+  {
+    using var ws = new TempWorkspaceBuilder()
+      .WithSolutionX()
+      .WithProject("ProjectAlpha")
+      .WithProject("ProjectBeta")
+      .Build();
+
+    await InitializeWorkspaceAsync(ws);
+
+    await _projectsLoaded.Reader.ReadAsync().AsTask().WaitAsync(TimeSpan.FromMinutes(3));
+  }
+
+  [Fact]
+  public async Task Initialize_WithoutSolution_DoesNotNotifyProjectsLoaded()
+  {
+    using var ws = new TempWorkspaceBuilder()
+      .WithProject("ProjectAlpha")
+      .Build();
+
+    await InitializeWorkspaceAsync(ws);
+
+    var readTask = _projectsLoaded.Reader.ReadAsync().AsTask();
+    var completed = await Task.WhenAny(readTask, Task.Delay(TimeSpan.FromSeconds(3)));
+
+    Assert.NotSame(readTask, completed);
+  }
+
+  private sealed record TestSolutionProjectsLoadedNotification();
+
+  private sealed class RpcHandlers(InitializeContainerTests<TContainer> test)
+  {
+    [JsonRpcMethod("solution/projects-loaded", UseSingleObjectParameterDeserialization = true)]
+    public Task SolutionProjectsLoaded(TestSolutionProjectsLoadedNotification notification)
+    {
+      test._projectsLoaded.Writer.TryWrite(notification);
+      return Task.CompletedTask;
     }
   }
 }
