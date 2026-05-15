@@ -552,12 +552,14 @@ public class OperationExecutor(
         continue;
       }
 
-      var hasFailed = scopedLeaves.Any(n => detailStore.Get(n.Id)?.Outcome == "failed");
-      var hasInconclusive = !hasFailed && scopedLeaves.Any(n => detailStore.Get(n.Id)?.Outcome == "none");
-      var hasSkipped = !hasFailed && !hasInconclusive && scopedLeaves.Any(n => detailStore.Get(n.Id)?.Outcome == "skipped");
+      var passed = scopedLeaves.Count(n => detailStore.Get(n.Id)?.Outcome == "passed");
+      var failed = scopedLeaves.Count(n => detailStore.Get(n.Id)?.Outcome == "failed");
+      var skipped = scopedLeaves.Count(n => detailStore.Get(n.Id)?.Outcome == "skipped");
+      var inconclusive = scopedLeaves.Count(n => detailStore.Get(n.Id)?.Outcome == "none");
 
-      logger.LogDebug("Bubble parent {ParentId}: hasFailed={HasFailed} hasInconclusive={HasInconclusive} hasSkipped={HasSkipped}",
-          parentId, hasFailed, hasInconclusive, hasSkipped);
+      logger.LogDebug(
+          "Bubble parent {ParentId}: passed={Passed} failed={Failed} skipped={Skipped} inconclusive={Inconclusive}",
+          parentId, passed, failed, skipped, inconclusive);
 
       var maxDuration = scopedLeaves
           .Select(n => detailStore.Get(n.Id)?.DurationMs ?? 0)
@@ -565,13 +567,12 @@ public class OperationExecutor(
           .Max();
       var durationDisplay = FormatDuration(maxDuration);
 
-      TestNodeStatus aggregateStatus = hasFailed
-          ? new TestNodeStatus.Failed(durationDisplay, [])
-          : hasInconclusive
-              ? new TestNodeStatus.Inconclusive("")
-              : hasSkipped
-                  ? new TestNodeStatus.Skipped("")
-                  : new TestNodeStatus.Passed(durationDisplay);
+      var aggregateStatus = TestStatusPriority.AggregateTerminalStatus(
+          passed,
+          failed,
+          skipped,
+          inconclusive,
+          durationDisplay);
 
       await dispatcher.SendStatusAsync(parentId, aggregateStatus, operationId: operationId);
       parentId = registry.Get(parentId)?.ParentId;
@@ -692,6 +693,8 @@ public class OperationExecutor(
 
         if (string.Equals(detail?.Outcome, "failed", StringComparison.OrdinalIgnoreCase))
           state.Failed++;
+        else if (string.Equals(detail?.Outcome, "passed", StringComparison.OrdinalIgnoreCase))
+          state.Passed++;
         else if (string.Equals(detail?.Outcome, "none", StringComparison.OrdinalIgnoreCase))
           state.Inconclusive++;
         else if (string.Equals(detail?.Outcome, "skipped", StringComparison.OrdinalIgnoreCase))
@@ -724,16 +727,19 @@ public class OperationExecutor(
     private static TestNodeStatus BuildAggregateStatus(ParentRunState state)
     {
       var durationDisplay = FormatDuration(state.MaxDurationMs);
-      if (state.Failed > 0) return new TestNodeStatus.Failed(durationDisplay, []);
-      if (state.Inconclusive > 0) return new TestNodeStatus.Inconclusive("");
-      if (state.Skipped > 0) return new TestNodeStatus.Skipped("");
-      return new TestNodeStatus.Passed(durationDisplay);
+      return TestStatusPriority.AggregateTerminalStatus(
+          state.Passed,
+          state.Failed,
+          state.Skipped,
+          state.Inconclusive,
+          durationDisplay);
     }
 
     private sealed class ParentRunState
     {
       public int Total { get; set; }
       public int Completed { get; set; }
+      public int Passed { get; set; }
       public int Failed { get; set; }
       public int Inconclusive { get; set; }
       public int Skipped { get; set; }
