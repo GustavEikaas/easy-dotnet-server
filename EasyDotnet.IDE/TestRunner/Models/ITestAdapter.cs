@@ -30,6 +30,7 @@ public interface ITestAdapter
   Task RunAsync(
       ValidatedDotnetProject project,
       IReadOnlyList<string> nativeIds,
+      Func<string, Task> onStarted,
       Func<TestRunResult, Task> onResult,
       OperationControl control,
       CancellationToken ct);
@@ -41,6 +42,7 @@ public interface ITestAdapter
   Task DebugAsync(
       ValidatedDotnetProject project,
       IReadOnlyList<string> nativeIds,
+      Func<string, Task> onStarted,
       Func<TestRunResult, Task> onResult,
       OperationControl control,
       CancellationToken ct);

@@ -188,6 +188,30 @@ public static class TestFixtures
     """;
 
   /// <summary>
+  /// Slow enough for VSTest <c>ActiveTests</c> run-stat updates to expose tests that
+  /// have started but have not yet reached a terminal result.
+  /// </summary>
+  public const string NUnitSlowTests = """
+    using System.Threading;
+    using NUnit.Framework;
+
+    namespace Sample.Slow
+    {
+        public class SlowCases
+        {
+            [Test]
+            public void A() => Thread.Sleep(1500);
+
+            [Test]
+            public void B() => Thread.Sleep(1500);
+
+            [Test]
+            public void C() => Thread.Sleep(1500);
+        }
+    }
+    """;
+
+  /// <summary>
   /// Deterministic source layout used to pin TestSourceLocator line-number output.
   /// Source shared between xUnit v2 and v3 (same attribute syntax).
   /// <para>

@@ -28,6 +28,7 @@ public abstract class TestRunnerTestBase<TContainer> : ContainerTestBase<TContai
 
   private readonly ConcurrentDictionary<string, TestNodeDto> _nodes = new();
   private readonly ConcurrentDictionary<string, string> _lastStatusKind = new();
+  private readonly ConcurrentDictionary<string, ConcurrentQueue<string>> _statusHistory = new();
   private int _singleStatusNotifications;
   private int _batchStatusNotifications;
   private int _batchedStatusUpdates;
@@ -41,6 +42,7 @@ public abstract class TestRunnerTestBase<TContainer> : ContainerTestBase<TContai
   /// <c>updateStatusBatch</c> (e.g. <c>"Running"</c>, <c>"Passed"</c>, <c>"Failed"</c>).
   /// </summary>
   public IReadOnlyDictionary<string, string> LastStatusKind => _lastStatusKind;
+  public IReadOnlyDictionary<string, ConcurrentQueue<string>> StatusHistory => _statusHistory;
 
   protected int SingleStatusNotificationCount => _singleStatusNotifications;
   protected int BatchStatusNotificationCount => _batchStatusNotifications;
@@ -94,7 +96,7 @@ public abstract class TestRunnerTestBase<TContainer> : ContainerTestBase<TContai
     public void UpdateStatus(UpdateStatusPayload payload)
     {
       Interlocked.Increment(ref owner._singleStatusNotifications);
-      if (payload.Status is { } s) owner._lastStatusKind[payload.Id] = s.Type;
+      if (payload.Status is { } s) owner.RecordStatus(payload.Id, s.Type);
     }
 
     [JsonRpcMethod("updateStatusBatch", UseSingleObjectParameterDeserialization = true)]
@@ -105,7 +107,7 @@ public abstract class TestRunnerTestBase<TContainer> : ContainerTestBase<TContai
       Interlocked.Add(ref owner._batchedStatusUpdates, payload.Updates.Count);
       foreach (var u in payload.Updates)
       {
-        if (u.Id is { } id && u.Status is { } s) owner._lastStatusKind[id] = s.Type;
+        if (u.Id is { } id && u.Status is { } s) owner.RecordStatus(id, s.Type);
       }
     }
 
@@ -123,6 +125,12 @@ public abstract class TestRunnerTestBase<TContainer> : ContainerTestBase<TContai
   private sealed record UpdateStatusPayload(string Id, StatusDto? Status, List<string>? AvailableActions);
   private sealed record UpdateStatusBatchPayload(List<StatusUpdate>? Updates);
   private sealed record StatusUpdate(string Id, StatusDto? Status, List<string>? AvailableActions);
+
+  private void RecordStatus(string id, string type)
+  {
+    _lastStatusKind[id] = type;
+    _statusHistory.GetOrAdd(id, _ => new ConcurrentQueue<string>()).Enqueue(type);
+  }
 }
 
 public sealed record RunnerStatusDto(

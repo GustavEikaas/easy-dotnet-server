@@ -17,6 +17,7 @@ internal static class MtpRunHandling
 
   internal static async Task ForwardResultsOrCancelAsync(
       IAsyncEnumerable<TestNodeUpdate> updates,
+      Func<string, Task> onStarted,
       Func<TestRunResult, Task> onResult,
       ILogger logger,
       Func<bool> abortRequested,
@@ -29,6 +30,12 @@ internal static class MtpRunHandling
     {
       await foreach (var update in updates.WithCancellation(ct))
       {
+        if (update.Node.ExecutionState == "in-progress")
+        {
+          await onStarted(update.Node.Uid);
+          continue;
+        }
+
         TestRunResult? result;
         try { result = update.ToTestRunResult(); }
         catch (ArgumentOutOfRangeException ex)
