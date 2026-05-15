@@ -82,6 +82,18 @@ public abstract class ServerContainer : IAsyncDisposable
       {
         var logs = await TryGetLogsAsync(ct);
         await TryDisposeContainerAsync();
+
+        if (IsDotnetFirstTimeUseMutexFailure(ex, logs))
+        {
+          lastException = ex;
+
+          if (attempt == maxAttempts)
+            break;
+
+          await Task.Delay(TimeSpan.FromSeconds(attempt * 2), ct);
+          continue;
+        }
+
         throw new InvalidOperationException(
           $"Container failed to start on attempt {attempt}.{logs}",
           ex);
@@ -89,11 +101,18 @@ public abstract class ServerContainer : IAsyncDisposable
     }
 
     throw new InvalidOperationException(
-      $"Container segfaulted on all {maxAttempts} attempts.", lastException);
+      $"Container failed to start on all {maxAttempts} attempts.", lastException);
   }
 
   private static bool IsSegfault(Exception ex) =>
     ex is ContainerNotRunningException && ex.Message.Contains("139");
+
+  private static bool IsDotnetFirstTimeUseMutexFailure(Exception ex, string logs)
+  {
+    var text = ex + logs;
+    return text.Contains("NuGet.Common.Migrations.MigrationRunner", StringComparison.Ordinal) &&
+           text.Contains("Object synchronization method was called from an unsynchronized block of code", StringComparison.Ordinal);
+  }
 
   private async Task StartContainerCoreAsync(CancellationToken ct)
   {

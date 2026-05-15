@@ -7,9 +7,12 @@ using Microsoft.VisualStudio.TestPlatform.ObjectModel.Logging;
 namespace EasyDotnet.IDE.TestRunner.Adapters.VSTest;
 
 internal sealed class TestRunHandler(
-    ChannelWriter<TestRunResult> writer,
+    ChannelWriter<VsTestRunEvent> writer,
     ILogger<TestRunHandler> logger) : ITestRunEventsHandler
 {
+  private readonly HashSet<Guid> _started = [];
+  private readonly object _startedLock = new();
+
   public void HandleLogMessage(TestMessageLevel level, string? message) { }
   public void HandleRawMessage(string rawMessage) { }
 
@@ -25,6 +28,9 @@ internal sealed class TestRunHandler(
 
   public void HandleTestRunStatsChange(TestRunChangedEventArgs? testRunChangedArgs)
   {
+    if (testRunChangedArgs?.ActiveTests is not null)
+      WriteStarted(testRunChangedArgs.ActiveTests);
+
     if (testRunChangedArgs?.NewTestResults is not null)
       WriteResults(testRunChangedArgs.NewTestResults);
   }
@@ -42,7 +48,26 @@ internal sealed class TestRunHandler(
         logger.LogError("Skipping result for {TestId} — unmapped VSTest outcome: {Outcome}", result.TestCase.Id, result.Outcome);
         continue;
       }
-      writer.TryWrite(mapped);
+      writer.TryWrite(VsTestRunEvent.Result(mapped));
     }
   }
+
+  private void WriteStarted(IEnumerable<TestCase> tests)
+  {
+    foreach (var test in tests)
+    {
+      lock (_startedLock)
+      {
+        if (!_started.Add(test.Id)) continue;
+      }
+
+      writer.TryWrite(VsTestRunEvent.Started(test.Id.ToString()));
+    }
+  }
+}
+
+internal sealed record VsTestRunEvent(string? StartedNativeId, TestRunResult? TestResult)
+{
+  public static VsTestRunEvent Started(string nativeId) => new(nativeId, null);
+  public static VsTestRunEvent Result(TestRunResult result) => new(null, result);
 }

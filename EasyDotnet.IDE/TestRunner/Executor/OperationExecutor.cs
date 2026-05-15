@@ -238,9 +238,6 @@ public class OperationExecutor(
     var self = registry.Get(nodeId);
     if (self?.Type is NodeType.TestMethod or NodeType.Subcase) { leafNodes.Add(self); }
 
-    var runningStatus = debug ? (TestNodeStatus)new TestNodeStatus.Debugging() : new TestNodeStatus.Running();
-    await dispatcher.SendBatchStatusAsync(nodeId, runningStatus, registry, operationId: token.OperationId);
-
     var nativeIds = leafNodes
         .Select(n => registry.GetNativeId(n.Id))
         .Where(id => id is not null)
@@ -252,6 +249,8 @@ public class OperationExecutor(
       logger.LogWarning("No runnable tests found under node {NodeId}", nodeId);
       return sharedCounter ?? new RunProgressCounter(0);
     }
+
+    await dispatcher.SendBatchStatusAsync(nodeId, new TestNodeStatus.Queued(), registry, operationId: token.OperationId);
 
     var counter = sharedCounter ?? new RunProgressCounter(nativeIds.Count);
 
@@ -273,6 +272,26 @@ public class OperationExecutor(
 
     var expectedNativeIds = nativeIds.ToHashSet(StringComparer.Ordinal);
     var seenNativeIds = new HashSet<string>(StringComparer.Ordinal);
+    var startedNativeIds = new HashSet<string>(StringComparer.Ordinal);
+    var runningStatus = debug ? (TestNodeStatus)new TestNodeStatus.Debugging() : new TestNodeStatus.Running();
+
+    async Task OnStarted(string nativeId)
+    {
+      if (!expectedNativeIds.Contains(nativeId)) return;
+      if (!startedNativeIds.Add(nativeId)) return;
+
+      var stableId = registry.GetStableId(nativeId);
+      if (stableId is null)
+      {
+        logger.LogWarning("Received start for unknown native ID {NativeId}", nativeId);
+        return;
+      }
+
+      if (detailStore.Get(stableId) is not null) return;
+
+      await dispatcher.SendStatusAsync(stableId, runningStatus, operationId: token.OperationId);
+      await BubbleStatusAsync(stableId, leafIds, token.OperationId);
+    }
 
     async Task OnResult(TestRunResult result)
     {
@@ -302,9 +321,9 @@ public class OperationExecutor(
     }
 
     if (debug)
-      await adapter.DebugAsync(project, nativeIds, OnResult, control, token.Ct);
+      await adapter.DebugAsync(project, nativeIds, OnStarted, OnResult, control, token.Ct);
     else
-      await adapter.RunAsync(project, nativeIds, OnResult, control, token.Ct);
+      await adapter.RunAsync(project, nativeIds, OnStarted, OnResult, control, token.Ct);
 
     await resultBatch.FlushAsync(forceRunnerStatus: true);
 
