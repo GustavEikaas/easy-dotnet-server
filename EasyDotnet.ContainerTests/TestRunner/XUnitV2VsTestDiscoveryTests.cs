@@ -152,6 +152,23 @@ public abstract class XUnitV2VsTestDiscoveryTests<TContainer> : TestRunnerTestBa
   }
 
   [Fact]
+  public async Task Discover_FSharpMixedDottedAndPlainFactNames_DiscoversBothMethods()
+  {
+    using var fixture = new TestProjectFixtureBuilder()
+      .WithName("Sample.FSharpXUnitV2DottedNames")
+      .WithFramework(TestFrameworkKind.XUnitV2VsTestFSharp)
+      .WithFile("Tests.fs", TestFixtures.FSharpXUnitMixedDottedNames)
+      .Build();
+
+    await InitializeTestRunnerAsync(fixture);
+
+    var methods = NodesOfType(NodeTypeNames.TestMethod).ToList();
+    Assert.True(
+      methods.Count == 2,
+      $"Expected two F# xUnit facts to be discovered. Node dump:\n{DumpNodes()}");
+  }
+
+  [Fact]
   public async Task Run_SlowSuite_ReportsQueuedThenRunningBeforeTerminalStatus()
   {
     using var fixture = new TestProjectFixtureBuilder()
