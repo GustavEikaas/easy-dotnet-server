@@ -17,6 +17,11 @@ public static class DiModules
     services.AddSingleton(jsonRpc);
     services.AddSingleton<IFileSystem, FileSystem>();
     services.AddSingleton<IDocumentManager, DocumentManager>();
+    services.AddSingleton<IProjXWorkspaceContext, ProjXWorkspaceContext>();
+    services.AddSingleton<IProjXDocumentTextProvider, ProjXDocumentTextProvider>();
+    services.AddSingleton<IProjXMsBuildPropertyProvider, DotnetMsBuildPropertyProvider>();
+    services.AddSingleton<IProjXWorkspaceHierarchyService, ProjXWorkspaceHierarchyService>();
+    services.AddSingleton<IPackageReferenceEditPlanner, PackageReferenceEditPlanner>();
     services.AddSingleton<IUserSecretsResolver, UserSecretsResolver>();
     services.AddSingleton<ICompletionService, CompletionService>();
     services.AddSingleton<IHoverService, HoverService>();
