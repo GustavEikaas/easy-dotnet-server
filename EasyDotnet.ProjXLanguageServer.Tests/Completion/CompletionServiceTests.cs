@@ -37,6 +37,7 @@ public class CompletionServiceTests
     var message = items.SingleOrDefault(i => i.Label == "Message");
 
     await Assert.That(message).IsNotNull();
+    await Assert.That(message!.Kind).IsEqualTo(Microsoft.VisualStudio.LanguageServer.Protocol.CompletionItemKind.Class);
     await Assert.That(message!.InsertText).IsEqualTo("Message Text=\"$1\" Importance=\"$2\" />");
   }
 

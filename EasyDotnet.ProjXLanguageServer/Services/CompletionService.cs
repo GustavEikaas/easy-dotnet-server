@@ -211,7 +211,7 @@ public class CompletionService(INugetSearchService nugetSearch, ILogger<Completi
 
   private static CompletionItem[] GetTargetCompletions() =>
   [
-    new CompletionItem { Label = "Message", Kind = CompletionItemKind.Function, InsertText = "Message Text=\"$1\" Importance=\"$2\" />", InsertTextFormat = InsertTextFormat.Snippet, Detail = "MSBuild Message task" },
+    new CompletionItem { Label = "Message", Kind = CompletionItemKind.Class, InsertText = "Message Text=\"$1\" Importance=\"$2\" />", InsertTextFormat = InsertTextFormat.Snippet, Detail = "MSBuild Message task" },
   ];
 
   private static CompletionItem[] GetSdkCompletions() =>

@@ -63,6 +63,7 @@
   </ItemGroup>
 
   <Target Name="PublishAppWrapper" BeforeTargets="Build">
+    <Message Text="" Importance="" />()
     <PropertyGroup>
       <AppWrapperOutputPath>$(OutputPath)Tools\AppWrapper\</AppWrapperOutputPath>
     </PropertyGroup>
