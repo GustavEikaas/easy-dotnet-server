@@ -11,14 +11,14 @@ public sealed record AddPackageReferenceEditRequest(
 
 public interface IPackageReferenceEditPlanner
 {
-  WorkspaceEdit PlanAddPackageReference(AddPackageReferenceEditRequest request);
+  Task<WorkspaceEdit> PlanAddPackageReferenceAsync(AddPackageReferenceEditRequest request, CancellationToken cancellationToken);
 }
 
 public sealed class PackageReferenceEditPlanner(
     IProjXWorkspaceHierarchyService hierarchyService,
     IProjXDocumentTextProvider textProvider) : IPackageReferenceEditPlanner
 {
-  public WorkspaceEdit PlanAddPackageReference(AddPackageReferenceEditRequest request)
+  public async Task<WorkspaceEdit> PlanAddPackageReferenceAsync(AddPackageReferenceEditRequest request, CancellationToken cancellationToken)
   {
     if (string.IsNullOrWhiteSpace(request.ProjectPath))
       throw new ArgumentException("ProjectPath is required.", nameof(request));
@@ -27,7 +27,7 @@ public sealed class PackageReferenceEditPlanner(
     if (string.IsNullOrWhiteSpace(request.Version))
       throw new ArgumentException("Version is required.", nameof(request));
 
-    var hierarchy = hierarchyService.Resolve(request.ProjectPath);
+    var hierarchy = await hierarchyService.ResolveAsync(request.ProjectPath, cancellationToken);
     var projectUri = new Uri(hierarchy.ProjectPath);
     var changes = new Dictionary<string, TextEdit[]>();
 

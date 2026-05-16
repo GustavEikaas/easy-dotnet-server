@@ -6,10 +6,16 @@ namespace EasyDotnet.ProjXLanguageServer.Services;
 
 public interface ICodeActionService
 {
-  CodeAction[] GetCodeActions(CsprojDocument doc, LspRange range, Diagnostic[] contextDiagnostics);
+  Task<CodeAction[]> GetCodeActionsAsync(
+      CsprojDocument doc,
+      LspRange range,
+      Diagnostic[] contextDiagnostics,
+      CancellationToken cancellationToken);
 }
 
-public class CodeActionService(IUserSecretsResolver userSecretsResolver) : ICodeActionService
+public class CodeActionService(
+    IUserSecretsResolver userSecretsResolver,
+    IPackageReferenceEditPlanner? packageReferenceEditPlanner = null) : ICodeActionService
 {
   public CodeAction[] GetCodeActions(CsprojDocument doc, LspRange range, Diagnostic[] contextDiagnostics)
   {
@@ -30,6 +36,29 @@ public class CodeActionService(IUserSecretsResolver userSecretsResolver) : ICode
     {
       AddIfNotNull(actions, RemoveElementAction.BuildForDiagnostic(doc, diagnostic));
       AddIfNotNull(actions, ConvertTargetFrameworkAction.BuildToSingleForDiagnostic(doc, diagnostic));
+    }
+
+    return [.. actions];
+  }
+
+  public async Task<CodeAction[]> GetCodeActionsAsync(
+      CsprojDocument doc,
+      LspRange range,
+      Diagnostic[] contextDiagnostics,
+      CancellationToken cancellationToken)
+  {
+    var actions = GetCodeActions(doc, range, contextDiagnostics).ToList();
+
+    if (packageReferenceEditPlanner is not null)
+    {
+      var startOffset = doc.ToOffset(range.Start.Line, range.Start.Character);
+      var endOffset = doc.ToOffset(range.End.Line, range.End.Character);
+      AddIfNotNull(actions, await ApplyPackageReferenceWorkspaceRulesAction.BuildAsync(
+          doc,
+          startOffset,
+          endOffset,
+          packageReferenceEditPlanner,
+          cancellationToken));
     }
 
     return [.. actions];

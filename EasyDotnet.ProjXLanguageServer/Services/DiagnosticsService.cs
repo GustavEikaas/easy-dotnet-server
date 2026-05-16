@@ -9,6 +9,7 @@ namespace EasyDotnet.ProjXLanguageServer.Services;
 public interface IDiagnosticsService
 {
   Diagnostic[] GetDiagnostics(CsprojDocument doc);
+  Task<Diagnostic[]> GetDiagnosticsAsync(CsprojDocument doc, CancellationToken cancellationToken);
 }
 
 public static class DiagnosticCodes
@@ -19,9 +20,13 @@ public static class DiagnosticCodes
   public const string SingleTfmInTargetFrameworks = "projx-single-tfm-in-targetframeworks";
   public const string ConflictingTargetFrameworkProperties = "projx-conflicting-targetframework-properties";
   public const string MismatchedTagNames = "projx-mismatched-tag-names";
+  public const string MissingCentralPackageVersion = "projx-missing-central-package-version";
 }
 
-public class DiagnosticsService(IFileSystem fileSystem) : IDiagnosticsService
+public class DiagnosticsService(
+    IFileSystem fileSystem,
+    IProjXWorkspaceHierarchyService? hierarchyService = null,
+    ICentralPackageVersionService? centralPackageVersionService = null) : IDiagnosticsService
 {
   public Diagnostic[] GetDiagnostics(CsprojDocument doc)
   {
@@ -69,6 +74,13 @@ public class DiagnosticsService(IFileSystem fileSystem) : IDiagnosticsService
     return [.. diagnostics];
   }
 
+  public async Task<Diagnostic[]> GetDiagnosticsAsync(CsprojDocument doc, CancellationToken cancellationToken)
+  {
+    var diagnostics = GetDiagnostics(doc).ToList();
+    await AddCentralPackageManagementDiagnosticsAsync(doc, diagnostics, cancellationToken);
+    return [.. diagnostics];
+  }
+
   private static string NormalizeSeparators(string path) =>
       Path.DirectorySeparatorChar == '/' ? path.Replace('\\', '/') : path.Replace('/', '\\');
 
@@ -100,6 +112,90 @@ public class DiagnosticsService(IFileSystem fileSystem) : IDiagnosticsService
           Message = $"Duplicate PackageReference: '{include}'"
         });
       }
+    }
+  }
+
+  private async Task AddCentralPackageManagementDiagnosticsAsync(
+      CsprojDocument doc,
+      List<Diagnostic> diagnostics,
+      CancellationToken cancellationToken)
+  {
+    if (hierarchyService is null || centralPackageVersionService is null || !doc.Uri.IsFile)
+    {
+      return;
+    }
+
+    ProjXWorkspaceHierarchy hierarchy;
+    try
+    {
+      hierarchy = await hierarchyService.ResolveAsync(doc.Uri.LocalPath, cancellationToken);
+    }
+    catch (Exception e) when (e is not OperationCanceledException)
+    {
+      return;
+    }
+
+    if (!hierarchy.ManagePackageVersionsCentrally)
+    {
+      return;
+    }
+
+    var centralPackages = await centralPackageVersionService.GetPackageVersionsAsync(doc.Uri.LocalPath, cancellationToken);
+    var packageIds = centralPackages.Select(p => p.PackageId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+    foreach (var element in EnumerateElements(doc.Root))
+    {
+      if (!string.Equals(element.Name, "PackageReference", StringComparison.Ordinal))
+      {
+        continue;
+      }
+
+      var includeAttr = GetIncludeAttribute(element);
+      if (includeAttr?.ValueNode == null || string.IsNullOrWhiteSpace(includeAttr.Value))
+      {
+        continue;
+      }
+
+      if (packageIds.Contains(includeAttr.Value))
+      {
+        AddVersionInCentralPackageManagementDiagnosticIfNeeded(doc, diagnostics, element, includeAttr.Value);
+        continue;
+      }
+
+      var node = (SyntaxNode)element;
+      diagnostics.Add(new Diagnostic
+      {
+        Range = PositionUtils.ToRange(doc.LineOffsets, node.SpanStart, node.Width),
+        Severity = LspDiagnosticSeverity.Warning,
+        Source = DiagnosticCodes.Source,
+        Code = DiagnosticCodes.MissingCentralPackageVersion,
+        Message = $"PackageReference '{includeAttr.Value}' must be declared in central package management.",
+      });
+    }
+  }
+
+  private static void AddVersionInCentralPackageManagementDiagnosticIfNeeded(
+      CsprojDocument doc,
+      List<Diagnostic> diagnostics,
+      IXmlElementSyntax element,
+      string packageId)
+  {
+    foreach (var attr in element.AttributesNode)
+    {
+      if (!string.Equals(attr.Name, "Version", StringComparison.OrdinalIgnoreCase))
+      {
+        continue;
+      }
+
+      var node = (SyntaxNode)element;
+      diagnostics.Add(new Diagnostic
+      {
+        Range = PositionUtils.ToRange(doc.LineOffsets, node.SpanStart, node.Width),
+        Severity = LspDiagnosticSeverity.Warning,
+        Source = DiagnosticCodes.Source,
+        Code = DiagnosticCodes.MissingCentralPackageVersion,
+        Message = $"PackageReference '{packageId}' should not specify Version when central package management is enabled.",
+      });
+      return;
     }
   }
 

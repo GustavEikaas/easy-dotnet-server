@@ -65,8 +65,15 @@ public class TextDocumentHandler(
       var doc = documentManager.GetDocument(uri);
       if (doc == null)
         return;
-      var diagnostics = diagnosticsService.GetDiagnostics(doc);
-      await diagnosticsPublisher.PublishAsync(uri, diagnostics);
+      try
+      {
+        var diagnostics = await diagnosticsService.GetDiagnosticsAsync(doc, cts.Token);
+        await diagnosticsPublisher.PublishAsync(uri, diagnostics);
+      }
+      catch (OperationCanceledException)
+      {
+        // A newer document change superseded this diagnostics run.
+      }
     });
   }
 }

@@ -22,7 +22,7 @@ public sealed class PackageReferenceEditPlannerTests
 
     var sut = CreateSut(project, centralPackageText: null, manageCentrally: false);
 
-    var edit = sut.PlanAddPackageReference(new AddPackageReferenceEditRequest(ProjectPath, "Newtonsoft.Json", "13.0.3"));
+    var edit = await sut.PlanAddPackageReferenceAsync(new AddPackageReferenceEditRequest(ProjectPath, "Newtonsoft.Json", "13.0.3"), CancellationToken.None);
     var result = ApplyEdits(project, edit.Changes![UriFor(ProjectPath)]);
 
     await Assert.That(edit.Changes!.Keys).IsEquivalentTo([UriFor(ProjectPath)]);
@@ -47,7 +47,7 @@ public sealed class PackageReferenceEditPlannerTests
 
     var sut = CreateSut(project, central, manageCentrally: true);
 
-    var edit = sut.PlanAddPackageReference(new AddPackageReferenceEditRequest(ProjectPath, "Newtonsoft.Json", "13.0.3"));
+    var edit = await sut.PlanAddPackageReferenceAsync(new AddPackageReferenceEditRequest(ProjectPath, "Newtonsoft.Json", "13.0.3"), CancellationToken.None);
     var projectResult = ApplyEdits(project, edit.Changes![UriFor(ProjectPath)]);
     var centralResult = ApplyEdits(central, edit.Changes![UriFor(CentralPackagePath)]);
 
@@ -75,7 +75,7 @@ public sealed class PackageReferenceEditPlannerTests
 
     var sut = CreateSut(project, central, manageCentrally: true);
 
-    var edit = sut.PlanAddPackageReference(new AddPackageReferenceEditRequest(ProjectPath, "Newtonsoft.Json", "13.0.3"));
+    var edit = await sut.PlanAddPackageReferenceAsync(new AddPackageReferenceEditRequest(ProjectPath, "Newtonsoft.Json", "13.0.3"), CancellationToken.None);
     var projectResult = ApplyEdits(project, edit.Changes![UriFor(ProjectPath)]);
     var centralResult = ApplyEdits(central, edit.Changes![UriFor(CentralPackagePath)]);
 
@@ -103,7 +103,7 @@ public sealed class PackageReferenceEditPlannerTests
 
     var sut = CreateSut(project, central, manageCentrally: true);
 
-    var edit = sut.PlanAddPackageReference(new AddPackageReferenceEditRequest(ProjectPath, "Newtonsoft.Json", "13.0.3"));
+    var edit = await sut.PlanAddPackageReferenceAsync(new AddPackageReferenceEditRequest(ProjectPath, "Newtonsoft.Json", "13.0.3"), CancellationToken.None);
     var centralResult = ApplyEdits(central, edit.Changes![UriFor(CentralPackagePath)]);
 
     await Assert.That(centralResult.IndexOf("Newtonsoft.Json", StringComparison.Ordinal)).IsLessThan(
@@ -131,7 +131,7 @@ public sealed class PackageReferenceEditPlannerTests
     documentManager.OpenDocument(new Uri(CentralPackagePath), openCentral, version: 2);
     var sut = CreateSut(project, diskCentral, manageCentrally: true, documentManager);
 
-    var edit = sut.PlanAddPackageReference(new AddPackageReferenceEditRequest(ProjectPath, "Newtonsoft.Json", "13.0.3"));
+    var edit = await sut.PlanAddPackageReferenceAsync(new AddPackageReferenceEditRequest(ProjectPath, "Newtonsoft.Json", "13.0.3"), CancellationToken.None);
     var centralResult = ApplyEdits(openCentral, edit.Changes![UriFor(CentralPackagePath)]);
 
     await Assert.That(centralResult).Contains("OpenOnly");
@@ -191,6 +191,7 @@ public sealed class PackageReferenceEditPlannerTests
 
   private sealed class FakeHierarchyService(ProjXWorkspaceHierarchy hierarchy) : IProjXWorkspaceHierarchyService
   {
-    public ProjXWorkspaceHierarchy Resolve(string projectPath) => hierarchy;
+    public Task<ProjXWorkspaceHierarchy> ResolveAsync(string projectPath, CancellationToken cancellationToken) =>
+        Task.FromResult(hierarchy);
   }
 }

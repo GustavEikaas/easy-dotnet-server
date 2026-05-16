@@ -12,7 +12,7 @@ public sealed record ProjXWorkspaceHierarchy(
 
 public interface IProjXWorkspaceHierarchyService
 {
-  ProjXWorkspaceHierarchy Resolve(string projectPath);
+  Task<ProjXWorkspaceHierarchy> ResolveAsync(string projectPath, CancellationToken cancellationToken);
 }
 
 public sealed class ProjXWorkspaceHierarchyService(
@@ -20,7 +20,7 @@ public sealed class ProjXWorkspaceHierarchyService(
     IProjXMsBuildPropertyProvider propertyProvider,
     IFileSystem fileSystem) : IProjXWorkspaceHierarchyService
 {
-  public ProjXWorkspaceHierarchy Resolve(string projectPath)
+  public async Task<ProjXWorkspaceHierarchy> ResolveAsync(string projectPath, CancellationToken cancellationToken)
   {
     var fullProjectPath = fileSystem.Path.GetFullPath(projectPath);
     if (!fileSystem.File.Exists(fullProjectPath))
@@ -32,19 +32,28 @@ public sealed class ProjXWorkspaceHierarchyService(
       ?? throw new InvalidOperationException($"Could not resolve project directory for {fullProjectPath}.");
     var workspaceRoot = ResolveWorkspaceRoot(projectDir);
 
-    var properties = propertyProvider.GetProperties(
+    var properties = await propertyProvider.GetPropertiesAsync(
         fullProjectPath,
-        "ManagePackageVersionsCentrally",
-        "DirectoryPackagesPropsPath");
+        [
+          "ManagePackageVersionsCentrally",
+          "DirectoryPackagesPropsPath",
+          "DirectoryBuildPropsPath",
+          "DirectoryBuildTargetsPath"
+        ],
+        cancellationToken);
 
     properties.TryGetValue("ManagePackageVersionsCentrally", out var manageCentrallyRaw);
     properties.TryGetValue("DirectoryPackagesPropsPath", out var directoryPackagesPropsPath);
+    properties.TryGetValue("DirectoryBuildPropsPath", out var directoryBuildPropsPath);
+    properties.TryGetValue("DirectoryBuildTargetsPath", out var directoryBuildTargetsPath);
 
     return new ProjXWorkspaceHierarchy(
         ProjectPath: fullProjectPath,
         WorkspaceRoot: workspaceRoot,
-        DirectoryBuildPropsPath: FindFileAbove(projectDir, "Directory.Build.props", workspaceRoot),
-        DirectoryBuildTargetsPath: FindFileAbove(projectDir, "Directory.Build.targets", workspaceRoot),
+        DirectoryBuildPropsPath: NullIfEmpty(directoryBuildPropsPath ?? string.Empty)
+            ?? FindFileAbove(projectDir, "Directory.Build.props", workspaceRoot),
+        DirectoryBuildTargetsPath: NullIfEmpty(directoryBuildTargetsPath ?? string.Empty)
+            ?? FindFileAbove(projectDir, "Directory.Build.targets", workspaceRoot),
         ManagePackageVersionsCentrally: IsTrue(manageCentrallyRaw ?? string.Empty),
         DirectoryPackagesPropsPath: NullIfEmpty(directoryPackagesPropsPath ?? string.Empty));
   }

@@ -8,8 +8,10 @@ public sealed class PackageReferenceEditHandler(
     IPackageReferenceEditPlanner packageReferenceEditPlanner) : BaseController
 {
   [JsonRpcMethod("projx/package/add-reference-edit", UseSingleObjectParameterDeserialization = true)]
-  public Task<WorkspaceEdit> AddPackageReferenceEditAsync(AddPackageReferenceEditRequest request)
+  public Task<WorkspaceEdit> AddPackageReferenceEditAsync(
+      AddPackageReferenceEditRequest request,
+      CancellationToken cancellationToken)
   {
-    return Task.FromResult(packageReferenceEditPlanner.PlanAddPackageReference(request));
+    return packageReferenceEditPlanner.PlanAddPackageReferenceAsync(request, cancellationToken);
   }
 }
