@@ -294,8 +294,9 @@ public class OperationExecutor(
 
       if (detailStore.Get(stableId) is not null) return;
 
-      await dispatcher.SendStatusAsync(stableId, runningStatus, operationId: token.OperationId);
-      await BubbleStatusAsync(stableId, leafIds, token.OperationId);
+      resultBatch.Enqueue(new StatusUpdate(stableId, runningStatus));
+      BubbleStatus(resultBatch, stableId, leafIds);
+      await resultBatch.FlushIfNeededAsync();
     }
 
     async Task OnResult(TestRunResult result)
@@ -529,58 +530,106 @@ public class OperationExecutor(
     return (status, baseActions);
   }
 
-  private async Task BubbleStatusAsync(string leafId, HashSet<string> runningLeafIds, long operationId)
+  sealed class TestNodeStatusAggregator
+  {
+    public int Passed { get; private set; }
+    public int Failed { get; private set; }
+    public int Skipped { get; private set; }
+    public int Inconclusive { get; private set; }
+    public int Running { get; private set; }
+    public long MaxDuration { get; private set; }
+    public int ScopedLeaves { get; private set; }
+
+    public void Add(TestDetail? details)
+    {
+      ++ScopedLeaves;
+      if (details is null)
+      {
+        ++Running;
+        return;
+      }
+      switch (details.Outcome)
+      {
+        case "passed": ++Passed; break;
+        case "failed": ++Failed; break;
+        case "skipped": ++Skipped; break;
+        case "none": ++Inconclusive; break;
+      }
+      if (details.DurationMs is { } ms && ms > MaxDuration)
+      {
+        MaxDuration = ms;
+      }
+    }
+  }
+
+  private void BubbleStatus(RunResultBatch resultBatch, string leafId, HashSet<string> runningLeafIds)
   {
     var node = registry.Get(leafId);
-    var parentId = node?.ParentId;
-
+    if (node is null) return;
+    var parentId = node.ParentId;
+    var aggregators = new Dictionary<string, TestNodeStatusAggregator>();
     while (parentId is not null)
     {
-      var scopedLeaves = registry.GetLeafDescendants(parentId)
-          .Where(n => IsInScope(n.Id, runningLeafIds))
-          .ToList();
+      var n = registry.Get(parentId);
+      if (n is null) break;
+      aggregators.Add(n.Id, new());
+      parentId = n.ParentId;
+    }
 
+    if (aggregators.Count == 0) return;
+
+    var leaves = registry.GetAll()
+        .Where(n => n.Type
+          is NodeType.TestMethod
+          or NodeType.Subcase
+          or NodeType.ProbableTest
+          && IsInScope(n.Id, runningLeafIds))
+        .ToList();
+
+    foreach (var leaf in leaves)
+    {
+      var fetchedDetails = false;
+      TestDetail? details = null;
+      parentId = leaf.ParentId;
+      while (parentId is not null)
+      {
+        var n = registry.Get(parentId);
+        if (n is null) break;
+        if (!aggregators.TryGetValue(n.Id, out var tracker)) break;
+        if (!fetchedDetails)
+        {
+          details = detailStore.Get(leaf.Id);
+          fetchedDetails = true;
+        }
+        tracker.Add(details);
+        parentId = n.ParentId;
+      }
+    }
+
+    foreach (var (id, aggregator) in aggregators)
+    {
       logger.LogDebug("Bubble from {LeafId} at parent {ParentId}: scopedLeaves={Count}",
-          leafId, parentId, scopedLeaves.Count);
+          leafId, parentId, aggregator.ScopedLeaves);
 
-      if (scopedLeaves.Count == 0)
+      if (aggregator.Running > 0)
       {
-        parentId = registry.Get(parentId)?.ParentId;
-        continue;
+        resultBatch.Enqueue(new(id, new TestNodeStatus.Running()));
       }
-
-      var allComplete = scopedLeaves.All(n => detailStore.Get(n.Id) is not null);
-      if (!allComplete)
+      else
       {
-        await dispatcher.SendStatusAsync(parentId, new TestNodeStatus.Running(), operationId: operationId);
-        parentId = registry.Get(parentId)?.ParentId;
-        continue;
+        logger.LogDebug(
+            "Bubble parent {ParentId}: passed={Passed} failed={Failed} skipped={Skipped} inconclusive={Inconclusive}",
+            parentId, aggregator.Passed, aggregator.Failed, aggregator.Skipped, aggregator.Inconclusive);
+
+        var durationDisplay = FormatDuration(aggregator.MaxDuration);
+        var aggregateStatus = TestStatusPriority.AggregateTerminalStatus(
+            aggregator.Passed,
+            aggregator.Failed,
+            aggregator.Skipped,
+            aggregator.Inconclusive,
+            durationDisplay);
+        resultBatch.Enqueue(new(id, aggregateStatus));
       }
-
-      var passed = scopedLeaves.Count(n => detailStore.Get(n.Id)?.Outcome == "passed");
-      var failed = scopedLeaves.Count(n => detailStore.Get(n.Id)?.Outcome == "failed");
-      var skipped = scopedLeaves.Count(n => detailStore.Get(n.Id)?.Outcome == "skipped");
-      var inconclusive = scopedLeaves.Count(n => detailStore.Get(n.Id)?.Outcome == "none");
-
-      logger.LogDebug(
-          "Bubble parent {ParentId}: passed={Passed} failed={Failed} skipped={Skipped} inconclusive={Inconclusive}",
-          parentId, passed, failed, skipped, inconclusive);
-
-      var maxDuration = scopedLeaves
-          .Select(n => detailStore.Get(n.Id)?.DurationMs ?? 0)
-          .DefaultIfEmpty(0)
-          .Max();
-      var durationDisplay = FormatDuration(maxDuration);
-
-      var aggregateStatus = TestStatusPriority.AggregateTerminalStatus(
-          passed,
-          failed,
-          skipped,
-          inconclusive,
-          durationDisplay);
-
-      await dispatcher.SendStatusAsync(parentId, aggregateStatus, operationId: operationId);
-      parentId = registry.Get(parentId)?.ParentId;
     }
   }
 
