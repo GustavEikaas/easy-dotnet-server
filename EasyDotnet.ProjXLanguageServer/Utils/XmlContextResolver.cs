@@ -9,6 +9,7 @@ public enum CursorContextKind
   ProjectRoot,
   PropertyGroup,
   ItemGroup,
+  Target,
   InsideStartTag,
   InsideAttributeValue,
   InsideElementText,
@@ -44,13 +45,15 @@ public static class XmlContextResolver
     if (ctx.Kind == CursorContextKind.InsideStartTag)
     {
       var parent = ctx.ParentElementName;
-      return parent is not ("Project" or "PropertyGroup" or "ItemGroup");
+      return parent is not ("Project" or "PropertyGroup" or "ItemGroup" or "Target");
     }
     if (ctx.Kind == CursorContextKind.InsideElementText)
     {
       var name = ctx.ElementName;
       if (name == null)
         return true;
+      if (name is "Target")
+        return false;
       if (name is "Project" or "PropertyGroup" or "ItemGroup")
         return true;
       return !EasyDotnet.MsBuild.MsBuildProperties.GetAllPropertyNames().Any(n => string.Equals(n, name, StringComparison.Ordinal));
@@ -70,6 +73,7 @@ public static class XmlContextResolver
       "Project" => CursorContextKind.ProjectRoot,
       "PropertyGroup" => CursorContextKind.PropertyGroup,
       "ItemGroup" => CursorContextKind.ItemGroup,
+      "Target" => CursorContextKind.Target,
       _ => CursorContextKind.InsideStartTag,
     };
     return new CursorContext(kind, null, name, null, parent);
@@ -190,7 +194,9 @@ public static class XmlContextResolver
       if (element is XmlElementSyntax elementWithBody && IsInsideElementText(elementWithBody, position))
       {
         return new CursorContext(
-            CursorContextKind.InsideElementText,
+            string.Equals(element.Name, "Target", StringComparison.Ordinal)
+                ? CursorContextKind.Target
+                : CursorContextKind.InsideElementText,
             element,
             element.Name,
             null,

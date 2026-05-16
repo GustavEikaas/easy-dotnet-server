@@ -6,6 +6,15 @@ namespace EasyDotnet.ProjXLanguageServer.Services.CodeActions;
 
 internal static class RemoveElementAction
 {
+  public static CodeAction? BuildForElement(CsprojDocument doc, int rangeStart, int rangeEnd, string elementName, string title)
+  {
+    var element = AstSearch.FindElementOverlapping(doc.Root, rangeStart, rangeEnd, elementName);
+    if (element == null)
+      return null;
+
+    return Build(doc, element, title, CodeActionKind.RefactorRewrite, null);
+  }
+
   public static CodeAction? BuildForDiagnostic(CsprojDocument doc, Diagnostic diagnostic)
   {
     var code = diagnostic.Code?.Value?.ToString();
@@ -23,6 +32,11 @@ internal static class RemoveElementAction
     if (element == null)
       return null;
 
+    return Build(doc, element, title, CodeActionKind.QuickFix, diagnostic);
+  }
+
+  private static CodeAction Build(CsprojDocument doc, IXmlElementSyntax element, string title, CodeActionKind kind, Diagnostic? diagnostic)
+  {
     var node = (SyntaxNode)element;
     var deleteStart = node.SpanStart;
     var deleteEnd = node.SpanStart + node.Width;
@@ -41,7 +55,7 @@ internal static class RemoveElementAction
       NewText = string.Empty,
     };
 
-    return CodeActionBuilder.Build(doc, title, CodeActionKind.QuickFix, diagnostic, [edit]);
+    return CodeActionBuilder.Build(doc, title, kind, diagnostic, [edit]);
   }
 
   private static int FindLineStart(string text, int offset)

@@ -23,6 +23,8 @@ public class CodeActionService(IUserSecretsResolver userSecretsResolver) : ICode
     AddIfNotNull(actions, OpenSecretsAction.Build(doc, startOffset, endOffset, userSecretsResolver));
     AddIfNotNull(actions, ExpandSelfClosingAction.Build(doc, startOffset, endOffset));
     AddIfNotNull(actions, CollapseSelfClosingAction.Build(doc, startOffset, endOffset));
+    AddIfNotNull(actions, RemoveElementAction.BuildForElement(doc, startOffset, endOffset, "ProjectReference", "Remove this ProjectReference"));
+    AddIfNotNull(actions, RemoveElementAction.BuildForElement(doc, startOffset, endOffset, "PackageReference", "Remove this PackageReference"));
 
     foreach (var diagnostic in contextDiagnostics)
     {
