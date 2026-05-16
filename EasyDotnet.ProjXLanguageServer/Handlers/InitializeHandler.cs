@@ -4,11 +4,15 @@ using StreamJsonRpc;
 
 namespace EasyDotnet.ProjXLanguageServer.Handlers;
 
-public class InitializeHandler(ISemanticTokensService semanticTokensService) : BaseController
+public class InitializeHandler(
+    ISemanticTokensService semanticTokensService,
+    IProjXWorkspaceContext workspaceContext) : BaseController
 {
   [JsonRpcMethod("initialize", UseSingleObjectParameterDeserialization = true)]
   public Task<InitializeResult> InitializeAsync(InitializeParams param)
   {
+    workspaceContext.Initialize(param);
+
     var result = new InitializeResult
     {
       Capabilities = new ServerCapabilities

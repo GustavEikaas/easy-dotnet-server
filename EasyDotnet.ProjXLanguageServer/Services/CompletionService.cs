@@ -13,7 +13,11 @@ public interface ICompletionService
   Task<CompletionResult> GetCompletionsAsync(CsprojDocument doc, int line, int character, CancellationToken cancellationToken);
 }
 
-public class CompletionService(INugetSearchService nugetSearch, ILogger<CompletionService> logger) : ICompletionService
+public class CompletionService(
+    INugetSearchService nugetSearch,
+    ILogger<CompletionService> logger,
+    IProjXWorkspaceHierarchyService? hierarchyService = null,
+    ICentralPackageVersionService? centralPackageVersionService = null) : ICompletionService
 {
   private static readonly Dictionary<string, string[]> ValueCompletions = new(StringComparer.Ordinal)
   {
@@ -45,21 +49,21 @@ public class CompletionService(INugetSearchService nugetSearch, ILogger<Completi
       CursorContextKind.Target => Static(GetTargetCompletions()),
       CursorContextKind.InsideElementText => Static(GetInsideElementCompletions(ctx.ElementName)),
       CursorContextKind.InsideStartTag => Static(GetStartTagCompletions(ctx.ParentElementName)),
-      CursorContextKind.InsideAttributeValue => await GetAttributeValueCompletionsAsync(ctx, cancellationToken),
+      CursorContextKind.InsideAttributeValue => await GetAttributeValueCompletionsAsync(doc, ctx, cancellationToken),
       _ => Static([]),
     };
   }
 
   private static CompletionResult Static(CompletionItem[] items) => new(items, false);
 
-  private async Task<CompletionResult> GetAttributeValueCompletionsAsync(CursorContext ctx, CancellationToken cancellationToken)
+  private async Task<CompletionResult> GetAttributeValueCompletionsAsync(CsprojDocument doc, CursorContext ctx, CancellationToken cancellationToken)
   {
     if (ctx.ElementName == "Project" && ctx.AttributeName == "Sdk")
     {
       return Static(GetSdkCompletions());
     }
 
-    if (ctx.ElementName != "PackageReference")
+    if (ctx.ElementName is not ("PackageReference" or "PackageVersion"))
     {
       return Static([]);
     }
@@ -75,6 +79,24 @@ public class CompletionService(INugetSearchService nugetSearch, ILogger<Completi
             {
               return Static([]);
             }
+
+            if (ctx.ElementName == "PackageReference"
+                && await IsCentralPackageManagementEnabledAsync(doc, cancellationToken))
+            {
+              var centralPackages = await GetCentralPackageVersionsAsync(doc, cancellationToken);
+              var centralItems = centralPackages
+                  .Where(p => p.PackageId.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                  .Select(p => new CompletionItem
+                  {
+                    Label = p.PackageId,
+                    Kind = CompletionItemKind.Module,
+                    InsertText = p.PackageId,
+                    Detail = p.Version is null ? "central package version" : $"central package version ({p.Version})",
+                  })
+                  .ToArray();
+              return new CompletionResult(centralItems, IsIncomplete: false);
+            }
+
             var hits = await nugetSearch.SearchByPrefixAsync(prefix, take: 20, includePrerelease: false, cancellationToken);
             var items = hits.Select(h => new CompletionItem
             {
@@ -90,7 +112,8 @@ public class CompletionService(INugetSearchService nugetSearch, ILogger<Completi
           }
         case "Version":
           {
-            var packageId = ctx.Attributes?.GetValueOrDefault("Include");
+            var packageId = ctx.Attributes?.GetValueOrDefault("Include")
+              ?? ctx.Attributes?.GetValueOrDefault("Update");
             if (string.IsNullOrWhiteSpace(packageId))
             {
               return Static([]);
@@ -144,6 +167,46 @@ public class CompletionService(INugetSearchService nugetSearch, ILogger<Completi
     {
       logger.LogWarning(e, "NuGet completion failed for attribute {attr}", ctx.AttributeName);
       return Static([]);
+    }
+  }
+
+  private async Task<bool> IsCentralPackageManagementEnabledAsync(CsprojDocument doc, CancellationToken cancellationToken)
+  {
+    if (hierarchyService is null || !doc.Uri.IsFile)
+    {
+      return false;
+    }
+
+    try
+    {
+      var hierarchy = await hierarchyService.ResolveAsync(doc.Uri.LocalPath, cancellationToken);
+      return hierarchy.ManagePackageVersionsCentrally
+          && !string.IsNullOrWhiteSpace(hierarchy.DirectoryPackagesPropsPath);
+    }
+    catch (Exception e) when (e is not OperationCanceledException)
+    {
+      logger.LogWarning(e, "Failed to evaluate central package management state for {path}", doc.Uri.LocalPath);
+      return false;
+    }
+  }
+
+  private async Task<IReadOnlyList<CentralPackageVersionInfo>> GetCentralPackageVersionsAsync(
+      CsprojDocument doc,
+      CancellationToken cancellationToken)
+  {
+    if (centralPackageVersionService is null || !doc.Uri.IsFile)
+    {
+      return [];
+    }
+
+    try
+    {
+      return await centralPackageVersionService.GetPackageVersionsAsync(doc.Uri.LocalPath, cancellationToken);
+    }
+    catch (Exception e) when (e is not OperationCanceledException)
+    {
+      logger.LogWarning(e, "Failed to read central package versions for {path}", doc.Uri.LocalPath);
+      return [];
     }
   }
 
@@ -239,6 +302,7 @@ public class CompletionService(INugetSearchService nugetSearch, ILogger<Completi
   private static CompletionItem[] GetItemGroupCompletions() =>
   [
     new CompletionItem { Label = "PackageReference", Kind = CompletionItemKind.Class, InsertText = "PackageReference Include=\"$1\" Version=\"$2\" />", InsertTextFormat = InsertTextFormat.Snippet, Detail = "NuGet Package Reference", Documentation = new MarkupContent { Kind = MarkupKind.Markdown, Value = "Reference to a NuGet package" } },
+    new CompletionItem { Label = "PackageVersion", Kind = CompletionItemKind.Class, InsertText = "PackageVersion Include=\"$1\" Version=\"$2\" />", InsertTextFormat = InsertTextFormat.Snippet, Detail = "Central NuGet Package Version", Documentation = new MarkupContent { Kind = MarkupKind.Markdown, Value = "Central package version used by NuGet central package management" } },
     new CompletionItem { Label = "ProjectReference", Kind = CompletionItemKind.Class, InsertText = "ProjectReference Include=\"$1\" />", InsertTextFormat = InsertTextFormat.Snippet, Detail = "Project Reference", Documentation = new MarkupContent { Kind = MarkupKind.Markdown, Value = "Reference to another project in the solution" } },
     new CompletionItem { Label = "Reference", Kind = CompletionItemKind.Class, InsertText = "Reference Include=\"$1\" />", InsertTextFormat = InsertTextFormat.Snippet, Detail = "Assembly Reference" },
     new CompletionItem { Label = "Compile", Kind = CompletionItemKind.Class, InsertText = "Compile Include=\"$1\" />", InsertTextFormat = InsertTextFormat.Snippet, Detail = "Compile Item" },

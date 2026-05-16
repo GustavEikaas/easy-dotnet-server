@@ -9,11 +9,15 @@ public class CodeActionHandler(
     ICodeActionService codeActionService) : BaseController
 {
   [JsonRpcMethod("textDocument/codeAction", UseSingleObjectParameterDeserialization = true)]
-  public CodeAction[] GetCodeActions(CodeActionParams @params)
+  public async Task<CodeAction[]> GetCodeActions(CodeActionParams @params, CancellationToken cancellationToken)
   {
     var doc = documentManager.GetDocument(@params.TextDocument.Uri);
     if (doc == null)
       return [];
-    return codeActionService.GetCodeActions(doc, @params.Range, @params.Context?.Diagnostics ?? []);
+    return await codeActionService.GetCodeActionsAsync(
+        doc,
+        @params.Range,
+        @params.Context?.Diagnostics ?? [],
+        cancellationToken);
   }
 }

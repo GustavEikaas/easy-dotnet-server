@@ -10,6 +10,7 @@ public interface IDocumentManager
   string? GetDocumentContent(Uri uri);
   int GetDocumentVersion(Uri uri);
   CsprojDocument? GetDocument(Uri uri);
+  IReadOnlyCollection<CsprojDocument> GetOpenDocuments();
 }
 
 public class DocumentManager : IDocumentManager
@@ -29,4 +30,6 @@ public class DocumentManager : IDocumentManager
   public CsprojDocument? GetDocument(Uri uri) => _documents.TryGetValue(uri, out var doc) ? doc : null;
 
   public Uri? TryGetAnyDocumentUri() => _documents.Keys.FirstOrDefault();
+
+  public IReadOnlyCollection<CsprojDocument> GetOpenDocuments() => [.. _documents.Values];
 }

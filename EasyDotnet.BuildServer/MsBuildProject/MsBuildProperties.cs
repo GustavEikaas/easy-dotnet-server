@@ -930,6 +930,34 @@ public static class MsBuildProperties
           Deserialize: MsBuildValueParsers.AsBool
       );
 
+  public static readonly MsBuildProperty<bool> ManagePackageVersionsCentrally =
+      new(
+          Name: "ManagePackageVersionsCentrally",
+          Description: "Specifies whether NuGet central package management is enabled for this project.",
+          Deserialize: MsBuildValueParsers.AsBool
+      );
+
+  public static readonly MsBuildProperty<string?> DirectoryPackagesPropsPath =
+      new(
+          Name: "DirectoryPackagesPropsPath",
+          Description: "Specifies the evaluated Directory.Packages.props path imported for central package management.",
+          Deserialize: MsBuildValueParsers.AsPath
+      );
+
+  public static readonly MsBuildProperty<string?> DirectoryBuildPropsPath =
+      new(
+          Name: "DirectoryBuildPropsPath",
+          Description: "Specifies the evaluated Directory.Build.props path imported for this project.",
+          Deserialize: MsBuildValueParsers.AsPath
+      );
+
+  public static readonly MsBuildProperty<string?> DirectoryBuildTargetsPath =
+      new(
+          Name: "DirectoryBuildTargetsPath",
+          Description: "Specifies the evaluated Directory.Build.targets path imported for this project.",
+          Deserialize: MsBuildValueParsers.AsPath
+      );
+
   public static readonly MsBuildProperty<string?> MinimumMSBuildVersion =
       new(
           Name: "MinimumMSBuildVersion",
