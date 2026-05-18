@@ -4,7 +4,6 @@ using System.Reflection;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Logging;
 using EasyDotnet.IDE.Utils;
-using Microsoft.Build.Locator;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Serialization;
 using StreamJsonRpc;
@@ -146,48 +145,14 @@ public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService c
       if (dotIndex < 0 || !int.TryParse(versionStr[..dotIndex], out var major) || major <= 0)
         return "";
 
-      MSBuildLocator.AllowQueryAllRuntimeVersions = true;
-      var sdkInstance = MSBuildLocator.QueryVisualStudioInstances()
-          .Where(i => i.DiscoveryType == DiscoveryType.DotNetSdk && i.Version.Major == major)
-          .OrderByDescending(i => i.Version)
-          .FirstOrDefault()
-          ?? throw new InvalidOperationException($"global.json requires .NET {major} SDK but no matching SDK installation was found. Install the .NET {major} SDK and try again.");
-
-      var dotnetRoot = DeriveDotnetRoot(sdkInstance.MSBuildPath);
-      var runtimeDir = Path.Combine(dotnetRoot, "shared", "Microsoft.NETCore.App");
-
-      var best = (Directory.Exists(runtimeDir)
-          ? Directory.EnumerateDirectories(runtimeDir)
-              .Select(d => Version.TryParse(Path.GetFileName(d), out var v) ? v : null)
-              .OfType<Version>()
-              .Where(v => v.Major == major)
-              .MaxBy(v => v)
-          : null)
-          ?? throw new InvalidOperationException($"global.json requires .NET {major} but no matching runtime was found under '{runtimeDir}'. Install the .NET {major} runtime and try again.");
-
-      logger.LogInformation("global.json requires .NET {Major}; pinning BuildServer to --fx-version {Version}", major, best);
-      return $"--fx-version {best} ";
-    }
-    catch (InvalidOperationException)
-    {
-      throw;
+      logger.LogInformation("global.json requires .NET {Major}; pinning BuildServer to --fx-version {Major}.0.0 --roll-forward LatestMinor", major, major);
+      return $"--fx-version {major}.0.0 --roll-forward LatestMinor ";
     }
     catch (Exception ex)
     {
       logger.LogWarning(ex, "Failed to resolve --fx-version from global.json; falling back to default rollForward");
       return "";
     }
-  }
-
-  /// <summary>
-  /// Derives the dotnet install root from an MSBuildPath such as
-  /// /usr/share/dotnet/sdk/8.0.415/ → /usr/share/dotnet/
-  /// </summary>
-  private static string DeriveDotnetRoot(string msBuildPath)
-  {
-    var normalized = msBuildPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-    var sdkVersionDir = Path.GetDirectoryName(normalized) ?? normalized;
-    return Path.GetDirectoryName(sdkVersionDir) ?? sdkVersionDir;
   }
 
   private static class BuildHostLocator

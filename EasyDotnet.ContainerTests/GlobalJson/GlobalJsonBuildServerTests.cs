@@ -50,4 +50,27 @@ public sealed class GlobalJsonBuildServerTests : ContainerTestBase<MultiSdkLinux
     // The BuildServer must run on the .NET 8 runtime as required by global.json.
     Assert.Equal(8, diagnostics.RuntimeVersionMajor);
   }
+
+  /// <summary>
+  /// Guards against re-introducing exact-patch pinning. The workspace global.json
+  /// names a .NET 8 patch that is NOT installed in the container; the BuildServer
+  /// must still launch by rolling forward to the latest installed 8.x runtime.
+  /// </summary>
+  [Fact]
+  public async Task BuildServer_WithGlobalJsonPinningUninstalledPatch_StillLaunchesOnMatchingMajor()
+  {
+    using var ws = new TempWorkspaceBuilder()
+      .WithSolutionX()
+      .WithProject("ProjectAlpha")
+      .WithGlobalJson("8.0.999", "latestFeature")
+      .Build();
+
+    await InitializeWorkspaceAsync(ws);
+
+    var diagnostics = await Container.Rpc
+      .InvokeAsync<BuildServerDiagnosticsResponse>("diagnostics/buildserver")
+      .WaitAsync(TimeSpan.FromMinutes(2));
+
+    Assert.Equal(8, diagnostics.RuntimeVersionMajor);
+  }
 }
