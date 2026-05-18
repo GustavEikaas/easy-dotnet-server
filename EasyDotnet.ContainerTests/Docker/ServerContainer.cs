@@ -223,6 +223,19 @@ public abstract class ServerContainer : IAsyncDisposable
     }
   };
 
+  /// <summary>
+  /// Run a command inside the container and return its stdout, stderr, and exit code.
+  /// Tests use this to introspect the container environment (e.g. <c>dotnet --list-runtimes</c>).
+  /// </summary>
+  public async Task<(string Stdout, string Stderr, long ExitCode)> ExecAsync(IList<string> command, CancellationToken ct = default)
+  {
+    if (_container is null)
+      throw new InvalidOperationException("Container has not been started.");
+
+    var result = await _container.ExecAsync(command, ct);
+    return (result.Stdout ?? string.Empty, result.Stderr ?? string.Empty, result.ExitCode ?? 0);
+  }
+
   public async ValueTask DisposeAsync()
   {
     try
