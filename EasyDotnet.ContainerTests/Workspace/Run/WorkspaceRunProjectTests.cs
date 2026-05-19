@@ -67,6 +67,59 @@ public abstract class WorkspaceRunProjectTests<TContainer> : WorkspaceRunTestBas
   }
 
   [Fact]
+  public async Task Run_DefaultUseAppHost_DispatchesSdkComputedAppHost()
+  {
+    using var ws = new TempWorkspaceBuilder()
+      .WithSolutionX()
+      .WithProject("ProjectAlpha")
+      .Build();
+
+    await InitializeWorkspaceAsync(ws);
+
+    await BeginRun();
+    var job = await ReceiveRunCommandAsync();
+
+    Assert.NotEqual("dotnet", job.Command.Executable);
+    Assert.Contains("ProjectAlpha", job.Command.Executable);
+    Assert.DoesNotContain(job.Command.Arguments, a => a.EndsWith(".dll", StringComparison.OrdinalIgnoreCase));
+  }
+
+  [Fact]
+  public async Task Run_WithUseAppHostFalse_DispatchesDotnetExecDll()
+  {
+    using var ws = new TempWorkspaceBuilder()
+      .WithSolutionX()
+      .WithProject("ProjectAlpha", p => p.WithProperty("UseAppHost", "false"))
+      .Build();
+
+    await InitializeWorkspaceAsync(ws);
+
+    await BeginRun();
+    var job = await ReceiveRunCommandAsync();
+
+    Assert.Equal("dotnet", job.Command.Executable);
+    Assert.Equal("exec", job.Command.Arguments[0]);
+    Assert.Contains(job.Command.Arguments, a => a.EndsWith("ProjectAlpha.dll", StringComparison.OrdinalIgnoreCase));
+  }
+
+  [Fact]
+  public async Task Run_WithWinExeProject_TreatsProjectAsRunnable()
+  {
+    using var ws = new TempWorkspaceBuilder()
+      .WithSolutionX()
+      .WithProject("ProjectAlpha", p => p.AsWinExe())
+      .Build();
+
+    await InitializeWorkspaceAsync(ws);
+
+    await BeginRun();
+    var job = await ReceiveRunCommandAsync();
+
+    Assert.Equal(0, SelectionCallCount);
+    Assert.Contains("ProjectAlpha", job.Command.Executable);
+  }
+
+  [Fact]
   public async Task Run_WithPersistedProjectRemovedFromSolution_ClearsDefaultAndAutoSelectsRemainingProject()
   {
     using var ws = new TempWorkspaceBuilder()

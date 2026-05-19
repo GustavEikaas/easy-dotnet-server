@@ -52,8 +52,10 @@ public abstract class WorkspaceRunNoSolutionSingleFileTests<TContainer> : Worksp
 
     var job = await ReceiveRunCommandAsync();
 
-    Assert.Equal("dotnet", job.Command.Executable);
-    Assert.Contains(job.Command.Arguments, a => a.EndsWith("Hello.dll", StringComparison.OrdinalIgnoreCase));
+    Assert.True(
+      job.Command.Executable.Contains("Hello", StringComparison.OrdinalIgnoreCase)
+      || job.Command.Arguments.Any(a => a.EndsWith("Hello.dll", StringComparison.OrdinalIgnoreCase)),
+      "Expected the generated single-file output to be used as either the executable or the dotnet exec target.");
   }
 }
 
@@ -83,8 +85,7 @@ public abstract class WorkspaceRunNoSolutionSingleFileLegacySdkTests<TContainer>
 }
 
 /// <summary>
-/// Verifies that cliArgs are passed through to the run command. The compiled binary is the
-/// first argument, followed by "--" and the passthrough args.
+/// Verifies that cliArgs are passed through to the generated run command.
 /// </summary>
 public abstract class WorkspaceRunNoSolutionSingleFileWithArgsTests<TContainer> : WorkspaceRunTestBase<TContainer>
   where TContainer : ServerContainer, new()
@@ -103,18 +104,12 @@ public abstract class WorkspaceRunNoSolutionSingleFileWithArgsTests<TContainer> 
     var job = await ReceiveRunCommandAsync();
     var args = job.Command.Arguments;
 
-    var binaryArgIndex = args.FindIndex(a => a.EndsWith(".dll", StringComparison.OrdinalIgnoreCase));
-    var separatorIndex = args.IndexOf("--");
     var arg1Index = args.IndexOf("user-arg1");
     var arg2Index = args.IndexOf("user-arg2");
 
-    Assert.True(binaryArgIndex >= 0, "Expected compiled binary (.dll) in Arguments");
-    Assert.True(separatorIndex >= 0, "Expected -- separator before cliArgs");
     Assert.True(arg1Index >= 0, "Expected user-arg1 in Arguments");
     Assert.True(arg2Index >= 0, "Expected user-arg2 in Arguments");
 
-    Assert.True(binaryArgIndex < separatorIndex, "compiled binary must precede the -- separator");
-    Assert.True(separatorIndex < arg1Index, "cliArgs must follow the -- separator");
     Assert.Equal(arg1Index + 1, arg2Index);
   }
 }

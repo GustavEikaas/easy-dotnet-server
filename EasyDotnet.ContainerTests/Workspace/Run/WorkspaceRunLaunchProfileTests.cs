@@ -149,11 +149,11 @@ public abstract class WorkspaceRunLaunchProfileTests<TContainer> : WorkspaceRunT
 
   /// <summary>
   /// Verifies argument precedence when both a launch profile and cliArgs supply arguments:
-  ///   [targetPath, ...lpCommandLineArgs, "--", ...cliArgs]
+  ///   [sdk run arguments..., ...lpCommandLineArgs, ...cliArgs]
   ///
   /// LP args come first (no separator) so the binary receives them as normal flags.
-  /// cliArgs follow after "--" so they are passed through verbatim.
-  /// This matches the behaviour expected by ASP.NET Core and most .NET CLI apps.
+  /// cliArgs are application arguments and are appended without a literal "--",
+  /// matching the command shape produced by dotnet run after parsing.
   /// </summary>
   [Fact]
   public async Task Run_WithLaunchProfileArgsAndCliArgs_LpArgsPrecedeCliArgsSeparatedByDashDash()
@@ -184,16 +184,12 @@ public abstract class WorkspaceRunLaunchProfileTests<TContainer> : WorkspaceRunT
 
     var args = job.Command.Arguments;
     var lpFlagIndex = args.IndexOf("--lp-flag");
-    var separatorIndex = args.IndexOf("--");
     var userArgIndex = args.IndexOf("user-arg");
 
     Assert.True(lpFlagIndex >= 0, "Expected --lp-flag from launch profile commandLineArgs");
-    Assert.True(separatorIndex >= 0, "Expected -- separator before cliArgs");
     Assert.True(userArgIndex >= 0, "Expected user-arg from cliArgs");
 
-    // LP args must come before the -- separator, cliArgs must come after.
-    Assert.True(lpFlagIndex < separatorIndex, "LP args must precede the -- separator");
-    Assert.True(separatorIndex < userArgIndex, "cliArgs must follow the -- separator");
+    Assert.True(lpFlagIndex < userArgIndex, "LP args must precede cliArgs");
     Assert.Equal(lpFlagIndex + 1, args.IndexOf("lp-value")); // lp-value immediately follows --lp-flag
   }
 

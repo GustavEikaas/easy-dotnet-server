@@ -136,6 +136,8 @@ public static class DotnetProjectDeserializer
         BundledMSBuildVersion: bag.Get(MsBuildProperties.BundledMSBuildVersion),
         MSBuildBinPath: bag.Get(MsBuildProperties.MSBuildBinPath),
         DefaultAppHostRuntimeIdentifier: bag.Get(MsBuildProperties.DefaultAppHostRuntimeIdentifier),
+        RuntimeIdentifier: bag.Get(MsBuildProperties.RuntimeIdentifier),
+        UseAppHost: bag.Get(MsBuildProperties.UseAppHost),
         RunCommand: bag.Get(MsBuildProperties.RunCommand),
         RunArguments: bag.Get(MsBuildProperties.RunArguments),
         ProjectDepsFileName: bag.Get(MsBuildProperties.ProjectDepsFileName),

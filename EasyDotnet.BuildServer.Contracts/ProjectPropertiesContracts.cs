@@ -1,6 +1,10 @@
 namespace EasyDotnet.BuildServer.Contracts;
 
-public sealed record GetProjectPropertiesBatchRequest(string[] ProjectPaths, string? Configuration, string? Platform = null);
+public sealed record GetProjectPropertiesBatchRequest(
+    string[] ProjectPaths,
+    string? Configuration,
+    string? Platform = null,
+    bool ComputeRunArguments = false);
 
 public sealed record ProjectEvaluationResult(string ProjectPath, string? Configuration, string? TargetFramework, bool Success, ValidatedDotnetProject? Project, ProjectEvaluationError? Error);
 
@@ -139,6 +143,8 @@ public record DotnetProject
     string? BundledMSBuildVersion,
     string? MSBuildBinPath,
     string? DefaultAppHostRuntimeIdentifier,
+    string? RuntimeIdentifier,
+    bool UseAppHost,
     string? RunCommand,
     string? RunArguments,
     string? ProjectDepsFileName,
@@ -171,9 +177,13 @@ public sealed record ValidatedDotnetProject
   public required DotnetProject Raw { get; init; }
 
   public bool IsRunnable =>
-      OutputType.Equals("Exe", StringComparison.OrdinalIgnoreCase)
-      && !Raw.IsTestProject
-      && !Raw.IsTestingPlatformApplication;
+      !Raw.IsTestProject
+      && !Raw.IsTestingPlatformApplication
+      && (
+          Raw.HasRuntimeOutput
+          || !string.IsNullOrWhiteSpace(Raw.RunCommand)
+          || OutputType.Equals("Exe", StringComparison.OrdinalIgnoreCase)
+          || OutputType.Equals("WinExe", StringComparison.OrdinalIgnoreCase));
 
   public bool IsMTP => Raw.IsTestingPlatformApplication;
 

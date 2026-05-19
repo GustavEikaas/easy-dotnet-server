@@ -9,21 +9,22 @@ public readonly record struct PropertyCacheKey(
     string Configuration,
     string Platform,
     string TargetFramework,
-    string MsBuildVersion)
+    string MsBuildVersion,
+    bool ComputeRunArguments)
 {
-  public static PropertyCacheKey Create(string projectPath, string configuration, string? platform, string targetFramework, string msBuildVersion)
+  public static PropertyCacheKey Create(string projectPath, string configuration, string? platform, string targetFramework, string msBuildVersion, bool computeRunArguments)
   {
     var full = Path.GetFullPath(projectPath);
     if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
     {
       full = full.ToLowerInvariant();
     }
-    return new PropertyCacheKey(full, configuration, platform ?? string.Empty, targetFramework, msBuildVersion);
+    return new PropertyCacheKey(full, configuration, platform ?? string.Empty, targetFramework, msBuildVersion, computeRunArguments);
   }
 
   public string ToDiskFileName()
   {
-    var raw = $"{ProjectFullPath}|{Configuration}|{Platform}|{TargetFramework}|{MsBuildVersion}";
+    var raw = $"{ProjectFullPath}|{Configuration}|{Platform}|{TargetFramework}|{MsBuildVersion}|{ComputeRunArguments}";
     return Sha256Hex(raw)[..16] + ".props.json";
   }
 

@@ -3,6 +3,7 @@ using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.BuildServer.MsBuildProject;
 using EasyDotnet.BuildServer.MsBuildProject.Cache;
 using Microsoft.Build.Evaluation;
+using Microsoft.Build.Execution;
 using StreamJsonRpc;
 
 namespace EasyDotnet.BuildServer.Handlers;
@@ -134,7 +135,8 @@ public class ProjectPropertiesBatchHandler(PropertyCache cache, MsBuildInstance 
         globalProps["Configuration"],
         globalProps.TryGetValue("Platform", out var platform) ? platform : null,
         targetFramework ?? string.Empty,
-        msBuildInstance.Version.ToString());
+        msBuildInstance.Version.ToString(),
+        request.ComputeRunArguments);
 
     var entry = cache.GetOrEvaluate(
         key,
@@ -142,7 +144,9 @@ public class ProjectPropertiesBatchHandler(PropertyCache cache, MsBuildInstance 
         evaluate: () =>
         {
           var project = projectCollection.LoadProject(projectPath, globalProps, toolsVersion: null);
-          var props = ExtractProperties(project);
+          var props = request.ComputeRunArguments
+              ? ExtractPropertiesAfterComputeRunArguments(project)
+              : ExtractProperties(project);
           return (project, props);
         },
         CancellationToken.None);
@@ -224,6 +228,35 @@ public class ProjectPropertiesBatchHandler(PropertyCache cache, MsBuildInstance 
   }
 
   private static IReadOnlyDictionary<string, string?> ExtractProperties(Project project)
+  {
+    var propertyNames = MsBuildProperties.GetAllPropertyNames();
+    var dictionary = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+
+    foreach (var propertyName in propertyNames)
+    {
+      var value = project.GetPropertyValue(propertyName);
+      dictionary[propertyName] = string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
+    return dictionary;
+  }
+
+  private static IReadOnlyDictionary<string, string?> ExtractPropertiesAfterComputeRunArguments(Project project)
+  {
+    var instance = project.CreateProjectInstance();
+    if (instance.Targets.ContainsKey("ComputeRunArguments"))
+    {
+      var success = instance.Build(["ComputeRunArguments"], loggers: null);
+      if (!success)
+      {
+        throw new InvalidOperationException("ComputeRunArguments failed.");
+      }
+    }
+
+    return ExtractProperties(instance);
+  }
+
+  private static IReadOnlyDictionary<string, string?> ExtractProperties(ProjectInstance project)
   {
     var propertyNames = MsBuildProperties.GetAllPropertyNames();
     var dictionary = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);

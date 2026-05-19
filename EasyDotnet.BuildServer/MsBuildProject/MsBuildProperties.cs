@@ -958,6 +958,20 @@ public static class MsBuildProperties
           Deserialize: MsBuildValueParsers.AsString
       );
 
+  public static readonly MsBuildProperty<string?> RuntimeIdentifier =
+      new(
+          Name: "RuntimeIdentifier",
+          Description: "Specifies the runtime identifier (RID) for the build output.",
+          Deserialize: MsBuildValueParsers.AsString
+      );
+
+  public static readonly MsBuildProperty<bool> UseAppHost =
+      new(
+          Name: "UseAppHost",
+          Description: "Indicates whether the SDK should create and run a native apphost executable.",
+          Deserialize: MsBuildValueParsers.AsBool
+      );
+
   public static readonly MsBuildProperty<string?> RunCommand =
       new(
           Name: "RunCommand",
