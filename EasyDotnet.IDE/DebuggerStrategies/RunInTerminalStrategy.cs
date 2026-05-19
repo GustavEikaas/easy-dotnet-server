@@ -5,7 +5,6 @@ using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.Debugger;
 using EasyDotnet.Debugger.Messages;
 using EasyDotnet.IDE.Interfaces;
-using EasyDotnet.IDE.Models.Client;
 using EasyDotnet.IDE.Models.LaunchProfile;
 using EasyDotnet.IDE.Types;
 using EasyDotnet.IDE.Utils;
