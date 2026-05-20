@@ -23,6 +23,8 @@ public sealed record TestRunCommand(
 public sealed record TestTrackedJob(Guid JobId, TestRunCommand Command);
 
 public sealed record TestDisplayMessage(string Message);
+public sealed record TestOpenBufferRequest(string Path, int? Line);
+public sealed record TestPromptStringRequest(string Prompt, string? DefaultValue);
 
 public sealed record TestQuickFixItem(
   string FileName,
