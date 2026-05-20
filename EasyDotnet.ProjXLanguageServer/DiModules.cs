@@ -19,6 +19,8 @@ public static class DiModules
     services.AddSingleton<IDocumentManager, DocumentManager>();
     services.AddSingleton<IUserSecretsResolver, UserSecretsResolver>();
     services.AddSingleton<ICompletionService, CompletionService>();
+    services.AddSingleton(new LspProgressOptions());
+    services.AddSingleton<ILspProgressReporter, LspProgressReporter>();
     services.AddSingleton<IHoverService, HoverService>();
     services.AddSingleton<IDefinitionService, DefinitionService>();
     services.AddSingleton<ISemanticTokensService, SemanticTokensService>();
