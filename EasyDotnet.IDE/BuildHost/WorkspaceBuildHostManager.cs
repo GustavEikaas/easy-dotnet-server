@@ -48,18 +48,18 @@ public class WorkspaceBuildHostManager : IBuildHostManager
       [EnumeratorCancellation] CancellationToken ct)
   {
     var resolvedTargets = await ResolveTargetsAsync(request.ProjectPaths, request.Configuration, request.Platform, ct);
-    var fetchGroups = new Dictionary<(string Configuration, string Platform), List<string>>();
-    var tasksByTarget = new Dictionary<(string Path, string Configuration, string Platform), Task<List<ProjectEvaluationResult>>>();
+    var fetchGroups = new Dictionary<(string Configuration, string Platform, bool ComputeRunArguments), List<string>>();
+    var tasksByTarget = new Dictionary<(string Path, string Configuration, string Platform, bool ComputeRunArguments), Task<List<ProjectEvaluationResult>>>();
 
     foreach (var target in resolvedTargets)
     {
-      var cacheKey = (target.TargetPath, target.Configuration, target.Platform ?? "");
-      var (tcs, isNew) = _cache.GetOrRegister(target.TargetPath, target.Configuration, target.Platform);
+      var cacheKey = (target.TargetPath, target.Configuration, target.Platform ?? "", request.ComputeRunArguments);
+      var (tcs, isNew) = _cache.GetOrRegister(target.TargetPath, target.Configuration, target.Platform, request.ComputeRunArguments);
       tasksByTarget[cacheKey] = tcs.Task;
 
       if (isNew)
       {
-        var groupKey = (target.Configuration, target.Platform ?? "");
+        var groupKey = (target.Configuration, target.Platform ?? "", request.ComputeRunArguments);
         if (!fetchGroups.TryGetValue(groupKey, out var paths))
         {
           paths = [];
@@ -70,12 +70,12 @@ public class WorkspaceBuildHostManager : IBuildHostManager
     }
 
     var fetchTasks = fetchGroups
-        .Select(group => ExecuteBatchFetchAsync(group.Value, group.Key.Configuration, group.Key.Platform, ct))
+        .Select(group => ExecuteBatchFetchAsync(group.Value, group.Key.Configuration, group.Key.Platform, group.Key.ComputeRunArguments, ct))
         .ToList();
 
     foreach (var target in resolvedTargets)
     {
-      foreach (var result in await tasksByTarget[(target.TargetPath, target.Configuration, target.Platform ?? "")])
+      foreach (var result in await tasksByTarget[(target.TargetPath, target.Configuration, target.Platform ?? "", request.ComputeRunArguments)])
       {
         yield return result;
       }
@@ -89,9 +89,10 @@ public class WorkspaceBuildHostManager : IBuildHostManager
       string targetFramework,
       string? configuration = null,
       string? platform = null,
+      bool computeRunArguments = false,
       CancellationToken ct = default)
   {
-    var request = new GetProjectPropertiesBatchRequest([projectPath], configuration, platform);
+    var request = new GetProjectPropertiesBatchRequest([projectPath], configuration, platform, computeRunArguments);
 
     await foreach (var result in GetProjectPropertiesBatchAsync(request, ct))
     {
@@ -293,13 +294,14 @@ public class WorkspaceBuildHostManager : IBuildHostManager
       List<string> paths,
       string config,
       string? platform,
+      bool computeRunArguments,
       CancellationToken ct)
   {
     var buckets = paths.ToDictionary(p => p, _ => new List<ProjectEvaluationResult>());
 
     try
     {
-      var request = new GetProjectPropertiesBatchRequest([.. paths], config, platform);
+      var request = new GetProjectPropertiesBatchRequest([.. paths], config, platform, computeRunArguments);
 
       await foreach (var result in _innerManager.GetProjectPropertiesBatchAsync(request, ct))
       {
@@ -308,13 +310,13 @@ public class WorkspaceBuildHostManager : IBuildHostManager
 
       foreach (var path in paths)
       {
-        _cache.Complete(path, config, platform, buckets[path]);
+        _cache.Complete(path, config, platform, computeRunArguments, buckets[path]);
       }
     }
     catch (Exception ex)
     {
       _logger.LogError(ex, "Failed to evaluate MSBuild batch");
-      foreach (var path in paths) { _cache.Fault(path, config, platform, ex); }
+      foreach (var path in paths) { _cache.Fault(path, config, platform, computeRunArguments, ex); }
     }
   }
 

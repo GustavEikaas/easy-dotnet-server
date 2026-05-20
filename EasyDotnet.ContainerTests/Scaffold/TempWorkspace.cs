@@ -238,7 +238,8 @@ public sealed class TempWorkspaceBuilder
       </Project>
       """);
 
-    if (outputType.Equals("Exe", StringComparison.OrdinalIgnoreCase))
+    if (outputType.Equals("Exe", StringComparison.OrdinalIgnoreCase)
+        || outputType.Equals("WinExe", StringComparison.OrdinalIgnoreCase))
     {
       File.WriteAllText(Path.Combine(dir, "Program.cs"), $"""
         Console.WriteLine("Hello from {name}!");
@@ -440,6 +441,20 @@ public sealed class TempProjectBuilder
   public TempProjectBuilder AsLibrary()
   {
     OutputType = "Library";
+    return this;
+  }
+
+  public TempProjectBuilder AsWinExe()
+  {
+    OutputType = "WinExe";
+    return this;
+  }
+
+  public TempProjectBuilder WithProperty(string name, string value)
+  {
+    ExtraProperties = string.IsNullOrWhiteSpace(ExtraProperties)
+      ? $"<{name}>{value}</{name}>"
+      : $"{ExtraProperties}\n          <{name}>{value}</{name}>";
     return this;
   }
 

@@ -5,10 +5,10 @@ using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.Debugger;
 using EasyDotnet.Debugger.Messages;
 using EasyDotnet.IDE.Interfaces;
-using EasyDotnet.IDE.Models.Client;
 using EasyDotnet.IDE.Models.LaunchProfile;
 using EasyDotnet.IDE.Types;
 using EasyDotnet.IDE.Utils;
+using EasyDotnet.IDE.Workspace.Services;
 using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
 
@@ -60,24 +60,24 @@ public class RunInTerminalStrategy(
     var profileEnv = LaunchProfileUtils.GetEnvironmentVariables(_activeProfile);
     _hookSession = startupHookService.CreateSession(profileEnv);
 
-    var extraArgs = BuildCommandLineArgs();
-    var terminalArgs = new List<string>() { project.TargetPath };
-    terminalArgs.AddRange(extraArgs);
-
     var cwd = LaunchProfileUtils.ResolveCwd(_activeProfile, project.Raw);
     var terminalKind = ExtractTerminalKind(request.Arguments.Console);
+    var runCommand = WorkspaceRunCommandBuilder.Build(
+        project.Raw,
+        _activeProfile,
+        BuildCommandLineArgs(),
+        _hookSession.EnvironmentVariables);
 
     if (terminalKind == RunInTerminalKind.External)
     {
-      var runCommand = new RunCommand("dotnet", terminalArgs, cwd, _hookSession.EnvironmentVariables);
       _wrapperHandle = await appWrapperManager.GetOrSpawnAsync(CancellationToken.None);
       await _wrapperHandle.SendRunCommandAsync(Guid.NewGuid(), runCommand, CancellationToken.None);
     }
     else
     {
-      var runInTerminalReq = RunInTerminalRequest.Create(terminalKind, ["dotnet", .. terminalArgs]);
+      var runInTerminalReq = RunInTerminalRequest.Create(terminalKind, [runCommand.Executable, .. runCommand.Arguments]);
       runInTerminalReq.Arguments.Cwd = cwd;
-      runInTerminalReq.Arguments.Env = _hookSession.EnvironmentVariables;
+      runInTerminalReq.Arguments.Env = runCommand.EnvironmentVariables;
 
       logger.LogInformation("Sending runInTerminal request to Neovim: {payload}", JsonSerializer.Serialize(runInTerminalReq, _jsonSerializerOptions));
       var termResponse = await proxy.RunClientRequestAsync(runInTerminalReq, CancellationToken.None);
@@ -272,8 +272,6 @@ public class RunInTerminalStrategy(
   private string[] BuildCommandLineArgs()
   {
     var args = new List<string>();
-    if (_activeProfile?.CommandLineArgs is not null)
-      args.AddRange(LaunchProfileUtils.ParseCommandLineArgs(_activeProfile.CommandLineArgs, project.Raw));
     if (cliArgs is not null)
       args.AddRange(LaunchProfileUtils.ParseCommandLineArgs(cliArgs, project.Raw));
 

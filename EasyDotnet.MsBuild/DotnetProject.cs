@@ -133,6 +133,8 @@ public record DotnetProject
     string? BundledMSBuildVersion,
     string? MSBuildBinPath,
     string? DefaultAppHostRuntimeIdentifier,
+    string? RuntimeIdentifier,
+    bool UseAppHost,
     string? RunCommand,
     string? RunArguments,
     string? ProjectDepsFileName,

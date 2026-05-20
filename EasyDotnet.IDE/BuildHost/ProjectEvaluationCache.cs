@@ -18,7 +18,7 @@ public enum CacheInvalidationReason
 
 public sealed class ProjectEvaluationCache(ILogger<ProjectEvaluationCache> logger)
 {
-  private readonly ConcurrentDictionary<(string Path, string Config, string Platform), TaskCompletionSource<List<ProjectEvaluationResult>>> _store = new();
+  private readonly ConcurrentDictionary<(string Path, string Config, string Platform, bool ComputeRunArguments), TaskCompletionSource<List<ProjectEvaluationResult>>> _store = new();
 
   /// <summary>
   /// Fired when one or more entries are removed from the cache.
@@ -31,9 +31,9 @@ public sealed class ProjectEvaluationCache(ILogger<ProjectEvaluationCache> logge
   /// Returns (tcs, isNew) — isNew=true means the caller owns the fetch.
   /// </summary>
   public (TaskCompletionSource<List<ProjectEvaluationResult>> Tcs, bool IsNew) GetOrRegister(
-      string path, string config, string? platform)
+      string path, string config, string? platform, bool computeRunArguments = false)
   {
-    var key = (path, config, platform ?? "");
+    var key = (path, config, platform ?? "", computeRunArguments);
     var tcs = new TaskCompletionSource<List<ProjectEvaluationResult>>(TaskCreationOptions.RunContinuationsAsynchronously);
     var actual = _store.GetOrAdd(key, tcs);
     var isNew = ReferenceEquals(actual, tcs);
@@ -54,9 +54,9 @@ public sealed class ProjectEvaluationCache(ILogger<ProjectEvaluationCache> logge
   /// Marks a fetch as complete. Removes the entry if evaluation failed
   /// so the next caller retries rather than getting a cached failure.
   /// </summary>
-  public void Complete(string path, string config, string? platform, List<ProjectEvaluationResult> results)
+  public void Complete(string path, string config, string? platform, bool computeRunArguments, List<ProjectEvaluationResult> results)
   {
-    var key = (path, config, platform ?? "");
+    var key = (path, config, platform ?? "", computeRunArguments);
     var failed = results.Count == 0 || results.Exists(r => !r.Success);
 
     if (failed)
@@ -77,9 +77,9 @@ public sealed class ProjectEvaluationCache(ILogger<ProjectEvaluationCache> logge
   /// Faults a pending fetch and removes it from the cache so the next
   /// caller retries cleanly.
   /// </summary>
-  public void Fault(string path, string config, string? platform, Exception ex)
+  public void Fault(string path, string config, string? platform, bool computeRunArguments, Exception ex)
   {
-    var key = (path, config, platform ?? "");
+    var key = (path, config, platform ?? "", computeRunArguments);
     _store.TryRemove(key, out var tcs);
     tcs?.TrySetException(ex);
     logger.LogDebug("Cache faulted for {Path} [{Config}|{Platform}]: {Message}", path, config, platform ?? "", ex.Message);
@@ -101,7 +101,13 @@ public sealed class ProjectEvaluationCache(ILogger<ProjectEvaluationCache> logge
     }
     else
     {
-      _store.TryRemove((path, config, platform ?? ""), out _);
+      foreach (var key in _store.Keys.Where(key =>
+          string.Equals(key.Path, path, StringComparison.OrdinalIgnoreCase)
+          && string.Equals(key.Config, config, StringComparison.OrdinalIgnoreCase)
+          && string.Equals(key.Platform, platform ?? "", StringComparison.OrdinalIgnoreCase)).ToList())
+      {
+        _store.TryRemove(key, out _);
+      }
       logger.LogInformation("Cache invalidated for {Path} [{Config}|{Platform}]", path, config, platform ?? "");
     }
     Invalidated?.Invoke([path], CacheInvalidationReason.ExplicitInvalidate);

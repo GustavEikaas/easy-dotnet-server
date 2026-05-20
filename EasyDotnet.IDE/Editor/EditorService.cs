@@ -8,6 +8,7 @@ using EasyDotnet.IDE.Models.Client.Prompt;
 using EasyDotnet.IDE.Models.Client.Quickfix;
 using EasyDotnet.IDE.Picker;
 using EasyDotnet.IDE.Picker.Models;
+using EasyDotnet.IDE.Workspace.Services;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Editor;
@@ -239,25 +240,9 @@ public class EditorService(
     CancellationToken ct = default) => pickerService.RequestMultiLivePickerAsync(prompt, queryFactory, previewFactory, ct);
 
   private static RunCommand BuildRunCommand(RunProjectRequest request, Dictionary<string, string> hookEnv)
-  {
-    var args = new List<string> { request.Project.TargetPath! };
-
-    if (request.LaunchProfile?.CommandLineArgs is not null)
-    {
-      args.AddRange(LaunchProfileUtils.ParseCommandLineArgs(request.LaunchProfile.CommandLineArgs, request.Project));
-    }
-
-    if (request.AdditionalArguments is { Length: > 0 })
-    {
-      args.AddRange(request.AdditionalArguments);
-    }
-
-    var env = LaunchProfileUtils.GetEnvironmentVariables(request.LaunchProfile);
-    foreach (var kvp in hookEnv)
-    {
-      env[kvp.Key] = kvp.Value;
-    }
-
-    return new RunCommand("dotnet", [.. args], LaunchProfileUtils.ResolveCwd(request.LaunchProfile, request.Project), env);
-  }
+    => WorkspaceRunCommandBuilder.Build(
+        request.Project,
+        request.LaunchProfile,
+        request.AdditionalArguments,
+        hookEnv);
 }

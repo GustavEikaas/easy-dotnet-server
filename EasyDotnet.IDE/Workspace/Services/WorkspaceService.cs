@@ -80,7 +80,13 @@ public class WorkspaceService(
         return;
       }
 
-      await StartDebugSessionAsync(project, target.LaunchProfileName, request.CliArgs, ct);
+      var runnableProject = await ResolveProjectForRunAsync(project, ct);
+      if (runnableProject is null)
+      {
+        return;
+      }
+
+      await StartDebugSessionAsync(runnableProject, target.LaunchProfileName, request.CliArgs, ct);
     }
     catch (Exception ex)
     {
@@ -192,23 +198,7 @@ public class WorkspaceService(
 
     var additionalArgs = string.IsNullOrEmpty(cliArgs)
         ? null
-        : new[] { "--" }.Concat(CommandLineParser.SplitCommandLine(cliArgs)).ToArray();
-
-    var runRequest = new RunProjectRequest(
-        project.Raw,
-        launchProfile,
-        additionalArgs,
-        null,
-        OnPidReceived: pid =>
-        {
-          sessionRegistry.SetProcessInfo(sessionKey, new RunningProcessEntry(
-              sessionKey,
-              project.ProjectName,
-              project.ProjectFullPath,
-              project.TargetFramework,
-              pid));
-          logger.LogInformation("Registered running process {ProjectName} (PID {Pid})", project.ProjectName, pid);
-        });
+        : CommandLineParser.SplitCommandLine(cliArgs).ToArray();
 
     if (!await preBuildService.BuildBeforeRunAsync(project.ProjectFullPath, project.ProjectName, ct))
     {
@@ -217,6 +207,30 @@ public class WorkspaceService(
       return;
     }
 
+    var runnableProject = await ResolveProjectForRunAsync(project, ct);
+    if (runnableProject is null)
+    {
+      sessionRegistry.Release(sessionKey);
+      _ = NotifyRunningSessionsAsync();
+      return;
+    }
+
+    var runRequest = new RunProjectRequest(
+        runnableProject.Raw,
+        launchProfile,
+        additionalArgs,
+        null,
+        OnPidReceived: pid =>
+        {
+          sessionRegistry.SetProcessInfo(sessionKey, new RunningProcessEntry(
+              sessionKey,
+              runnableProject.ProjectName,
+              runnableProject.ProjectFullPath,
+              runnableProject.TargetFramework,
+              pid));
+          logger.LogInformation("Registered running process {ProjectName} (PID {Pid})", runnableProject.ProjectName, pid);
+        });
+
     Guid guid;
     try
     {
@@ -224,8 +238,8 @@ public class WorkspaceService(
     }
     catch (Exception ex)
     {
-      logger.LogError(ex, "Unexpected error while starting {ProjectName}", project.ProjectName);
-      await editorService.DisplayError($"Failed to run {project.ProjectName}: {ex.Message}");
+      logger.LogError(ex, "Unexpected error while starting {ProjectName}", runnableProject.ProjectName);
+      await editorService.DisplayError($"Failed to run {runnableProject.ProjectName}: {ex.Message}");
       sessionRegistry.Release(sessionKey);
       _ = NotifyRunningSessionsAsync();
       return;
@@ -236,15 +250,15 @@ public class WorkspaceService(
       try
       {
         var exitCode = await editorProcessManagerService.WaitForExitAsync(guid);
-        logger.LogInformation("{ProjectName} exited with code {ExitCode}", project.ProjectName, exitCode);
+        logger.LogInformation("{ProjectName} exited with code {ExitCode}", runnableProject.ProjectName, exitCode);
         if (exitCode != 0 && exitCode != 134)
         {
-          await editorService.DisplayError($"{project.ProjectName} exited with code {exitCode}");
+          await editorService.DisplayError($"{runnableProject.ProjectName} exited with code {exitCode}");
         }
       }
       catch (Exception ex)
       {
-        logger.LogError(ex, "Unexpected error while monitoring {ProjectName}", project.ProjectName);
+        logger.LogError(ex, "Unexpected error while monitoring {ProjectName}", runnableProject.ProjectName);
       }
       finally
       {
@@ -267,7 +281,33 @@ public class WorkspaceService(
       return;
     }
 
-    await StartDebugSessionAsync(project, null, cliArgs, ct);
+    var runnableProject = await ResolveProjectForRunAsync(project, ct);
+    if (runnableProject is null)
+    {
+      return;
+    }
+
+    await StartDebugSessionAsync(runnableProject, null, cliArgs, ct);
+  }
+
+  private async Task<ValidatedDotnetProject?> ResolveProjectForRunAsync(
+      ValidatedDotnetProject project,
+      CancellationToken ct)
+  {
+    buildHostManager.InvalidateCache(project.ProjectFullPath);
+    var resolved = await buildHostManager.GetProjectAsync(
+        project.ProjectFullPath,
+        project.TargetFramework,
+        computeRunArguments: true,
+        ct: ct);
+
+    if (resolved is not null)
+    {
+      return resolved;
+    }
+
+    await editorService.DisplayError($"Failed to compute run command for {project.ProjectName}");
+    return null;
   }
 
   private async Task<ValidatedDotnetProject?> ConvertSingleFileToProjectAsync(string filePath, CancellationToken ct)
