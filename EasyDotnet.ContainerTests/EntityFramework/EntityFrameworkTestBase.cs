@@ -1,7 +1,7 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
 using System.Threading.Channels;
-using System.Collections.Concurrent;
 using DotNet.Testcontainers.Builders;
 using EasyDotnet.ContainerTests.Docker;
 using EasyDotnet.ContainerTests.Scaffold;
