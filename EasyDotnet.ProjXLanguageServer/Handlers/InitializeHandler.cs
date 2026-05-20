@@ -16,7 +16,8 @@ public class InitializeHandler(ISemanticTokensService semanticTokensService) : B
         CompletionProvider = new CompletionOptions
         {
           ResolveProvider = true,
-          TriggerCharacters = ["<", ">", "\""]
+          TriggerCharacters = ["<", ">", "\""],
+          WorkDoneProgress = true
         },
         TextDocumentSync = new TextDocumentSyncOptions
         {
