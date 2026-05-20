@@ -13,7 +13,10 @@ public interface ICompletionService
   Task<CompletionResult> GetCompletionsAsync(CsprojDocument doc, int line, int character, CancellationToken cancellationToken);
 }
 
-public class CompletionService(INugetSearchService nugetSearch, ILogger<CompletionService> logger) : ICompletionService
+public class CompletionService(
+    INugetSearchService nugetSearch,
+    ILspProgressReporter progressReporter,
+    ILogger<CompletionService> logger) : ICompletionService
 {
   private static readonly Dictionary<string, string[]> ValueCompletions = new(StringComparer.Ordinal)
   {
@@ -75,7 +78,11 @@ public class CompletionService(INugetSearchService nugetSearch, ILogger<Completi
             {
               return Static([]);
             }
-            var hits = await nugetSearch.SearchByPrefixAsync(prefix, take: 20, includePrerelease: false, cancellationToken);
+            var hits = await progressReporter.RunWithDelayedProgressAsync(
+                "Searching NuGet",
+                $"Searching packages for '{prefix}'...",
+                ct => nugetSearch.SearchByPrefixAsync(prefix, take: 20, includePrerelease: false, ct),
+                cancellationToken);
             var items = hits.Select(h => new CompletionItem
             {
               Label = h.Id,
@@ -95,7 +102,11 @@ public class CompletionService(INugetSearchService nugetSearch, ILogger<Completi
             {
               return Static([]);
             }
-            var versions = await nugetSearch.GetVersionsAsync(packageId, includePrerelease: true, cancellationToken);
+            var versions = await progressReporter.RunWithDelayedProgressAsync(
+                "Searching NuGet",
+                $"Fetching versions for {packageId}...",
+                ct => nugetSearch.GetVersionsAsync(packageId, includePrerelease: true, ct),
+                cancellationToken);
             var latestStable = versions.FirstOrDefault(v => !v.IsPrerelease);
             var latestAny = versions.FirstOrDefault();
 
