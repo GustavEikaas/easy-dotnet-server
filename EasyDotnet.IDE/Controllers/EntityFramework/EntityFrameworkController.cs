@@ -109,16 +109,23 @@ public class EntityFrameworkController(
         choices,
         (m, _) =>
         {
-          var filePath = Path.Combine(projectDir, "Migrations", $"{m.SafeName ?? m.Name}.cs");
+          var filePath = GetMigrationFilePath(projectDir, m);
           return Task.FromResult<PreviewResult>(new PreviewResult.File(filePath));
         },
         cancellationToken);
 
     if (selected is null) return;
 
-    var selectedFileName = selected.SafeName ?? selected.Name;
-    var migrationFilePath = Path.Combine(projectDir, "Migrations", $"{selectedFileName}.cs");
-    await editorService.RequestOpenBuffer(migrationFilePath);
+    await editorService.RequestOpenBuffer(GetMigrationFilePath(projectDir, selected));
+  }
+
+  internal static string GetMigrationFilePath(string projectDir, Migration migration)
+  {
+    var fileName = string.IsNullOrWhiteSpace(migration.Id)
+      ? migration.SafeName ?? migration.Name
+      : migration.Id;
+
+    return Path.Combine(projectDir, "Migrations", $"{fileName}.cs");
   }
 
   [JsonRpcMethod("ef/database-update")]
