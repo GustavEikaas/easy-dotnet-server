@@ -303,7 +303,7 @@ public sealed class EfFakeDotnetSdk10LinuxContainer() : LinuxServerContainer("mc
       data:     "id": "20260520083538_Add_Maintenance_Notification",
       data:     "name": "Add_Maintenance_Notification",
       data:     "safeName": "Add_Maintenance_Notification",
-      data:     "applied": true
+      data:     "applied": null
       data:   }
       data: ]
       EOF

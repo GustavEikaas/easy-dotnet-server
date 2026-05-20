@@ -1,3 +1,4 @@
+using System.Text.Json;
 using EasyDotnet.IDE.EntityFramework;
 
 namespace EasyDotnet.IDE.Tests.EntityFramework;
@@ -67,5 +68,25 @@ public class EfToolOutputParserTests
     await Assert.That(result.ErrorMessage).IsNull();
     await Assert.That(result.InfoMessages).IsEmpty();
     await Assert.That(result.ErrorMessages).IsEmpty();
+  }
+
+  [Test]
+  public async Task DeserializeMigration_WithNullApplied_AllowsEfJson()
+  {
+    const string json = """
+      [
+        {
+          "id": "20260306111737_Initial",
+          "name": "Initial",
+          "safeName": "Initial",
+          "applied": null
+        }
+      ]
+      """;
+
+    var migrations = JsonSerializer.Deserialize<List<Migration>>(json);
+
+    await Assert.That(migrations).IsNotNull();
+    await Assert.That(migrations![0].Applied).IsNull();
   }
 }

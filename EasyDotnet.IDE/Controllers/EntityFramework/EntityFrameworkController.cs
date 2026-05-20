@@ -99,7 +99,7 @@ public class EntityFrameworkController(
     var choices = migrations.AsEnumerable().Reverse()
         .Select(m =>
         {
-          var label = m.Applied ? $"✓ {m.Name}" : $"  {m.Name}";
+          var label = m.Applied == true ? $"✓ {m.Name}" : $"  {m.Name}";
           return new PickerChoice<Migration>(m.Id, label, m);
         })
         .ToArray();
