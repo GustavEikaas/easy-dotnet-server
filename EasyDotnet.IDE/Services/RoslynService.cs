@@ -1,7 +1,6 @@
+using EasyDotnet.BuildServer.Contracts;
 using System.Threading.Channels;
 using EasyDotnet.Controllers.Roslyn;
-using EasyDotnet.IDE.Interfaces;
-using EasyDotnet.MsBuild;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.MSBuild;
@@ -131,11 +130,11 @@ public class RoslynService(ILogger<RoslynService> logService)
 
     try
     {
-      if (FileTypes.IsAnySolutionFile(targetPath))
+      if (DotnetFileTypes.IsAnySolutionFile(targetPath))
       {
         solution = await workspace.OpenSolutionAsync(targetPath).ConfigureAwait(false);
       }
-      else if (FileTypes.IsAnyProjectFile(targetPath))
+      else if (DotnetFileTypes.IsAnyProjectFile(targetPath))
       {
         var project = await workspace.OpenProjectAsync(targetPath).ConfigureAwait(false);
         solution = project.Solution;
@@ -147,7 +146,7 @@ public class RoslynService(ILogger<RoslynService> logService)
     }
     catch (InvalidOperationException ex)
     {
-      throw new InvalidOperationException($"Failed to open {(FileTypes.IsAnySolutionFile(targetPath) ? "solution" : "project")}: {ex.Message}", ex);
+      throw new InvalidOperationException($"Failed to open {(DotnetFileTypes.IsAnySolutionFile(targetPath) ? "solution" : "project")}: {ex.Message}", ex);
     }
     catch (FileNotFoundException ex)
     {
@@ -155,11 +154,11 @@ public class RoslynService(ILogger<RoslynService> logService)
     }
     catch (IOException ex)
     {
-      throw new IOException($"IO error while opening {(FileTypes.IsAnySolutionFile(targetPath) ? "solution" : "project")}: {ex.Message}", ex);
+      throw new IOException($"IO error while opening {(DotnetFileTypes.IsAnySolutionFile(targetPath) ? "solution" : "project")}: {ex.Message}", ex);
     }
     catch (UnauthorizedAccessException ex)
     {
-      throw new UnauthorizedAccessException($"Access denied to {(FileTypes.IsAnySolutionFile(targetPath) ? "solution" : "project")}: {ex.Message}", ex);
+      throw new UnauthorizedAccessException($"Access denied to {(DotnetFileTypes.IsAnySolutionFile(targetPath) ? "solution" : "project")}: {ex.Message}", ex);
     }
 
     var allDocuments = solution.Projects.SelectMany(project => project.Documents);

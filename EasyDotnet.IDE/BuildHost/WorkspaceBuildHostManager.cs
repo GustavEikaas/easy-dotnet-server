@@ -3,7 +3,6 @@ using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Models.Solution;
 using EasyDotnet.IDE.Workspace.BuildConfiguration;
-using EasyDotnet.MsBuild;
 using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.IDE.BuildHost;
@@ -354,7 +353,7 @@ public class WorkspaceBuildHostManager : IBuildHostManager
   }
 
   private static string? ResolveExplicitPlatform(string targetPath, string? platform) =>
-      FileTypes.IsAnySolutionFile(targetPath)
+      DotnetFileTypes.IsAnySolutionFile(targetPath)
           ? platform
           : MsBuildPlatform.ToProjectPlatform(platform);
 
@@ -366,7 +365,7 @@ public class WorkspaceBuildHostManager : IBuildHostManager
 
     foreach (var targetPath in targetPaths)
     {
-      if (!FileTypes.IsAnySolutionFile(targetPath))
+      if (!DotnetFileTypes.IsAnySolutionFile(targetPath))
       {
         expanded.Add(targetPath);
         continue;

@@ -233,14 +233,14 @@
 
 ## ProjectReferenceController
 
-### `msbuild/add-project-reference-interactive`
+### `project/add-reference-interactive`
 | Parameter | Type | Optional |
 |-----------|------|----------|
 | request | ProjectReferenceRequest |   |
 
 **Returns:** `Task`
 
-### `msbuild/remove-project-reference-interactive`
+### `project/remove-reference-interactive`
 | Parameter | Type | Optional |
 |-----------|------|----------|
 | request | ProjectReferenceRequest |   |
@@ -421,50 +421,6 @@ _No parameters_
 
 **Returns:** `Task<IAsyncEnumerable<NugetPackageMetadata>>`
 
----
-
-## MsBuildController
-
-### `msbuild/add-project-reference`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| projectPath | string |   |
-| targetPath | string |   |
-
-**Returns:** `Task<bool>`
-
-### `msbuild/list-package-reference`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| projectPath | string |   |
-| targetFramework | string |   |
-
-**Returns:** `Task<IAsyncEnumerable<PackageReference>>`
-
-### `msbuild/list-project-reference`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| projectPath | string |   |
-
-**Returns:** `Task<List<string>>`
-
-### `msbuild/project-properties`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| request | ProjectPropertiesRequest |   |
-
-**Returns:** `Task<DotnetProjectV1>`
-
-### `msbuild/remove-project-reference`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| projectPath | string |   |
-| targetPath | string |   |
-
-**Returns:** `Task<bool>`
-
----
-
 ## InitializeController
 
 ### `initialize`
@@ -568,4 +524,3 @@ _No parameters_
 **Returns:** `Task`
 
 ---
-

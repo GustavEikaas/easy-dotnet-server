@@ -14,7 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\EasyDotnet.MsBuild\EasyDotnet.MsBuild.csproj" />
+    <ProjectReference Include="..\EasyDotnet.BuildServer.Contracts\EasyDotnet.BuildServer.Contracts.csproj" />
     <ProjectReference Include="..\EasyDotnet.Nuget\EasyDotnet.Nuget.csproj" />
   </ItemGroup>
 

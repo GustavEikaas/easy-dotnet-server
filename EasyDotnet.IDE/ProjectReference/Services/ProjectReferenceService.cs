@@ -6,7 +6,7 @@ namespace EasyDotnet.IDE.ProjectReference.Services;
 public class ProjectReferenceService(
     IClientService clientService,
     ISolutionService solutionService,
-    IMsBuildService msBuildService,
+    ProjectReferenceCliService projectReferenceCliService,
     IEditorService editorService)
 {
   public async Task AddProjectReferenceInteractiveAsync(string projectPath, CancellationToken ct)
@@ -14,7 +14,7 @@ public class ProjectReferenceService(
     var fullProjectPath = Path.GetFullPath(projectPath);
     var solutionFilePath = clientService.RequireSolutionFile();
 
-    var existingRefs = await msBuildService.GetProjectReferencesAsync(fullProjectPath, ct);
+    var existingRefs = await projectReferenceCliService.GetProjectReferencesAsync(fullProjectPath, ct);
     var existingRefPaths = existingRefs
         .Select(Path.GetFullPath)
         .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -40,7 +40,7 @@ public class ProjectReferenceService(
     var selection = await editorService.RequestSelection("Select project to add as reference", options);
     if (selection is null) return;
 
-    await msBuildService.AddProjectReferenceAsync(fullProjectPath, selection.Id, ct);
+    await projectReferenceCliService.AddProjectReferenceAsync(fullProjectPath, selection.Id, ct);
     await editorService.DisplayMessage($"Reference to '{Path.GetFileNameWithoutExtension(selection.Id)}' added");
   }
 
@@ -48,7 +48,7 @@ public class ProjectReferenceService(
   {
     var fullProjectPath = Path.GetFullPath(projectPath);
 
-    var refs = await msBuildService.GetProjectReferencesAsync(fullProjectPath, ct);
+    var refs = await projectReferenceCliService.GetProjectReferencesAsync(fullProjectPath, ct);
     if (refs.Count == 0)
     {
       await editorService.DisplayWarning("No project references found");
@@ -63,7 +63,7 @@ public class ProjectReferenceService(
     var selection = await editorService.RequestSelection("Select project reference to remove", options);
     if (selection is null) return;
 
-    await msBuildService.RemoveProjectReferenceAsync(fullProjectPath, selection.Id, ct);
+    await projectReferenceCliService.RemoveProjectReferenceAsync(fullProjectPath, selection.Id, ct);
     await editorService.DisplayMessage($"Reference to '{Path.GetFileNameWithoutExtension(selection.Id)}' removed");
   }
 }

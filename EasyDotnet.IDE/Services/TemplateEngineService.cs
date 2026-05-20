@@ -1,4 +1,4 @@
-using EasyDotnet.IDE.Interfaces;
+using EasyDotnet.IDE.Sdk;
 using EasyDotnet.IDE.TemplateEngine.PostActionHandlers;
 using Microsoft.TemplateEngine.Abstractions;
 using Microsoft.TemplateEngine.Abstractions.Installer;
@@ -11,7 +11,7 @@ using Microsoft.VisualStudio.Threading;
 namespace EasyDotnet.IDE.Services;
 
 public class TemplateEngineService(
-  IMsBuildService msBuildService,
+  SdkService sdkService,
   PostActionProcessor postActionProcessor)
 {
   private static readonly Dictionary<string, string> NoNameTemplates = new(StringComparer.OrdinalIgnoreCase)
@@ -40,7 +40,7 @@ public class TemplateEngineService(
   {
     using var bootstrapper = new Bootstrapper(_host, virtualizeConfiguration: false, loadDefaultComponents: true);
 
-    var templatesFolder = Path.Join(msBuildService.GetDotnetSdkBasePath(), "templates");
+    var templatesFolder = Path.Join(sdkService.GetDotnetSdkBasePath(), "templates");
     if (!Directory.Exists(templatesFolder)) return;
 
     var highestVersionDir = Directory.GetDirectories(templatesFolder).ToList()
@@ -78,7 +78,7 @@ public class TemplateEngineService(
     var template = templates.FirstOrDefault(x => x.Identity == identity)
                        ?? throw new Exception($"Failed to find template with id {identity}");
 
-    var monikers = msBuildService.QuerySdkInstallations().Select(x => x.Moniker).ToList();
+    var monikers = sdkService.QuerySdkInstallations().Select(x => x.Moniker).ToList();
 
     return [.. template.ParameterDefinitions
             .Where(p => p.Precedence.PrecedenceDefinition != PrecedenceDefinition.Implicit)

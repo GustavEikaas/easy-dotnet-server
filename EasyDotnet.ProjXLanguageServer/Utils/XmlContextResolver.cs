@@ -1,4 +1,5 @@
 using EasyDotnet.ProjXLanguageServer.Services;
+using EasyDotnet.BuildServer.Contracts;
 using Microsoft.Language.Xml;
 
 namespace EasyDotnet.ProjXLanguageServer.Utils;
@@ -56,7 +57,7 @@ public static class XmlContextResolver
         return false;
       if (name is "Project" or "PropertyGroup" or "ItemGroup")
         return true;
-      return !EasyDotnet.MsBuild.MsBuildProperties.GetAllPropertyNames().Any(n => string.Equals(n, name, StringComparison.Ordinal));
+      return !MsBuildPropertyCatalog.GetAllPropertyNames().Any(n => string.Equals(n, name, StringComparison.Ordinal));
     }
     return false;
   }

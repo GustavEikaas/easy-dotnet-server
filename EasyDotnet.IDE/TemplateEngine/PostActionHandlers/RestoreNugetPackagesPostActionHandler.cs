@@ -1,7 +1,6 @@
 using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.IDE.Editor;
 using EasyDotnet.IDE.Interfaces;
-using EasyDotnet.MsBuild;
 using Microsoft.Extensions.FileSystemGlobbing;
 using Microsoft.Extensions.Logging;
 using Microsoft.TemplateEngine.Abstractions;
@@ -83,7 +82,7 @@ public class RestoreNugetPackagesPostActionHandler(
 
     foreach (var output in primaryOutputs)
     {
-      if (FileTypes.IsAnyProjectFile(output.Path))
+      if (DotnetFileTypes.IsAnyProjectFile(output.Path))
       {
         var fullPath = Path.IsPathRooted(output.Path)
             ? output.Path
@@ -136,7 +135,7 @@ public class RestoreNugetPackagesPostActionHandler(
 
     foreach (var output in primaryOutputs)
     {
-      if (!FileTypes.IsAnyProjectFile(output.Path))
+      if (!DotnetFileTypes.IsAnyProjectFile(output.Path))
         continue;
 
       var normalizedPath = output.Path
