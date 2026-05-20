@@ -16,6 +16,8 @@ public sealed class EntityFrameworkMigrationsTests : EntityFrameworkTestBase<EfF
     var openBuffer = await ReceiveOpenBufferAsync();
     await listTask;
 
+    Assert.Equal(MigrationId, picker.Choices[0].Id);
+    Assert.Equal(InitialMigrationId, picker.Choices[1].Id);
     Assert.Contains(picker.Choices, c => c.Id == MigrationId);
     Assert.Equal(expectedPath, openBuffer.Path);
     Assert.True(File.Exists(openBuffer.Path), $"Expected openBuffer path to exist: {openBuffer.Path}");
@@ -43,7 +45,12 @@ public sealed class EntityFrameworkMigrationsTests : EntityFrameworkTestBase<EfF
 
     await BeginApplyMigration();
     var job = await ReceiveRunCommandAsync();
+    var migrationPrompt = Assert.Single(
+      PromptSelectionRequests,
+      request => request.Prompt == "Select migration to apply");
 
+    Assert.Equal(MigrationId, migrationPrompt.Choices[0].Id);
+    Assert.Equal(InitialMigrationId, migrationPrompt.Choices[1].Id);
     Assert.Equal("dotnet-ef", job.Command.Executable);
     Assert.Equal("database", job.Command.Arguments[0]);
     Assert.Equal("update", job.Command.Arguments[1]);
