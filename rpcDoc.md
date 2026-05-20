@@ -421,6 +421,8 @@ _No parameters_
 
 **Returns:** `Task<IAsyncEnumerable<NugetPackageMetadata>>`
 
+---
+
 ## InitializeController
 
 ### `initialize`
@@ -524,3 +526,4 @@ _No parameters_
 **Returns:** `Task`
 
 ---
+
