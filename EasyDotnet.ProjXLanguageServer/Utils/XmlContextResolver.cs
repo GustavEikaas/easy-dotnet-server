@@ -1,5 +1,5 @@
-using EasyDotnet.ProjXLanguageServer.Services;
 using EasyDotnet.BuildServer.Contracts;
+using EasyDotnet.ProjXLanguageServer.Services;
 using Microsoft.Language.Xml;
 
 namespace EasyDotnet.ProjXLanguageServer.Utils;
