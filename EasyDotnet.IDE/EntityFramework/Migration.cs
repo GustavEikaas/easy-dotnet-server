@@ -3,5 +3,5 @@ namespace EasyDotnet.IDE.EntityFramework;
 public sealed record Migration(
     string Id,
     string Name,
-    bool Applied,
+    bool? Applied,
     string? SafeName = null);

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
 using System.Threading.Channels;
@@ -14,8 +15,12 @@ public abstract class EntityFrameworkTestBase<TContainer> : ContainerTestBase<TC
 {
   protected const string MigrationId = "20260520083538_Add_Maintenance_Notification";
   protected const string MigrationName = "Add_Maintenance_Notification";
+  protected const string InitialMigrationId = "20260519070000_Initial";
+  protected const string InitialMigrationName = "Initial";
 
   private static readonly TimeSpan RequestTimeout = TimeSpan.FromMinutes(3);
+
+  private readonly ConcurrentQueue<TestPromptSelectionRequest> _selectionRequests = new();
 
   private readonly Channel<(TestPickerRequest Request, TaskCompletionSource<string[]?> Reply)> _pickers =
     Channel.CreateUnbounded<(TestPickerRequest, TaskCompletionSource<string[]?>)>();
@@ -36,6 +41,7 @@ public abstract class EntityFrameworkTestBase<TContainer> : ContainerTestBase<TC
     Channel.CreateUnbounded<TestQuickFixItem[]>();
 
   protected string? PromptStringResponse { get; set; }
+  protected TestPromptSelectionRequest[] PromptSelectionRequests => [.. _selectionRequests];
 
   protected override void ConfigureRpc(JsonRpc rpc) =>
     rpc.AddLocalRpcTarget(new RpcHandlers(this), new JsonRpcTargetOptions { DisposeOnDisconnect = false });
@@ -112,6 +118,14 @@ public abstract class EntityFrameworkTestBase<TContainer> : ContainerTestBase<TC
     var migrationsDir = Path.Combine(project.Dir, "Migrations");
     Directory.CreateDirectory(migrationsDir);
 
+    File.WriteAllText(Path.Combine(migrationsDir, $"{InitialMigrationId}.cs"), """
+      namespace App.Migrations;
+
+      internal sealed class Initial
+      {
+      }
+      """);
+
     File.WriteAllText(Path.Combine(migrationsDir, $"{MigrationId}.cs"), """
       namespace App.Migrations;
 
@@ -169,8 +183,11 @@ public abstract class EntityFrameworkTestBase<TContainer> : ContainerTestBase<TC
   private sealed class RpcHandlers(EntityFrameworkTestBase<TContainer> test)
   {
     [JsonRpcMethod("promptSelection", UseSingleObjectParameterDeserialization = true)]
-    public Task<string?> PromptSelection(TestPromptSelectionRequest request) =>
-      Task.FromResult<string?>(request.Choices[0].Id);
+    public Task<string?> PromptSelection(TestPromptSelectionRequest request)
+    {
+      test._selectionRequests.Enqueue(request);
+      return Task.FromResult<string?>(request.Choices[0].Id);
+    }
 
     [JsonRpcMethod("promptString", UseSingleObjectParameterDeserialization = true)]
     public Task<string?> PromptString(TestPromptStringRequest request) =>
@@ -277,10 +294,16 @@ public sealed class EfFakeDotnetSdk10LinuxContainer() : LinuxServerContainer("mc
       info: Build succeeded.
       data: [
       data:   {
+      data:     "id": "20260519070000_Initial",
+      data:     "name": "Initial",
+      data:     "safeName": "Initial",
+      data:     "applied": true
+      data:   },
+      data:   {
       data:     "id": "20260520083538_Add_Maintenance_Notification",
       data:     "name": "Add_Maintenance_Notification",
       data:     "safeName": "Add_Maintenance_Notification",
-      data:     "applied": true
+      data:     "applied": null
       data:   }
       data: ]
       EOF

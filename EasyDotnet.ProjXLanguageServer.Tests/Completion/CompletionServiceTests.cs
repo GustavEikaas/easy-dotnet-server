@@ -28,6 +28,21 @@ public class CompletionServiceTests
   }
 
   [Test]
+  public async Task StaticCompletion_DoesNotReportProgress()
+  {
+    var progress = new FakeLspProgressReporter();
+    var sut = CompletionTestFactory.Create(progress: progress);
+
+    var text = "<Project>\n<ItemGroup>\n@CURSOR\n</ItemGroup>\n</Project>";
+    var (line, character) = Docs.PositionAt(text, "@CURSOR");
+    var clean = text.Replace("@CURSOR", string.Empty);
+
+    await sut.GetCompletionsAsync(Docs.Make(clean), line, character, default);
+
+    await Assert.That(progress.Calls).IsEqualTo(0);
+  }
+
+  [Test]
   public async Task TargetBody_OffersMessageTask()
   {
     var text = "<Project>\n<Target Name=\"Build\">\n@CURSOR\n</Target>\n</Project>";

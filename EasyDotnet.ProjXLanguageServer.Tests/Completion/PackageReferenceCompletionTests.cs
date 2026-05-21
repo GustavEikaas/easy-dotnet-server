@@ -23,7 +23,8 @@ public class PackageReferenceCompletionTests
         new NugetPackageHit("nuget.org", "NewtonSoft.Whatever", "1.0.0", null, 100, null),
       ]
     };
-    var sut = CompletionTestFactory.Create(fake);
+    var progress = new FakeLspProgressReporter();
+    var sut = CompletionTestFactory.Create(fake, progress);
 
     var text = "<Project>\n<ItemGroup>\n<PackageReference Include=\"Newt@CURSOR\" />\n</ItemGroup>\n</Project>";
     var (line, character, clean) = PositionFor(text);
@@ -31,6 +32,9 @@ public class PackageReferenceCompletionTests
     var result = await sut.GetCompletionsAsync(Docs.Make(clean), line, character, default);
 
     await Assert.That(fake.SearchCalls).IsEqualTo(1);
+    await Assert.That(progress.Calls).IsEqualTo(1);
+    await Assert.That(progress.LastTitle).IsEqualTo("Searching NuGet");
+    await Assert.That(progress.LastMessage).IsEqualTo("Searching packages for 'Newt'...");
     await Assert.That(result.IsIncomplete).IsTrue();
     await Assert.That(result.Items.Any(i => i.Label == "Newtonsoft.Json")).IsTrue();
   }
@@ -39,7 +43,8 @@ public class PackageReferenceCompletionTests
   public async Task IncludeAttribute_EmptyPrefix_DoesNotCallNuget()
   {
     var fake = new FakeNugetSearchService();
-    var sut = CompletionTestFactory.Create(fake);
+    var progress = new FakeLspProgressReporter();
+    var sut = CompletionTestFactory.Create(fake, progress);
 
     var text = "<Project>\n<ItemGroup>\n<PackageReference Include=\"@CURSOR\" />\n</ItemGroup>\n</Project>";
     var (line, character, clean) = PositionFor(text);
@@ -47,6 +52,7 @@ public class PackageReferenceCompletionTests
     var result = await sut.GetCompletionsAsync(Docs.Make(clean), line, character, default);
 
     await Assert.That(fake.SearchCalls).IsEqualTo(0);
+    await Assert.That(progress.Calls).IsEqualTo(0);
     await Assert.That(result.Items.Length).IsEqualTo(0);
   }
 
@@ -76,7 +82,8 @@ public class PackageReferenceCompletionTests
         return [NuGetVersion.Parse("13.0.3"), NuGetVersion.Parse("12.0.3")];
       }
     };
-    var sut = CompletionTestFactory.Create(fake);
+    var progress = new FakeLspProgressReporter();
+    var sut = CompletionTestFactory.Create(fake, progress);
 
     var text = "<Project>\n<ItemGroup>\n<PackageReference Include=\"Newtonsoft.Json\" Version=\"@CURSOR\" />\n</ItemGroup>\n</Project>";
     var (line, character, clean) = PositionFor(text);
@@ -84,6 +91,9 @@ public class PackageReferenceCompletionTests
     var result = await sut.GetCompletionsAsync(Docs.Make(clean), line, character, default);
 
     await Assert.That(capturedId).IsEqualTo("Newtonsoft.Json");
+    await Assert.That(progress.Calls).IsEqualTo(1);
+    await Assert.That(progress.LastTitle).IsEqualTo("Searching NuGet");
+    await Assert.That(progress.LastMessage).IsEqualTo("Fetching versions for Newtonsoft.Json...");
     await Assert.That(result.Items.Any(i => i.Label == "13.0.3")).IsTrue();
     await Assert.That(result.Items[0].Label).IsEqualTo("latest");
     await Assert.That(result.Items[0].InsertText).IsEqualTo("13.0.3");
@@ -141,7 +151,8 @@ public class PackageReferenceCompletionTests
   public async Task VersionAttribute_WithoutInclude_DoesNotCallNuget()
   {
     var fake = new FakeNugetSearchService();
-    var sut = CompletionTestFactory.Create(fake);
+    var progress = new FakeLspProgressReporter();
+    var sut = CompletionTestFactory.Create(fake, progress);
 
     var text = "<Project>\n<ItemGroup>\n<PackageReference Version=\"@CURSOR\" />\n</ItemGroup>\n</Project>";
     var (line, character, clean) = PositionFor(text);
@@ -149,6 +160,7 @@ public class PackageReferenceCompletionTests
     var result = await sut.GetCompletionsAsync(Docs.Make(clean), line, character, default);
 
     await Assert.That(fake.VersionCalls).IsEqualTo(0);
+    await Assert.That(progress.Calls).IsEqualTo(0);
     await Assert.That(result.Items.Length).IsEqualTo(0);
   }
 }
