@@ -7,7 +7,7 @@ namespace EasyDotnet.IDE.TemplateEngine.PostActionHandlers;
 public class EasyDotnetAddToSolutionPostActionHandler(ISolutionService solutionService, IClientService clientService) : IPostActionHandler
 {
   public static readonly Guid Id = Guid.Parse("76F7B4BE-5570-4E66-A13F-D22A05FA5F1D");
-  public static readonly string ParameterKey = "easy-dotnet.addToSolution";
+  public static readonly string ParameterKey = "addToSolution";
 
   public Guid ActionId => Id;
 

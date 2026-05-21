@@ -15,7 +15,8 @@ public abstract class TemplateInstantiateTestBase<TContainer> : ContainerTestBas
     await foreach (var t in stream.WithCancellation(cancellationToken))
     {
       if (t.Name.Contains(shortName, StringComparison.OrdinalIgnoreCase) ||
-          t.DisplayName.Contains(shortName, StringComparison.OrdinalIgnoreCase))
+          t.DisplayName.Contains(shortName, StringComparison.OrdinalIgnoreCase) ||
+          t.Identity.Contains(shortName, StringComparison.OrdinalIgnoreCase))
       {
         return t;
       }
