@@ -16,7 +16,8 @@ public abstract class TemplateInstantiateTestBase<TContainer> : ContainerTestBas
     {
       if (t.Name.Contains(shortName, StringComparison.OrdinalIgnoreCase) ||
           t.DisplayName.Contains(shortName, StringComparison.OrdinalIgnoreCase) ||
-          t.Identity.Contains(shortName, StringComparison.OrdinalIgnoreCase))
+          t.Identity.Contains(shortName, StringComparison.OrdinalIgnoreCase) ||
+          t.ShortNames.Any(sn => sn.Equals(shortName, StringComparison.OrdinalIgnoreCase)))
       {
         return t;
       }
@@ -48,5 +49,5 @@ public abstract class TemplateInstantiateTestBase<TContainer> : ContainerTestBas
         cancellationToken);
 }
 
-public sealed record TestTemplateInfo(string DisplayName, string Name, string Identity, string? Type, bool IsNameRequired);
+public sealed record TestTemplateInfo(string DisplayName, string Name, string Identity, string? Type, bool IsNameRequired, IReadOnlyList<string> ShortNames);
 public sealed record TestTemplateParameter(string Name, string? DefaultValue, string? DataType, string? Description, bool IsRequired);

@@ -15,7 +15,7 @@ public class TemplateController(TemplateEngineService templateEngineService) : B
     await templateEngineService.EnsureInstalled();
     var templates = await templateEngineService.GetTemplatesAsync();
 
-    return templates.Where(x => x.GetLanguage() != "VB").Select(x => new DotnetNewTemplateResponse(string.IsNullOrWhiteSpace(x.GetLanguage()) ? x.Name : $"{x.Name} ({x.GetLanguage()})", x.Name, x.Identity, x.GetTemplateType(), TemplateEngineService.IsNameRequired(x.Identity))).ToBatchedAsyncEnumerable(5);
+    return templates.Where(x => x.GetLanguage() != "VB").Select(x => new DotnetNewTemplateResponse(string.IsNullOrWhiteSpace(x.GetLanguage()) ? x.Name : $"{x.Name} ({x.GetLanguage()})", x.Name, x.Identity, x.GetTemplateType(), TemplateEngineService.IsNameRequired(x.Identity), x.ShortNameList)).ToBatchedAsyncEnumerable(5);
   }
 
   [JsonRpcMethod("template/parameters")]
