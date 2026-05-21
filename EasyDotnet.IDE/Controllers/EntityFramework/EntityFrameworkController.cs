@@ -66,7 +66,7 @@ public class EntityFrameworkController(
 
     var selectedMigration = await editorService.RequestSelection(
       "Select migration to apply",
-      [.. migrations.Select(m => new SelectionOption(m.Id, m.Name))])
+      [.. migrations.AsEnumerable().Reverse().Select(m => new SelectionOption(m.Id, m.Name))])
       ?? throw new InvalidOperationException("No migration selected");
 
     _ = editorService.RequestRunCommandAsync(new RunCommand(
@@ -96,10 +96,10 @@ public class EntityFrameworkController(
     }
 
     var projectDir = Path.GetDirectoryName(efProject)!;
-    var choices = migrations
+    var choices = migrations.AsEnumerable().Reverse()
         .Select(m =>
         {
-          var label = m.Applied ? $"✓ {m.Name}" : $"  {m.Name}";
+          var label = m.Applied == true ? $"✓ {m.Name}" : $"  {m.Name}";
           return new PickerChoice<Migration>(m.Id, label, m);
         })
         .ToArray();
