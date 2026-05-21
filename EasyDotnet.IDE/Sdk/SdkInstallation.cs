@@ -1,3 +1,3 @@
-namespace EasyDotnet.IDE.Models.MsBuild.SDK;
+namespace EasyDotnet.IDE.Sdk;
 
 public sealed record SdkInstallation(string Name, string Moniker, Version Version, string MSBuildPath, string VisualStudioRootPath);

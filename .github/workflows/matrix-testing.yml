@@ -35,4 +35,3 @@ jobs:
         run: |
           dotnet run --no-build --project ./EasyDotnet.Debugger.Tests
           dotnet run --no-build --project ./EasyDotnet.IDE.Tests/EasyDotnet.IDE.Tests.csproj
-          dotnet run --no-build --project ./EasyDotnet.MsBuild.Tests/EasyDotnet.MsBuild.Tests.csproj

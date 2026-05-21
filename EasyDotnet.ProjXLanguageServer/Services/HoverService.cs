@@ -1,5 +1,5 @@
 using System.Text.RegularExpressions;
-using EasyDotnet.MsBuild;
+using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.ProjXLanguageServer.Utils;
 using Microsoft.VisualStudio.LanguageServer.Protocol;
 
@@ -41,7 +41,7 @@ public partial class HoverService(IUserSecretsResolver userSecretsResolver) : IH
       }
     }
 
-    var info = MsBuildProperties.GetAllPropertiesWithDocs()
+    var info = MsBuildPropertyCatalog.GetAllPropertiesWithDocs()
         .FirstOrDefault(p => string.Equals(p.Name, ctx.ElementName, StringComparison.Ordinal));
     if (info != null)
     {

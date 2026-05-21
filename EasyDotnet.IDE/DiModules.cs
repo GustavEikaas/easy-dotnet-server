@@ -125,7 +125,6 @@ public static class DiModules
 
     services.AddTransient<IProgressScopeFactory, ProgressScopeFactory>();
     services.AddTransient<IStartupHookService, StartupHookService>();
-    services.AddTransient<IMsBuildService, MsBuildService>();
     services.AddTransient<NewFileService>();
     services.AddTransient<UserSecretsService>();
     services.AddTransient<UserSecretsFlowService>();
@@ -148,6 +147,7 @@ public static class DiModules
     services.AddTransient<GlobalJsonService>();
 
     services.AddTransient<ProjectReferenceService>();
+    services.AddTransient<ProjectReferenceCliService>();
     services.AddTransient<SolutionManagementService>();
     services.AddTransient<PostActionProcessor>();
     services.AddTransient<IPostActionHandler, RunScriptPostActionHandler>();

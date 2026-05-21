@@ -1,6 +1,6 @@
+using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Settings;
-using EasyDotnet.MsBuild;
 using Microsoft.VisualStudio.SolutionPersistence.Model;
 
 namespace EasyDotnet.IDE.Workspace.BuildConfiguration;
@@ -108,7 +108,7 @@ public sealed class WorkspaceBuildConfigurationService(
       WorkspaceBuildConfiguration activeWorkspaceConfiguration,
       IReadOnlyDictionary<string, SolutionProjectModel> projectsByPath)
   {
-    if (FileTypes.IsAnySolutionFile(targetPath))
+    if (DotnetFileTypes.IsAnySolutionFile(targetPath))
     {
       return new ResolvedBuildConfiguration(
           targetPath,

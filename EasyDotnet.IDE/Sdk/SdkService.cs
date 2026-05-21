@@ -1,4 +1,3 @@
-using EasyDotnet.IDE.Models.MsBuild.SDK;
 using Microsoft.Build.Locator;
 
 namespace EasyDotnet.IDE.Sdk;

@@ -1,4 +1,4 @@
-using EasyDotnet.MsBuild;
+using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.Nuget;
 using EasyDotnet.ProjXLanguageServer.Utils;
 using Microsoft.Extensions.Logging;
@@ -236,7 +236,7 @@ public class CompletionService(
 
   private static CompletionItem[] GetPropertyGroupCompletions() =>
   [
-    .. MsBuildProperties.GetAllPropertiesWithDocs().Select(p => new CompletionItem
+    .. MsBuildPropertyCatalog.GetAllPropertiesWithDocs().Select(p => new CompletionItem
     {
       Label = p.Name,
       Kind = CompletionItemKind.Property,
