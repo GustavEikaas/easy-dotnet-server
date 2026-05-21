@@ -58,12 +58,12 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
         "EasyDotnet", "RoslynLogs");
     Directory.CreateDirectory(roslynLogDir);
 
-    var startInfo = new ProcessStartInfo("dotnet")
+    var startInfo = new ProcessStartInfo("roslyn-language-server")
     {
       UseShellExecute = false,
     };
 
-    startInfo.ArgumentList.Add(roslynDllPath);
+    // startInfo.ArgumentList.Add(roslynDllPath);
     startInfo.ArgumentList.Add("--stdio");
     startInfo.ArgumentList.Add("--logLevel=Information");
     startInfo.ArgumentList.Add("--extensionLogDirectory");
