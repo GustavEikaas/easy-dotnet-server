@@ -57,9 +57,17 @@ public class TestRunnerController(TestRunnerService service) : BaseController
   public GetResultsResult GetResults(NodeRequest request) =>
       service.GetResults(request.Id);
 
+  [JsonRpcMethod("testrunner/neotestPositions", UseSingleObjectParameterDeserialization = true)]
+  public List<NeotestPositionDto> GetNeotestPositions(NeotestPositionsRequest request) =>
+      service.GetNeotestPositions(request.FilePath);
+
+  [JsonRpcMethod("testrunner/neotestBatchResults", UseSingleObjectParameterDeserialization = true)]
+  public Dictionary<string, NeotestBatchResultDto> GetNeotestBatchResults(NeotestBatchResultsRequest request) =>
+      service.GetNeotestBatchResults(request.Ids);
+
   [JsonRpcMethod("testrunner/syncFile", UseSingleObjectParameterDeserialization = true)]
-  public SyncFileResult SyncFile(SyncFileRequest request) =>
-          service.SyncFile(request);
+  public Task<SyncFileResult> SyncFileAsync(SyncFileRequest request) =>
+          service.SyncFileAsync(request);
 
   [JsonRpcMethod("testrunner/getBuildErrors", UseSingleObjectParameterDeserialization = true)]
   public Task GetBuildErrorsAsync(NodeRequest request) =>

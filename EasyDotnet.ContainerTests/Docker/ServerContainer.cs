@@ -17,6 +17,7 @@ namespace EasyDotnet.ContainerTests.Docker;
 public abstract class ServerContainer : IAsyncDisposable
 {
   private const string NugetContainerPath = "/nuget";
+  private static readonly TimeSpan StartupTimeout = TimeSpan.FromMinutes(2);
 
   // Unique per instance so parallel containers don't share the tool install directory.
   private readonly string _toolInstallPath = $"/tmp/tool-{Guid.NewGuid():N}";
@@ -65,23 +66,53 @@ public abstract class ServerContainer : IAsyncDisposable
         await StartContainerCoreAsync(ct);
         return;
       }
-      catch (Exception ex) when (IsSegfault(ex) && attempt < maxAttempts)
+      catch (Exception ex) when (IsSegfault(ex))
       {
         // Intermittent SIGSEGV (exit 139) under resource pressure — clean up and retry.
         lastException = ex;
         await TryDisposeContainerAsync();
 
+        if (attempt == maxAttempts)
+          break;
+
         // Back off briefly so concurrent containers have time to release resources.
         await Task.Delay(TimeSpan.FromSeconds(attempt * 2), ct);
+      }
+      catch (Exception ex)
+      {
+        var logs = await TryGetLogsAsync(ct);
+        await TryDisposeContainerAsync();
+
+        if (IsDotnetFirstTimeUseMutexFailure(ex, logs))
+        {
+          lastException = ex;
+
+          if (attempt == maxAttempts)
+            break;
+
+          await Task.Delay(TimeSpan.FromSeconds(attempt * 2), ct);
+          continue;
+        }
+
+        throw new InvalidOperationException(
+          $"Container failed to start on attempt {attempt}.{logs}",
+          ex);
       }
     }
 
     throw new InvalidOperationException(
-      $"Container segfaulted on all {maxAttempts} attempts.", lastException);
+      $"Container failed to start on all {maxAttempts} attempts.", lastException);
   }
 
   private static bool IsSegfault(Exception ex) =>
     ex is ContainerNotRunningException && ex.Message.Contains("139");
+
+  private static bool IsDotnetFirstTimeUseMutexFailure(Exception ex, string logs)
+  {
+    var text = ex + logs;
+    return text.Contains("NuGet.Common.Migrations.MigrationRunner", StringComparison.Ordinal) &&
+           text.Contains("Object synchronization method was called from an unsynchronized block of code", StringComparison.Ordinal);
+  }
 
   private async Task StartContainerCoreAsync(CancellationToken ct)
   {
@@ -100,7 +131,11 @@ public abstract class ServerContainer : IAsyncDisposable
       .WithCommand("sh", "-c", installAndRun)
       .WithOutputConsumer(Consume.RedirectStdoutAndStderrToConsole())
       .WithWaitStrategy(Wait.ForUnixContainer()
-        .UntilMessageIsLogged("Named pipe server started:"));
+        .UntilMessageIsLogged(
+          "Named pipe server started:",
+          o => o
+            .WithTimeout(StartupTimeout)
+            .WithInterval(TimeSpan.FromSeconds(1))));
 
     builder = ConfigureContainer(builder);
 
@@ -116,7 +151,7 @@ public abstract class ServerContainer : IAsyncDisposable
     var pipeName = match[(match.LastIndexOf(':') + 1)..].Trim();
 
     _pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
-    await _pipe.ConnectAsync(5_000, ct);
+    await _pipe.ConnectAsync(10_000, ct);
 
     Rpc = new JsonRpc(new HeaderDelimitedMessageHandler(_pipe, _pipe, CreateFormatter()));
     Rpc.TraceSource.Switch.Level = SourceLevels.All;
@@ -133,9 +168,25 @@ public abstract class ServerContainer : IAsyncDisposable
       if (_container is not null)
         await _container.DisposeAsync();
     }
-    catch
+    catch (Exception ex)
     {
-      // Best-effort cleanup before retry.
+      Console.WriteLine($"Container cleanup failed: {ex}");
+    }
+  }
+
+  private async Task<string> TryGetLogsAsync(CancellationToken ct)
+  {
+    if (_container is null)
+      return string.Empty;
+
+    try
+    {
+      var (stdout, stderr) = await _container.GetLogsAsync(timestampsEnabled: false, ct: ct);
+      return $"\nStdout:\n{stdout}\nStderr:\n{stderr}";
+    }
+    catch (Exception logEx)
+    {
+      return $"\nUnable to read container logs: {logEx.Message}";
     }
   }
 
@@ -174,11 +225,34 @@ public abstract class ServerContainer : IAsyncDisposable
 
   public async ValueTask DisposeAsync()
   {
-    Rpc?.Dispose();
-    _pipe?.Dispose();
-    await _container.DisposeAsync();
+    try
+    {
+      Rpc?.Dispose();
+    }
+    catch (Exception ex)
+    {
+      Console.WriteLine($"RPC dispose failed: {ex}");
+    }
 
-    if (Directory.Exists(_toolInstallPath))
-      Directory.Delete(_toolInstallPath, recursive: true);
+    try
+    {
+      _pipe?.Dispose();
+    }
+    catch (Exception ex)
+    {
+      Console.WriteLine($"Pipe dispose failed: {ex}");
+    }
+
+    await TryDisposeContainerAsync();
+
+    try
+    {
+      if (Directory.Exists(_toolInstallPath))
+        Directory.Delete(_toolInstallPath, recursive: true);
+    }
+    catch (Exception ex)
+    {
+      Console.WriteLine($"Tool install cleanup failed for '{_toolInstallPath}': {ex}");
+    }
   }
 }

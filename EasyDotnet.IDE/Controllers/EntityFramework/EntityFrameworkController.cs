@@ -4,6 +4,7 @@ using EasyDotnet.IDE.EntityFramework;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Models.Client;
 using EasyDotnet.IDE.Models.Client.Prompt;
+using EasyDotnet.IDE.Picker.Models;
 using EasyDotnet.IDE.Services;
 using StreamJsonRpc;
 
@@ -65,7 +66,7 @@ public class EntityFrameworkController(
 
     var selectedMigration = await editorService.RequestSelection(
       "Select migration to apply",
-      [.. migrations.Select(m => new SelectionOption(m.Id, m.Name))])
+      [.. migrations.AsEnumerable().Reverse().Select(m => new SelectionOption(m.Id, m.Name))])
       ?? throw new InvalidOperationException("No migration selected");
 
     _ = editorService.RequestRunCommandAsync(new RunCommand(
@@ -73,6 +74,58 @@ public class EntityFrameworkController(
       ["database", "update", selectedMigration.Id, "--project", efProject, "--startup-project", startupProject, "--context", dbContext, "--no-build"],
       ".",
       []), cancellationToken);
+  }
+
+  [JsonRpcMethod("ef/migrations-list")]
+  public async Task ListMigrations(CancellationToken cancellationToken)
+  {
+    var (efProject, startupProject, dbContext) = await PromptEfProjectInfoAsync(cancellationToken);
+    var success = await editorService.BuildProject(startupProject, cancellationToken);
+    if (!success) return;
+
+    List<Migration> migrations;
+    using (var listScope = progressScopeFactory.Create("Listing migrations", "Resolving migrations"))
+    {
+      migrations = await entityFrameworkService.ListMigrationsAsync(efProject, startupProject, dbContext, noBuild: true, cancellationToken: cancellationToken);
+    }
+
+    if (migrations.Count == 0)
+    {
+      await editorService.DisplayMessage("No migrations found");
+      return;
+    }
+
+    var projectDir = Path.GetDirectoryName(efProject)!;
+    var choices = migrations.AsEnumerable().Reverse()
+        .Select(m =>
+        {
+          var label = m.Applied == true ? $"✓ {m.Name}" : $"  {m.Name}";
+          return new PickerChoice<Migration>(m.Id, label, m);
+        })
+        .ToArray();
+
+    var selected = await editorService.RequestPickerAsync(
+        "Migrations",
+        choices,
+        (m, _) =>
+        {
+          var filePath = GetMigrationFilePath(projectDir, m);
+          return Task.FromResult<PreviewResult>(new PreviewResult.File(filePath));
+        },
+        cancellationToken);
+
+    if (selected is null) return;
+
+    await editorService.RequestOpenBuffer(GetMigrationFilePath(projectDir, selected));
+  }
+
+  internal static string GetMigrationFilePath(string projectDir, Migration migration)
+  {
+    var fileName = string.IsNullOrWhiteSpace(migration.Id)
+      ? migration.SafeName ?? migration.Name
+      : migration.Id;
+
+    return Path.Combine(projectDir, "Migrations", $"{fileName}.cs");
   }
 
   [JsonRpcMethod("ef/database-update")]

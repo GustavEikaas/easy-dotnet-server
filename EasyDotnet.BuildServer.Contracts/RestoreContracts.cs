@@ -1,6 +1,9 @@
 namespace EasyDotnet.BuildServer.Contracts;
 
-public sealed record RestoreRequest(string[] ProjectPaths);
+public sealed record RestoreRequest(
+    string[] ProjectPaths,
+    string? Configuration = null,
+    string? Platform = null);
 
 public sealed record RestoreResponse(RestoreResult[] Results);
 

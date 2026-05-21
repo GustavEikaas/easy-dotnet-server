@@ -116,11 +116,73 @@ public class InterceptableVariablesRequest : Request
   public new InterceptableVariablesArguments? Arguments { get; set; } = new();
 }
 
+public class ScopesRequest : Request
+{
+  public new ScopesArguments? Arguments { get; set; } = new();
+}
+
+public class ScopesArguments
+{
+  public int FrameId { get; set; }
+
+  [JsonExtensionData]
+  public Dictionary<string, JsonElement>? ExtraProperties { get; set; }
+}
+
 public class InterceptableVariablesArguments
 {
   public int VariablesReference { get; set; }
   [JsonExtensionData]
   public Dictionary<string, JsonElement>? ExtraProperties { get; set; }
+}
+
+public class InterceptableCompletionsRequest : Request
+{
+  public new InterceptableCompletionsArguments? Arguments { get; set; } = new();
+}
+
+public class InterceptableCompletionsArguments
+{
+  public int? FrameId { get; set; }
+  public string Text { get; set; } = string.Empty;
+  public int Column { get; set; }
+  public int? Line { get; set; }
+
+  [JsonExtensionData]
+  public Dictionary<string, JsonElement>? ExtraProperties { get; set; }
+}
+
+public class CompletionsResponse : Response
+{
+  public new CompletionsResponseBody? Body { get; set; }
+}
+
+public class CompletionsResponseBody
+{
+  public required List<CompletionItem> Targets { get; set; }
+}
+
+public class CompletionItem
+{
+  public required string Label { get; set; }
+  public string? Text { get; set; }
+  public string? SortText { get; set; }
+  public string? Detail { get; set; }
+  public string? Type { get; set; }
+  public int? Start { get; set; }
+  public int? Length { get; set; }
+}
+
+public class ScopesResponseBody
+{
+  public required List<DapScope> Scopes { get; set; }
+}
+
+public class DapScope
+{
+  public required string Name { get; set; }
+  public int VariablesReference { get; set; }
+  public bool Expensive { get; set; }
 }
 
 public class TelemetryEvent : Event;

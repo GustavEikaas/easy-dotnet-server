@@ -4,8 +4,16 @@ using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Workspace.Controllers;
 
-public class WorkspaceController(WorkspaceService service, WorkspaceBuildService buildService, WorkspaceRestoreService restoreService, WorkspaceTestService testService, WorkspaceDebugAttachService debugAttachService) : BaseController
+public class WorkspaceController(WorkspaceService service, WorkspaceBuildService buildService, WorkspaceCleanService cleanService, WorkspaceRestoreService restoreService, WorkspaceTestService testService, WorkspaceDebugAttachService debugAttachService, WorkspaceStopService stopService, WorkspaceNugetService nugetService) : BaseController
 {
+  [JsonRpcMethod("workspace/pack", UseSingleObjectParameterDeserialization = true)]
+  public async Task PackAsync(NugetPackRequest request, CancellationToken ct) =>
+      await nugetService.PackAsync(request, ct);
+
+  [JsonRpcMethod("workspace/pack-and-push", UseSingleObjectParameterDeserialization = true)]
+  public async Task PackAndPushAsync(NugetPackRequest request, CancellationToken ct) =>
+      await nugetService.PackAndPushAsync(request, ct);
+
   [JsonRpcMethod("workspace/run", UseSingleObjectParameterDeserialization = true)]
   public async Task RunAsync(WorkspaceRunRequest request, CancellationToken ct) =>
       await service.RunAsync(request, ct);
@@ -30,6 +38,10 @@ public class WorkspaceController(WorkspaceService service, WorkspaceBuildService
   public async Task BuildSolutionAsync(WorkspaceBuildRequest request, CancellationToken ct) =>
       await buildService.BuildSolutionAsync(request, ct);
 
+  [JsonRpcMethod("workspace/clean", UseSingleObjectParameterDeserialization = true)]
+  public async Task CleanAsync(WorkspaceCleanRequest request, CancellationToken ct) =>
+      await cleanService.CleanAsync(request, ct);
+
   [JsonRpcMethod("workspace/restore", UseSingleObjectParameterDeserialization = true)]
   public async Task RestoreAsync(WorkspaceRestoreRequest request, CancellationToken ct) =>
       await restoreService.RestoreAsync(request, ct);
@@ -41,4 +53,8 @@ public class WorkspaceController(WorkspaceService service, WorkspaceBuildService
   [JsonRpcMethod("workspace/test-solution", UseSingleObjectParameterDeserialization = true)]
   public async Task TestSolutionAsync(WorkspaceTestRequest request, CancellationToken ct) =>
       await testService.TestSolutionAsync(request, ct);
+
+  [JsonRpcMethod("workspace/stop", UseSingleObjectParameterDeserialization = true)]
+  public async Task StopAsync(WorkspaceStopRequest request, CancellationToken ct) =>
+      await stopService.StopAsync(ct);
 }

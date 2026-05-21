@@ -1,5 +1,6 @@
+using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.IDE.Interfaces;
-using EasyDotnet.IDE.Models.MsBuild.Project;
+using EasyDotnet.Nuget;
 using Microsoft.Extensions.Logging;
 using NuGet.Common;
 using NuGet.Configuration;
@@ -13,137 +14,67 @@ namespace EasyDotnet.Services;
 
 public sealed record RestoreResult(bool Success, IAsyncEnumerable<string> Errors, IAsyncEnumerable<string> Warnings);
 
-public class NugetService(IClientService clientService, ILogger<NugetService> logger, IProcessQueue processLimiter)
+public class NugetService(
+    ILogger<NugetService> logger,
+    INugetSearchService searchService,
+    INugetSettingsProvider settingsProvider,
+    IBuildHostManager buildHostManager)
 {
-
-  private static (string Command, string Arguments) GetCommandAndArguments(
-      MSBuildProjectType type,
-      string targetPath) => type switch
-      {
-        MSBuildProjectType.SDK => ("dotnet", $"restore \"{targetPath}\" "),
-        MSBuildProjectType.VisualStudio => ("nuget", $"restore \"{targetPath}\""),
-        _ => throw new InvalidOperationException("Unknown MSBuild type")
-      };
 
   public async Task<RestoreResult> RestorePackagesAsync(string targetPath, CancellationToken cancellationToken)
   {
-    var (command, args) = GetCommandAndArguments(clientService.UseVisualStudio ? MSBuildProjectType.VisualStudio : MSBuildProjectType.SDK, targetPath);
-    logger.LogInformation("Starting restore `{command} {args}`", command, args);
-    var (success, stdout, stderr) = await processLimiter.RunProcessAsync(command, args, new ProcessOptions(KillOnTimeout: true), cancellationToken);
+    logger.LogInformation("Starting restore for {TargetPath}", targetPath);
 
-    var errors = stderr
-        .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
-        .Where(l => l.Contains("error", StringComparison.OrdinalIgnoreCase))
-        .ToList();
+    var errors = new List<string>();
+    var warnings = new List<string>();
+    var success = true;
 
-    var warnings = (stdout + Environment.NewLine + stderr)
-        .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
-        .Where(l => l.Contains("warning", StringComparison.OrdinalIgnoreCase))
-        .AsAsyncEnumerable();
+    await foreach (var result in buildHostManager.RestoreNugetPackagesAsync(
+        new RestoreRequest([Path.GetFullPath(targetPath)]),
+        cancellationToken))
+    {
+      success &= result.Success;
 
-    return new RestoreResult(success && errors.Count == 0, errors.AsAsyncEnumerable(), warnings);
+      if (!result.Success && !string.IsNullOrWhiteSpace(result.ErrorMessage))
+      {
+        errors.Add($"{result.ProjectPath}: {result.ErrorMessage}");
+      }
+
+      foreach (var diagnostic in result.Output?.Diagnostics ?? [])
+      {
+        var message = FormatDiagnostic(diagnostic);
+        if (diagnostic.Severity == BuildDiagnosticSeverity.Error)
+        {
+          errors.Add(message);
+        }
+        else if (diagnostic.Severity == BuildDiagnosticSeverity.Warning)
+        {
+          warnings.Add(message);
+        }
+      }
+    }
+
+    return new RestoreResult(success && errors.Count == 0, errors.AsAsyncEnumerable(), warnings.AsAsyncEnumerable());
   }
 
-  public ISettings GetSettings() => Settings.LoadDefaultSettings(
-        root:
-          clientService.ProjectInfo?.RootDir ??
-            (clientService.ProjectInfo?.SolutionFile != null ?
-              Path.GetDirectoryName(Path.GetFullPath(clientService.ProjectInfo.SolutionFile)) :
-                Directory.GetCurrentDirectory()));
+  public ISettings GetSettings() => settingsProvider.GetSettings();
 
-  public List<PackageSource> GetSources()
-  {
-    var sourceProvider = new PackageSourceProvider(GetSettings());
-    var sources = sourceProvider.LoadPackageSources();
-    return [.. sources];
-  }
+  public List<PackageSource> GetSources() => searchService.GetSources();
 
-  public async Task<IEnumerable<NuGetVersion>> GetPackageVersionsAsync(
+  public Task<IReadOnlyList<NuGetVersion>> GetPackageVersionsAsync(
       string packageId,
       CancellationToken cancellationToken,
       bool includePrerelease = false,
       List<string>? sourceNames = null)
-  {
-    DefaultCredentialServiceUtility.SetupDefaultCredentialService(NullLogger.Instance, nonInteractive: true);
-    var nugetLogger = NullLogger.Instance;
+      => searchService.GetVersionsAsync(packageId, includePrerelease, cancellationToken, sourceNames);
 
-    using var cache = new SourceCacheContext();
-
-    var sources = (sourceNames is { Count: > 0 }
-        ? GetSources().Where(s => sourceNames.Contains(s.Name))
-        : GetSources())
-        .ToList();
-
-    var versionTasks = sources.Select(async source =>
-    {
-      try
-      {
-        var repo = Repository.Factory.GetCoreV3(source.Source);
-        var resource = await repo.GetResourceAsync<FindPackageByIdResource>(cancellationToken);
-        var versions = await resource.GetAllVersionsAsync(packageId, cache, nugetLogger, cancellationToken);
-
-        return [.. versions.Where(v => includePrerelease || !v.IsPrerelease)];
-      }
-      catch (Exception e)
-      {
-        logger.LogError("Failed to get package versions in source {name}: {ex}", source.Name, e);
-        return Enumerable.Empty<NuGetVersion>();
-      }
-    });
-
-    var versionLists = await Task.WhenAll(versionTasks);
-
-    return versionLists
-        .SelectMany(v => v)
-        .Distinct()
-        .OrderByDescending(v => v);
-  }
-
-  public async Task<Dictionary<string, IEnumerable<IPackageSearchMetadata>>> SearchAllSourcesByNameAsync(
-        string searchTerm,
-        CancellationToken cancellationToken,
-        int take = 10,
-        bool includePrerelease = false,
-        List<string>? sourceNames = null)
-  {
-    DefaultCredentialServiceUtility.SetupDefaultCredentialService(NullLogger.Instance, nonInteractive: true);
-    var provider = Repository.Provider.GetCoreV3();
-
-    var sourceProvider = new PackageSourceProvider(GetSettings());
-    var allSources = sourceProvider.LoadPackageSources().Where(s => s.IsEnabled);
-
-    var selectedSources = sourceNames == null ? allSources : allSources.Where(s => sourceNames.Contains(s.Name, StringComparer.OrdinalIgnoreCase));
-
-    var taskMap = selectedSources.ToDictionary(
-        source => source.Name,
-        async source =>
-        {
-          try
-          {
-            var repo = new SourceRepository(source, provider);
-            var search = await repo.GetResourceAsync<PackageSearchResource>();
-
-            return await search.SearchAsync(
-                    searchTerm,
-                    new SearchFilter(includePrerelease),
-                    skip: 0,
-                    take: take,
-                    log: NullLogger.Instance,
-                    cancellationToken: cancellationToken);
-          }
-          catch (Exception e)
-          {
-            logger.LogError("Failed to search packages in source {name}: {ex}", source.Name, e);
-            return [];
-          }
-        });
-
-    await Task.WhenAll(taskMap.Values);
-
-    return taskMap.ToDictionary(
-        kvp => kvp.Key,
-        kvp => kvp.Value.Result);
-  }
+  public Task<IReadOnlyDictionary<string, IReadOnlyList<IPackageSearchMetadata>>> SearchAllSourcesByNameAsync(
+      string searchTerm,
+      CancellationToken cancellationToken,
+      int take = 10,
+      bool includePrerelease = false,
+      List<string>? sourceNames = null)
+      => searchService.SearchAllSourcesAsync(searchTerm, take, includePrerelease, cancellationToken, sourceNames);
 
   public async Task<bool> PushPackageAsync(List<string> packages, string sourceUrl, string? apiKey)
   {
@@ -177,5 +108,22 @@ public class NugetService(IClientService clientService, ILogger<NugetService> lo
     var packageSource = new PackageSource(sourceUrl);
     var sourceRepository = Repository.Factory.GetCoreV3(packageSource);
     return await sourceRepository.GetResourceAsync<PackageUpdateResource>();
+  }
+
+  private static string FormatDiagnostic(BuildDiagnostic diagnostic)
+  {
+    var location = string.IsNullOrWhiteSpace(diagnostic.File)
+        ? diagnostic.ProjectFile
+        : diagnostic.File;
+
+    var prefix = string.IsNullOrWhiteSpace(location)
+        ? string.Empty
+        : $"{location}({diagnostic.LineNumber},{diagnostic.ColumnNumber}): ";
+
+    var code = string.IsNullOrWhiteSpace(diagnostic.Code)
+        ? string.Empty
+        : $"{diagnostic.Code}: ";
+
+    return $"{prefix}{code}{diagnostic.Message}";
   }
 }

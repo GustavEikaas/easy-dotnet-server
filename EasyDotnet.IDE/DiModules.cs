@@ -4,8 +4,10 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using DotNetOutdated.Core.Services;
 using EasyDotnet.Debugger;
+using EasyDotnet.Debugger.Services;
 using EasyDotnet.IDE.AppWrapper;
 using EasyDotnet.IDE.BuildHost;
+using EasyDotnet.IDE.Dap;
 using EasyDotnet.IDE.DebuggerStrategies;
 using EasyDotnet.IDE.Editor;
 using EasyDotnet.IDE.EntityFramework;
@@ -15,7 +17,9 @@ using EasyDotnet.IDE.NewFile;
 using EasyDotnet.IDE.PackageManager;
 using EasyDotnet.IDE.Picker;
 using EasyDotnet.IDE.ProcessExecution;
+using EasyDotnet.IDE.Project.Services;
 using EasyDotnet.IDE.ProjectReference.Services;
+using EasyDotnet.IDE.Sdk;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.Settings;
 using EasyDotnet.IDE.Solution.Services;
@@ -29,8 +33,11 @@ using EasyDotnet.IDE.TestRunner.Lock;
 using EasyDotnet.IDE.TestRunner.Registry;
 using EasyDotnet.IDE.TestRunner.Service;
 using EasyDotnet.IDE.TestRunner.Store;
+using EasyDotnet.IDE.UserSecrets.Services;
 using EasyDotnet.IDE.Utils;
+using EasyDotnet.IDE.Workspace.BuildConfiguration;
 using EasyDotnet.IDE.Workspace.Services;
+using EasyDotnet.Nuget;
 using EasyDotnet.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -68,6 +75,7 @@ public static class DiModules
     services.AddSingleton<TemplateEngineService>();
     services.AddSingleton<IDebugSessionManager, DebugSessionManager>();
     services.AddSingleton<IDebugOrchestrator, DebugOrchestrator>();
+    services.AddSingleton<IVariableLocationResolver, VariableLocationResolver>();
     services.AddSingleton<IAppPathsService, AppPathsService>();
     services.AddSingleton<UpdateCheckerService>();
     services.AddSingleton<SettingsFileResolver>();
@@ -85,18 +93,24 @@ public static class DiModules
     services.AddSingleton<AppWrapperPipeListener>();
     services.AddSingleton<BuildHostFactory>();
     services.AddSingleton<IBuildHostManager, BuildHostManager>();
-    services.AddSingleton<WorkspaceBuildHostManager>();
     services.AddSingleton<ProjectEvaluationCache>();
+    services.AddSingleton<WorkspaceBuildHostManager>();
+    services.AddSingleton<ProjectGraphService>();
+    services.AddSingleton<SdkService>();
 
     services.AddSingleton<TestRunnerService>();
+    services.AddSingleton<IWorkspaceBuildConfigurationService, WorkspaceBuildConfigurationService>();
     services.AddSingleton<WorkspaceService>();
     services.AddSingleton<WorkspaceProjectResolver>();
     services.AddSingleton<WorkspaceBuildService>();
+    services.AddSingleton<WorkspaceCleanService>();
+    services.AddSingleton<WorkspaceNugetService>();
     services.AddSingleton<WorkspaceRestoreService>();
     services.AddSingleton<WorkspaceTestService>();
     services.AddSingleton<WorkspacePreBuildService>();
     services.AddSingleton<WorkspaceSessionRegistry>();
     services.AddSingleton<WorkspaceDebugAttachService>();
+    services.AddSingleton<WorkspaceStopService>();
     services.AddSingleton<NodeRegistry>();
     services.AddSingleton<StatusDispatcher>();
     services.AddSingleton<DetailStore>();
@@ -104,24 +118,36 @@ public static class DiModules
     services.AddSingleton<GlobalOperationLock>();
     services.AddSingleton<OperationExecutor>();
     services.AddSingleton<AdapterResolver>();
-    services.AddSingleton<VsTestAdapter>();
+    services.AddTransient<VsTestAdapter>();
+    services.AddSingleton<Func<VsTestAdapter>>(x => () => x.GetRequiredService<VsTestAdapter>());
     services.AddSingleton<MtpAdapter>();
     services.AddSingleton<MtpClientFactory>();
 
     services.AddTransient<IProgressScopeFactory, ProgressScopeFactory>();
     services.AddTransient<IStartupHookService, StartupHookService>();
-    services.AddTransient<IMsBuildService, MsBuildService>();
     services.AddTransient<NewFileService>();
     services.AddTransient<UserSecretsService>();
+    services.AddTransient<UserSecretsFlowService>();
     services.AddTransient<EntityFrameworkService>();
     services.AddTransient<ILaunchProfileService, LaunchProfileService>();
     services.AddTransient<INotificationService, NotificationService>();
     services.AddTransient<NugetService>();
+    services.AddTransient<INugetSettingsProvider>(sp =>
+    {
+      var clientService = sp.GetRequiredService<IClientService>();
+      return new DefaultNugetSettingsProvider(() =>
+          clientService.ProjectInfo?.RootDir ??
+            (clientService.ProjectInfo?.SolutionFile != null
+              ? Path.GetDirectoryName(Path.GetFullPath(clientService.ProjectInfo.SolutionFile))
+              : null));
+    });
+    services.AddTransient<INugetSearchService, NugetSearchService>();
     services.AddPackageManager();
     services.AddTransient<OutdatedService>();
     services.AddTransient<GlobalJsonService>();
 
     services.AddTransient<ProjectReferenceService>();
+    services.AddTransient<ProjectReferenceCliService>();
     services.AddTransient<SolutionManagementService>();
     services.AddTransient<PostActionProcessor>();
     services.AddTransient<IPostActionHandler, RunScriptPostActionHandler>();

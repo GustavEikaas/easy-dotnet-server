@@ -59,6 +59,25 @@ public class StatusDispatcher(
     return rpc.NotifyWithParameterObjectAsync("updateStatus", new { id = nodeId, status, availableActions });
   }
 
+  public Task SendStatusUpdatesAsync(
+      IEnumerable<StatusUpdate> statusUpdates,
+      long? operationId = null)
+  {
+    if (!ShouldDispatch(operationId)) return Task.CompletedTask;
+
+    var updates = statusUpdates
+        .Where(u => registry.SetLastStatus(u.Id, u.Status))
+        .Select(u => new { id = u.Id, status = u.Status, availableActions = u.AvailableActions })
+        .ToList();
+
+    if (updates.Count == 0)
+    {
+      return Task.CompletedTask;
+    }
+
+    return rpc.NotifyWithParameterObjectAsync("updateStatusBatch", new { updates });
+  }
+
   /// <summary>
   /// Sends a single batched status update covering a node and all its descendants.
   /// Filters out nodes whose status type hasn't changed.
@@ -112,3 +131,8 @@ public class StatusDispatcher(
     return editorService.SetQuickFixList(items);
   }
 }
+
+public sealed record StatusUpdate(
+    string Id,
+    TestNodeStatus? Status,
+    List<TestAction>? AvailableActions = null);

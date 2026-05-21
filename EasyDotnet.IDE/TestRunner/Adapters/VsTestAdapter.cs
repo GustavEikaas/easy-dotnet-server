@@ -1,9 +1,9 @@
 using System.IO.Abstractions;
-using System.Threading;
 using System.Threading.Channels;
 using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.IDE.DebuggerStrategies;
 using EasyDotnet.IDE.Interfaces;
+using EasyDotnet.IDE.Sdk;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.Settings;
 using EasyDotnet.IDE.TestRunner.Adapters.VSTest;
@@ -22,7 +22,7 @@ namespace EasyDotnet.IDE.TestRunner.Adapters;
 /// The global operation lock makes the old VsTestService semaphore redundant.
 /// </summary>
 public sealed class VsTestAdapter(
-    IMsBuildService msBuildService,
+    SdkService sdkService,
     IEditorService editorService,
     IDebugStrategyFactory debugStrategyFactory,
     IDebugOrchestrator debugOrchestrator,
@@ -30,6 +30,7 @@ public sealed class VsTestAdapter(
     SettingsService settingsService,
     ILoggerFactory loggerFactory) : ITestAdapter, IAsyncDisposable
 {
+  private readonly ILogger _logger = loggerFactory.CreateLogger<VsTestAdapter>();
   private static readonly TestPlatformOptions DefaultOptions = new()
   {
     CollectMetrics = false,
@@ -52,14 +53,33 @@ public sealed class VsTestAdapter(
       var wrapper = EnsureWrapper();
       control.RegisterKill(() => KillWrapperAsync(wrapper));
 
-      using var _ = ct.Register(() =>
+      await using var _ = ct.Register(() =>
       {
         try { wrapper.CancelDiscovery(); } catch { /* best effort */ }
       });
 
-      var handler = new StreamingDiscoveryHandler(onDiscovered, loggerFactory);
+      var handler = new StreamingDiscoveryHandler(loggerFactory);
       wrapper.DiscoverTests([project.TargetPath], null, DefaultOptions, null, handler);
-      await handler.Completion;
+
+      // Buffer all TestCases so we can detect parameterised rows by duplicate FQN —
+      // this is the only reliable VSTest-layer signal, since frameworks like MSTest
+      // can strip parens from DisplayName entirely via [DataRow(DisplayName = "...")].
+      var testCases = new List<Microsoft.VisualStudio.TestPlatform.ObjectModel.TestCase>();
+      await foreach (var tc in handler.ReadAllAsync().WithCancellation(ct))
+      {
+        testCases.Add(tc);
+      }
+
+      foreach (var group in testCases.GroupBy(tc => tc.FullyQualifiedName))
+      {
+        var isParameterised = group.Count() > 1;
+        foreach (var tc in group)
+        {
+          var discoveredTest = tc.ToDiscoveredTest(isParameterised);
+          try { await onDiscovered(discoveredTest); }
+          catch (Exception ex) { _logger.LogError(ex, "Error in onDiscovered callback for {TestCase}", discoveredTest.FullyQualifiedName); }
+        }
+      }
     }
     finally
     {
@@ -70,28 +90,31 @@ public sealed class VsTestAdapter(
   public async Task RunAsync(
       ValidatedDotnetProject project,
       IReadOnlyList<string> nativeIds,
+      Func<string, Task> onStarted,
       Func<TestRunResult, Task> onResult,
       OperationControl control,
       CancellationToken ct)
   {
     var nativeGuids = nativeIds.Select(Guid.Parse).ToHashSet();
-    await RunCoreAsync(project, nativeGuids, onResult, attachDebugger: false, control, ct);
+    await RunCoreAsync(project, nativeGuids, onStarted, onResult, attachDebugger: false, control, ct);
   }
 
   public async Task DebugAsync(
       ValidatedDotnetProject project,
       IReadOnlyList<string> nativeIds,
+      Func<string, Task> onStarted,
       Func<TestRunResult, Task> onResult,
       OperationControl control,
       CancellationToken ct)
   {
     var nativeGuids = nativeIds.Select(Guid.Parse).ToHashSet();
-    await RunCoreAsync(project, nativeGuids, onResult, attachDebugger: true, control, ct);
+    await RunCoreAsync(project, nativeGuids, onStarted, onResult, attachDebugger: true, control, ct);
   }
 
   private async Task RunCoreAsync(
       ValidatedDotnetProject project,
       HashSet<Guid> nativeGuids,
+      Func<string, Task> onStarted,
       Func<TestRunResult, Task> onResult,
       bool attachDebugger,
       OperationControl control,
@@ -114,7 +137,7 @@ public sealed class VsTestAdapter(
         try { wrapper.CancelTestRun(); } catch { /* best effort */ }
       }
 
-      var channel = Channel.CreateUnbounded<TestRunResult>();
+      var channel = Channel.CreateUnbounded<VsTestRunEvent>();
 
       // Re-discover to get TestCase objects needed by VSTest run API.
       var discoveryHandler = new TestDiscoveryHandler(loggerFactory.CreateLogger<TestDiscoveryHandler>());
@@ -173,8 +196,17 @@ public sealed class VsTestAdapter(
 
       try
       {
-        await foreach (var result in channel.Reader.ReadAllAsync(runToken))
-          await onResult(result);
+        await foreach (var runEvent in channel.Reader.ReadAllAsync(runToken))
+        {
+          if (runEvent.StartedNativeId is { } startedNativeId)
+          {
+            await onStarted(startedNativeId);
+            continue;
+          }
+
+          if (runEvent.TestResult is { } result)
+            await onResult(result);
+        }
 
         await runTask;
       }
@@ -206,15 +238,9 @@ public sealed class VsTestAdapter(
   private VsTestConsoleWrapper EnsureWrapper()
   {
     if (_wrapper is not null) return _wrapper;
-    var vsTestPath = GetVsTestPath();
+    var vsTestPath = sdkService.GetVsTestPath();
     _wrapper = new VsTestConsoleWrapper(vsTestPath);
     return _wrapper;
-  }
-
-  private string GetVsTestPath()
-  {
-    var sdk = msBuildService.QuerySdkInstallations();
-    return Path.Join(sdk.ToList()[0].MSBuildPath, "vstest.console.dll");
   }
 
   private DebuggerTestHostLauncher CreateDebuggerLauncher(

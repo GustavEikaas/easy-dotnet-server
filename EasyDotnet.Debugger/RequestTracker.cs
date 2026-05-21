@@ -22,6 +22,7 @@ public interface IRequestTracker
   int RegisterProxyRequest(TaskCompletionSource<Response> tcs, CancellationToken cancellationToken);
   int GetNextSequenceNumber();
   RequestContext? GetAndRemoveContext(int proxySeq);
+  RequestContext? PeekContext(int proxySeq);
   void Clear();
 }
 
@@ -72,6 +73,12 @@ public class RequestTracker : IRequestTracker
   public RequestContext? GetAndRemoveContext(int proxySeq)
   {
     _pendingRequests.TryRemove(proxySeq, out var context);
+    return context;
+  }
+
+  public RequestContext? PeekContext(int proxySeq)
+  {
+    _pendingRequests.TryGetValue(proxySeq, out var context);
     return context;
   }
 

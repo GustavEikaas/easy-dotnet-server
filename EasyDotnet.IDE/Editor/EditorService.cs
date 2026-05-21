@@ -1,4 +1,5 @@
 using EasyDotnet.BuildServer.Contracts;
+using EasyDotnet.IDE.BuildHost;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Models.Client;
 using EasyDotnet.IDE.Models.Client.Debugger;
@@ -7,6 +8,7 @@ using EasyDotnet.IDE.Models.Client.Prompt;
 using EasyDotnet.IDE.Models.Client.Quickfix;
 using EasyDotnet.IDE.Picker;
 using EasyDotnet.IDE.Picker.Models;
+using EasyDotnet.IDE.Workspace.Services;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Editor;
@@ -66,7 +68,7 @@ public class EditorService(
 
   public async Task<Guid> StartRunProjectAsync(RunProjectRequest request, CancellationToken ct = default)
   {
-    var guid = editorProcessManagerService.RegisterJob(TerminalSlot.LongRunning);
+    var guid = editorProcessManagerService.RegisterJob();
     var session = startupHookService.CreateSession(request.EnvironmentVariables);
 
     var command = BuildRunCommand(request, session.EnvironmentVariables);
@@ -80,13 +82,15 @@ public class EditorService(
       }
       else
       {
-        await jsonRpc.InvokeWithParameterObjectAsync("runCommandManaged", new TrackedJob(guid, command), ct);
+        var projectName = request.Project.ProjectName ?? Path.GetFileNameWithoutExtension(request.Project.MSBuildProjectFullPath);
+        var slotId = $"run:{projectName}";
+        await jsonRpc.InvokeWithParameterObjectAsync("runCommandManaged", new TrackedJob(guid, command, slotId), ct);
       }
     }
     catch (Exception e)
     {
       await session.DisposeAsync();
-      editorProcessManagerService.SetFailedToStart(guid, TerminalSlot.LongRunning, e.Message);
+      editorProcessManagerService.SetFailedToStart(guid, null, e.Message);
       throw;
     }
 
@@ -165,11 +169,12 @@ public class EditorService(
   public async Task<bool> BuildProject(string projectPath, CancellationToken cancellationToken)
   {
     var name = Path.GetFileNameWithoutExtension(projectPath);
+    var tfm = await buildHostManager.ResolveSingleTfmAsync(projectPath, configuration: null, platform: null, ct: cancellationToken);
     List<BatchBuildResult> results;
     using (new ProgressScope(this, "Building", $"Building {name}"))
     {
       results = await buildHostManager
-          .BatchBuildAsync(new BatchBuildRequest([projectPath], "Debug"), cancellationToken)
+          .BatchBuildAsync(new BatchBuildRequest([projectPath], Configuration: null, Platform: null, TargetFramework: tfm), cancellationToken)
           .ToListAsync(cancellationToken);
     }
 
@@ -235,25 +240,9 @@ public class EditorService(
     CancellationToken ct = default) => pickerService.RequestMultiLivePickerAsync(prompt, queryFactory, previewFactory, ct);
 
   private static RunCommand BuildRunCommand(RunProjectRequest request, Dictionary<string, string> hookEnv)
-  {
-    var args = new List<string> { request.Project.TargetPath! };
-
-    if (request.LaunchProfile?.CommandLineArgs is not null)
-    {
-      args.AddRange(LaunchProfileUtils.ParseCommandLineArgs(request.LaunchProfile.CommandLineArgs, request.Project));
-    }
-
-    if (request.AdditionalArguments is { Length: > 0 })
-    {
-      args.AddRange(request.AdditionalArguments);
-    }
-
-    var env = LaunchProfileUtils.GetEnvironmentVariables(request.LaunchProfile);
-    foreach (var kvp in hookEnv)
-    {
-      env[kvp.Key] = kvp.Value;
-    }
-
-    return new RunCommand("dotnet", [.. args], LaunchProfileUtils.ResolveCwd(request.LaunchProfile, request.Project), env);
-  }
+    => WorkspaceRunCommandBuilder.Build(
+        request.Project,
+        request.LaunchProfile,
+        request.AdditionalArguments,
+        hookEnv);
 }

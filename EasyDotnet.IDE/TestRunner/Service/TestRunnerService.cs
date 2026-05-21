@@ -31,6 +31,7 @@ public class TestRunnerService(
   private OperationControl? _operationControl;
   private long _operationId;
   private OperationStage _operationStage = OperationStage.Idle;
+  private volatile bool _isInitialized = false;
 
   private enum OperationStage
   {
@@ -56,6 +57,7 @@ public class TestRunnerService(
 
     try
     {
+      _isInitialized = false;
       registry.Clear();
       detailStore.ClearAll();
       await adapterResolver.InvalidateAllAsync();
@@ -105,11 +107,21 @@ public class TestRunnerService(
 
   public async Task<InitializeResult> InitializeAsync(string solutionPath, CancellationToken ct)
   {
+    // Fast path: already initialized, avoid MSBuild entirely.
+    if (_isInitialized) return new InitializeResult(Success: true);
+
     var opCts = new CancellationTokenSource();
     var control = new OperationControl();
 
     using var token = await operationLock.WaitAcquireAsync("initialize", ct, opCts.Token);
     TrackOperationStart(token, opCts, control);
+
+    // Double-check after acquiring the lock: another caller may have initialized while we waited.
+    if (_isInitialized)
+    {
+      TrackOperationEnd(token);
+      return new InitializeResult(Success: true);
+    }
 
     var solutionName = Path.GetFileName(solutionPath);
     var solutionId = NodeIdBuilder.Solution(solutionName);
@@ -174,6 +186,7 @@ public class TestRunnerService(
             OverallStatus: OverallStatus.Idle,
             TotalTests: registry.GetLeafCount(), TotalRunning: 0,
             TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0), token.OperationId);
+        _isInitialized = true;
         return new InitializeResult(Success: true);
       }
 
@@ -247,6 +260,7 @@ public class TestRunnerService(
           TotalTests: registry.GetLeafCount(), TotalRunning: 0,
           TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0), token.OperationId);
 
+      _isInitialized = true;
       return new InitializeResult(Success: true);
     }
     catch (OperationCanceledException)
@@ -388,7 +402,6 @@ public class TestRunnerService(
       if (project is not null)
       {
         await adapterResolver.InvalidateAsync(project.ProjectFullPath);
-        buildHost.InvalidateCache(project.ProjectFullPath);
         projectsByPath[project.ProjectFullPath] = [project];
       }
 
@@ -398,9 +411,12 @@ public class TestRunnerService(
         return new OperationResult(Success: true);
       }
 
+      var singlePath = projectsByPath.Keys.Single();
+      var tfm = await buildHost.ResolveSingleTfmAsync(singlePath, "Debug", token.Ct);
       var buildRequest = new BatchBuildRequest(
-          ProjectPaths: [.. projectsByPath.Keys],
-          Configuration: null);
+          ProjectPaths: [singlePath],
+          Configuration: "Debug",
+          TargetFramework: tfm);
 
       var discoverTasks = new List<Task>();
 
@@ -663,11 +679,69 @@ public class TestRunnerService(
     );
   }
 
-  public SyncFileResult SyncFile(SyncFileRequest req)
+  public List<NeotestPositionDto> GetNeotestPositions(string filePath)
+  {
+    var fileNodes = registry.GetNodesForFile(filePath).ToList();
+    if (fileNodes.Count == 0) return [];
+
+    var group = fileNodes
+        .Where(n => n.ProjectId is not null)
+        .GroupBy(n => n.ProjectId!)
+        .FirstOrDefault();
+    if (group is null) return [];
+
+    var nodes = group.ToList();
+    var nodeIdSet = nodes.Select(n => n.Id).ToHashSet(StringComparer.Ordinal);
+
+    return nodes
+        .Select(n =>
+        {
+          var type = n.Type switch
+          {
+            NodeType.Namespace => "namespace",
+            NodeType.TestClass => "namespace",
+            NodeType.TheoryGroup => "namespace",
+            NodeType.TestMethod => "test",
+            NodeType.Subcase => "test",
+            _ => null
+          };
+          if (type is null) return null;
+
+          var parentId = nodeIdSet.Contains(n.ParentId ?? "") ? n.ParentId : filePath;
+
+          return new NeotestPositionDto(
+              Id: n.Id,
+              Name: n.DisplayName,
+              Type: type,
+              ParentId: parentId,
+              StartLine: n.SignatureLine,
+              EndLine: n.EndLine);
+        })
+        .OfType<NeotestPositionDto>()
+        .OrderBy(dto => dto.StartLine ?? int.MaxValue)
+        .ToList();
+  }
+
+  public Dictionary<string, NeotestBatchResultDto> GetNeotestBatchResults(string[] ids) =>
+      ids
+          .Select(id => (id, detail: detailStore.Get(id)))
+          .Where(x => x.detail is not null)
+          .ToDictionary(
+              x => x.id,
+              x => new NeotestBatchResultDto(
+                  Outcome: x.detail!.Outcome,
+                  ErrorMessage: x.detail.ErrorMessage.Length > 0 ? x.detail.ErrorMessage : null,
+                  FailingFrame: x.detail.FailingFrame is { } ff
+                      ? new StackFrameDto(ff.OriginalText, ff.File, ff.Line, ff.IsUserCode)
+                      : null,
+                  Stdout: x.detail.Stdout.Length > 0 ? x.detail.Stdout : null));
+
+  public async Task<SyncFileResult> SyncFileAsync(SyncFileRequest req)
   {
     var parsed = TestSourceLocator.ParseContent(req.Content);
     var updates = new List<LineNumberUpdateDto>();
 
+    // --- 1. Update line numbers for all already-registered nodes in this file ---
     foreach (var node in registry.GetNodesForFile(req.Path))
     {
       TestMethodLocation? loc;
@@ -691,11 +765,133 @@ public class TestRunnerService(
       if (loc is null) continue;
 
       registry.UpdateLineNumbers(node.Id, loc.SignatureLine, loc.BodyStartLine, loc.EndLine);
-
       updates.Add(new LineNumberUpdateDto(node.Id, loc.SignatureLine, loc.BodyStartLine, loc.EndLine));
     }
 
+    // --- 2. Synthesise ProbableTest nodes for newly-written test methods ---
+    //
+    // Only methods whose containing class IS already in the registry can get a
+    // probable node — we need the classNodeId to build the stable ID.
+    var existingProbableIds = registry.GetNodesForFile(req.Path)
+        .Where(n => n.Type is NodeType.ProbableTest)
+        .Select(n => n.Id)
+        .ToHashSet(StringComparer.Ordinal);
+
+    // Build a set of signature lines already occupied by real (non-probable) nodes.
+    // Any probable method whose line overlaps a real node is discarded — it's already discovered.
+    var realNodeLines = registry.GetNodesForFile(req.Path)
+        .Where(n => n.Type is not NodeType.ProbableTest && n.SignatureLine.HasValue)
+        .Select(n => n.SignatureLine!.Value)
+        .ToHashSet();
+
+    var newProbableIds = new HashSet<string>(StringComparer.Ordinal);
+
+    foreach (var probable in parsed.ProbableMethods)
+    {
+      // Discard if any real node already occupies the same signature line
+      if (realNodeLines.Contains(probable.Location.SignatureLine))
+        continue;
+
+      // Find the registered class node for this file + class name
+      var classNode = registry.GetNodesForFile(req.Path)
+          .FirstOrDefault(n =>
+              n.Type is NodeType.TestClass &&
+              string.Equals(n.DisplayName, probable.ClassName, StringComparison.Ordinal));
+
+      if (classNode is null) continue;
+
+      var probableId = NodeIdBuilder.Method(classNode.Id, probable.MethodName);
+
+      newProbableIds.Add(probableId);
+
+      var existing = registry.Get(probableId);
+      if (existing?.Type is NodeType.ProbableTest)
+      {
+        // Already known probable — update line numbers and include in updates
+        registry.UpdateLineNumbers(probableId, probable.Location.SignatureLine, probable.Location.BodyStartLine, probable.Location.EndLine);
+        updates.Add(new LineNumberUpdateDto(probableId, probable.Location.SignatureLine, probable.Location.BodyStartLine, probable.Location.EndLine));
+        continue;
+      }
+
+      // New probable — synthesise FQN by walking up through namespace segments
+      var fqn = BuildFqn(classNode, probable.MethodName);
+
+      var probableNode = new TestNode(
+          Id: probableId,
+          DisplayName: probable.MethodName,
+          ParentId: classNode.Id,
+          FilePath: req.Path,
+          SignatureLine: probable.Location.SignatureLine,
+          BodyStartLine: probable.Location.BodyStartLine,
+          EndLine: probable.Location.EndLine,
+          Type: new NodeType.ProbableTest(),
+          ProjectId: classNode.ProjectId,
+          AvailableActions: [TestAction.Run, TestAction.Debug, TestAction.GoToSource]
+      );
+
+      registry.Register(probableNode, nativeId: fqn);
+      await dispatcher.SendRegisterTestAsync(probableNode);
+
+      updates.Add(new LineNumberUpdateDto(probableId, probable.Location.SignatureLine, probable.Location.BodyStartLine, probable.Location.EndLine));
+    }
+
+    // --- 3. Remove probable nodes whose methods are no longer in the source ---
+    foreach (var staleId in existingProbableIds)
+    {
+      if (newProbableIds.Contains(staleId)) continue;
+      registry.RemoveSubtree(staleId);
+      await dispatcher.SendRemoveTestAsync(staleId);
+    }
+
     return new SyncFileResult([.. updates], req.Version);
+  }
+
+  /// <summary>
+  /// Walks from a class node upward through Namespace nodes and builds the
+  /// dotted FQN used as the probable node's nativeId.
+  /// </summary>
+  private string BuildFqn(TestNode classNode, string methodName)
+  {
+    var segments = new Stack<string>();
+    segments.Push(methodName);
+    segments.Push(classNode.DisplayName);
+
+    var current = classNode.ParentId is not null ? registry.Get(classNode.ParentId) : null;
+    while (current is not null && current.Type is NodeType.Namespace)
+    {
+      segments.Push(current.DisplayName);
+      current = current.ParentId is not null ? registry.Get(current.ParentId) : null;
+    }
+
+    return string.Join(".", segments);
+  }
+
+  /// <summary>
+  /// If <paramref name="nodeId"/> pointed to a ProbableTest that has now been replaced
+  /// (same FilePath + ParentId + DisplayName) by a real TestMethod / TheoryGroup under a
+  /// different stable id (adapters disagree on whether <c>discovered.MethodName</c> is
+  /// short or FQN), returns the successor's id. Otherwise returns <paramref name="nodeId"/>.
+  /// </summary>
+  private string ResolveProbableSuccessor(
+      string nodeId,
+      (string? FilePath, string? ParentId, string MethodName) snapshot)
+  {
+    if (snapshot.FilePath is null || snapshot.ParentId is null) return nodeId;
+
+    var current = registry.Get(nodeId);
+    if (current is not null && current.Type is not NodeType.ProbableTest) return nodeId;
+
+    var normalized = snapshot.FilePath.Replace('\\', '/');
+    var successor = registry.GetAll().FirstOrDefault(n =>
+        (n.Type is NodeType.TestMethod or NodeType.TheoryGroup) &&
+        n.ParentId == snapshot.ParentId &&
+        string.Equals(n.DisplayName, snapshot.MethodName, StringComparison.Ordinal) &&
+        string.Equals(
+            n.FilePath?.Replace('\\', '/'),
+            normalized,
+            StringComparison.OrdinalIgnoreCase));
+
+    return successor?.Id ?? nodeId;
   }
 
   private async Task<OperationResult> ExecuteOnNodeAsync(
@@ -833,15 +1029,16 @@ public class TestRunnerService(
 
     token.Ct.ThrowIfCancellationRequested();
 
-    var (_, passed, failed, skipped, cancelled) = sharedCounter.Snapshot();
+    var (_, passed, failed, skipped, cancelled, inconclusive) = sharedCounter.Snapshot();
     await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
         IsLoading: false, CurrentOperation: null,
-        OverallStatus: failed > 0 ? OverallStatus.Failed : OverallStatus.Passed,
+        OverallStatus: failed > 0 ? OverallStatus.Failed : inconclusive > 0 ? OverallStatus.Inconclusive : OverallStatus.Passed,
         TotalTests: registry.GetLeafCount(), TotalRunning: 0,
         TotalPassed: passed, TotalFailed: failed,
-        TotalSkipped: skipped, TotalCancelled: cancelled), token.OperationId);
+        TotalSkipped: skipped, TotalCancelled: cancelled,
+        TotalInconclusive: inconclusive), token.OperationId);
 
-    await MaybeNotifyFinishedAsync(source, passed, failed, skipped, cancelled, token.Ct);
+    await MaybeNotifyFinishedAsync(source, passed, failed, skipped, cancelled, inconclusive, token.Ct);
 
     return new OperationResult(Success: failed == 0 && failedProjectIds.Count == 0);
   }
@@ -859,6 +1056,14 @@ public class TestRunnerService(
 
     var project = await ResolveProjectAsync(projectId, token.Ct)
         ?? throw new InvalidOperationException($"Project {projectId} not found");
+
+    // Snapshot probable metadata before re-discovery wipes the node. After discovery
+    // we try to resolve the successor (real TestMethod / TheoryGroup) by file + class +
+    // method name — adapters disagree on whether discovered.MethodName is short or FQN,
+    // so the probable's stable id doesn't always survive rediscovery.
+    var probableSnapshot = node.Type is NodeType.ProbableTest
+        ? (FilePath: node.FilePath, ParentId: node.ParentId, MethodName: node.DisplayName)
+        : default;
 
     await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus("Building", OverallStatus.Building), token.OperationId);
     await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.Building(), operationId: token.OperationId);
@@ -896,22 +1101,38 @@ public class TestRunnerService(
       return new OperationResult(Success: false);
     }
 
+    // Re-discover after a successful build so any newly-written tests (with or
+    // without probable nodes) are registered and emitted to the client before
+    // RunNodeAsync collects its leaf set.  This also covers MTP, which has no
+    // internal pre-run discovery of its own.
+    var solutionNodeId = registry.Get(projectId)?.ParentId;
+    if (solutionNodeId is not null)
+    {
+      await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus("Discovering", OverallStatus.Discovering), token.OperationId);
+      await executor.DiscoverProjectAsync(project, solutionNodeId, control, token);
+    }
+
+    // If the caller handed us a ProbableTest id that discovery just replaced under a
+    // different stable id, redirect to the successor so this first run actually fires.
+    var runNodeId = ResolveProbableSuccessor(nodeId, probableSnapshot);
+
     await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus(debug ? "Debugging" : "Running", debug ? OverallStatus.Debugging : OverallStatus.Running), token.OperationId);
 
-    var counter = await executor.RunNodeAsync(nodeId, project, control, token, debug);
+    var counter = await executor.RunNodeAsync(runNodeId, project, control, token, debug);
 
     token.Ct.ThrowIfCancellationRequested();
 
-    var (_, passed, failed, skipped, cancelled) = counter.Snapshot();
+    var (_, passed, failed, skipped, cancelled, inconclusive) = counter.Snapshot();
 
     await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
         IsLoading: false, CurrentOperation: null,
-        OverallStatus: failed > 0 ? OverallStatus.Failed : OverallStatus.Passed,
+        OverallStatus: failed > 0 ? OverallStatus.Failed : inconclusive > 0 ? OverallStatus.Inconclusive : OverallStatus.Passed,
         TotalTests: registry.GetLeafCount(), TotalRunning: 0,
         TotalPassed: passed, TotalFailed: failed,
-        TotalSkipped: skipped, TotalCancelled: cancelled), token.OperationId);
+        TotalSkipped: skipped, TotalCancelled: cancelled,
+        TotalInconclusive: inconclusive), token.OperationId);
 
-    await MaybeNotifyFinishedAsync(source, passed, failed, skipped, cancelled, token.Ct);
+    await MaybeNotifyFinishedAsync(source, passed, failed, skipped, cancelled, inconclusive, token.Ct);
 
     return new OperationResult(Success: failed == 0);
   }
@@ -939,12 +1160,13 @@ public class TestRunnerService(
       int failed,
       int skipped,
       int cancelled,
+      int inconclusive,
       CancellationToken ct)
   {
     if (clientService.ClientOptions?.EnableOsNotifications != true) return;
     if (NormalizeSource(source) == "buffer") return;
 
-    var total = passed + failed + skipped + cancelled;
+    var total = passed + failed + skipped + cancelled + inconclusive;
     if (total == 0) return;
 
     bool visible;
@@ -960,7 +1182,7 @@ public class TestRunnerService(
 
     if (visible) return;
 
-    OsNotify.TryNotifyTestRunFinished(logger, passed, failed, skipped, cancelled);
+    OsNotify.TryNotifyTestRunFinished(logger, passed, failed, skipped, cancelled, inconclusive);
   }
 
   private TestRunnerStatus BuildIdleStatus() =>
@@ -971,12 +1193,13 @@ public class TestRunnerService(
 
   private TestRunnerStatus BuildCancelledStatus()
   {
-    var (passed, failed, skipped, cancelled) = SnapshotLeafTotals();
+    var (passed, failed, skipped, cancelled, inconclusive) = SnapshotLeafTotals();
     return new TestRunnerStatus(
         IsLoading: false, CurrentOperation: null,
         OverallStatus: OverallStatus.Cancelled,
         TotalTests: registry.GetLeafCount(), TotalRunning: 0,
-        TotalPassed: passed, TotalFailed: failed, TotalSkipped: skipped, TotalCancelled: cancelled);
+        TotalPassed: passed, TotalFailed: failed, TotalSkipped: skipped, TotalCancelled: cancelled,
+        TotalInconclusive: inconclusive);
   }
 
   private TestRunnerStatus BuildCancellingStatus() =>
@@ -1045,12 +1268,13 @@ public class TestRunnerService(
     }
   }
 
-  private (int Passed, int Failed, int Skipped, int Cancelled) SnapshotLeafTotals()
+  private (int Passed, int Failed, int Skipped, int Cancelled, int Inconclusive) SnapshotLeafTotals()
   {
     var passed = 0;
     var failed = 0;
     var skipped = 0;
     var cancelled = 0;
+    var inconclusive = 0;
 
     foreach (var node in registry.GetAll())
     {
@@ -1069,13 +1293,16 @@ public class TestRunnerService(
         case TestNodeStatusKind.Skipped:
           skipped++;
           break;
+        case TestNodeStatusKind.Inconclusive:
+          inconclusive++;
+          break;
         case TestNodeStatusKind.Cancelled:
           cancelled++;
           break;
       }
     }
 
-    return (passed, failed, skipped, cancelled);
+    return (passed, failed, skipped, cancelled, inconclusive);
   }
 
   private static string FormatDuration(long ms) =>
@@ -1101,3 +1328,8 @@ public record StackFrameDto(string OriginalText, string? File, int? Line, bool I
 public record SyncFileRequest(string Path, string Content, int Version);
 public record SyncFileResult(LineNumberUpdateDto[] Updates, int Version);
 public record LineNumberUpdateDto(string Id, int SignatureLine, int BodyStartLine, int EndLine);
+
+public record NeotestPositionsRequest(string FilePath);
+public record NeotestPositionDto(string Id, string Name, string Type, string? ParentId, int? StartLine, int? EndLine);
+public record NeotestBatchResultsRequest(string[] Ids);
+public record NeotestBatchResultDto(string Outcome, string[]? ErrorMessage, StackFrameDto? FailingFrame, string[]? Stdout);

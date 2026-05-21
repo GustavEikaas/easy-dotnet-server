@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>$(LowestNetCoreTfm)</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="StreamJsonRpc" Version="2.22.11" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\EasyDotnet.BuildServer.Contracts\EasyDotnet.BuildServer.Contracts.csproj" />
+    <ProjectReference Include="..\EasyDotnet.BuildServer\EasyDotnet.BuildServer.csproj"
+                      ReferenceOutputAssembly="false"
+                      SkipGetTargetFrameworkProperties="true"
+                      Private="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Fixtures\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Target Name="CopyBuildServerOutputs" AfterTargets="Build">
+    <ItemGroup>
+      <_BuildServerNet8 Include="..\EasyDotnet.BuildServer\bin\$(Configuration)\net8.0\**\*.*" />
+      <_BuildServerNet472 Include="..\EasyDotnet.BuildServer\bin\$(Configuration)\net472\**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_BuildServerNet8)"
+          DestinationFiles="@(_BuildServerNet8->'$(OutDir)BuildServer\net8.0\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_BuildServerNet472)"
+          DestinationFiles="@(_BuildServerNet472->'$(OutDir)BuildServer\net472\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true"
+          Condition="'@(_BuildServerNet472)' != ''" />
+  </Target>
+
+</Project>

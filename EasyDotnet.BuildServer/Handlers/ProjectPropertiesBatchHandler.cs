@@ -1,12 +1,14 @@
 using System.Runtime.CompilerServices;
 using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.BuildServer.MsBuildProject;
+using EasyDotnet.BuildServer.MsBuildProject.Cache;
 using Microsoft.Build.Evaluation;
+using Microsoft.Build.Execution;
 using StreamJsonRpc;
 
 namespace EasyDotnet.BuildServer.Handlers;
 
-public class ProjectPropertiesBatchHandler
+public class ProjectPropertiesBatchHandler(PropertyCache cache, MsBuildInstance msBuildInstance)
 {
   [JsonRpcMethod("project/get-properties-batch", UseSingleObjectParameterDeserialization = true)]
   public async IAsyncEnumerable<ProjectEvaluationResult> GetProjectPropertiesBatch(
@@ -128,25 +130,34 @@ public class ProjectPropertiesBatchHandler
       globalProps["TargetFramework"] = targetFramework!;
     }
 
-    var project = projectCollection.LoadProject(projectPath, globalProps, toolsVersion: null);
+    var key = PropertyCacheKey.Create(
+        projectPath,
+        globalProps["Configuration"],
+        globalProps.TryGetValue("Platform", out var platform) ? platform : null,
+        targetFramework ?? string.Empty,
+        msBuildInstance.Version.ToString(),
+        request.ComputeRunArguments);
 
-    try
-    {
+    var entry = cache.GetOrEvaluate(
+        key,
+        projectCollection,
+        evaluate: () =>
+        {
+          var project = projectCollection.LoadProject(projectPath, globalProps, toolsVersion: null);
+          var props = request.ComputeRunArguments
+              ? ExtractPropertiesAfterComputeRunArguments(project)
+              : ExtractProperties(project);
+          return (project, props);
+        },
+        CancellationToken.None);
 
+    var bag = new MsBuildPropertyBag(entry.Properties);
+    var dotnetProject = DotnetProjectDeserializer.FromBag(bag);
+    var validated = ValidatedDotnetProject.TryCreate(dotnetProject);
 
-      var propertyDictionary = ExtractProperties(project);
-      var bag = new MsBuildPropertyBag(propertyDictionary);
-      var dotnetProject = DotnetProjectDeserializer.FromBag(bag);
-      var validated = ValidatedDotnetProject.TryCreate(dotnetProject);
-
-      return validated is not null
-          ? new ProjectEvaluationResult(projectPath, request.Configuration, targetFramework, true, validated, null)
-          : new ProjectEvaluationResult(projectPath, request.Configuration, targetFramework, false, null, new ProjectEvaluationError("Project is missing required properties (TargetFramework, OutputType, etc.)", null, null));
-    }
-    finally
-    {
-      projectCollection.UnloadProject(project);
-    }
+    return validated is not null
+        ? new ProjectEvaluationResult(projectPath, request.Configuration, targetFramework, true, validated, null)
+        : new ProjectEvaluationResult(projectPath, request.Configuration, targetFramework, false, null, new ProjectEvaluationError("Project is missing required properties (TargetFramework, OutputType, etc.)", null, null));
   }
 
   private static IReadOnlyList<string> DetermineTargetFrameworks(Project project)
@@ -182,6 +193,11 @@ public class ProjectPropertiesBatchHandler
       ["GeneratePackageOnBuild"] = "false"
     };
 
+    if (!string.IsNullOrWhiteSpace(request.Platform))
+    {
+      globalProperties["Platform"] = request.Platform!;
+    }
+
     return new ProjectCollection(
         globalProperties,
         loggers: null,
@@ -212,6 +228,35 @@ public class ProjectPropertiesBatchHandler
   }
 
   private static IReadOnlyDictionary<string, string?> ExtractProperties(Project project)
+  {
+    var propertyNames = MsBuildProperties.GetAllPropertyNames();
+    var dictionary = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+
+    foreach (var propertyName in propertyNames)
+    {
+      var value = project.GetPropertyValue(propertyName);
+      dictionary[propertyName] = string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
+    return dictionary;
+  }
+
+  private static IReadOnlyDictionary<string, string?> ExtractPropertiesAfterComputeRunArguments(Project project)
+  {
+    var instance = project.CreateProjectInstance();
+    if (instance.Targets.ContainsKey("ComputeRunArguments"))
+    {
+      var success = instance.Build(["ComputeRunArguments"], loggers: null);
+      if (!success)
+      {
+        throw new InvalidOperationException("ComputeRunArguments failed.");
+      }
+    }
+
+    return ExtractProperties(instance);
+  }
+
+  private static IReadOnlyDictionary<string, string?> ExtractProperties(ProjectInstance project)
   {
     var propertyNames = MsBuildProperties.GetAllPropertyNames();
     var dictionary = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);

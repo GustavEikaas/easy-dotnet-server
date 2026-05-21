@@ -10,6 +10,7 @@ namespace EasyDotnet.IDE.Workspace.Services;
 
 public class WorkspaceDebugAttachService(
     WorkspaceSessionRegistry sessionRegistry,
+    INotificationService notificationService,
     IEditorService editorService,
     IDebugOrchestrator debugOrchestrator,
     IDebugStrategyFactory debugStrategyFactory,
@@ -173,6 +174,13 @@ public class WorkspaceDebugAttachService(
       _ => throw new InvalidOperationException("Unexpected attach target type")
     };
 
+    var registryKey = target is ServerAttachTarget sa ? sa.Entry.SessionKey : null;
+    if (registryKey is not null)
+    {
+      sessionRegistry.SetDebugging(registryKey, true);
+      _ = NotifyAsync();
+    }
+
     using var progress = progressScopeFactory.Create(
         "Debug Attach",
         $"Connecting debugger to {label}...");
@@ -182,5 +190,26 @@ public class WorkspaceDebugAttachService(
 
     await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
     await session.ProcessStarted;
+
+    if (registryKey is not null)
+    {
+      _ = Task.Run(async () =>
+      {
+        try { await session.DisposalStarted; }
+        finally
+        {
+          sessionRegistry.SetDebugging(registryKey, false);
+          _ = NotifyAsync();
+        }
+      }, CancellationToken.None);
+    }
+  }
+
+  private Task NotifyAsync()
+  {
+    var sessions = sessionRegistry.GetAllRunningSessions()
+        .Select(s => new RunningSessionInfo(s.ProjectName, s.IsDebugging))
+        .ToArray();
+    return notificationService.NotifyRunningProcessesChangedAsync(sessions);
   }
 }

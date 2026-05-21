@@ -7,6 +7,10 @@ namespace EasyDotnet.IDE.Services;
 //UpdateType is "major" | "minor" | "patch"
 public sealed record ServerUpdateAvailable(Version CurrentVersion, Version AvailableVersion, string UpdateType);
 public sealed record ProjectChangedNotification(string ProjectPath, string? TargetFrameworkMoniker = null, string? Configuration = null);
+public sealed record ActiveProjectChangedNotification(string? ProjectPath, string? ProjectName, string? LaunchProfile);
+public sealed record RunningProcessesChangedNotification(RunningSessionInfo[] Projects);
+public sealed record SolutionProjectsLoadedNotification();
+public sealed record RunningSessionInfo(string Name, bool IsDebugging);
 
 public class NotificationService(JsonRpc jsonRpc) : INotificationService
 {
@@ -15,4 +19,13 @@ public class NotificationService(JsonRpc jsonRpc) : INotificationService
 
   [RpcNotification("project/changed")]
   public async Task NotifyProjectChanged(string projectPath, string? targetFrameworkMoniker = null, string configuration = "Debug") => await jsonRpc.NotifyWithParameterObjectAsync("project/changed", new ProjectChangedNotification(projectPath, targetFrameworkMoniker, configuration));
+
+  [RpcNotification("solution/projects-loaded")]
+  public async Task NotifySolutionProjectsLoaded() => await jsonRpc.NotifyWithParameterObjectAsync("solution/projects-loaded", new SolutionProjectsLoadedNotification());
+
+  [RpcNotification("activeProject/changed")]
+  public async Task NotifyActiveProjectChanged(string? projectPath, string? projectName, string? launchProfile) => await jsonRpc.NotifyWithParameterObjectAsync("activeProject/changed", new ActiveProjectChangedNotification(projectPath, projectName, launchProfile));
+
+  [RpcNotification("runningProcesses/changed")]
+  public async Task NotifyRunningProcessesChangedAsync(RunningSessionInfo[] projects) => await jsonRpc.NotifyWithParameterObjectAsync("runningProcesses/changed", new RunningProcessesChangedNotification(projects));
 }

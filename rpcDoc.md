@@ -46,6 +46,13 @@
 
 **Returns:** `Task`
 
+### `workspace/clean`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | WorkspaceCleanRequest |   |
+
+**Returns:** `Task`
+
 ### `workspace/debug`
 | Parameter | Type | Optional |
 |-----------|------|----------|
@@ -60,6 +67,20 @@
 
 **Returns:** `Task`
 
+### `workspace/pack`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | NugetPackRequest |   |
+
+**Returns:** `Task`
+
+### `workspace/pack-and-push`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | NugetPackRequest |   |
+
+**Returns:** `Task`
+
 ### `workspace/restore`
 | Parameter | Type | Optional |
 |-----------|------|----------|
@@ -71,6 +92,13 @@
 | Parameter | Type | Optional |
 |-----------|------|----------|
 | request | WorkspaceRunRequest |   |
+
+**Returns:** `Task`
+
+### `workspace/stop`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | WorkspaceStopRequest |   |
 
 **Returns:** `Task`
 
@@ -92,6 +120,16 @@
 | Parameter | Type | Optional |
 |-----------|------|----------|
 | request | WorkspaceWatchRequest |   |
+
+**Returns:** `Task`
+
+---
+
+## UserSecretsController
+
+### `user-secrets/open`
+| Parameter | Type | Optional |
+|-----------|------|----------|
 
 **Returns:** `Task`
 
@@ -140,6 +178,20 @@
 
 **Returns:** `Task<OperationResult>`
 
+### `testrunner/neotestBatchResults`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | NeotestBatchResultsRequest |   |
+
+**Returns:** `Dictionary<string, NeotestBatchResultDto>`
+
+### `testrunner/neotestPositions`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | NeotestPositionsRequest |   |
+
+**Returns:** `List<NeotestPositionDto>`
+
 ### `testrunner/quickDiscover`
 | Parameter | Type | Optional |
 |-----------|------|----------|
@@ -159,7 +211,7 @@
 |-----------|------|----------|
 | request | SyncFileRequest |   |
 
-**Returns:** `SyncFileResult`
+**Returns:** `Task<SyncFileResult>`
 
 ---
 
@@ -181,14 +233,14 @@
 
 ## ProjectReferenceController
 
-### `msbuild/add-project-reference-interactive`
+### `project/add-reference-interactive`
 | Parameter | Type | Optional |
 |-----------|------|----------|
 | request | ProjectReferenceRequest |   |
 
 **Returns:** `Task`
 
-### `msbuild/remove-project-reference-interactive`
+### `project/remove-reference-interactive`
 | Parameter | Type | Optional |
 |-----------|------|----------|
 | request | ProjectReferenceRequest |   |
@@ -296,17 +348,6 @@ _No parameters_
 
 ---
 
-## UserSecretsController
-
-### `user-secrets/init`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| projectPath | string |   |
-
-**Returns:** `Task<ProjectUserSecretsInitResponse>`
-
----
-
 ## TestController
 
 ### `test/set-project-run-settings`
@@ -365,20 +406,6 @@ _No parameters_
 
 **Returns:** `Task<IAsyncEnumerable<string>>`
 
-### `nuget/list-sources`
-_No parameters_
-
-**Returns:** `IAsyncEnumerable<NugetSourceResponse>`
-
-### `nuget/push`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| packagePaths | List<string> |   |
-| source | string |   |
-| apiKey | string | ✅  |
-
-**Returns:** `Task<NugetPushResponse>`
-
 ### `nuget/restore`
 | Parameter | Type | Optional |
 |-----------|------|----------|
@@ -393,55 +420,6 @@ _No parameters_
 | sources | List<string> | ✅  |
 
 **Returns:** `Task<IAsyncEnumerable<NugetPackageMetadata>>`
-
----
-
-## MsBuildController
-
-### `msbuild/add-project-reference`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| projectPath | string |   |
-| targetPath | string |   |
-
-**Returns:** `Task<bool>`
-
-### `msbuild/build`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| request | BuildRequest |   |
-
-**Returns:** `Task<BuildResultResponse>`
-
-### `msbuild/list-package-reference`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| projectPath | string |   |
-| targetFramework | string |   |
-
-**Returns:** `Task<IAsyncEnumerable<PackageReference>>`
-
-### `msbuild/list-project-reference`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| projectPath | string |   |
-
-**Returns:** `Task<List<string>>`
-
-### `msbuild/project-properties`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| request | ProjectPropertiesRequest |   |
-
-**Returns:** `Task<DotnetProjectV1>`
-
-### `msbuild/remove-project-reference`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| projectPath | string |   |
-| targetPath | string |   |
-
-**Returns:** `Task<bool>`
 
 ---
 
@@ -478,6 +456,12 @@ _No parameters_
 **Returns:** `Task`
 
 ### `ef/migrations-apply`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+
+**Returns:** `Task`
+
+### `ef/migrations-list`
 | Parameter | Type | Optional |
 |-----------|------|----------|
 

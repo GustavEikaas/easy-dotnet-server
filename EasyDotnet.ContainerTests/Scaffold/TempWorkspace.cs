@@ -43,6 +43,7 @@ public sealed class TempWorkspaceBuilder
   private string? _globalJsonSdkVersion;
   private string? _globalJsonRollForward;
   private bool _mtpRunnerGlobalJson;
+  private string? _localNugetFeedDir;
 
   /// <summary>Declares a <c>.slnx</c> solution file at <paramref name="relativePath"/> (relative to workspace root).</summary>
   public TempWorkspaceBuilder WithSolutionX(string relativePath = "Solution")
@@ -137,11 +138,37 @@ public sealed class TempWorkspaceBuilder
     return this;
   }
 
+  /// <summary>
+  /// Writes a <c>NuGet.Config</c> at the workspace root with a single <c>local</c> source
+  /// pointing at a freshly created directory inside the workspace.
+  /// The directory is also returned via <see cref="TempWorkspace.LocalNugetFeedDir"/>.
+  /// </summary>
+  public TempWorkspaceBuilder WithLocalNugetFeed(string feedDirName = "nuget-local-feed")
+  {
+    _localNugetFeedDir = feedDirName;
+    return this;
+  }
+
   /// <summary>Materialises the workspace to disk and returns a <see cref="TempWorkspace"/> handle.</summary>
   public TempWorkspace Build()
   {
     var root = Path.Combine(Path.GetTempPath(), $"ContainerTest_{Guid.NewGuid():N}");
     Directory.CreateDirectory(root);
+
+    string? localFeedDir = null;
+    if (_localNugetFeedDir is not null)
+    {
+      localFeedDir = Path.Combine(root, _localNugetFeedDir);
+      Directory.CreateDirectory(localFeedDir);
+      File.WriteAllText(Path.Combine(root, "NuGet.Config"), $"""
+        <?xml version="1.0" encoding="utf-8"?>
+        <configuration>
+          <packageSources>
+            <add key="local" value="{localFeedDir}" />
+          </packageSources>
+        </configuration>
+        """);
+    }
 
     var projectMap = new Dictionary<string, TempProject>(StringComparer.OrdinalIgnoreCase);
     foreach (var spec in _projects)
@@ -194,7 +221,7 @@ public sealed class TempWorkspaceBuilder
         }
         """);
 
-    return new TempWorkspace(root, solutionPaths, projectMap, singleFilePath);
+    return new TempWorkspace(root, solutionPaths, projectMap, singleFilePath, localFeedDir);
   }
 
   private static void WriteProject(string dir, string name, string outputType = "Exe", string? extraProperties = null)
@@ -211,9 +238,13 @@ public sealed class TempWorkspaceBuilder
       </Project>
       """);
 
-    File.WriteAllText(Path.Combine(dir, "Program.cs"), $"""
-      Console.WriteLine("Hello from {name}!");
-      """);
+    if (outputType.Equals("Exe", StringComparison.OrdinalIgnoreCase)
+        || outputType.Equals("WinExe", StringComparison.OrdinalIgnoreCase))
+    {
+      File.WriteAllText(Path.Combine(dir, "Program.cs"), $"""
+        Console.WriteLine("Hello from {name}!");
+        """);
+    }
 
     File.WriteAllText(Path.Combine(dir, "Helpers.cs"), $$"""
       namespace {{name}};
@@ -350,12 +381,16 @@ public sealed class TempWorkspace : IDisposable
   /// <summary>Absolute path to the standalone <c>.cs</c> file, or <c>null</c> if none was added.</summary>
   public string? SingleFilePath { get; }
 
-  internal TempWorkspace(string rootDir, List<string> solutionPaths, Dictionary<string, TempProject> projects, string? singleFilePath)
+  /// <summary>Absolute path to the local NuGet feed directory, or <c>null</c> if none was configured.</summary>
+  public string? LocalNugetFeedDir { get; }
+
+  internal TempWorkspace(string rootDir, List<string> solutionPaths, Dictionary<string, TempProject> projects, string? singleFilePath, string? localNugetFeedDir)
   {
     RootDir = rootDir;
     _solutionPaths = solutionPaths;
     _projects = projects;
     SingleFilePath = singleFilePath;
+    LocalNugetFeedDir = localNugetFeedDir;
   }
 
   /// <summary>Returns the project registered under <paramref name="name"/> (the last segment of the relative path passed to <c>WithProject</c>).</summary>
@@ -409,6 +444,20 @@ public sealed class TempProjectBuilder
     return this;
   }
 
+  public TempProjectBuilder AsWinExe()
+  {
+    OutputType = "WinExe";
+    return this;
+  }
+
+  public TempProjectBuilder WithProperty(string name, string value)
+  {
+    ExtraProperties = string.IsNullOrWhiteSpace(ExtraProperties)
+      ? $"<{name}>{value}</{name}>"
+      : $"{ExtraProperties}\n          <{name}>{value}</{name}>";
+    return this;
+  }
+
   /// <summary>
   /// Marks the project as a VsTest project by setting <c>IsTestProject=true</c> in the MSBuild properties.
   /// The project still builds as a plain console app — no NuGet packages are added.
@@ -432,19 +481,48 @@ public sealed class TempProjectBuilder
     ExtraProperties = "<IsTestingPlatformApplication>true</IsTestingPlatformApplication>";
     return this;
   }
+
+  /// <summary>
+  /// Marks the project as packable with an explicit <c>PackageId</c> and <c>Version</c>.
+  /// Forces <c>OutputType=Library</c> so the produced nupkg is a normal package.
+  /// </summary>
+  public TempProjectBuilder AsPackable(string packageId, string version = "1.0.0")
+  {
+    OutputType = "Library";
+    ExtraProperties = $"<IsPackable>true</IsPackable>\n          <PackageId>{packageId}</PackageId>\n          <Version>{version}</Version>";
+    return this;
+  }
+
+  /// <summary>
+  /// Explicitly marks the project as not packable. Use in tests that need to assert
+  /// the "no packable projects" path, since SDK projects default to IsPackable=true.
+  /// </summary>
+  public TempProjectBuilder AsNotPackable()
+  {
+    ExtraProperties = "<IsPackable>false</IsPackable>";
+    return this;
+  }
 }
 
 /// <summary>A single project inside a <see cref="TempWorkspace"/>.</summary>
 public sealed class TempProject
 {
+  public string Name { get; }
   public string Dir { get; }
   public string CsprojPath { get; }
 
   internal TempProject(string dir, string name)
   {
+    Name = name;
     Dir = dir;
     CsprojPath = Path.Combine(dir, $"{name}.csproj");
   }
+
+  public string OutputDllPath(string configuration = "Debug", string targetFramework = "net8.0") =>
+    Path.Combine(Dir, "bin", configuration, targetFramework, $"{Name}.dll");
+
+  public string IntermediateOutputDllPath(string configuration = "Debug", string targetFramework = "net8.0") =>
+    Path.Combine(Dir, "obj", configuration, targetFramework, $"{Name}.dll");
 
   /// <summary>Writes (or overwrites) <c>Properties/launchSettings.json</c> for this project.</summary>
   public void WriteLaunchSettings(string launchSettingsJson) =>

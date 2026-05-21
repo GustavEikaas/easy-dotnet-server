@@ -1,12 +1,27 @@
 using System.Diagnostics;
 using EasyDotnet.AppWrapper.Contracts;
+using Spectre.Console;
 using StreamJsonRpc;
 
 namespace EasyDotnet.AppWrapper;
 
-public class AppWrapperHandler(JsonRpc rpc)
+public class AppWrapperHandler
 {
-  private Process? _currentProcess;
+  private readonly JsonRpc _rpc;
+  private volatile Process? _currentProcess;
+
+  public AppWrapperHandler(JsonRpc rpc)
+  {
+    _rpc = rpc;
+    Console.CancelKeyPress += (_, e) =>
+    {
+      if (_currentProcess is { HasExited: false })
+      {
+        e.Cancel = true; // child is alive and already received SIGINT; keep AppWrapper running
+      }
+      // else: no child running — allow AppWrapper to exit naturally
+    };
+  }
 
   [JsonRpcMethod("appWrapper/run", UseSingleObjectParameterDeserialization = true)]
   public async Task RunAsync(RunAppCommand command, CancellationToken ct)
@@ -31,8 +46,11 @@ public class AppWrapperHandler(JsonRpc rpc)
     var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
     _currentProcess = process;
 
+    Console.WriteLine();
+    AnsiConsole.MarkupLine($"[dim]{Markup.Escape(FormatCommandForDisplay(command))}[/]");
+    Console.WriteLine();
+
     process.Start();
-    Console.Error.WriteLine($"[AppWrapper] Child process started (PID {process.Id}).");
 
     try
     {
@@ -46,11 +64,14 @@ public class AppWrapperHandler(JsonRpc rpc)
     var exitCode = process.ExitCode;
     _currentProcess = null;
 
-    Console.WriteLine($"\n[easy-dotnet] App has exited (code {exitCode}). This window will be reused.\n");
+    Console.WriteLine();
+    var codeText = exitCode == 134 ? "" : $" (code {exitCode})";
+    AnsiConsole.MarkupLine($"[dim]App has exited{codeText}. This window will be reused.[/]");
+    Console.WriteLine();
 
     try
     {
-      await rpc.NotifyWithParameterObjectAsync("appWrapper/exited", new AppExitedNotification(command.JobId, exitCode));
+      await _rpc.NotifyWithParameterObjectAsync("appWrapper/exited", new AppExitedNotification(command.JobId, exitCode));
     }
     catch (Exception ex)
     {
@@ -73,5 +94,23 @@ public class AppWrapperHandler(JsonRpc rpc)
     Console.Error.WriteLine("[AppWrapper] Terminate requested by IDE.");
     KillCurrentProcess();
     return Task.CompletedTask;
+  }
+
+  private static string FormatCommandForDisplay(RunAppCommand command) =>
+    string.Join(" ", new[] { command.Executable }.Concat(command.Arguments).Select(QuoteForDisplay));
+
+  private static string QuoteForDisplay(string value)
+  {
+    if (value.Length == 0)
+    {
+      return "\"\"";
+    }
+
+    if (!value.Any(char.IsWhiteSpace) && !value.Contains('"'))
+    {
+      return value;
+    }
+
+    return $"\"{value.Replace("\"", "\\\"")}\"";
   }
 }

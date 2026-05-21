@@ -17,6 +17,7 @@ public class WorkspaceService(
     WorkspacePreBuildService preBuildService,
     IEditorService editorService,
     IEditorProcessManagerService editorProcessManagerService,
+    INotificationService notificationService,
     WorkspaceBuildHostManager buildHostManager,
     IDebugOrchestrator debugOrchestrator,
     IDebugStrategyFactory debugStrategyFactory,
@@ -79,7 +80,13 @@ public class WorkspaceService(
         return;
       }
 
-      await StartDebugSessionAsync(project, target.LaunchProfileName, request.CliArgs, ct);
+      var runnableProject = await ResolveProjectForRunAsync(project, ct);
+      if (runnableProject is null)
+      {
+        return;
+      }
+
+      await StartDebugSessionAsync(runnableProject, target.LaunchProfileName, request.CliArgs, ct);
     }
     catch (Exception ex)
     {
@@ -125,16 +132,30 @@ public class WorkspaceService(
       sessionKey = $"watch:{project.ProjectFullPath}";
     }
 
-    if (!TryClaimSession(sessionKey, TerminalSlot.Managed))
+    if (!TryClaimSession(sessionKey, project.ProjectName, TerminalSlot.Managed))
     {
       await editorService.DisplayError($"{project.ProjectName} is already being watched");
       return;
     }
 
+    _ = NotifyRunningSessionsAsync();
+
     var args = new List<string> { "watch", "--non-interactive" };
     if (target.LaunchProfileName is not null)
     {
       args.AddRange(["--launch-profile", target.LaunchProfileName]);
+    }
+
+    if (!string.IsNullOrWhiteSpace(project.Raw.Configuration))
+    {
+      args.Add("-c");
+      args.Add(project.Raw.Configuration);
+    }
+
+    var projectPlatform = BuildConfiguration.MsBuildPlatform.ToProjectPlatform(project.Raw.Platform);
+    if (!string.IsNullOrWhiteSpace(projectPlatform))
+    {
+      args.Add($"-p:Platform={projectPlatform}");
     }
 
     if (!string.IsNullOrEmpty(request.CliArgs))
@@ -152,7 +173,11 @@ public class WorkspaceService(
     _ = Task.Run(async () =>
     {
       try { await editorService.RequestRunCommandAsync(command, CancellationToken.None); }
-      finally { sessionRegistry.Release(sessionKey); }
+      finally
+      {
+        sessionRegistry.Release(sessionKey);
+        _ = NotifyRunningSessionsAsync();
+      }
     }, CancellationToken.None);
   }
 
@@ -163,18 +188,35 @@ public class WorkspaceService(
       CancellationToken ct)
   {
     var sessionKey = $"{project.ProjectFullPath}:{project.TargetFramework}";
-    if (!TryClaimSession(sessionKey, TerminalSlot.LongRunning))
+    if (!TryClaimSession(sessionKey, project.ProjectName, null))
     {
       await editorService.DisplayError($"{project.ProjectName} is already running");
       return;
     }
 
+    _ = NotifyRunningSessionsAsync();
+
     var additionalArgs = string.IsNullOrEmpty(cliArgs)
         ? null
-        : new[] { "--" }.Concat(CommandLineParser.SplitCommandLine(cliArgs)).ToArray();
+        : CommandLineParser.SplitCommandLine(cliArgs).ToArray();
+
+    if (!await preBuildService.BuildBeforeRunAsync(project.ProjectFullPath, project.ProjectName, ct))
+    {
+      sessionRegistry.Release(sessionKey);
+      _ = NotifyRunningSessionsAsync();
+      return;
+    }
+
+    var runnableProject = await ResolveProjectForRunAsync(project, ct);
+    if (runnableProject is null)
+    {
+      sessionRegistry.Release(sessionKey);
+      _ = NotifyRunningSessionsAsync();
+      return;
+    }
 
     var runRequest = new RunProjectRequest(
-        project.Raw,
+        runnableProject.Raw,
         launchProfile,
         additionalArgs,
         null,
@@ -182,18 +224,12 @@ public class WorkspaceService(
         {
           sessionRegistry.SetProcessInfo(sessionKey, new RunningProcessEntry(
               sessionKey,
-              project.ProjectName,
-              project.ProjectFullPath,
-              project.TargetFramework,
+              runnableProject.ProjectName,
+              runnableProject.ProjectFullPath,
+              runnableProject.TargetFramework,
               pid));
-          logger.LogInformation("Registered running process {ProjectName} (PID {Pid})", project.ProjectName, pid);
+          logger.LogInformation("Registered running process {ProjectName} (PID {Pid})", runnableProject.ProjectName, pid);
         });
-
-    if (!await preBuildService.BuildBeforeRunAsync(project.ProjectFullPath, project.ProjectName, ct))
-    {
-      sessionRegistry.Release(sessionKey);
-      return;
-    }
 
     Guid guid;
     try
@@ -202,9 +238,10 @@ public class WorkspaceService(
     }
     catch (Exception ex)
     {
-      logger.LogError(ex, "Unexpected error while starting {ProjectName}", project.ProjectName);
-      await editorService.DisplayError($"Failed to run {project.ProjectName}: {ex.Message}");
+      logger.LogError(ex, "Unexpected error while starting {ProjectName}", runnableProject.ProjectName);
+      await editorService.DisplayError($"Failed to run {runnableProject.ProjectName}: {ex.Message}");
       sessionRegistry.Release(sessionKey);
+      _ = NotifyRunningSessionsAsync();
       return;
     }
 
@@ -212,20 +249,21 @@ public class WorkspaceService(
     {
       try
       {
-        var exitCode = await editorProcessManagerService.WaitForExitAsync(guid, TerminalSlot.LongRunning);
-        logger.LogInformation("{ProjectName} exited with code {ExitCode}", project.ProjectName, exitCode);
-        if (exitCode != 0)
+        var exitCode = await editorProcessManagerService.WaitForExitAsync(guid);
+        logger.LogInformation("{ProjectName} exited with code {ExitCode}", runnableProject.ProjectName, exitCode);
+        if (exitCode != 0 && exitCode != 134)
         {
-          await editorService.DisplayError($"{project.ProjectName} exited with code {exitCode}");
+          await editorService.DisplayError($"{runnableProject.ProjectName} exited with code {exitCode}");
         }
       }
       catch (Exception ex)
       {
-        logger.LogError(ex, "Unexpected error while monitoring {ProjectName}", project.ProjectName);
+        logger.LogError(ex, "Unexpected error while monitoring {ProjectName}", runnableProject.ProjectName);
       }
       finally
       {
         sessionRegistry.Release(sessionKey);
+        _ = NotifyRunningSessionsAsync();
       }
     }, CancellationToken.None);
   }
@@ -243,7 +281,33 @@ public class WorkspaceService(
       return;
     }
 
-    await StartDebugSessionAsync(project, null, cliArgs, ct);
+    var runnableProject = await ResolveProjectForRunAsync(project, ct);
+    if (runnableProject is null)
+    {
+      return;
+    }
+
+    await StartDebugSessionAsync(runnableProject, null, cliArgs, ct);
+  }
+
+  private async Task<ValidatedDotnetProject?> ResolveProjectForRunAsync(
+      ValidatedDotnetProject project,
+      CancellationToken ct)
+  {
+    buildHostManager.InvalidateCache(project.ProjectFullPath);
+    var resolved = await buildHostManager.GetProjectAsync(
+        project.ProjectFullPath,
+        project.TargetFramework,
+        computeRunArguments: true,
+        ct: ct);
+
+    if (resolved is not null)
+    {
+      return resolved;
+    }
+
+    await editorService.DisplayError($"Failed to compute run command for {project.ProjectName}");
+    return null;
   }
 
   private async Task<ValidatedDotnetProject?> ConvertSingleFileToProjectAsync(string filePath, CancellationToken ct)
@@ -271,14 +335,38 @@ public class WorkspaceService(
       string? cliArgs,
       CancellationToken ct)
   {
+    var sessionKey = $"debug:{project.ProjectFullPath}";
+    sessionRegistry.TryClaim(sessionKey, project.ProjectName, isDebug: true);
+    _ = NotifyRunningSessionsAsync();
+
     var strategy = debugStrategyFactory.CreateRunInTerminalStrategy(project, launchProfileName, cliArgs);
 
-    var session = await debugOrchestrator.StartClientDebugSessionAsync(
-        project.ProjectFullPath, strategy, ct);
+    EasyDotnet.Debugger.DebugSession session;
+    try
+    {
+      session = await debugOrchestrator.StartClientDebugSessionAsync(
+          project.ProjectFullPath, strategy, ct);
 
-    await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
-    await session.ProcessStarted;
-    await Task.Delay(1000, ct);
+      await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
+      await session.ProcessStarted;
+      await Task.Delay(1000, ct);
+    }
+    catch
+    {
+      sessionRegistry.Release(sessionKey);
+      _ = NotifyRunningSessionsAsync();
+      throw;
+    }
+
+    _ = Task.Run(async () =>
+    {
+      try { await session.DisposalStarted; }
+      finally
+      {
+        sessionRegistry.Release(sessionKey);
+        _ = NotifyRunningSessionsAsync();
+      }
+    }, CancellationToken.None);
   }
 
   private bool ValidateFilePath(string? filePath)
@@ -297,16 +385,23 @@ public class WorkspaceService(
     return false;
   }
 
-  private bool TryClaimSession(string key, TerminalSlot slot)
+  private Task NotifyRunningSessionsAsync() =>
+      notificationService.NotifyRunningProcessesChangedAsync(
+          [.. sessionRegistry.GetAllRunningSessions().Select(s => new RunningSessionInfo(s.ProjectName, s.IsDebugging))]);
+
+  private bool TryClaimSession(string key, string projectName, TerminalSlot? slot)
   {
-    if (sessionRegistry.TryClaim(key))
+    if (sessionRegistry.TryClaim(key, projectName))
       return true;
 
-    if (editorProcessManagerService.IsSlotBusy(slot))
+    if (!slot.HasValue)
       return false;
 
-    logger.LogWarning("Session {Key} was stale (slot {Slot} is free). Reclaiming.", key, slot);
+    if (editorProcessManagerService.IsSlotBusy(slot.Value))
+      return false;
+
+    logger.LogWarning("Session {Key} was stale (slot {Slot} is free). Reclaiming.", key, slot.Value);
     sessionRegistry.Release(key);
-    return sessionRegistry.TryClaim(key);
+    return sessionRegistry.TryClaim(key, projectName);
   }
 }
