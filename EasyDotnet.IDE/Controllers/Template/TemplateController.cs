@@ -1,6 +1,7 @@
 using EasyDotnet.Controllers;
 using EasyDotnet.Controllers.Template;
 using EasyDotnet.IDE.Services;
+using EasyDotnet.IDE.TemplateEngine.PostActionHandlers;
 using Microsoft.TemplateEngine.Utils;
 using StreamJsonRpc;
 
@@ -23,6 +24,15 @@ public class TemplateController(TemplateEngineService templateEngineService) : B
     await templateEngineService.EnsureInstalled();
     var parameters = await templateEngineService.GetTemplateOptions(identity);
 
+    var synthetic = new DotnetNewParameterResponse(
+        EasyDotnetAddToSolutionPostActionHandler.ParameterKey,
+        DefaultValue: "true",
+        DefaultIfOptionWithoutValue: null,
+        DataType: "bool",
+        Description: "Add project(s) to solution file",
+        IsRequired: false,
+        Choices: null);
+
     return parameters
       .Select(x => new DotnetNewParameterResponse(
             x.Name,
@@ -32,6 +42,7 @@ public class TemplateController(TemplateEngineService templateEngineService) : B
             x.Description,
             x.Precedence.IsRequired,
             x.Choices?.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.DisplayName ?? kvp.Value.Description ?? "")))
+      .Append(synthetic)
       .ToBatchedAsyncEnumerable(5);
   }
 
