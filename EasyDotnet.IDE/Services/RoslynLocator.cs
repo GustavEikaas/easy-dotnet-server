@@ -6,34 +6,22 @@ public static class RoslynLocator
 {
   public const string ROSLYN_DLL_PATH_ENV = "EASY_DOTNET_ROSLYN_DLL_PATH";
 
-  /// <summary>
-  /// Returns the full path to the Roslyn LSP DLL.
-  /// Checks EASY_DOTNET_ROSLYN_DLL_PATH first, then falls back to bundled version.
-  /// </summary>
-  public static string GetRoslynDllPath()
+  public static string? GetCustomRoslynDllPath()
   {
     var customDllPath = Environment.GetEnvironmentVariable(ROSLYN_DLL_PATH_ENV);
-    if (!string.IsNullOrWhiteSpace(customDllPath))
+    if (string.IsNullOrWhiteSpace(customDllPath))
     {
-      if (File.Exists(customDllPath))
-      {
-        return customDllPath;
-      }
-      throw new FileNotFoundException(
+      return null;
+    }
+
+    if (File.Exists(customDllPath))
+    {
+      return customDllPath;
+    }
+
+    throw new FileNotFoundException(
         $"Custom Roslyn DLL specified in {ROSLYN_DLL_PATH_ENV} not found",
         customDllPath);
-    }
-
-
-    var roslynDir = GetRoslynBaseDir();
-    var roslynDll = Path.Combine(roslynDir, "LanguageServer", "Microsoft.CodeAnalysis.LanguageServer.dll");
-
-    if (!File.Exists(roslynDll))
-    {
-      throw new FileNotFoundException("Roslyn LSP DLL not found", roslynDll);
-    }
-
-    return roslynDll;
   }
 
   /// <summary>
