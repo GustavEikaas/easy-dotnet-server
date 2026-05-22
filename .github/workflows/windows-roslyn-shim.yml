@@ -8,6 +8,9 @@ jobs:
     runs-on: windows-latest
 
     steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
@@ -24,11 +27,11 @@ jobs:
         shell: pwsh
         run: |
           $toolDir = Join-Path $env:USERPROFILE ".dotnet\tools"
-          $expectedExe = Join-Path $toolDir "roslyn-language-server.exe"
+          $expectedCmd = Join-Path $toolDir "roslyn-language-server.cmd"
 
           Write-Host "USERPROFILE: $env:USERPROFILE"
           Write-Host "Tool dir: $toolDir"
-          Write-Host "Expected exe: $expectedExe"
+          Write-Host "Expected cmd: $expectedCmd"
           Write-Host ""
 
           Write-Host "dotnet tool list --global"
@@ -47,14 +50,19 @@ jobs:
           where.exe roslyn-language-server
           Write-Host ""
 
-          Write-Host "Expected exe exists: $(Test-Path $expectedExe)"
+          Write-Host "Expected cmd exists: $(Test-Path $expectedCmd)"
           Write-Host "roslyn-language-server --version"
           roslyn-language-server --version
           Write-Host ""
 
-          Write-Host "Direct expected exe --version"
-          & $expectedExe --version
+          Write-Host "Direct expected cmd --version"
+          & $expectedCmd --version
 
-          if (!(Test-Path $expectedExe)) {
-            throw "Expected shim was not found at $expectedExe"
+          if (!(Test-Path $expectedCmd)) {
+            throw "Expected shim was not found at $expectedCmd"
           }
+
+      - name: Run easy-dotnet healthcheck
+        shell: pwsh
+        run: |
+          dotnet run --project ./EasyDotnet.IDE/EasyDotnet.IDE.csproj -- healthcheck --format markdown

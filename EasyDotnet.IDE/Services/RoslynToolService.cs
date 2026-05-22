@@ -116,17 +116,7 @@ public static class RoslynToolService
 
   private static async Task<RoslynToolCommandResult> RunProcessAsync(string fileName, IReadOnlyList<string> arguments, CancellationToken cancellationToken)
   {
-    var startInfo = new ProcessStartInfo(fileName)
-    {
-      RedirectStandardOutput = true,
-      RedirectStandardError = true,
-      UseShellExecute = false,
-    };
-
-    foreach (var arg in arguments)
-    {
-      startInfo.ArgumentList.Add(arg);
-    }
+    var startInfo = CreateProcessStartInfo(fileName, arguments, redirectOutput: true);
 
     using var process = new Process { StartInfo = startInfo };
     process.Start();
@@ -143,9 +133,34 @@ public static class RoslynToolService
     return new RoslynToolCommandResult(process.ExitCode == 0, process.ExitCode, output.Trim());
   }
 
+  internal static ProcessStartInfo CreateProcessStartInfo(string fileName, IReadOnlyList<string> arguments, bool redirectOutput)
+  {
+    var startInfo = IsWindowsCommandScript(fileName)
+        ? new ProcessStartInfo("cmd.exe")
+        : new ProcessStartInfo(fileName);
+
+    startInfo.UseShellExecute = false;
+    startInfo.RedirectStandardOutput = redirectOutput;
+    startInfo.RedirectStandardError = redirectOutput;
+
+    if (IsWindowsCommandScript(fileName))
+    {
+      startInfo.ArgumentList.Add("/d");
+      startInfo.ArgumentList.Add("/c");
+      startInfo.ArgumentList.Add(fileName);
+    }
+
+    foreach (var arg in arguments)
+    {
+      startInfo.ArgumentList.Add(arg);
+    }
+
+    return startInfo;
+  }
+
   private static string? ResolveExecutablePath()
   {
-    var executableName = OperatingSystem.IsWindows() ? $"{CommandName}.exe" : CommandName;
+    var executableName = OperatingSystem.IsWindows() ? $"{CommandName}.cmd" : CommandName;
 
     var globalTool = GetGlobalToolPath(executableName);
     if (File.Exists(globalTool))
@@ -176,4 +191,8 @@ public static class RoslynToolService
     var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
     return Path.Combine(home, ".dotnet", "tools", executableName);
   }
+
+  private static bool IsWindowsCommandScript(string fileName) =>
+    OperatingSystem.IsWindows()
+    && string.Equals(Path.GetExtension(fileName), ".cmd", StringComparison.OrdinalIgnoreCase);
 }
