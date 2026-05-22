@@ -6,7 +6,7 @@ on:
       - main
 
 permissions:
-  id-token: write 
+  id-token: write
 
 jobs:
   publish:
@@ -24,8 +24,8 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
-      - name: Build Release + Inject Roslyn
-        uses: ./.github/actions/build-release-with-roslyn
+      - name: Build Release Assets
+        uses: ./.github/actions/build-release-assets
 
       - name: Pack
         run: dotnet pack ./EasyDotnet.IDE

@@ -2,7 +2,7 @@
 
 *(Server ↔ Client (Neovim / easy-dotnet.nvim))*
 
-The server bundles a **Roslyn LSP** `Microsoft.CodeAnalysis.LanguageServer.neutral` and exposes it via a subcommand:
+The server uses the official **Roslyn LSP** `roslyn-language-server` global tool and exposes it via a subcommand:
 
 ```bash
 dotnet easydotnet roslyn start
@@ -13,9 +13,10 @@ This launches the LSP server using **stdio communication**, making it compatible
 ### Key Features
 
 * **Standard Roslyn LSP support** for C# and .NET projects.
+* **Automatic install:** If `roslyn-language-server` is missing, the server installs it with `dotnet tool install --global roslyn-language-server --prerelease`.
 * **Roslynator support:** By passing `--roslynator`, the server automatically loads Roslynator analyzers.
 * **Custom analyzers:** Additional analyzer assemblies can be loaded via `--analyzer <PATH>`.
-* **Optional tooling integrations:** DevKit, Razor source generators, and design-time paths can be specified.
+* **Optional tooling integrations:** DevKit dependencies and analyzer extensions can be specified.
 
 ## Why the Server Provides LSP
 
@@ -36,9 +37,10 @@ Clients (such as `easy-dotnet.nvim`) usually:
 
 ## Versioning & Updates
 
-* The server ships with a specific version of Roslyn and its analyzers.
-* Users are expected to **periodically update the server**, which ensures they automatically get the latest LSP improvements and analyzer updates.
-* This approach simplifies client management since the client does not need to manage individual LSP binaries or dependencies.
+* The server tracks a recommended minimum Roslyn tool version and warns if the installed tool is older.
+* Users are periodically notified when a newer Roslyn tool is available.
+* Existing Roslyn tool installs are not updated automatically; clients can invoke the update command when ready.
+* Health checks can read Roslyn tool state from the deterministic `dotnet-easydotnet healthcheck` item list instead of reimplementing version parsing.
 
 ## Command-Line Options
 
@@ -50,17 +52,14 @@ Options:
   --roslynator             Enable Roslynator analyzers (optional)
   --analyzer <PATH>        Additional analyzer assemblies to load
   --devKitDependencyPath   Full path to DevKit dependencies (optional)
-  --razorSourceGenerator   Full path to Razor source generator (optional)
-  --razorDesignTimePath    Full path to Razor design-time target (optional)
-  --csharpDesignTimePath   Full path to C# design-time target (optional)
+  --clientProcessId        Client process id Roslyn should monitor for shutdown
 ```
 
 ## Summary
 
 From the **server perspective**:
 
-* We provide a ready-to-use Roslyn LSP with optional analyzers.
+* We provide a ready-to-use Roslyn LSP launcher with optional analyzers.
 * We handle all logging, workspace, and extension loading.
 * Clients are expected to consume it using standard LSP protocols.
 * Updating the server automatically updates the underlying LSP and analyzers, keeping tooling current across clients.
-

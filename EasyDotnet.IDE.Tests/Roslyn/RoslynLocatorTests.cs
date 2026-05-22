@@ -6,29 +6,20 @@ namespace EasyDotnet.IDE.Tests.Roslyn;
 public class RoslynLocatorTests
 {
 
-  //No bundled version when running locally
   [Test]
-  public async Task GetRoslynDllPath_UsesBundledVersion_WhenNoEnvVarSet()
+  public async Task TryParseVersion_StripsBuildMetadata()
   {
-
-    Environment.SetEnvironmentVariable(RoslynLocator.ROSLYN_DLL_PATH_ENV, null);
-    Assert.Throws<Exception>(() => RoslynLocator.GetRoslynDllPath());
+    var version = RoslynToolService.TryParseVersion("5.8.0-1.26252.1+3d098b3a2f24112aa06731d38ea6dd7334169998");
+    await Assert.That(version).IsNotNull();
+    await Assert.That(version!.ToString()).IsEqualTo("5.8.0-1.26252.1");
   }
 
   [Test]
-  public async Task GetRoslynDllPath_UsesCustomPath_WhenEnvVarSet()
+  public async Task IsBelowRecommendedVersion_UsesMinimumRecommendedVersion()
   {
-    var customDllPath = Path.GetTempFileName();
-    try
-    {
-      Environment.SetEnvironmentVariable(RoslynLocator.ROSLYN_DLL_PATH_ENV, customDllPath);
-      var path = RoslynLocator.GetRoslynDllPath();
-      await Assert.That(path).IsEqualTo(customDllPath);
-    }
-    finally
-    {
-      File.Delete(customDllPath);
-    }
+    await Assert.That(RoslynToolService.IsBelowRecommendedVersion("5.8.0-1.26252.1")).IsTrue();
+    await Assert.That(RoslynToolService.IsBelowRecommendedVersion("5.8.0-1.26262.10")).IsFalse();
+    await Assert.That(RoslynToolService.IsBelowRecommendedVersion("5.8.0-1.26266.2")).IsFalse();
   }
 
   [After(Test)]

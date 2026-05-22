@@ -342,6 +342,9 @@ EndGlobal
     public Task NotifyActiveProjectChanged(string? projectPath, string? projectName, string? launchProfile) => Task.CompletedTask;
 
     public Task NotifyRunningProcessesChangedAsync(RunningSessionInfo[] projects) => Task.CompletedTask;
+
+    public Task NotifyRoslynUpdateAvailable(string? currentVersion, string availableVersion, string minimumRecommendedVersion, bool isBelowRecommended) => Task.CompletedTask;
+
   }
 
   private sealed class NoOpBuildHostManager : IBuildHostManager

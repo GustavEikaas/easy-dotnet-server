@@ -35,11 +35,26 @@ You can regenerate this file at any time by running the server with the `generat
 dotnet run generate-rpc-docs -- --format markdown
 ```
 
+The server also exposes a machine-readable health command:
+
+```bash
+dotnet-easydotnet healthcheck
+```
+
+It returns a deterministic JSON array of health items with `type`, `name`, `value`, and `advice` fields. Use `--format markdown` for readable terminal output.
+Pass `--debugger-bin-path <PATH>` to make the debugger health rows reflect a client-provided netcoredbg path.
+
 ## Configuration
 
 ### Custom Roslyn LSP Server
 
-For testing purposes or workarounds, you can override the bundled Roslyn language server using environment variables:
+easy-dotnet uses the official `roslyn-language-server` .NET global tool for Roslyn LSP. If it is missing, the server can install it with:
+
+```bash
+dotnet tool install --global roslyn-language-server --prerelease
+```
+
+For testing purposes or workarounds, you can override the Roslyn language server using environment variables:
 
 #### Environment Variables
 
