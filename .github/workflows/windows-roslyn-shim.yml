@@ -65,4 +65,5 @@ jobs:
       - name: Run easy-dotnet healthcheck
         shell: pwsh
         run: |
+          dotnet build
           dotnet run --project ./EasyDotnet.IDE/EasyDotnet.IDE.csproj -- healthcheck --format markdown
