@@ -156,6 +156,7 @@ public static class DiModules
     services.AddTransient<IPostActionHandler, DisplayManualInstructionsPostActionHandler>();
     services.AddTransient<IPostActionHandler, RestoreNugetPackagesPostActionHandler>();
     services.AddTransient<IPostActionHandler, AddProjectsToSolutionFilePostActionHandler>();
+    services.AddTransient<IPostActionHandler, EasyDotnetAddToSolutionPostActionHandler>();
     services.AddTransient<IPostActionHandler, AddPropertyToExistingJsonFilePostActionHandler>();
     services.AddTransient<IPostActionHandler, AddReferenceToProjectFilePostActionHandler>();
 

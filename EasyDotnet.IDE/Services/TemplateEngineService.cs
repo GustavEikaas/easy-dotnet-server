@@ -99,7 +99,7 @@ public class TemplateEngineService(
       name = defaultName;
     }
 
-    var mutableParams = OverwriteTargetFrameworkIfSet(parameters);
+    var (addToSolution, mutableParams) = ExtractAddToSolutionParam(parameters);
 
     var result = await bootstrapper.CreateAsync(template, name, outputPath, mutableParams, cancellationToken: cancellationToken);
 
@@ -110,10 +110,35 @@ public class TemplateEngineService(
 
     if (result.CreationResult?.PostActions is not null)
     {
-      await postActionProcessor.ProcessAsync(result.CreationResult.PostActions, result.CreationResult.PrimaryOutputs, outputPath, cancellationToken);
+      var postActions = EnrichPostActions(result.CreationResult.PostActions, addToSolution);
+      await postActionProcessor.ProcessAsync(postActions, result.CreationResult.PrimaryOutputs, outputPath, cancellationToken);
     }
 
     return result;
+  }
+
+  private static (bool addToSolution, IReadOnlyDictionary<string, string?>) ExtractAddToSolutionParam(IReadOnlyDictionary<string, string?>? parameters)
+  {
+    var mutable = OverwriteTargetFrameworkIfSet(parameters);
+    var dict = new Dictionary<string, string?>(mutable);
+
+    var addToSolution = dict.TryGetValue(EasyDotnetAddToSolutionPostActionHandler.ParameterKey, out var raw)
+        && string.Equals(raw, "true", StringComparison.OrdinalIgnoreCase);
+
+    dict.Remove(EasyDotnetAddToSolutionPostActionHandler.ParameterKey);
+
+    return (addToSolution, dict.AsReadOnly());
+  }
+
+  private static IReadOnlyList<IPostAction> EnrichPostActions(IReadOnlyList<IPostAction> postActions, bool addToSolution)
+  {
+    if (!addToSolution)
+      return postActions;
+
+    if (postActions.Any(a => a.ActionId == AddProjectsToSolutionFilePostActionHandler.Id))
+      return postActions;
+
+    return [.. postActions, EasyDotnetAddToSolutionPostActionHandler.SyntheticPostAction];
   }
 
   public async Task<IReadOnlyList<ITemplateInfo>> GetTemplatesAsync()
