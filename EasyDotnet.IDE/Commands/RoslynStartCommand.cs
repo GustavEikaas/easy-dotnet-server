@@ -98,14 +98,6 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
       startInfo.ArgumentList.Add(settings.DevKitDependencyPath);
     }
 
-    var razorExtensionDir = RoslynLocator.GetRazorExtensionDir();
-    var sourceGenerator = Path.Combine(razorExtensionDir, "Microsoft.CodeAnalysis.Razor.Compiler.dll");
-    var designTimePath = Path.Combine(razorExtensionDir, "Targets", "Microsoft.NET.Sdk.Razor.DesignTime.targets");
-    var extensionDll = Path.Combine(razorExtensionDir, "Microsoft.VisualStudioCode.RazorExtension.dll");
-    startInfo.ArgumentList.Add($"--extension={extensionDll}");
-    startInfo.ArgumentList.Add($"--razorSourceGenerator={sourceGenerator}");
-    startInfo.ArgumentList.Add($"--razorDesignTimePath={designTimePath}");
-
     if (!string.IsNullOrWhiteSpace(settings.CSharpDesignTimePath))
     {
       startInfo.ArgumentList.Add("--csharpDesignTimePath");
