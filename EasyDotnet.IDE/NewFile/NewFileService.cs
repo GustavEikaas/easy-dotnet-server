@@ -121,7 +121,7 @@ public class NewFileService(IBuildHostManager buildHostManager, IEditorService e
   private static string BuildRazorComponentContent(string filePath)
   {
     var name = GetLogicalTypeName(filePath);
-    return $"<h3>{name}</h3>\n\n@code {{\n\n}}\n";
+    return $"<h3>{name}</h3>\n";
   }
 
   private static string BuildRazorCodeBehindContent(
