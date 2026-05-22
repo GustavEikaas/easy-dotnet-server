@@ -6,6 +6,7 @@ public interface IAppPathsService
 {
   string CacheDirectory { get; }
   string UpdateCheckCacheFile { get; }
+  string RoslynUpdateCheckCacheFile { get; }
   void ClearCache();
 }
 
@@ -30,6 +31,8 @@ public class AppPathsService : IAppPathsService
   /// Gets the path for the update check cache file
   /// </summary>
   public string UpdateCheckCacheFile => Path.Combine(CacheDirectory, "last-update-check.txt");
+
+  public string RoslynUpdateCheckCacheFile => Path.Combine(CacheDirectory, "last-roslyn-update-check.txt");
 
 
   private string InitializeCacheDirectory()

@@ -22,12 +22,19 @@ public class UpdateCheckerService(
   private const string PackageId = "EasyDotnet";
 
   private string? _cachedUpdateMessage;
+  private string? _cachedRoslynUpdateMessage;
 
   public async Task CheckForUpdates(CancellationToken cancellationToken)
   {
+    await CheckEasyDotnetUpdates(cancellationToken);
+    await CheckRoslynToolUpdates(cancellationToken);
+  }
+
+  private async Task CheckEasyDotnetUpdates(CancellationToken cancellationToken)
+  {
     try
     {
-      var lastCheck = await GetLastCheckTimeAsync();
+      var lastCheck = await GetLastCheckTimeAsync(appPaths.UpdateCheckCacheFile);
       if (lastCheck.HasValue && DateTime.UtcNow - lastCheck.Value < _updateCheckInterval)
       {
         logger.LogDebug("Skipping update check, last checked {TimeAgo} ago", DateTime.UtcNow - lastCheck.Value);
@@ -53,7 +60,7 @@ public class UpdateCheckerService(
       if (newerVersions.Count == 0)
       {
         logger.LogDebug("No updates available");
-        await SaveLastCheckTimeAsync(DateTime.UtcNow);
+        await SaveLastCheckTimeAsync(appPaths.UpdateCheckCacheFile, DateTime.UtcNow);
         _cachedUpdateMessage = null;
         return;
       }
@@ -65,7 +72,7 @@ public class UpdateCheckerService(
 
       logger.LogInformation("Update available: {Message}", _cachedUpdateMessage);
 
-      await SaveLastCheckTimeAsync(DateTime.UtcNow);
+      await SaveLastCheckTimeAsync(appPaths.UpdateCheckCacheFile, DateTime.UtcNow);
       await notificationService.NotifyUpdateAvailable(currentVersion, highest.Version, updateType);
     }
     catch (Exception ex)
@@ -74,12 +81,79 @@ public class UpdateCheckerService(
     }
   }
 
-  private async Task<DateTime?> GetLastCheckTimeAsync()
+  private async Task CheckRoslynToolUpdates(CancellationToken cancellationToken)
   {
     try
     {
-      var cacheFile = appPaths.UpdateCheckCacheFile;
+      var lastCheck = await GetLastCheckTimeAsync(appPaths.RoslynUpdateCheckCacheFile);
+      if (lastCheck.HasValue && DateTime.UtcNow - lastCheck.Value < _updateCheckInterval)
+      {
+        logger.LogDebug("Skipping Roslyn tool update check, last checked {TimeAgo} ago", DateTime.UtcNow - lastCheck.Value);
 
+        if (!string.IsNullOrEmpty(_cachedRoslynUpdateMessage))
+        {
+          logger.LogInformation("Cached Roslyn update available: {Message}", _cachedRoslynUpdateMessage);
+        }
+        return;
+      }
+
+      var status = await RoslynToolService.GetStatusAsync(cancellationToken);
+      if (!status.IsInstalled)
+      {
+        logger.LogDebug("Skipping Roslyn tool update check because {PackageId} is not installed", RoslynToolService.PackageId);
+        await SaveLastCheckTimeAsync(appPaths.RoslynUpdateCheckCacheFile, DateTime.UtcNow);
+        _cachedRoslynUpdateMessage = null;
+        return;
+      }
+
+      var currentVersion = RoslynToolService.TryParseVersion(status.Version);
+      if (currentVersion is null)
+      {
+        logger.LogDebug("Skipping Roslyn tool update check because installed version could not be parsed: {Version}", status.Version);
+        await SaveLastCheckTimeAsync(appPaths.RoslynUpdateCheckCacheFile, DateTime.UtcNow);
+        _cachedRoslynUpdateMessage = null;
+        return;
+      }
+
+      logger.LogDebug("Checking for updates to {PackageId} (current: {Version})", RoslynToolService.PackageId, currentVersion);
+
+      var versions = await nugetService.GetPackageVersionsAsync(RoslynToolService.PackageId, cancellationToken, true);
+      var latest = versions.OrderByDescending(x => x).FirstOrDefault();
+
+      await SaveLastCheckTimeAsync(appPaths.RoslynUpdateCheckCacheFile, DateTime.UtcNow);
+
+      var isBelowRecommended = status.IsBelowRecommended;
+      if (latest is null)
+      {
+        if (isBelowRecommended)
+        {
+          await notificationService.NotifyRoslynUpdateAvailable(status.Version, RoslynToolService.MinimumRecommendedVersion, RoslynToolService.MinimumRecommendedVersion, true);
+        }
+        return;
+      }
+
+      if (latest <= currentVersion && !isBelowRecommended)
+      {
+        logger.LogDebug("No Roslyn tool updates available");
+        _cachedRoslynUpdateMessage = null;
+        return;
+      }
+
+      _cachedRoslynUpdateMessage = $"{currentVersion} -> {latest}";
+      logger.LogInformation("Roslyn tool update available: {Message}", _cachedRoslynUpdateMessage);
+
+      await notificationService.NotifyRoslynUpdateAvailable(status.Version, latest.ToString(), RoslynToolService.MinimumRecommendedVersion, isBelowRecommended);
+    }
+    catch (Exception ex)
+    {
+      logger.LogWarning(ex, "Failed to check for Roslyn tool updates");
+    }
+  }
+
+  private async Task<DateTime?> GetLastCheckTimeAsync(string cacheFile)
+  {
+    try
+    {
       if (!File.Exists(cacheFile))
         return null;
 
@@ -95,11 +169,10 @@ public class UpdateCheckerService(
     }
   }
 
-  private async Task SaveLastCheckTimeAsync(DateTime checkTime)
+  private async Task SaveLastCheckTimeAsync(string cacheFile, DateTime checkTime)
   {
     try
     {
-      var cacheFile = appPaths.UpdateCheckCacheFile;
       var cacheData = new UpdateCheckCache(checkTime);
       var json = JsonSerializer.Serialize(cacheData, JsonSerializerOptions);
 

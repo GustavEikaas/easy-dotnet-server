@@ -36,25 +36,35 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
     [CommandOption("--devKitDependencyPath <PATH>")]
     public string? DevKitDependencyPath { get; init; }
 
-    [Description("Full path to the Razor source generator (optional).")]
-    [CommandOption("--razorSourceGenerator <PATH>")]
-    public string? RazorSourceGenerator { get; init; }
-
-    [Description("Full path to the Razor design time target path (optional).")]
-    [CommandOption("--razorDesignTimePath <PATH>")]
-    public string? RazorDesignTimePath { get; init; }
-
-    [Description("Full path to the C# design time target path (optional).")]
-    [CommandOption("--csharpDesignTimePath <PATH>")]
-    public string? CSharpDesignTimePath { get; init; }
+    [Description("Client process id Roslyn should monitor for shutdown.")]
+    [CommandOption("--clientProcessId <PID>")]
+    public int? ClientProcessId { get; init; }
   }
 
   public override async Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
   {
-    var roslynDllPath = RoslynLocator.GetRoslynDllPath();
+    var customRoslynDllPath = RoslynLocator.GetCustomRoslynDllPath();
+    if (!string.IsNullOrWhiteSpace(customRoslynDllPath))
+    {
+      if (settings.ShowVersion)
+      {
+        return await ShowRoslynVersion(customRoslynDllPath, cancellationToken);
+      }
+
+      return await StartRoslynDllAsync(customRoslynDllPath, settings, cancellationToken);
+    }
+
     if (settings.ShowVersion)
     {
-      return await ShowRoslynVersion(roslynDllPath, cancellationToken);
+      var status = await RoslynToolService.GetStatusAsync(cancellationToken);
+      if (!status.IsInstalled)
+      {
+        AnsiConsole.MarkupLine($"[red]{status.Message}[/]");
+        return 1;
+      }
+
+      AnsiConsole.MarkupLine($"[green]Roslyn Version:[/] {status.Version}");
+      return 0;
     }
 
     if (!CheckRequiredDotnetSdk())
@@ -62,6 +72,88 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
       return RoslynExitCodes.SDKOutdated;
     }
 
+    var toolStatus = await RoslynToolService.EnsureInstalledAsync(true, cancellationToken);
+    if (!toolStatus.IsInstalled || string.IsNullOrWhiteSpace(toolStatus.ExecutablePath))
+    {
+      AnsiConsole.MarkupLine($"[red]Failed to locate {RoslynToolService.PackageId}.[/]");
+      if (!string.IsNullOrWhiteSpace(toolStatus.Message))
+      {
+        AnsiConsole.WriteLine(toolStatus.Message);
+      }
+      AnsiConsole.MarkupLine($"Install it with: [grey]dotnet tool install --global {RoslynToolService.PackageId} --prerelease[/]");
+      return RoslynExitCodes.ToolMissing;
+    }
+
+    if (toolStatus.IsBelowRecommended)
+    {
+      Console.Error.WriteLine($"[easy-dotnet] {toolStatus.Message}. Update with: dotnet tool update --global {RoslynToolService.PackageId} --prerelease");
+    }
+
+    return await StartRoslynToolAsync(toolStatus.ExecutablePath, settings, cancellationToken);
+  }
+
+  private static async Task<int> StartRoslynToolAsync(string executablePath, Settings settings, CancellationToken cancellationToken)
+  {
+    var roslynLogDir = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "EasyDotnet", "RoslynLogs");
+    Directory.CreateDirectory(roslynLogDir);
+
+    var startInfo = new ProcessStartInfo(executablePath)
+    {
+      UseShellExecute = false,
+    };
+
+    startInfo.ArgumentList.Add("--stdio");
+    startInfo.ArgumentList.Add("--logLevel=Information");
+    startInfo.ArgumentList.Add("--extensionLogDirectory");
+    startInfo.ArgumentList.Add(roslynLogDir);
+
+    if (settings.UseRoslynator)
+    {
+      foreach (var analyzer in RoslynLocator.GetRoslynatorAnalyzers())
+      {
+        startInfo.ArgumentList.Add("--extension");
+        startInfo.ArgumentList.Add(analyzer);
+      }
+    }
+    if (settings.UseEasyDotnetAnalyzer)
+    {
+      foreach (var analyzer in RoslynLocator.GetEasyDotnetAnalyzers())
+      {
+        startInfo.ArgumentList.Add("--extension");
+        startInfo.ArgumentList.Add(analyzer);
+      }
+    }
+
+    foreach (var dll in settings.AnalyzerAssemblies)
+    {
+      startInfo.ArgumentList.Add("--extension");
+      startInfo.ArgumentList.Add(dll);
+    }
+
+    if (!string.IsNullOrWhiteSpace(settings.DevKitDependencyPath))
+    {
+      startInfo.ArgumentList.Add("--devKitDependencyPath");
+      startInfo.ArgumentList.Add(settings.DevKitDependencyPath);
+    }
+
+    if (settings.ClientProcessId is > 0)
+    {
+      startInfo.ArgumentList.Add("--clientProcessId");
+      startInfo.ArgumentList.Add(settings.ClientProcessId.Value.ToString());
+    }
+
+    var process = new Process { StartInfo = startInfo };
+
+    process.Start();
+    await process.WaitForExitAsync(cancellationToken);
+
+    return process.ExitCode;
+  }
+
+  private static async Task<int> StartRoslynDllAsync(string roslynDllPath, Settings settings, CancellationToken cancellationToken)
+  {
     var roslynLogDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "EasyDotnet", "RoslynLogs");
@@ -107,22 +199,10 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
       startInfo.ArgumentList.Add(settings.DevKitDependencyPath);
     }
 
-    if (!string.IsNullOrWhiteSpace(settings.RazorSourceGenerator))
+    if (settings.ClientProcessId is > 0)
     {
-      startInfo.ArgumentList.Add("--razorSourceGenerator");
-      startInfo.ArgumentList.Add(settings.RazorSourceGenerator);
-    }
-
-    if (!string.IsNullOrWhiteSpace(settings.RazorDesignTimePath))
-    {
-      startInfo.ArgumentList.Add("--razorDesignTimePath");
-      startInfo.ArgumentList.Add(settings.RazorDesignTimePath);
-    }
-
-    if (!string.IsNullOrWhiteSpace(settings.CSharpDesignTimePath))
-    {
-      startInfo.ArgumentList.Add("--csharpDesignTimePath");
-      startInfo.ArgumentList.Add(settings.CSharpDesignTimePath);
+      startInfo.ArgumentList.Add("--clientProcessId");
+      startInfo.ArgumentList.Add(settings.ClientProcessId.Value.ToString());
     }
 
     var process = new Process { StartInfo = startInfo };
@@ -172,6 +252,42 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
 
   private static class RoslynExitCodes
   {
+    public const int ToolMissing = 74;
     public const int SDKOutdated = 75;
+  }
+}
+
+public sealed class RoslynToolInstallCommand : AsyncCommand<RoslynToolInstallCommand.Settings>
+{
+  public sealed class Settings : CommandSettings { }
+
+  public override async Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
+  {
+    var result = await RoslynToolService.InstallAsync(cancellationToken);
+    WriteCommandResult(result);
+    return result.ExitCode;
+  }
+
+  private static void WriteCommandResult(RoslynToolCommandResult result)
+  {
+    if (!string.IsNullOrWhiteSpace(result.Output))
+    {
+      AnsiConsole.WriteLine(result.Output);
+    }
+  }
+}
+
+public sealed class RoslynToolUpdateCommand : AsyncCommand<RoslynToolUpdateCommand.Settings>
+{
+  public sealed class Settings : CommandSettings { }
+
+  public override async Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
+  {
+    var result = await RoslynToolService.UpdateAsync(cancellationToken);
+    if (!string.IsNullOrWhiteSpace(result.Output))
+    {
+      AnsiConsole.WriteLine(result.Output);
+    }
+    return result.ExitCode;
   }
 }

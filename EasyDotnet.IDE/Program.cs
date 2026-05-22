@@ -18,6 +18,9 @@ static class Program
       config.AddCommand<GenerateRpcDocsCommand>("generate-rpc-docs")
               .WithDescription("Generate RPC documentation in JSON or Markdown format.");
 
+      config.AddCommand<HealthCheckCommand>("healthcheck")
+              .WithDescription("Print machine-readable health information as JSON.");
+
       config.AddBranch("compat", compat =>
         {
           compat.SetDescription("Run compatibility commands (run, build, test).");
@@ -43,6 +46,10 @@ static class Program
             roslyn.SetDescription("Roslyn language server commands.");
             roslyn.AddCommand<RoslynStartCommand>("start")
             .WithDescription("Start the Roslyn Language Server over stdio.");
+            roslyn.AddCommand<RoslynToolInstallCommand>("install")
+            .WithDescription("Install the roslyn-language-server global tool.");
+            roslyn.AddCommand<RoslynToolUpdateCommand>("update")
+            .WithDescription("Update the roslyn-language-server global tool.");
           });
     });
 

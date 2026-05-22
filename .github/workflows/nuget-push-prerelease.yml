@@ -9,7 +9,7 @@ on:
         default: 'alpha'
 
 permissions:
-  id-token: write 
+  id-token: write
 
 jobs:
   publish-prerelease:
@@ -18,7 +18,7 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-         
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
@@ -27,8 +27,8 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
-      - name: Build Release + Inject Roslyn
-        uses: ./.github/actions/build-release-with-roslyn
+      - name: Build Release Assets
+        uses: ./.github/actions/build-release-assets
 
       - name: Resolve version
         id: get_version
