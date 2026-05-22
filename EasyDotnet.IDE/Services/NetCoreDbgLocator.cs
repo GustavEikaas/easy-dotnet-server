@@ -23,12 +23,8 @@ public static class NetCoreDbgLocator
         customPath);
     }
 
-    var netcoredbgDir = GetNetCoreDbgBaseDir();
     var platform = GetRuntimePlatform();
-    var platformDir = Path.Combine(netcoredbgDir, platform);
-
-    var executableName = OperatingSystem.IsWindows() ? "netcoredbg.exe" : "netcoredbg";
-    var netcoredbgPath = Path.Combine(platformDir, executableName);
+    var netcoredbgPath = GetBundledNetCoreDbgPath(platform);
 
     if (!File.Exists(netcoredbgPath))
     {
@@ -38,6 +34,15 @@ public static class NetCoreDbgLocator
     }
 
     return netcoredbgPath;
+  }
+
+  public static string GetBundledNetCoreDbgPath(string platform)
+  {
+    var netcoredbgDir = GetNetCoreDbgBaseDir();
+    var platformDir = Path.Combine(netcoredbgDir, platform);
+    var executableName = OperatingSystem.IsWindows() ? "netcoredbg.exe" : "netcoredbg";
+
+    return Path.Combine(platformDir, executableName);
   }
 
   /// <summary>
@@ -56,7 +61,7 @@ public static class NetCoreDbgLocator
   /// <summary>
   /// Determines the current runtime platform identifier matching the bundled folder structure.
   /// </summary>
-  private static string GetRuntimePlatform()
+  public static string GetRuntimePlatform()
   {
     if (OperatingSystem.IsWindows())
       return "win-x64";

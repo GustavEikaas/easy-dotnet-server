@@ -42,6 +42,7 @@ dotnet-easydotnet healthcheck
 ```
 
 It returns a deterministic JSON array of health items with `type`, `name`, `value`, and `advice` fields. Use `--format markdown` for readable terminal output.
+Pass `--debugger-bin-path <PATH>` to make the debugger health rows reflect a client-provided netcoredbg path.
 
 ## Configuration
 
