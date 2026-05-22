@@ -67,3 +67,4 @@ jobs:
         run: |
           dotnet build
           dotnet run --project ./EasyDotnet.IDE/EasyDotnet.IDE.csproj -- healthcheck --format markdown
+          dotnet run --project ./EasyDotnet.IDE/EasyDotnet.IDE.csproj roslyn start 
