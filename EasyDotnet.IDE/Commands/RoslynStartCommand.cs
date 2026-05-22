@@ -99,51 +99,44 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
         "EasyDotnet", "RoslynLogs");
     Directory.CreateDirectory(roslynLogDir);
 
-    var startInfo = new ProcessStartInfo(executablePath)
-    {
-      UseShellExecute = false,
-    };
-
-    startInfo.ArgumentList.Add("--stdio");
-    startInfo.ArgumentList.Add("--logLevel=Information");
-    startInfo.ArgumentList.Add("--extensionLogDirectory");
-    startInfo.ArgumentList.Add(roslynLogDir);
+    List<string> arguments = ["--stdio", "--logLevel=Information", "--extensionLogDirectory", roslynLogDir];
 
     if (settings.UseRoslynator)
     {
       foreach (var analyzer in RoslynLocator.GetRoslynatorAnalyzers())
       {
-        startInfo.ArgumentList.Add("--extension");
-        startInfo.ArgumentList.Add(analyzer);
+        arguments.Add("--extension");
+        arguments.Add(analyzer);
       }
     }
     if (settings.UseEasyDotnetAnalyzer)
     {
       foreach (var analyzer in RoslynLocator.GetEasyDotnetAnalyzers())
       {
-        startInfo.ArgumentList.Add("--extension");
-        startInfo.ArgumentList.Add(analyzer);
+        arguments.Add("--extension");
+        arguments.Add(analyzer);
       }
     }
 
     foreach (var dll in settings.AnalyzerAssemblies)
     {
-      startInfo.ArgumentList.Add("--extension");
-      startInfo.ArgumentList.Add(dll);
+      arguments.Add("--extension");
+      arguments.Add(dll);
     }
 
     if (!string.IsNullOrWhiteSpace(settings.DevKitDependencyPath))
     {
-      startInfo.ArgumentList.Add("--devKitDependencyPath");
-      startInfo.ArgumentList.Add(settings.DevKitDependencyPath);
+      arguments.Add("--devKitDependencyPath");
+      arguments.Add(settings.DevKitDependencyPath);
     }
 
     if (settings.ClientProcessId is > 0)
     {
-      startInfo.ArgumentList.Add("--clientProcessId");
-      startInfo.ArgumentList.Add(settings.ClientProcessId.Value.ToString());
+      arguments.Add("--clientProcessId");
+      arguments.Add(settings.ClientProcessId.Value.ToString());
     }
 
+    var startInfo = RoslynToolService.CreateProcessStartInfo(executablePath, arguments, redirectOutput: false);
     var process = new Process { StartInfo = startInfo };
 
     process.Start();
