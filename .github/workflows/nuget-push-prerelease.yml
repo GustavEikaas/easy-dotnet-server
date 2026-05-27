@@ -8,6 +8,18 @@ on:
         required: true
         default: 'alpha'
 
+      notifyDiscord:
+        description: 'Notify Discord?'
+        type: boolean
+        required: true
+        default: false
+
+      discordMessage:
+        description: 'Discord message'
+        type: string
+        required: false
+        default: ''
+
 permissions:
   id-token: write
 
@@ -52,3 +64,56 @@ jobs:
           dotnet nuget push EasyDotnet.IDE/bin/Release/*.nupkg \
             --api-key ${{steps.login.outputs.NUGET_API_KEY}}   \
             --source https://api.nuget.org/v3/index.json
+
+      - name: Notify Discord
+        if: ${{ inputs.notifyDiscord }}
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          VERSION: ${{ steps.get_version.outputs.version }}
+          VERSION_SUFFIX: ${{ inputs.versionSuffix }}
+          DISCORD_MESSAGE: ${{ inputs.discordMessage }}
+        run: |
+          PACKAGE_VERSION="$VERSION-$VERSION_SUFFIX"
+          PACKAGE_URL="https://www.nuget.org/packages/EasyDotnet/$PACKAGE_VERSION"
+          INSTALL_COMMAND="dotnet tool install --global EasyDotnet --version $PACKAGE_VERSION"
+
+          jq -n \
+            --arg title "🚀 EasyDotnet prerelease published" \
+            --arg description "$DISCORD_MESSAGE" \
+            --arg url "$PACKAGE_URL" \
+            --arg version "$PACKAGE_VERSION" \
+            --arg install "$INSTALL_COMMAND" \
+            '{
+              embeds: [
+                {
+                  title: $title,
+                  description: $description,
+                  url: $url,
+                  color: 5814783,
+                  fields: [
+                    {
+                      name: "📦 Version",
+                      value: "`\($version)`",
+                      inline: true
+                    },
+                    {
+                      name: "🔗 NuGet",
+                      value: "[View package](\($url))",
+                      inline: true
+                    },
+                    {
+                      name: "🛠 Install",
+                      value: "```\($install)```",
+                      inline: false
+                    }
+                  ],
+                  footer: {
+                    text: "Published from GitHub Actions"
+                  }
+                }
+              ]
+            }' \
+          | curl -fsSL \
+              -H "Content-Type: application/json" \
+              -d @- \
+              "$DISCORD_WEBHOOK"
