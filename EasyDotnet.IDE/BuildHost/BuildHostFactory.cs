@@ -77,21 +77,27 @@ public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService c
       RedirectStandardOutput = false,
       WorkingDirectory = coreFolder
     };
+    startInfo.Environment.Remove("MSBUILD_EXE_PATH");
+
     var logLevel = logLevelState.Current.ToString();
+    var msBuildWorkingDirectory = ResolveMsBuildWorkingDirectory();
+    var msBuildWorkingDirectoryArg = string.IsNullOrWhiteSpace(msBuildWorkingDirectory)
+        ? ""
+        : $" --msbuild-working-directory \"{EscapeArgument(msBuildWorkingDirectory)}\"";
 
     if (runtime == BuildServerRuntime.Net472)
     {
       startInfo.FileName = BuildHostLocator.GetBuildServerFramework();
-      startInfo.Arguments = $"--pipe \"{pipeName}\" --log-level={logLevel}";
+      startInfo.Arguments = $"--pipe \"{pipeName}\" --log-level={logLevel}{msBuildWorkingDirectoryArg}";
     }
     else
     {
       startInfo.FileName = "dotnet";
       var fxVersionArg = ResolveFxVersionArg();
 #if DEBUG
-      startInfo.Arguments = $"exec {fxVersionArg}\"{BuildHostLocator.GetBuildServerCore()}\" --pipe \"{pipeName}\" --log-level=Verbose";
+      startInfo.Arguments = $"exec {fxVersionArg}\"{BuildHostLocator.GetBuildServerCore()}\" --pipe \"{pipeName}\" --log-level=Verbose{msBuildWorkingDirectoryArg}";
 #else
-      startInfo.Arguments = $"exec {fxVersionArg}\"{BuildHostLocator.GetBuildServerCore()}\" --pipe \"{pipeName}\" --log-level={logLevel}";
+      startInfo.Arguments = $"exec {fxVersionArg}\"{BuildHostLocator.GetBuildServerCore()}\" --pipe \"{pipeName}\" --log-level={logLevel}{msBuildWorkingDirectoryArg}";
 #endif
     }
 
@@ -136,7 +142,7 @@ public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService c
   {
     try
     {
-      var slnDir = clientService.ProjectInfo?.SolutionFile != null ? Path.GetDirectoryName(clientService.ProjectInfo?.SolutionFile) : null;
+      var slnDir = ResolveMsBuildWorkingDirectory();
       var globalJson = slnDir != null ? globalJsonService.GetGlobalJson(slnDir) : globalJsonService.GetGlobalJson();
       var versionStr = globalJson?.Sdk?.Version;
       if (string.IsNullOrEmpty(versionStr))
@@ -189,6 +195,20 @@ public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService c
     var sdkVersionDir = Path.GetDirectoryName(normalized) ?? normalized;
     return Path.GetDirectoryName(sdkVersionDir) ?? sdkVersionDir;
   }
+
+  private string? ResolveMsBuildWorkingDirectory()
+  {
+    var solutionFile = clientService.ProjectInfo?.SolutionFile;
+    if (!string.IsNullOrWhiteSpace(solutionFile))
+    {
+      return Path.GetDirectoryName(Path.GetFullPath(solutionFile));
+    }
+
+    var rootDir = clientService.ProjectInfo?.RootDir;
+    return string.IsNullOrWhiteSpace(rootDir) ? null : Path.GetFullPath(rootDir);
+  }
+
+  private static string EscapeArgument(string value) => value.Replace("\"", "\\\"");
 
   private static class BuildHostLocator
   {

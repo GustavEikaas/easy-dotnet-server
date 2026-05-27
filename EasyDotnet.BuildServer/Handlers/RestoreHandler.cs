@@ -70,12 +70,7 @@ public class RestoreHandler
           }
 
           var logger = new DiagnosticLogger(diagnostics);
-          var buildParameters = new BuildParameters
-          {
-            EnableNodeReuse = true,
-            MaxNodeCount = Environment.ProcessorCount,
-            Loggers = [logger],
-          };
+          var buildParameters = BuildServerBuildParameters.Create([logger]);
 
           var buildRequest = new BuildRequestData(
                 projectPath,

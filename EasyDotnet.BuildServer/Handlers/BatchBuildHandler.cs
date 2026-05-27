@@ -197,10 +197,7 @@ public class BatchBuildHandler(BuildFreshnessChecker freshnessChecker, Logger lo
         }
 
         var logger = new DiagnosticLogger(diagnostics);
-        var buildParameters = new BuildParameters
-        {
-          Loggers = [logger],
-        };
+        var buildParameters = BuildServerBuildParameters.Create([logger]);
 
         var buildRequest = new BuildRequestData(
                 projectPath,
