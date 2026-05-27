@@ -19,18 +19,19 @@ static class Program
       return 1;
     }
 
-    var instance = RegisterMSBuild();
+    var msBuildWorkingDirectory = ParseMsBuildWorkingDirectory(args);
+    var instance = RegisterMSBuild(msBuildWorkingDirectory);
 
     return await RunServer(logLevel, pipe, instance);
   }
 
-  private static MsBuildInstance RegisterMSBuild()
+  private static MsBuildInstance RegisterMSBuild(string? msBuildWorkingDirectory)
   {
 #pragma warning disable IDE0022 // Use expression body for method
 #if NET472
     return RegisterMSBuildFramework();
 #else
-    return RegisterMSBuildCore();
+    return RegisterMSBuildCore(msBuildWorkingDirectory);
 #pragma warning restore IDE0022 // Use expression body for method
 #endif
   }
@@ -92,20 +93,27 @@ static class Program
     }
   }
 
-  private static MsBuildInstance RegisterMSBuildCore()
+  private static MsBuildInstance RegisterMSBuildCore(string? msBuildWorkingDirectory)
   {
     try
     {
       var currentRuntimeVersion = Environment.Version;
+      var queryOptions = new VisualStudioInstanceQueryOptions
+      {
+        DiscoveryTypes = DiscoveryType.DotNetSdk,
+      };
+      if (!string.IsNullOrWhiteSpace(msBuildWorkingDirectory))
+      {
+        queryOptions.WorkingDirectory = msBuildWorkingDirectory;
+      }
 
-      var instances = MSBuildLocator.QueryVisualStudioInstances()
+      var instances = MSBuildLocator.QueryVisualStudioInstances(queryOptions)
           .Where(i => i.Version.Major == currentRuntimeVersion.Major)
           .ToList();
 
       Console.Error.WriteLine($"[Info] Found {instances.Count} compatible MSBuild instance(s)");
 
       var matchingInstance = instances
-          .OrderByDescending(i => i.Version)
           .FirstOrDefault();
 
       if (matchingInstance == null)
@@ -120,6 +128,10 @@ static class Program
       Console.Error.WriteLine($"[Info] BuildServer running on .NET Core {currentRuntimeVersion}");
       Console.Error.WriteLine($"[Info] Registered MSBuild: {matchingInstance.Name} (v{matchingInstance.Version})");
       Console.Error.WriteLine($"[Info] MSBuild Path: {matchingInstance.MSBuildPath}");
+      if (!string.IsNullOrWhiteSpace(msBuildWorkingDirectory))
+      {
+        Console.Error.WriteLine($"[Info] MSBuild working directory: {msBuildWorkingDirectory}");
+      }
 
       return new MsBuildInstance(matchingInstance.Name, $"net{matchingInstance.Version.Major}.0", matchingInstance.Version, matchingInstance.MSBuildPath, matchingInstance.VisualStudioRootPath, MsBuildInstanceOrigin.SDK);
     }
@@ -223,5 +235,20 @@ static class Program
 #else
     return SourceLevels.Off;
 #endif
+  }
+
+  private static string? ParseMsBuildWorkingDirectory(string[] args)
+  {
+    for (var i = 0; i < args.Length; i++)
+    {
+      var arg = args[i];
+
+      if (arg.Equals("--msbuild-working-directory", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length && !args[i + 1].StartsWith("--"))
+      {
+        return args[i + 1];
+      }
+    }
+
+    return null;
   }
 }

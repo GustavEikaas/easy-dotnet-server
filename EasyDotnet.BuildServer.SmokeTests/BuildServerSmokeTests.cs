@@ -41,6 +41,24 @@ public sealed class BuildServerSmokeTests
 
   [Theory]
   [MemberData(nameof(Targets))]
+  public async Task Diagnostics_Accepts_MsBuild_WorkingDirectory(string tfm, string exe, string[] leadingArgs)
+  {
+    _ = tfm;
+    var fixtureDir = Path.Combine(AppContext.BaseDirectory, "Fixtures", "Minimal");
+    await using var srv = await BuildServerProcess.StartAsync(
+        exe,
+        [.. leadingArgs, "--msbuild-working-directory", fixtureDir],
+        TimeSpan.FromSeconds(30));
+
+    var result = await srv.Rpc.InvokeAsync<BuildServerDiagnosticsResponse>("diagnostics/buildserver");
+
+    Assert.NotNull(result);
+    Assert.False(string.IsNullOrWhiteSpace(result.MsBuildVersion));
+    Assert.False(string.IsNullOrWhiteSpace(result.MsBuildPath));
+  }
+
+  [Theory]
+  [MemberData(nameof(Targets))]
   public async Task GetPropertiesBatch_Evaluates_Project(string tfm, string exe, string[] leadingArgs)
   {
     _ = tfm;
