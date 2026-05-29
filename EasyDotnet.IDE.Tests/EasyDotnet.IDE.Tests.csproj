@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\EasyDotnet.IDE\EasyDotnet.IDE.csproj" />
+    <ProjectReference Include="..\EasyDotnet.RoslynLanguageServices\EasyDotnet.RoslynLanguageServices.csproj" />
   </ItemGroup>
 
 </Project>

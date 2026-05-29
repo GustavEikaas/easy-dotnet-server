@@ -195,6 +195,7 @@ public class WorkspaceBuildHostManager : IBuildHostManager
     var groups = resolvedTargets
         .GroupBy(target => (target.Configuration, target.Platform), target => target.TargetPath)
         .ToList();
+    var shouldClearCache = false;
 
     foreach (var group in groups)
     {
@@ -207,11 +208,15 @@ public class WorkspaceBuildHostManager : IBuildHostManager
 
       await foreach (var result in _innerManager.RestoreNugetPackagesAsync(restoreRequest, ct))
       {
+        shouldClearCache |= result.Success != true || result.Output?.NoOp != true;
         yield return result;
       }
     }
 
-    _cache.Clear(CacheInvalidationReason.Restore);
+    if (shouldClearCache)
+    {
+      _cache.Clear(CacheInvalidationReason.Restore);
+    }
   }
 
   public async IAsyncEnumerable<RestoreResult> RestoreNugetPackagesSolutionAsync(

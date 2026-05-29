@@ -68,6 +68,19 @@ public static class RoslynLocator
         .Where(File.Exists)];
   }
 
+  public static string GetEasyDotnetRoslynLanguageServicesPath()
+  {
+    var analyzerPath = GetEasyDotnetAnalyzers().SingleOrDefault();
+    if (string.IsNullOrWhiteSpace(analyzerPath))
+    {
+      throw new FileNotFoundException(
+          "EasyDotnet.RoslynLanguageServices.dll was not found in the bundled Roslyn analyzer directory.",
+          Path.Combine(GetRoslynBaseDir(), "Analyzers", "EasyDotnet.RoslynLanguageServices.dll"));
+    }
+
+    return analyzerPath;
+  }
+
   /// <summary>
   /// Returns the base Roslyn folder inside the .NET tool installation folder.
   /// </summary>
