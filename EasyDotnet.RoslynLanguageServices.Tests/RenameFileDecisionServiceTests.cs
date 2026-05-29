@@ -3,7 +3,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Text;
 
-namespace EasyDotnet.IDE.Tests.RoslynLanguageServices;
+namespace EasyDotnet.RoslynLanguageServices.Tests;
 
 public sealed class RenameFileDecisionServiceTests
 {

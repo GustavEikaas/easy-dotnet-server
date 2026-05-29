@@ -6,7 +6,7 @@ namespace EasyDotnet.IDE.Commands;
 
 public sealed class RoslynExtensionInfoCommand : Command
 {
-  public override int Execute(CommandContext context)
+  public override int Execute(CommandContext context, CancellationToken cancellationToken)
   {
     var info = new RoslynExtensionInfo(
         RoslynLocator.GetEasyDotnetRoslynLanguageServicesPath());

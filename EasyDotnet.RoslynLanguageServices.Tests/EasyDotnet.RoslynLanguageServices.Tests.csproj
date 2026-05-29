@@ -8,14 +8,12 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Testing.Platform.MSBuild" Version="2.1.0" />
-    <PackageReference Include="Nerdbank.Streams" Version="2.12.87" />
-    <PackageReference Include="System.IO.Abstractions.TestingHelpers" Version="22.1.0" />
     <PackageReference Include="TUnit.Assertions" Version="1.13.56" />
     <PackageReference Include="TUnit" Version="1.13.56" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\EasyDotnet.IDE\EasyDotnet.IDE.csproj" />
+    <ProjectReference Include="..\EasyDotnet.RoslynLanguageServices\EasyDotnet.RoslynLanguageServices.csproj" />
   </ItemGroup>
 
 </Project>
