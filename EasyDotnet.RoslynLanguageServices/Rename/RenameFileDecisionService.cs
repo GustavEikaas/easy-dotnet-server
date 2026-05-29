@@ -138,7 +138,9 @@ public static class RenameFileDecisionService
     {
       cancellationToken.ThrowIfCancellationRequested();
 
-      if (semanticModel.GetDeclaredSymbol(node, cancellationToken) is INamedTypeSymbol declaredType)
+      if (node is BaseTypeDeclarationSyntax typeDeclaration &&
+          typeDeclaration.Identifier == token &&
+          semanticModel.GetDeclaredSymbol(node, cancellationToken) is INamedTypeSymbol declaredType)
       {
         return declaredType;
       }

@@ -5,12 +5,18 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="5.6.0-2.26172.2">
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="4.14.0">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.CodeAnalysis.ExternalAccess.Extensions" Version="5.8.0-1.26269.119" PrivateAssets="all" />
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.8.0-1.26269.119" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.0.0" />
+    <PackageDownload Include="Microsoft.CodeAnalysis.ExternalAccess.Extensions" Version="[5.0.0-1.25277.114]" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="Microsoft.CodeAnalysis.ExternalAccess.Extensions" Private="false">
+      <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.externalaccess.extensions/5.0.0-1.25277.114/lib/netstandard2.0/Microsoft.CodeAnalysis.ExternalAccess.Extensions.dll</HintPath>
+    </Reference>
   </ItemGroup>
 
 </Project>
