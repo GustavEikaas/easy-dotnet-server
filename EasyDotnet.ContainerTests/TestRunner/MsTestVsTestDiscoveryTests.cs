@@ -84,6 +84,53 @@ public abstract class MsTestVsTestDiscoveryTests<TContainer> : TestRunnerTestBas
   }
 
   [Fact]
+  public async Task Discover_SingleTargetProject_DisplayNameOmitsTargetFramework()
+  {
+    using var fixture = new TestProjectFixtureBuilder()
+      .WithName("Mst.SingleTfm")
+      .WithFramework(TestFrameworkKind.MsTestVsTest)
+      .WithNamespace("Mst.SingleTfm", ns => ns
+        .WithClass("C", c => c.WithTestMethod("M")))
+      .Build();
+
+    await InitializeTestRunnerAsync(fixture);
+
+    var project = Assert.Single(NodesOfType(NodeTypeNames.Project));
+    Assert.Equal("Mst.SingleTfm", project.DisplayName);
+    Assert.Equal("net8.0", project.TargetFramework);
+  }
+
+  [Fact]
+  public async Task Discover_MultiTargetProject_DisplayNameIncludesTargetFramework()
+  {
+    using var fixture = new TestProjectFixtureBuilder()
+      .WithName("Mst.MultiTfm")
+      .WithFramework(TestFrameworkKind.MsTestVsTest)
+      .WithTargetFrameworks("net8.0", "net10.0")
+      .WithNamespace("Mst.MultiTfm", ns => ns
+        .WithClass("C", c => c.WithTestMethod("M")))
+      .Build();
+
+    await InitializeTestRunnerAsync(fixture);
+
+    var projects = NodesOfType(NodeTypeNames.Project)
+      .OrderBy(n => n.TargetFramework, StringComparer.Ordinal)
+      .ToList();
+
+    Assert.Collection(projects,
+      project =>
+      {
+        Assert.Equal("Mst.MultiTfm (net10.0)", project.DisplayName);
+        Assert.Equal("net10.0", project.TargetFramework);
+      },
+      project =>
+      {
+        Assert.Equal("Mst.MultiTfm (net8.0)", project.DisplayName);
+        Assert.Equal("net8.0", project.TargetFramework);
+      });
+  }
+
+  [Fact]
   public async Task Discover_DynamicDataSource_ProducesTheoryGroupWithSubcases()
   {
     using var fixture = new TestProjectFixtureBuilder()
