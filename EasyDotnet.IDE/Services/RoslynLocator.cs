@@ -85,7 +85,7 @@ public static class RoslynLocator
 
   public static string? GetExternalAccessExtensionsPath()
   {
-    var path = Path.Combine(GetRoslynBaseDir(), "Analyzers", ExternalAccessExtensionsFileName);
+    var path = Path.Combine(GetRoslynBaseDir(), "DevKit", ExternalAccessExtensionsFileName);
     return File.Exists(path) ? path : null;
   }
 
