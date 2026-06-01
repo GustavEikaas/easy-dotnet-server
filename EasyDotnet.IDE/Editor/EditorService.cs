@@ -191,6 +191,7 @@ public class EditorService(
             ColumnNumber: d.ColumnNumber,
             Text: string.IsNullOrEmpty(d.Code) ? d.Message ?? "" : $"[{d.Code}] {d.Message}",
             Type: QuickFixItemType.Error))
+        .Distinct()
         .ToList();
 
     var warnings = allDiagnostics
@@ -201,6 +202,7 @@ public class EditorService(
             ColumnNumber: d.ColumnNumber,
             Text: string.IsNullOrEmpty(d.Code) ? d.Message ?? "" : $"[{d.Code}] {d.Message}",
             Type: QuickFixItemType.Warning))
+        .Distinct()
         .ToList();
 
     if (errors.Count > 0)
