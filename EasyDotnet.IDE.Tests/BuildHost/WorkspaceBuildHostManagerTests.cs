@@ -87,100 +87,15 @@ public sealed class WorkspaceBuildHostManagerTests
     await Assert.That(inner.RestoreRequests[0].Platform).IsNull();
   }
 
-  [Test]
-  public async Task RestoreNugetPackagesAsync_NoOpRestore_DoesNotClearEvaluationCache()
-  {
-    var projectPath = Path.Combine(Path.GetTempPath(), "App.csproj");
-    var cache = new ProjectEvaluationCache(NullLogger<ProjectEvaluationCache>.Instance);
-    var inner = new CapturingBuildHostManager { RestoreNoOp = true };
-    var manager = CreateManager(
-        inner,
-        new NoOpSolutionService(),
-        new ResolvedBuildConfiguration(
-            projectPath,
-            new WorkspaceBuildConfiguration("Debug", "Any CPU"),
-            "Debug",
-            null,
-            Build: true,
-            Deploy: false,
-            UsedProjectMapping: true),
-        cache);
-
-    var (_, firstIsNew) = cache.GetOrRegister(projectPath, "Debug", null);
-    await Assert.That(firstIsNew).IsTrue();
-
-    await manager.RestoreNugetPackagesAsync(new RestoreRequest([projectPath]), CancellationToken.None).ToListAsync(CancellationToken.None);
-
-    var (_, secondIsNew) = cache.GetOrRegister(projectPath, "Debug", null);
-    await Assert.That(secondIsNew).IsFalse();
-  }
-
-  [Test]
-  public async Task RestoreNugetPackagesAsync_NonNoOpRestore_ClearsEvaluationCache()
-  {
-    var projectPath = Path.Combine(Path.GetTempPath(), "App.csproj");
-    var cache = new ProjectEvaluationCache(NullLogger<ProjectEvaluationCache>.Instance);
-    var inner = new CapturingBuildHostManager { RestoreNoOp = false };
-    var manager = CreateManager(
-        inner,
-        new NoOpSolutionService(),
-        new ResolvedBuildConfiguration(
-            projectPath,
-            new WorkspaceBuildConfiguration("Debug", "Any CPU"),
-            "Debug",
-            null,
-            Build: true,
-            Deploy: false,
-            UsedProjectMapping: true),
-        cache);
-
-    var (_, firstIsNew) = cache.GetOrRegister(projectPath, "Debug", null);
-    await Assert.That(firstIsNew).IsTrue();
-
-    await manager.RestoreNugetPackagesAsync(new RestoreRequest([projectPath]), CancellationToken.None).ToListAsync(CancellationToken.None);
-
-    var (_, secondIsNew) = cache.GetOrRegister(projectPath, "Debug", null);
-    await Assert.That(secondIsNew).IsTrue();
-  }
-
-  [Test]
-  public async Task RestoreNugetPackagesAsync_FailedRestore_ClearsEvaluationCache()
-  {
-    var projectPath = Path.Combine(Path.GetTempPath(), "App.csproj");
-    var cache = new ProjectEvaluationCache(NullLogger<ProjectEvaluationCache>.Instance);
-    var inner = new CapturingBuildHostManager { RestoreSuccess = false, RestoreNoOp = true };
-    var manager = CreateManager(
-        inner,
-        new NoOpSolutionService(),
-        new ResolvedBuildConfiguration(
-            projectPath,
-            new WorkspaceBuildConfiguration("Debug", "Any CPU"),
-            "Debug",
-            null,
-            Build: true,
-            Deploy: false,
-            UsedProjectMapping: true),
-        cache);
-
-    var (_, firstIsNew) = cache.GetOrRegister(projectPath, "Debug", null);
-    await Assert.That(firstIsNew).IsTrue();
-
-    await manager.RestoreNugetPackagesAsync(new RestoreRequest([projectPath]), CancellationToken.None).ToListAsync(CancellationToken.None);
-
-    var (_, secondIsNew) = cache.GetOrRegister(projectPath, "Debug", null);
-    await Assert.That(secondIsNew).IsTrue();
-  }
-
   private static WorkspaceBuildHostManager CreateManager(
       CapturingBuildHostManager inner,
       ISolutionService solutionService,
-      ResolvedBuildConfiguration resolvedConfiguration,
-      ProjectEvaluationCache? cache = null)
+      ResolvedBuildConfiguration resolvedConfiguration)
   {
     return new WorkspaceBuildHostManager(
         solutionService,
         inner,
-        cache ?? new ProjectEvaluationCache(NullLogger<ProjectEvaluationCache>.Instance),
+        new ProjectEvaluationCache(NullLogger<ProjectEvaluationCache>.Instance),
         new StubWorkspaceBuildConfigurationService(resolvedConfiguration),
         NullLogger<WorkspaceBuildHostManager>.Instance);
   }
@@ -230,8 +145,6 @@ public sealed class WorkspaceBuildHostManagerTests
   {
     public List<RestoreRequest> RestoreRequests { get; } = [];
     public List<BatchBuildRequest> BuildRequests { get; } = [];
-    public bool RestoreSuccess { get; init; } = true;
-    public bool RestoreNoOp { get; init; }
 
     public void Dispose() { }
 
@@ -252,9 +165,9 @@ public sealed class WorkspaceBuildHostManagerTests
       RestoreRequests.Add(request);
       yield return new RestoreResult(
           request.ProjectPaths[0],
-          Success: RestoreSuccess,
-          ErrorMessage: RestoreSuccess ? null : "Restore failed",
-          Output: new RestoreOutput(TimeSpan.Zero, [], RestoreNoOp, RestoreNoOp ? "Restore artifacts were unchanged." : null));
+          Success: true,
+          ErrorMessage: null,
+          Output: new RestoreOutput(TimeSpan.Zero, []));
       await Task.CompletedTask;
     }
 

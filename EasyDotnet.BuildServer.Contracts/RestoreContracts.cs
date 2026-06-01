@@ -15,6 +15,4 @@ public sealed record RestoreResult(
 
 public sealed record RestoreOutput(
     TimeSpan Duration,
-    BuildDiagnostic[] Diagnostics,
-    bool NoOp = false,
-    string? NoOpReason = null);
+    BuildDiagnostic[] Diagnostics);
