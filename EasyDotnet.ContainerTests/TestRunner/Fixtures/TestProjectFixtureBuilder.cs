@@ -27,6 +27,7 @@ public sealed class TestProjectFixtureBuilder
 {
   private string _projectName = "TestFixture";
   private TestFrameworkKind? _framework;
+  private IReadOnlyList<string> _targetFrameworks = ["net8.0"];
   private bool _writeSolution = true;
   private readonly List<NamespaceSpec> _namespaces = [];
   private readonly List<(string RelativePath, string Content)> _extraFiles = [];
@@ -40,6 +41,15 @@ public sealed class TestProjectFixtureBuilder
   public TestProjectFixtureBuilder WithFramework(TestFrameworkKind framework)
   {
     _framework = framework;
+    return this;
+  }
+
+  public TestProjectFixtureBuilder WithTargetFrameworks(params string[] targetFrameworks)
+  {
+    if (targetFrameworks.Length == 0 || targetFrameworks.Any(string.IsNullOrWhiteSpace))
+      throw new ArgumentException("At least one non-empty target framework is required.", nameof(targetFrameworks));
+
+    _targetFrameworks = targetFrameworks;
     return this;
   }
 
@@ -84,7 +94,7 @@ public sealed class TestProjectFixtureBuilder
 
     var projectExtension = _framework.Value is TestFrameworkKind.XUnitV2VsTestFSharp ? "fsproj" : "csproj";
     var csprojPath = Path.Combine(projectDir, $"{_projectName}.{projectExtension}");
-    File.WriteAllText(csprojPath, RenderCsproj(_framework.Value));
+    File.WriteAllText(csprojPath, RenderCsproj(_framework.Value, _targetFrameworks));
 
     foreach (var ns in _namespaces)
     {
@@ -116,12 +126,16 @@ public sealed class TestProjectFixtureBuilder
     return new TestProjectFixture(root, projectDir, csprojPath, solutionPath);
   }
 
-  private static string RenderCsproj(TestFrameworkKind framework) => framework switch
+  private static string RenderCsproj(TestFrameworkKind framework, IReadOnlyList<string> targetFrameworks)
   {
-    TestFrameworkKind.MsTestVsTest => """
+    var targetFrameworkProperty = RenderTargetFrameworkProperty(targetFrameworks);
+
+    return framework switch
+    {
+      TestFrameworkKind.MsTestVsTest => $$"""
       <Project Sdk="Microsoft.NET.Sdk">
         <PropertyGroup>
-          <TargetFramework>net8.0</TargetFramework>
+      {{targetFrameworkProperty}}
           <Nullable>enable</Nullable>
           <ImplicitUsings>enable</ImplicitUsings>
           <IsPackable>false</IsPackable>
@@ -134,11 +148,11 @@ public sealed class TestProjectFixtureBuilder
         </ItemGroup>
       </Project>
       """,
-    TestFrameworkKind.TUnitMtp => """
+      TestFrameworkKind.TUnitMtp => $$"""
       <Project Sdk="Microsoft.NET.Sdk">
         <PropertyGroup>
           <OutputType>Exe</OutputType>
-          <TargetFramework>net8.0</TargetFramework>
+      {{targetFrameworkProperty}}
           <Nullable>enable</Nullable>
           <ImplicitUsings>enable</ImplicitUsings>
           <IsPackable>false</IsPackable>
@@ -149,10 +163,10 @@ public sealed class TestProjectFixtureBuilder
         </ItemGroup>
       </Project>
       """,
-    TestFrameworkKind.XUnitV2VsTest => """
+      TestFrameworkKind.XUnitV2VsTest => $$"""
       <Project Sdk="Microsoft.NET.Sdk">
         <PropertyGroup>
-          <TargetFramework>net8.0</TargetFramework>
+      {{targetFrameworkProperty}}
           <Nullable>enable</Nullable>
           <ImplicitUsings>enable</ImplicitUsings>
           <IsPackable>false</IsPackable>
@@ -165,10 +179,10 @@ public sealed class TestProjectFixtureBuilder
         </ItemGroup>
       </Project>
       """,
-    TestFrameworkKind.XUnitV2VsTestFSharp => """
+      TestFrameworkKind.XUnitV2VsTestFSharp => $$"""
       <Project Sdk="Microsoft.NET.Sdk">
         <PropertyGroup>
-          <TargetFramework>net8.0</TargetFramework>
+      {{targetFrameworkProperty}}
           <IsPackable>false</IsPackable>
           <GenerateProgramFile>true</GenerateProgramFile>
         </PropertyGroup>
@@ -182,11 +196,11 @@ public sealed class TestProjectFixtureBuilder
         </ItemGroup>
       </Project>
       """,
-    TestFrameworkKind.XUnitV3Mtp => """
+      TestFrameworkKind.XUnitV3Mtp => $$"""
       <Project Sdk="Microsoft.NET.Sdk">
         <PropertyGroup>
           <OutputType>Exe</OutputType>
-          <TargetFramework>net8.0</TargetFramework>
+      {{targetFrameworkProperty}}
           <Nullable>enable</Nullable>
           <ImplicitUsings>enable</ImplicitUsings>
           <IsPackable>false</IsPackable>
@@ -197,10 +211,10 @@ public sealed class TestProjectFixtureBuilder
         </ItemGroup>
       </Project>
       """,
-    TestFrameworkKind.NUnitV3VsTest => """
+      TestFrameworkKind.NUnitV3VsTest => $$"""
       <Project Sdk="Microsoft.NET.Sdk">
         <PropertyGroup>
-          <TargetFramework>net8.0</TargetFramework>
+      {{targetFrameworkProperty}}
           <Nullable>enable</Nullable>
           <ImplicitUsings>enable</ImplicitUsings>
           <IsPackable>false</IsPackable>
@@ -213,11 +227,11 @@ public sealed class TestProjectFixtureBuilder
         </ItemGroup>
       </Project>
       """,
-    TestFrameworkKind.NUnitV4Mtp => """
+      TestFrameworkKind.NUnitV4Mtp => $$"""
       <Project Sdk="Microsoft.NET.Sdk">
         <PropertyGroup>
           <OutputType>Exe</OutputType>
-          <TargetFramework>net8.0</TargetFramework>
+      {{targetFrameworkProperty}}
           <Nullable>enable</Nullable>
           <ImplicitUsings>enable</ImplicitUsings>
           <IsPackable>false</IsPackable>
@@ -231,8 +245,14 @@ public sealed class TestProjectFixtureBuilder
         </ItemGroup>
       </Project>
       """,
-    _ => throw new NotImplementedException($"TestFrameworkKind.{framework} is not implemented yet."),
-  };
+      _ => throw new NotImplementedException($"TestFrameworkKind.{framework} is not implemented yet."),
+    };
+  }
+
+  private static string RenderTargetFrameworkProperty(IReadOnlyList<string> targetFrameworks) =>
+    targetFrameworks.Count == 1
+      ? $"          <TargetFramework>{targetFrameworks[0]}</TargetFramework>"
+      : $"          <TargetFrameworks>{string.Join(";", targetFrameworks)}</TargetFrameworks>";
 
   private static string RenderNamespace(NamespaceSpec ns, TestFrameworkKind framework) => framework switch
   {

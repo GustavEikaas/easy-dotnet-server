@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using EasyDotnet.BuildServer.Contracts;
+using EasyDotnet.IDE.TestRunner;
 using EasyDotnet.IDE.TestRunner.Adapters;
 using EasyDotnet.IDE.TestRunner.Analysis;
 using EasyDotnet.IDE.TestRunner.Dispatch;
@@ -380,7 +381,7 @@ public class OperationExecutor(
     {
       var node = new TestNode(
           Id: projectNodeId,
-          DisplayName: $"{project.ProjectName} ({project.TargetFramework})",
+          DisplayName: ProjectNodeDisplayName.For(project),
           ParentId: solutionNodeId,
           FilePath: project.ProjectFullPath,
           SignatureLine: null,
