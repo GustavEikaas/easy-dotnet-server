@@ -2,6 +2,7 @@ using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.IDE.BuildHost;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Notifications;
+using EasyDotnet.IDE.TestRunner;
 using EasyDotnet.IDE.TestRunner.Adapters;
 using EasyDotnet.IDE.TestRunner.Analysis;
 using EasyDotnet.IDE.TestRunner.Dispatch;
@@ -606,9 +607,10 @@ public class TestRunnerService(
     var existing = registry.Get(projectNodeId);
     if (existing is null)
     {
+      var displayName = ProjectNodeDisplayName.For(project);
       var node = new TestNode(
           Id: projectNodeId,
-          DisplayName: $"{project.ProjectName} ({project.TargetFramework})",
+          DisplayName: displayName,
           ParentId: solutionNodeId,
           FilePath: project.ProjectFullPath,
           SignatureLine: null,
@@ -624,13 +626,14 @@ public class TestRunnerService(
       return projectNodeId;
     }
 
+    var displayNameChanged = !string.Equals(existing.DisplayName, ProjectNodeDisplayName.For(project), StringComparison.Ordinal);
     var fileChanged = !string.Equals(existing.FilePath, project.ProjectFullPath, StringComparison.OrdinalIgnoreCase);
 
-    if (fileChanged)
+    if (fileChanged || displayNameChanged)
     {
       var updated = existing with
       {
-        DisplayName = $"{project.ProjectName} ({project.TargetFramework})",
+        DisplayName = ProjectNodeDisplayName.For(project),
         FilePath = project.ProjectFullPath,
       };
 
