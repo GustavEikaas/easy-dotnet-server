@@ -47,6 +47,7 @@ runs:
 
         mkdir -p "$OUTPUT_PATH"
         cp EasyDotnet.RoslynLanguageServices/bin/Release/net8.0/EasyDotnet.RoslynLanguageServices.dll "$OUTPUT_PATH/"
+        cp EasyDotnet.RoslynLanguageServices/bin/Release/net8.0/Microsoft.CodeAnalysis.ExternalAccess.Extensions.dll "$OUTPUT_PATH/"
 
         mkdir -p artifacts/roslynator
         curl -L -o artifacts/roslynator/roslynator.nupkg \

@@ -5,6 +5,8 @@ namespace EasyDotnet.IDE.Services;
 public static class RoslynLocator
 {
   public const string ROSLYN_DLL_PATH_ENV = "EASY_DOTNET_ROSLYN_DLL_PATH";
+  private const string EasyDotnetRoslynLanguageServicesFileName = "EasyDotnet.RoslynLanguageServices.dll";
+  private const string ExternalAccessExtensionsFileName = "Microsoft.CodeAnalysis.ExternalAccess.Extensions.dll";
 
   public static string? GetCustomRoslynDllPath()
   {
@@ -61,7 +63,7 @@ public static class RoslynLocator
       throw new DirectoryNotFoundException($"EasyDotnet Analyzer folder not found: {analyzersDir}");
     }
 
-    var analyzerDlls = new[] { "EasyDotnet.RoslynLanguageServices.dll" };
+    var analyzerDlls = new[] { EasyDotnetRoslynLanguageServicesFileName };
 
     return [.. analyzerDlls
         .Select(dll => Path.Combine(analyzersDir, dll))
@@ -75,10 +77,16 @@ public static class RoslynLocator
     {
       throw new FileNotFoundException(
           "EasyDotnet.RoslynLanguageServices.dll was not found in the bundled Roslyn analyzer directory.",
-          Path.Combine(GetRoslynBaseDir(), "Analyzers", "EasyDotnet.RoslynLanguageServices.dll"));
+          Path.Combine(GetRoslynBaseDir(), "Analyzers", EasyDotnetRoslynLanguageServicesFileName));
     }
 
     return analyzerPath;
+  }
+
+  public static string? GetExternalAccessExtensionsPath()
+  {
+    var path = Path.Combine(GetRoslynBaseDir(), "Analyzers", ExternalAccessExtensionsFileName);
+    return File.Exists(path) ? path : null;
   }
 
   /// <summary>

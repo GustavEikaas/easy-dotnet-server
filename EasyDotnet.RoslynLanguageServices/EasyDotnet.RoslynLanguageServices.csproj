@@ -14,7 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Reference Include="Microsoft.CodeAnalysis.ExternalAccess.Extensions" Private="false">
+    <Reference Include="Microsoft.CodeAnalysis.ExternalAccess.Extensions">
       <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.externalaccess.extensions/5.0.0-1.25277.114/lib/netstandard2.0/Microsoft.CodeAnalysis.ExternalAccess.Extensions.dll</HintPath>
     </Reference>
   </ItemGroup>

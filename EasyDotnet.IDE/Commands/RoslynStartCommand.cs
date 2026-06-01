@@ -124,10 +124,16 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
       arguments.Add(dll);
     }
 
-    if (!string.IsNullOrWhiteSpace(settings.DevKitDependencyPath))
+    var devKitDependencyPath = settings.DevKitDependencyPath;
+    if (string.IsNullOrWhiteSpace(devKitDependencyPath) && settings.UseEasyDotnetAnalyzer)
+    {
+      devKitDependencyPath = RoslynLocator.GetExternalAccessExtensionsPath();
+    }
+
+    if (!string.IsNullOrWhiteSpace(devKitDependencyPath))
     {
       arguments.Add("--devKitDependencyPath");
-      arguments.Add(settings.DevKitDependencyPath);
+      arguments.Add(devKitDependencyPath);
     }
 
     if (settings.ClientProcessId is > 0)
@@ -186,10 +192,16 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
       startInfo.ArgumentList.Add(dll);
     }
 
-    if (!string.IsNullOrWhiteSpace(settings.DevKitDependencyPath))
+    var devKitDependencyPath = settings.DevKitDependencyPath;
+    if (string.IsNullOrWhiteSpace(devKitDependencyPath) && settings.UseEasyDotnetAnalyzer)
+    {
+      devKitDependencyPath = RoslynLocator.GetExternalAccessExtensionsPath();
+    }
+
+    if (!string.IsNullOrWhiteSpace(devKitDependencyPath))
     {
       startInfo.ArgumentList.Add("--devKitDependencyPath");
-      startInfo.ArgumentList.Add(settings.DevKitDependencyPath);
+      startInfo.ArgumentList.Add(devKitDependencyPath);
     }
 
     if (settings.ClientProcessId is > 0)
