@@ -98,15 +98,16 @@ public static class RenameFileDecisionService
       return ShouldRenameFileResponse.No("Could not resolve declaring syntax root.");
     }
 
-    var topLevelTypes = declaringRoot
+    var matchingFileNameTypes = declaringRoot
         .DescendantNodes()
         .OfType<BaseTypeDeclarationSyntax>()
-        .Where(static type => !type.Ancestors().OfType<BaseTypeDeclarationSyntax>().Any())
+        .Where(IsTopLevelFileNameType)
+        .Where(type => string.Equals(type.Identifier.ValueText, oldName, StringComparison.Ordinal))
         .ToArray();
 
-    if (topLevelTypes.Length != 1 || topLevelTypes[0] != typeDeclaration)
+    if (matchingFileNameTypes.Length != 1 || !IsSameDeclaration(matchingFileNameTypes[0], typeDeclaration))
     {
-      return ShouldRenameFileResponse.No("File does not contain exactly one top-level type.");
+      return ShouldRenameFileResponse.No("Renamed type is not the unique top-level type matching the file name.");
     }
 
     var directory = Path.GetDirectoryName(filePath);
@@ -160,6 +161,13 @@ public static class RenameFileDecisionService
 
     return null;
   }
+
+  private static bool IsTopLevelFileNameType(BaseTypeDeclarationSyntax type)
+    => type is (ClassDeclarationSyntax or InterfaceDeclarationSyntax or RecordDeclarationSyntax) &&
+       !type.Ancestors().OfType<BaseTypeDeclarationSyntax>().Any();
+
+  private static bool IsSameDeclaration(BaseTypeDeclarationSyntax left, BaseTypeDeclarationSyntax right)
+    => left.SyntaxTree == right.SyntaxTree && left.Span == right.Span;
 
   private static bool IsNormalCSharpFile(string filePath)
   {

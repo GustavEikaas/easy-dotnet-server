@@ -58,11 +58,47 @@ public sealed class RenameFileDecisionServiceTests
   }
 
   [Test]
-  public async Task MultipleTopLevelTypes_AreIgnored()
+  public async Task FileNameMatchingTypeInMultiTypeFile_ReturnsRename()
   {
     var document = CreateDocument("/tmp/Customer.cs", "public class Customer { }\npublic class Other { }\n");
 
     var response = await Decide(document, "Customer", "Client");
+
+    await Assert.That(response.ShouldRename).IsTrue();
+    await Assert.That(response.OldUri).EndsWith("/Customer.cs");
+    await Assert.That(response.NewUri).EndsWith("/Client.cs");
+  }
+
+  [Test]
+  public async Task FileNameMatchingInterfaceInMultiTypeFile_ReturnsRename()
+  {
+    var document = CreateDocument("/tmp/ICustomer.cs", "public interface ICustomer { }\npublic class Customer { }\n");
+
+    var response = await Decide(document, "ICustomer", "IClient");
+
+    await Assert.That(response.ShouldRename).IsTrue();
+    await Assert.That(response.OldUri).EndsWith("/ICustomer.cs");
+    await Assert.That(response.NewUri).EndsWith("/IClient.cs");
+  }
+
+  [Test]
+  public async Task FileNameMatchingRecordInMultiTypeFile_ReturnsRename()
+  {
+    var document = CreateDocument("/tmp/Customer.cs", "public record Customer;\npublic class CustomerValidator { }\n");
+
+    var response = await Decide(document, "Customer", "Client");
+
+    await Assert.That(response.ShouldRename).IsTrue();
+    await Assert.That(response.OldUri).EndsWith("/Customer.cs");
+    await Assert.That(response.NewUri).EndsWith("/Client.cs");
+  }
+
+  [Test]
+  public async Task NonFileNameMatchingTypeInMultiTypeFile_IsIgnored()
+  {
+    var document = CreateDocument("/tmp/Customer.cs", "public class Customer { }\npublic class Other { }\n");
+
+    var response = await Decide(document, "Other", "Else");
 
     await Assert.That(response.ShouldRename).IsFalse();
   }
