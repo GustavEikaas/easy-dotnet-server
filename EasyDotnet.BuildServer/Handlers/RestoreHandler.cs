@@ -89,7 +89,7 @@ public class RestoreHandler
                 projectPath,
                 Success: success,
                 ErrorMessage: success ? null : "Restore failed",
-                Output: new RestoreOutput(stopwatch.Elapsed, [.. diagnostics]));
+                Output: new RestoreOutput(stopwatch.Elapsed, BuildDiagnosticDeduplicator.Deduplicate(diagnostics)));
         }
         catch (OperationCanceledException)
         {
@@ -98,7 +98,7 @@ public class RestoreHandler
                 projectPath,
                 Success: false,
                 ErrorMessage: "Cancelled",
-                Output: new RestoreOutput(stopwatch.Elapsed, [.. diagnostics]));
+                Output: new RestoreOutput(stopwatch.Elapsed, BuildDiagnosticDeduplicator.Deduplicate(diagnostics)));
         }
         catch (Exception ex)
         {
@@ -107,7 +107,7 @@ public class RestoreHandler
                 projectPath,
                 Success: false,
                 ErrorMessage: $"Exception during restore: {ex.Message}",
-                Output: new RestoreOutput(stopwatch.Elapsed, [.. diagnostics]));
+                Output: new RestoreOutput(stopwatch.Elapsed, BuildDiagnosticDeduplicator.Deduplicate(diagnostics)));
         }
       }, ct);
 
