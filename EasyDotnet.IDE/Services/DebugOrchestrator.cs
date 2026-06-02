@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
+using EasyDotnet.Debugger;
 using EasyDotnet.Debugger.Interfaces;
+using EasyDotnet.Debugger.Messages;
 using EasyDotnet.Debugger.Services;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Types;
@@ -160,15 +162,14 @@ public class DebugOrchestrator(
       {
         try
         {
-          var proxy = await session.WaitForConfigurationDoneAsync();
-          // Giving the debugger 500ms of delay because this caused a race condition #985
-          await Task.Delay(2000, cancellationToken);
+          var proxy = await session.WaitForDebugSessionStartedAsync().WaitAsync(cancellationToken);
+          await ProbeDebuggerProcessAsync(proxy, cancellationToken);
           strategy.OnDebugSessionReady(session, proxy);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
-          logger.LogError(ex, "Failed to wait for DAP configurationDone");
+          logger.LogError(ex, "Failed to wait for DAP debug session start");
         }
       }, cancellationToken);
 
@@ -227,6 +228,21 @@ public class DebugOrchestrator(
       logger.LogError(ex, "Error initializing debug session for {Label}.", label);
       await strategy.DisposeAsync();
       throw;
+    }
+  }
+
+  private static async Task ProbeDebuggerProcessAsync(IDebuggerProxy proxy, CancellationToken cancellationToken)
+  {
+    var response = await proxy.RunInternalRequestAsync(new Request
+    {
+      Seq = 0,
+      Type = "request",
+      Command = "threads"
+    }, cancellationToken);
+
+    if (!response.Success)
+    {
+      throw new InvalidOperationException($"Debugger process probe failed: {response.Message ?? "threads request failed"}");
     }
   }
 }

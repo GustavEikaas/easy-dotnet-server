@@ -11,6 +11,9 @@ public class DebuggerMessageInterceptor(
   ValueConverterService valueConverterService,
   bool applyValueConverters,
   Action<int> onDebugeeProcessStarted,
+  Action<string> onDebugStartSignal,
+  Action onDebuggerConfigurationDone,
+  Action<string, string?> onDebugSessionStartFailed,
   FrameSourceTracker? frameSourceTracker = null,
   IVariableLocationResolver? variableLocationResolver = null) : IDapMessageInterceptor
 
@@ -57,6 +60,8 @@ public class DebuggerMessageInterceptor(
   {
     logger.LogDebug("[DEBUGGER] Response: {command}", response.Command);
 
+    TryReportDebugSessionStartState(response);
+
     if (response.Command == "stackTrace")
     {
       TryCaptureStackTrace(response);
@@ -70,6 +75,39 @@ public class DebuggerMessageInterceptor(
     AdvertiseCompletionsCapability(response);
     return Task.FromResult<ProtocolMessage?>(response);
   }
+
+  private void TryReportDebugSessionStartState(Response response)
+  {
+    if (IsStartRequest(response.Command))
+    {
+      if (response.Success)
+      {
+        onDebugStartSignal($"{response.Command} response");
+        return;
+      }
+
+      onDebugSessionStartFailed(response.Command, response.Message);
+      return;
+    }
+
+    if (!response.Command.Equals("configurationDone", StringComparison.OrdinalIgnoreCase))
+    {
+      return;
+    }
+
+    if (response.Success)
+    {
+      onDebuggerConfigurationDone();
+      return;
+    }
+
+    onDebugSessionStartFailed(response.Command, response.Message);
+  }
+
+  private static bool IsStartRequest(string command)
+    => command.Equals("attach", StringComparison.OrdinalIgnoreCase)
+       || command.Equals("launch", StringComparison.OrdinalIgnoreCase);
+
   private static void AdvertiseCompletionsCapability(Response response)
   {
     if (!response.Success || !string.Equals(response.Command, "initialize", StringComparison.OrdinalIgnoreCase))
@@ -244,6 +282,7 @@ public class DebuggerMessageInterceptor(
     }
     else if (evt.EventName == "process")
     {
+      onDebugStartSignal("process event");
       HandleProcessEvent(evt);
     }
     else if (evt.EventName == "terminated")
