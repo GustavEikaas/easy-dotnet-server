@@ -217,7 +217,7 @@ public class BatchBuildHandler(BuildFreshnessChecker freshnessChecker, Logger lo
                 Kind: BatchBuildResultKind.Finished,
                 Success: success,
                 ErrorMessage: success ? null : "Build failed",
-                Output: new BatchBuildOutput(stopwatch.Elapsed, [.. diagnostics]));
+                Output: new BatchBuildOutput(stopwatch.Elapsed, BuildDiagnosticDeduplicator.Deduplicate(diagnostics)));
       }
       catch (OperationCanceledException)
       {
@@ -227,7 +227,7 @@ public class BatchBuildHandler(BuildFreshnessChecker freshnessChecker, Logger lo
                 Kind: BatchBuildResultKind.Finished,
                 Success: false,
                 ErrorMessage: "Cancelled",
-                Output: new BatchBuildOutput(stopwatch.Elapsed, [.. diagnostics]));
+                Output: new BatchBuildOutput(stopwatch.Elapsed, BuildDiagnosticDeduplicator.Deduplicate(diagnostics)));
       }
       catch (Exception ex)
       {
@@ -237,7 +237,7 @@ public class BatchBuildHandler(BuildFreshnessChecker freshnessChecker, Logger lo
                 Kind: BatchBuildResultKind.Finished,
                 Success: false,
                 ErrorMessage: $"Exception during build: {ex.Message}",
-                Output: new BatchBuildOutput(stopwatch.Elapsed, [.. diagnostics]));
+                Output: new BatchBuildOutput(stopwatch.Elapsed, BuildDiagnosticDeduplicator.Deduplicate(diagnostics)));
       }
     }, ct);
   }

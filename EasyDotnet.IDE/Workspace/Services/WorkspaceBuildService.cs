@@ -264,6 +264,5 @@ public class WorkspaceBuildService(
               LineNumber: d.LineNumber,
               ColumnNumber: d.ColumnNumber,
               Text: string.IsNullOrEmpty(d.Code) ? d.Message ?? "" : $"[{d.Code}] {d.Message}",
-              Type: quickFixType))
-          .Distinct()];
+              Type: quickFixType))];
 }
