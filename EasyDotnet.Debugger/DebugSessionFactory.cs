@@ -40,6 +40,8 @@ public class DebugSessionFactory(ILoggerFactory loggerFactory) : IDebugSessionFa
       valueConverterService,
       applyValueConverters,
       processId => coordinator?.NotifyDebugeeProcessStarted(processId),
+      signal => coordinator?.NotifyDebugSessionStarted(signal),
+      (command, message) => coordinator?.NotifyDebugSessionStartFailed(command, message),
       frameSourceTracker,
       variableLocationResolver);
 

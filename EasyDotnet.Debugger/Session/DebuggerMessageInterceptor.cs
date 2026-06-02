@@ -11,6 +11,8 @@ public class DebuggerMessageInterceptor(
   ValueConverterService valueConverterService,
   bool applyValueConverters,
   Action<int> onDebugeeProcessStarted,
+  Action<string> onDebugSessionStarted,
+  Action<string, string?> onDebugSessionStartFailed,
   FrameSourceTracker? frameSourceTracker = null,
   IVariableLocationResolver? variableLocationResolver = null) : IDapMessageInterceptor
 
@@ -57,6 +59,8 @@ public class DebuggerMessageInterceptor(
   {
     logger.LogDebug("[DEBUGGER] Response: {command}", response.Command);
 
+    TryReportDebugSessionStarted(response);
+
     if (response.Command == "stackTrace")
     {
       TryCaptureStackTrace(response);
@@ -70,6 +74,27 @@ public class DebuggerMessageInterceptor(
     AdvertiseCompletionsCapability(response);
     return Task.FromResult<ProtocolMessage?>(response);
   }
+
+  private void TryReportDebugSessionStarted(Response response)
+  {
+    if (!IsStartRequest(response.Command))
+    {
+      return;
+    }
+
+    if (response.Success)
+    {
+      onDebugSessionStarted($"{response.Command} response");
+      return;
+    }
+
+    onDebugSessionStartFailed(response.Command, response.Message);
+  }
+
+  private static bool IsStartRequest(string command)
+    => command.Equals("attach", StringComparison.OrdinalIgnoreCase)
+       || command.Equals("launch", StringComparison.OrdinalIgnoreCase);
+
   private static void AdvertiseCompletionsCapability(Response response)
   {
     if (!response.Success || !string.Equals(response.Command, "initialize", StringComparison.OrdinalIgnoreCase))
@@ -244,6 +269,7 @@ public class DebuggerMessageInterceptor(
     }
     else if (evt.EventName == "process")
     {
+      onDebugSessionStarted("process event");
       HandleProcessEvent(evt);
     }
     else if (evt.EventName == "terminated")
