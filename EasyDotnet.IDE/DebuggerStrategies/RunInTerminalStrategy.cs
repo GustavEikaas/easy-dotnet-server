@@ -31,7 +31,7 @@ public class RunInTerminalStrategy(
   private Process? _browserProcess;
   private IAppWrapperHandle? _wrapperHandle;
 
-  private int _debugSessionStartedFlag;
+  private int _configurationDoneFlag;
   private int _pidReceivedFlag;
   private int _processConnectRequestPreparedFlag;
   private int _resumeInvoked;
@@ -105,9 +105,9 @@ public class RunInTerminalStrategy(
     SetFlag(ref _processConnectRequestPreparedFlag);
 
     logger.LogInformation(
-        "Prepared debug process-connect request (Pid: {Pid}). debugSessionStarted={DebugSessionStarted}",
+        "Prepared debug process-connect request (Pid: {Pid}). configurationDoneSeen={ConfigurationDoneSeen}",
         _pid,
-        IsSet(ref _debugSessionStartedFlag));
+        IsSet(ref _configurationDoneFlag));
 
     TryResumeIfReady();
   }
@@ -150,10 +150,10 @@ public class RunInTerminalStrategy(
 
   public void OnDebugSessionReady(DebugSession debugSession, IDebuggerProxy proxy)
   {
-    SetFlag(ref _debugSessionStartedFlag);
+    SetFlag(ref _configurationDoneFlag);
 
     logger.LogInformation(
-        "Debug session started. pidReceived={PidReceived}, requestPrepared={RequestPrepared}",
+        "ConfigurationDone observed. pidReceived={PidReceived}, requestPrepared={RequestPrepared}",
         IsSet(ref _pidReceivedFlag),
         IsSet(ref _processConnectRequestPreparedFlag));
 
@@ -163,7 +163,7 @@ public class RunInTerminalStrategy(
 
   private void TryResumeIfReady()
   {
-    if (!IsSet(ref _debugSessionStartedFlag)
+    if (!IsSet(ref _configurationDoneFlag)
         || !IsSet(ref _pidReceivedFlag)
         || !IsSet(ref _processConnectRequestPreparedFlag)
         || _hookSession is null)

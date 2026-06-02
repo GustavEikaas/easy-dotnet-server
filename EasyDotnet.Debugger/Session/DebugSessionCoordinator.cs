@@ -21,14 +21,12 @@ public class DebugSessionCoordinator(
   private readonly TaskCompletionSource<bool> _processStartedSource = new();
   private readonly TaskCompletionSource<int?> _debugeeProcessStartedSource = new();
   private readonly TaskCompletionSource _configurationDoneSource = new();
-  private readonly TaskCompletionSource _debugSessionStartedSource = new(TaskCreationOptions.RunContinuationsAsynchronously);
   private int _isDisposing;
   private Func<Task>? _onDispose;
 
   public Task ProcessStarted => _processStartedSource.Task;
   public Task DebugeeProcessStarted => _debugeeProcessStartedSource.Task;
   public Task ConfigurationDone => _configurationDoneSource.Task;
-  public Task DebugSessionStarted => _debugSessionStartedSource.Task;
   public Task Completion => _completionSource.Task;
   public Task DisposalStarted => _disposalStartedSource.Task;
   public int Port => tcpServer.Port;
@@ -131,29 +129,6 @@ public class DebugSessionCoordinator(
 
     logger.LogInformation("Configuration done event reported");
     _configurationDoneSource.SetResult();
-  }
-
-  public void NotifyDebugSessionStarted(string signal)
-  {
-    if (_debugSessionStartedSource.Task.IsCompleted)
-    {
-      logger.LogDebug("Debug session start already reported, ignoring signal: {Signal}", signal);
-      return;
-    }
-
-    logger.LogInformation("Debug session start reported by DAP {Signal}", signal);
-    _debugSessionStartedSource.SetResult();
-  }
-
-  public void NotifyDebugSessionStartFailed(string command, string? message)
-  {
-    if (_debugSessionStartedSource.Task.IsCompleted)
-    {
-      return;
-    }
-
-    _debugSessionStartedSource.SetException(
-      new InvalidOperationException($"Debugger failed to {command}: {message ?? "No error message provided"}"));
   }
 
   private void StartTelemetryMonitoring(int processId)

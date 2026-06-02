@@ -44,10 +44,4 @@ public class DebugSession : IAsyncDisposable
     await _coordinator.ConfigurationDone;
     return _coordinator.Proxy!;
   }
-
-  public async Task<DebuggerProxy> WaitForDebugSessionStartedAsync()
-  {
-    await _coordinator.DebugSessionStarted;
-    return _coordinator.Proxy!;
-  }
 }

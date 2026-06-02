@@ -160,13 +160,15 @@ public class DebugOrchestrator(
       {
         try
         {
-          var proxy = await session.WaitForDebugSessionStartedAsync().WaitAsync(cancellationToken);
+          var proxy = await session.WaitForConfigurationDoneAsync();
+          // Giving the debugger 500ms of delay because this caused a race condition #985
+          await Task.Delay(2000, cancellationToken);
           strategy.OnDebugSessionReady(session, proxy);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
-          logger.LogError(ex, "Failed to wait for DAP debug session start");
+          logger.LogError(ex, "Failed to wait for DAP configurationDone");
         }
       }, cancellationToken);
 
