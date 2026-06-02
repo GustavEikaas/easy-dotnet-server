@@ -90,18 +90,17 @@ public class DebuggerMessageInterceptor(
       return;
     }
 
-    if (!response.Command.Equals("configurationDone", StringComparison.OrdinalIgnoreCase))
+    if (response.Command.Equals("configurationDone", StringComparison.OrdinalIgnoreCase))
     {
-      return;
+      if (response.Success)
+      {
+        onDebuggerConfigurationDone();
+      }
+      else
+      {
+        onDebugSessionStartFailed(response.Command, response.Message);
+      }
     }
-
-    if (response.Success)
-    {
-      onDebuggerConfigurationDone();
-      return;
-    }
-
-    onDebugSessionStartFailed(response.Command, response.Message);
   }
 
   private static bool IsStartRequest(string command)
