@@ -2,6 +2,7 @@ using EasyDotnet.RoslynLanguageServices.CreateType;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Text;
+using System.Text.Json;
 
 namespace EasyDotnet.RoslynLanguageServices.Tests.CreateType;
 
@@ -63,6 +64,41 @@ public sealed class CreateTypeFromUsageServiceTests
 
     await Assert.That(response.CanCreate).IsTrue();
     await Assert.That(response.TypeName).IsEqualTo("Customer");
+  }
+
+  [Test]
+  public async Task UnresolvedMethodReturnType_ReturnsCreateClassPlan()
+  {
+    var document = CreateDocument("/tmp/Use.cs", "namespace App;\npublic class Use { public Shyyy Get() { return null; } }\n");
+
+    var response = await Decide(document, "Shyyy");
+
+    await Assert.That(response.CanCreate).IsTrue();
+    await Assert.That(response.TypeName).IsEqualTo("Shyyy");
+    await Assert.That(response.FilePath).EndsWith("/Shyyy.cs");
+  }
+
+  [Test]
+  public async Task Response_SerializesAsCamelCaseForLuaClient()
+  {
+    var response = CreateTypeFromUsageResponse.Yes("Customer", "/tmp/Customer.cs", "public class Customer\n{\n}\n");
+
+    var json = JsonSerializer.Serialize(response);
+
+    await Assert.That(json).Contains("\"canCreate\":true");
+    await Assert.That(json).Contains("\"typeName\":\"Customer\"");
+    await Assert.That(json).Contains("\"filePath\":\"/tmp/Customer.cs\"");
+    await Assert.That(json).Contains("\"fileText\":");
+  }
+
+  [Test]
+  public async Task Request_DeserializesCamelCaseFromLuaClient()
+  {
+    var request = JsonSerializer.Deserialize<CreateTypeFromUsageRequest>("{\"line\":12,\"character\":7}");
+
+    await Assert.That(request).IsNotNull();
+    await Assert.That(request!.Line).IsEqualTo(12);
+    await Assert.That(request.Character).IsEqualTo(7);
   }
 
   private static async Task<CreateTypeFromUsageResponse> Decide(Document document, string tokenText)

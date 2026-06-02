@@ -1,12 +1,14 @@
+using System.Text.Json.Serialization;
+
 namespace EasyDotnet.RoslynLanguageServices.CreateType;
 
 public sealed record CreateTypeFromUsageResponse(
-    bool CanCreate,
-    string? TypeName,
-    string? FilePath,
-    string? FileText,
-    string? Title,
-    string? Reason)
+    [property: JsonPropertyName("canCreate")] bool CanCreate,
+    [property: JsonPropertyName("typeName")] string? TypeName,
+    [property: JsonPropertyName("filePath")] string? FilePath,
+    [property: JsonPropertyName("fileText")] string? FileText,
+    [property: JsonPropertyName("title")] string? Title,
+    [property: JsonPropertyName("reason")] string? Reason)
 {
   public static CreateTypeFromUsageResponse No(string reason) =>
       new(false, null, null, null, null, reason);
