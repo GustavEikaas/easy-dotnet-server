@@ -184,15 +184,21 @@ public class WorkspaceBuildService(
       bool restoreBeforeOperation,
       CancellationToken ct)
   {
-    if (restoreBeforeOperation && !await RestoreBeforeBuildQuickfixAsync(targetPath, name, ct))
+    var restoreInBuild = restoreBeforeOperation
+        && string.Equals(buildTarget, "Build", StringComparison.OrdinalIgnoreCase)
+        && DotnetFileTypes.IsAnySolutionFile(targetPath);
+
+    if (restoreBeforeOperation && !restoreInBuild && !await RestoreBeforeBuildQuickfixAsync(targetPath, name, ct))
       return false;
 
-    var tfm = await buildHostManager.ResolveSingleTfmAsync(targetPath, configuration, platform, ct);
+    var tfm = DotnetFileTypes.IsAnySolutionFile(targetPath)
+        ? null
+        : await buildHostManager.ResolveSingleTfmAsync(targetPath, configuration, platform, ct);
     List<BatchBuildResult> results;
     using (progressScopeFactory.Create($"{operationName}...", $"{operationName} {name}"))
     {
       results = await buildHostManager
-          .BatchBuildAsync(new BatchBuildRequest([targetPath], configuration, Platform: platform, TargetFramework: tfm, BuildTarget: buildTarget), ct)
+          .BatchBuildAsync(new BatchBuildRequest([targetPath], configuration, Platform: platform, TargetFramework: tfm, BuildTarget: buildTarget, RestoreBeforeBuild: restoreInBuild), ct)
           .ToListAsync(ct);
     }
 

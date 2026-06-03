@@ -5,7 +5,8 @@ public sealed record BatchBuildRequest(
     string? Configuration,
     string? Platform = null,
     string? TargetFramework = null,
-    string? BuildTarget = "Build"
+    string? BuildTarget = "Build",
+    bool RestoreBeforeBuild = false
 );
 
 public enum BatchBuildResultKind { Started, Finished }

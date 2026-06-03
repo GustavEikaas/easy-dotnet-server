@@ -191,7 +191,7 @@ public class WorkspaceBuildHostManager : IBuildHostManager
       RestoreRequest request,
       [EnumeratorCancellation] CancellationToken ct)
   {
-    var resolvedTargets = await ResolveTargetsAsync(request.ProjectPaths, request.Configuration, request.Platform, ct);
+    var resolvedTargets = await ResolveDirectTargetsAsync(request.ProjectPaths, request.Configuration, request.Platform, ct);
     var groups = resolvedTargets
         .GroupBy(target => (target.Configuration, target.Platform), target => target.TargetPath)
         .ToList();
@@ -233,7 +233,7 @@ public class WorkspaceBuildHostManager : IBuildHostManager
       BatchBuildRequest request,
       [EnumeratorCancellation] CancellationToken ct)
   {
-    var resolvedTargets = await ResolveTargetsAsync(request.ProjectPaths, request.Configuration, request.Platform, ct);
+    var resolvedTargets = await ResolveDirectTargetsAsync(request.ProjectPaths, request.Configuration, request.Platform, ct);
     var groups = resolvedTargets
         .Where(target => target.Build)
         .GroupBy(target => (target.Configuration, target.Platform), target => target.TargetPath)
@@ -342,6 +342,30 @@ public class WorkspaceBuildHostManager : IBuildHostManager
     }
 
     return await _workspaceBuildConfigurationService.ResolveTargetsAsync(expandedTargetPaths, ct);
+  }
+
+  private Task<IReadOnlyList<ResolvedBuildConfiguration>> ResolveDirectTargetsAsync(
+      IReadOnlyCollection<string> targetPaths,
+      string? configuration,
+      string? platform,
+      CancellationToken ct)
+  {
+    if (!string.IsNullOrWhiteSpace(configuration) || !string.IsNullOrWhiteSpace(platform))
+    {
+      var explicitConfiguration = configuration ?? "Debug";
+      var workspaceConfiguration = new WorkspaceBuildConfiguration(explicitConfiguration, platform);
+      return Task.FromResult<IReadOnlyList<ResolvedBuildConfiguration>>(
+          [.. targetPaths.Select(path => new ResolvedBuildConfiguration(
+              path,
+              workspaceConfiguration,
+              explicitConfiguration,
+              ResolveExplicitPlatform(path, platform),
+              Build: true,
+              Deploy: false,
+              UsedProjectMapping: false))]);
+    }
+
+    return _workspaceBuildConfigurationService.ResolveTargetsAsync(targetPaths, ct);
   }
 
   private async Task<GetWatchListResponse> ResolveWatchListAsync(string projectPath, CancellationToken ct)
