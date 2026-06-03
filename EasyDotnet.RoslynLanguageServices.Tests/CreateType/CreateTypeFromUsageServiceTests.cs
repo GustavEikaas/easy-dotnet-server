@@ -1,8 +1,8 @@
+using System.Text.Json;
 using EasyDotnet.RoslynLanguageServices.CreateType;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Text;
-using System.Text.Json;
 
 namespace EasyDotnet.RoslynLanguageServices.Tests.CreateType;
 

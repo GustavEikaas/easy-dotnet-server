@@ -8,12 +8,10 @@ public sealed class RoslynExtensionInfoCommand : Command
 {
   public override int Execute(CommandContext context, CancellationToken cancellationToken)
   {
-    var info = new RoslynExtensionInfo(
-        RoslynLocator.GetEasyDotnetRoslynLanguageServicesPath());
-
-    Console.WriteLine(JsonSerializer.Serialize(info));
+    var info = new RoslynExtensionInfo(RoslynLocator.GetEasyDotnetRoslynLanguageServicesPath(), RoslynLocator.GetExternalAccessExtensionsPath());
+    Console.WriteLine(JsonSerializer.Serialize(info), JsonSerializerDefaults.Web);
     return 0;
   }
 
-  private sealed record RoslynExtensionInfo(string EasyDotnetRoslynLanguageServicesPath);
+  private sealed record RoslynExtensionInfo(string EasyDotnetRoslynLanguageServicesPath, string? DevKitDependencyPath);
 }

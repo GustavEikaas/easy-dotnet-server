@@ -39,16 +39,18 @@ runs:
       run: dotnet build -c Release --no-restore
 
 
-    - name: Build and Copy Analyzers
+    - name: Build and Copy Roslyn Assets
       shell: bash
       run: |
         ROSLYNATOR_VERSION="${{ inputs.roslynatorVersion }}"
         OUTPUT_PATH="${{ inputs.toolsOutputPath }}/Roslyn/Analyzers"
+        EXTENSION_OUTPUT_PATH="${{ inputs.toolsOutputPath }}/Roslyn/Extensions/EasyDotnet"
         DEVKIT_OUTPUT_PATH="${{ inputs.toolsOutputPath }}/Roslyn/DevKit"
 
         mkdir -p "$OUTPUT_PATH"
+        mkdir -p "$EXTENSION_OUTPUT_PATH"
         mkdir -p "$DEVKIT_OUTPUT_PATH"
-        cp EasyDotnet.RoslynLanguageServices/bin/Release/net8.0/EasyDotnet.RoslynLanguageServices.dll "$OUTPUT_PATH/"
+        cp EasyDotnet.RoslynLanguageServices/bin/Release/net8.0/EasyDotnet.RoslynLanguageServices.dll "$EXTENSION_OUTPUT_PATH/"
         cp EasyDotnet.RoslynLanguageServices/bin/Release/net8.0/Microsoft.CodeAnalysis.ExternalAccess.Extensions.dll "$DEVKIT_OUTPUT_PATH/"
 
         mkdir -p artifacts/roslynator

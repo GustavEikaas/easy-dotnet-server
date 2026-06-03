@@ -24,6 +24,10 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
     [CommandOption("--easy-dotnet-analyzer")]
     public bool UseEasyDotnetAnalyzer { get; init; }
 
+    [Description("Use the bundled EasyDotnet DevKit extension (optional).")]
+    [CommandOption("--easy-dotnet-extension")]
+    public bool UseEasyDotnetExtension { get; init; }
+
     [Description("Enable Roslynator analyzers (optional).")]
     [CommandOption("--roslynator")]
     public bool UseRoslynator { get; init; }
@@ -99,42 +103,7 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
         "EasyDotnet", "RoslynLogs");
     Directory.CreateDirectory(roslynLogDir);
 
-    List<string> arguments = ["--stdio", "--logLevel=Information", "--extensionLogDirectory", roslynLogDir];
-
-    if (settings.UseRoslynator)
-    {
-      foreach (var analyzer in RoslynLocator.GetRoslynatorAnalyzers())
-      {
-        arguments.Add("--extension");
-        arguments.Add(analyzer);
-      }
-    }
-    if (settings.UseEasyDotnetAnalyzer)
-    {
-      foreach (var analyzer in RoslynLocator.GetEasyDotnetAnalyzers())
-      {
-        arguments.Add("--extension");
-        arguments.Add(analyzer);
-      }
-    }
-
-    foreach (var dll in settings.AnalyzerAssemblies)
-    {
-      arguments.Add("--extension");
-      arguments.Add(dll);
-    }
-
-    var devKitDependencyPath = settings.DevKitDependencyPath;
-    if (string.IsNullOrWhiteSpace(devKitDependencyPath) && settings.UseEasyDotnetAnalyzer)
-    {
-      devKitDependencyPath = RoslynLocator.GetExternalAccessExtensionsPath();
-    }
-
-    if (!string.IsNullOrWhiteSpace(devKitDependencyPath))
-    {
-      arguments.Add("--devKitDependencyPath");
-      arguments.Add(devKitDependencyPath);
-    }
+    var arguments = BuildRoslynArguments(settings, roslynLogDir);
 
     if (settings.ClientProcessId is > 0)
     {
@@ -164,44 +133,9 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
     };
 
     startInfo.ArgumentList.Add(roslynDllPath);
-    startInfo.ArgumentList.Add("--stdio");
-    startInfo.ArgumentList.Add("--logLevel=Information");
-    startInfo.ArgumentList.Add("--extensionLogDirectory");
-    startInfo.ArgumentList.Add(roslynLogDir);
-
-    if (settings.UseRoslynator)
+    foreach (var argument in BuildRoslynArguments(settings, roslynLogDir))
     {
-      foreach (var analyzer in RoslynLocator.GetRoslynatorAnalyzers())
-      {
-        startInfo.ArgumentList.Add("--extension");
-        startInfo.ArgumentList.Add(analyzer);
-      }
-    }
-    if (settings.UseEasyDotnetAnalyzer)
-    {
-      foreach (var analyzer in RoslynLocator.GetEasyDotnetAnalyzers())
-      {
-        startInfo.ArgumentList.Add("--extension");
-        startInfo.ArgumentList.Add(analyzer);
-      }
-    }
-
-    foreach (var dll in settings.AnalyzerAssemblies)
-    {
-      startInfo.ArgumentList.Add("--extension");
-      startInfo.ArgumentList.Add(dll);
-    }
-
-    var devKitDependencyPath = settings.DevKitDependencyPath;
-    if (string.IsNullOrWhiteSpace(devKitDependencyPath) && settings.UseEasyDotnetAnalyzer)
-    {
-      devKitDependencyPath = RoslynLocator.GetExternalAccessExtensionsPath();
-    }
-
-    if (!string.IsNullOrWhiteSpace(devKitDependencyPath))
-    {
-      startInfo.ArgumentList.Add("--devKitDependencyPath");
-      startInfo.ArgumentList.Add(devKitDependencyPath);
+      startInfo.ArgumentList.Add(argument);
     }
 
     if (settings.ClientProcessId is > 0)
@@ -216,6 +150,55 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
     await process.WaitForExitAsync(cancellationToken);
 
     return process.ExitCode;
+  }
+
+  public static List<string> BuildRoslynArguments(Settings settings, string roslynLogDir)
+  {
+    List<string> arguments = ["--stdio", "--logLevel=Information", "--extensionLogDirectory", roslynLogDir];
+
+    if (settings.UseRoslynator)
+    {
+      foreach (var analyzer in RoslynLocator.GetRoslynatorAnalyzers())
+      {
+        AddExtension(arguments, analyzer);
+      }
+    }
+    if (settings.UseEasyDotnetAnalyzer)
+    {
+      foreach (var analyzer in RoslynLocator.GetEasyDotnetAnalyzers())
+      {
+        AddExtension(arguments, analyzer);
+      }
+    }
+    if (settings.UseEasyDotnetExtension)
+    {
+      AddExtension(arguments, RoslynLocator.GetEasyDotnetRoslynLanguageServicesPath());
+    }
+
+    foreach (var dll in settings.AnalyzerAssemblies)
+    {
+      AddExtension(arguments, dll);
+    }
+
+    var devKitDependencyPath = settings.DevKitDependencyPath;
+    if (string.IsNullOrWhiteSpace(devKitDependencyPath) && settings.UseEasyDotnetExtension)
+    {
+      devKitDependencyPath = RoslynLocator.GetExternalAccessExtensionsPath();
+    }
+
+    if (!string.IsNullOrWhiteSpace(devKitDependencyPath))
+    {
+      arguments.Add("--devKitDependencyPath");
+      arguments.Add(devKitDependencyPath);
+    }
+
+    return arguments;
+  }
+
+  private static void AddExtension(List<string> arguments, string path)
+  {
+    arguments.Add("--extension");
+    arguments.Add(path);
   }
 
   public static async Task<int> ShowRoslynVersion(string roslynDllPath, CancellationToken cancellationToken)

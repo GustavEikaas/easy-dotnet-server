@@ -1,3 +1,4 @@
+using EasyDotnet.IDE.Commands;
 using EasyDotnet.IDE.Services;
 
 namespace EasyDotnet.IDE.Tests.Roslyn;
@@ -22,6 +23,65 @@ public class RoslynLocatorTests
     await Assert.That(RoslynToolService.IsBelowRecommendedVersion("5.8.0-1.26266.2")).IsFalse();
   }
 
+  [Test]
+  public async Task BuildRoslynArguments_EasyDotnetAnalyzer_DoesNotEnableDevKitDependency()
+  {
+    Directory.CreateDirectory(Path.Combine(GetRoslynBaseDirForTests(), "Analyzers"));
+
+    var arguments = RoslynStartCommand.BuildRoslynArguments(
+        new RoslynStartCommand.Settings { UseEasyDotnetAnalyzer = true },
+        "/tmp/easydotnet-roslyn-logs");
+
+    await Assert.That(arguments.Contains("--devKitDependencyPath")).IsFalse();
+  }
+
+  [Test]
+  public async Task BuildRoslynArguments_EasyDotnetExtension_AddsBundledExtensionAndDevKitDependency()
+  {
+    var roslynBaseDir = GetRoslynBaseDirForTests();
+    var extensionPath = Path.Combine(roslynBaseDir, "Extensions", "EasyDotnet", "EasyDotnet.RoslynLanguageServices.dll");
+    var devKitPath = Path.Combine(roslynBaseDir, "DevKit", "Microsoft.CodeAnalysis.ExternalAccess.Extensions.dll");
+    Directory.CreateDirectory(Path.GetDirectoryName(extensionPath)!);
+    Directory.CreateDirectory(Path.GetDirectoryName(devKitPath)!);
+    await File.WriteAllTextAsync(extensionPath, string.Empty);
+    await File.WriteAllTextAsync(devKitPath, string.Empty);
+
+    var arguments = RoslynStartCommand.BuildRoslynArguments(
+        new RoslynStartCommand.Settings { UseEasyDotnetExtension = true },
+        "/tmp/easydotnet-roslyn-logs");
+
+    await Assert.That(arguments.Contains(extensionPath)).IsTrue();
+    await Assert.That(arguments.Contains("--devKitDependencyPath")).IsTrue();
+    await Assert.That(arguments.Contains(devKitPath)).IsTrue();
+  }
+
   [After(Test)]
-  public void Cleanup() => Environment.SetEnvironmentVariable(RoslynLocator.ROSLYN_DLL_PATH_ENV, null);
+  public void Cleanup()
+  {
+    Environment.SetEnvironmentVariable(RoslynLocator.ROSLYN_DLL_PATH_ENV, null);
+
+    var toolsDir = Path.Combine(GetTestProjectDir(), "tools");
+    if (Directory.Exists(toolsDir))
+    {
+      Directory.Delete(toolsDir, recursive: true);
+    }
+  }
+
+  private static string GetRoslynBaseDirForTests()
+  {
+    var assemblyLocation = typeof(RoslynLocator).Assembly.Location;
+    var toolExeDir = Path.GetDirectoryName(assemblyLocation)
+                     ?? throw new InvalidOperationException("Unable to determine assembly directory");
+
+    return Path.Combine(GetTestProjectDir(), "tools", "Roslyn");
+  }
+
+  private static string GetTestProjectDir()
+  {
+    var assemblyLocation = typeof(RoslynLocator).Assembly.Location;
+    var toolExeDir = Path.GetDirectoryName(assemblyLocation)
+                     ?? throw new InvalidOperationException("Unable to determine assembly directory");
+
+    return Path.GetFullPath(Path.Combine(toolExeDir, "..", "..", ".."));
+  }
 }
