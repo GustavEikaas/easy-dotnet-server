@@ -37,7 +37,7 @@ public sealed class WorkspaceBuildHostManagerTests
   }
 
   [Test]
-  public async Task BatchBuildAsync_SolutionTarget_ExpandsToProjectsAndAppliesActiveSolutionMapping()
+  public async Task BatchBuildAsync_SolutionTarget_PassesSolutionThroughAndAppliesActiveSolutionConfiguration()
   {
     var solutionPath = Path.Combine(Path.GetTempPath(), "App.sln");
     var projectPath = Path.Combine(Path.GetTempPath(), "App.csproj");
@@ -57,9 +57,9 @@ public sealed class WorkspaceBuildHostManagerTests
     await manager.BatchBuildAsync(new BatchBuildRequest([solutionPath], Configuration: null), CancellationToken.None).ToListAsync(CancellationToken.None);
 
     await Assert.That(inner.BuildRequests.Count).IsEqualTo(1);
-    await Assert.That(inner.BuildRequests[0].ProjectPaths).IsEquivalentTo([projectPath]);
+    await Assert.That(inner.BuildRequests[0].ProjectPaths).IsEquivalentTo([solutionPath]);
     await Assert.That(inner.BuildRequests[0].Configuration).IsEqualTo("Debug");
-    await Assert.That(inner.BuildRequests[0].Platform).IsNull();
+    await Assert.That(inner.BuildRequests[0].Platform).IsEqualTo("Any CPU");
   }
 
   [Test]
@@ -114,15 +114,30 @@ public sealed class WorkspaceBuildHostManagerTests
         Task.FromResult<IReadOnlyList<WorkspaceBuildConfiguration>>([resolvedConfiguration.WorkspaceConfiguration]);
 
     public Task<ResolvedBuildConfiguration> ResolveTargetAsync(string targetPath, CancellationToken cancellationToken = default) =>
-        Task.FromResult(resolvedConfiguration);
+        Task.FromResult(Resolve(targetPath));
 
     public Task<IReadOnlyList<ResolvedBuildConfiguration>> ResolveTargetsAsync(
         IReadOnlyCollection<string> targetPaths,
         CancellationToken cancellationToken = default) =>
-        Task.FromResult<IReadOnlyList<ResolvedBuildConfiguration>>([resolvedConfiguration]);
+        Task.FromResult<IReadOnlyList<ResolvedBuildConfiguration>>([.. targetPaths.Select(Resolve)]);
 
     public Task SetActiveConfigurationAsync(WorkspaceBuildConfiguration configuration, CancellationToken cancellationToken = default) =>
         Task.CompletedTask;
+
+    private ResolvedBuildConfiguration Resolve(string targetPath)
+    {
+      if (DotnetFileTypes.IsAnySolutionFile(targetPath))
+      {
+        return resolvedConfiguration with
+        {
+          TargetPath = targetPath,
+          Platform = resolvedConfiguration.WorkspaceConfiguration.Platform,
+          UsedProjectMapping = false
+        };
+      }
+
+      return resolvedConfiguration with { TargetPath = targetPath };
+    }
   }
 
   private sealed class NoOpSolutionService(

@@ -187,7 +187,9 @@ public class WorkspaceBuildService(
     if (restoreBeforeOperation && !await RestoreBeforeBuildQuickfixAsync(targetPath, name, ct))
       return false;
 
-    var tfm = await buildHostManager.ResolveSingleTfmAsync(targetPath, configuration, platform, ct);
+    var tfm = DotnetFileTypes.IsAnySolutionFile(targetPath)
+        ? null
+        : await buildHostManager.ResolveSingleTfmAsync(targetPath, configuration, platform, ct);
     List<BatchBuildResult> results;
     using (progressScopeFactory.Create($"{operationName}...", $"{operationName} {name}"))
     {
