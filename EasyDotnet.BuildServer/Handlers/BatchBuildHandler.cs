@@ -99,6 +99,12 @@ public class BatchBuildHandler(BuildFreshnessChecker freshnessChecker, Logger lo
 
   private (BatchBuildResult? Hit, string? MissReason) TryFastUpToDate(string projectPath, BatchBuildRequest request)
   {
+    if (request.RestoreBeforeBuild)
+    {
+      logger.LogDebug("FUTD skipped: restore-before-build requested for {Project}", projectPath);
+      return (null, null);
+    }
+
     var target = request.BuildTarget ?? "Build";
     if (!string.Equals(target, "Build", StringComparison.OrdinalIgnoreCase))
     {
@@ -203,7 +209,7 @@ public class BatchBuildHandler(BuildFreshnessChecker freshnessChecker, Logger lo
                 projectPath,
                 globalProperties,
                 toolsVersion: null,
-                [request.BuildTarget ?? "Build"],
+                ResolveTargetsToBuild(request),
                 hostServices: null);
 
         using var buildManager = new BuildManager();
@@ -240,5 +246,13 @@ public class BatchBuildHandler(BuildFreshnessChecker freshnessChecker, Logger lo
                 Output: new BatchBuildOutput(stopwatch.Elapsed, BuildDiagnosticDeduplicator.Deduplicate(diagnostics)));
       }
     }, ct);
+  }
+
+  private static string[] ResolveTargetsToBuild(BatchBuildRequest request)
+  {
+    var target = request.BuildTarget ?? "Build";
+    return request.RestoreBeforeBuild && string.Equals(target, "Build", StringComparison.OrdinalIgnoreCase)
+        ? ["Restore", "Build"]
+        : [target];
   }
 }

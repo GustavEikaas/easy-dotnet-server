@@ -191,7 +191,7 @@ public class WorkspaceBuildHostManager : IBuildHostManager
       RestoreRequest request,
       [EnumeratorCancellation] CancellationToken ct)
   {
-    var resolvedTargets = await ResolveTargetsAsync(request.ProjectPaths, request.Configuration, request.Platform, ct);
+    var resolvedTargets = await ResolveDirectTargetsAsync(request.ProjectPaths, request.Configuration, request.Platform, ct);
     var groups = resolvedTargets
         .GroupBy(target => (target.Configuration, target.Platform), target => target.TargetPath)
         .ToList();
@@ -233,7 +233,7 @@ public class WorkspaceBuildHostManager : IBuildHostManager
       BatchBuildRequest request,
       [EnumeratorCancellation] CancellationToken ct)
   {
-    var resolvedTargets = await ResolveBuildTargetsAsync(request.ProjectPaths, request.Configuration, request.Platform, ct);
+    var resolvedTargets = await ResolveDirectTargetsAsync(request.ProjectPaths, request.Configuration, request.Platform, ct);
     var groups = resolvedTargets
         .Where(target => target.Build)
         .GroupBy(target => (target.Configuration, target.Platform), target => target.TargetPath)
@@ -344,7 +344,7 @@ public class WorkspaceBuildHostManager : IBuildHostManager
     return await _workspaceBuildConfigurationService.ResolveTargetsAsync(expandedTargetPaths, ct);
   }
 
-  private Task<IReadOnlyList<ResolvedBuildConfiguration>> ResolveBuildTargetsAsync(
+  private Task<IReadOnlyList<ResolvedBuildConfiguration>> ResolveDirectTargetsAsync(
       IReadOnlyCollection<string> targetPaths,
       string? configuration,
       string? platform,

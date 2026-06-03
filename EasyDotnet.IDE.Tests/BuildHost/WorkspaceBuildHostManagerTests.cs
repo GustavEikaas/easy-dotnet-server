@@ -11,7 +11,7 @@ namespace EasyDotnet.IDE.Tests.BuildHost;
 public sealed class WorkspaceBuildHostManagerTests
 {
   [Test]
-  public async Task RestoreNugetPackagesAsync_SolutionTarget_ExpandsToProjectsAndAppliesActiveSolutionMapping()
+  public async Task RestoreNugetPackagesAsync_SolutionTarget_PassesSolutionThroughAndAppliesActiveSolutionConfiguration()
   {
     var solutionPath = Path.Combine(Path.GetTempPath(), "App.sln");
     var projectPath = Path.Combine(Path.GetTempPath(), "App.csproj");
@@ -31,9 +31,9 @@ public sealed class WorkspaceBuildHostManagerTests
     await manager.RestoreNugetPackagesAsync(new RestoreRequest([solutionPath]), CancellationToken.None).ToListAsync(CancellationToken.None);
 
     await Assert.That(inner.RestoreRequests.Count).IsEqualTo(1);
-    await Assert.That(inner.RestoreRequests[0].ProjectPaths).IsEquivalentTo([projectPath]);
+    await Assert.That(inner.RestoreRequests[0].ProjectPaths).IsEquivalentTo([solutionPath]);
     await Assert.That(inner.RestoreRequests[0].Configuration).IsEqualTo("Debug");
-    await Assert.That(inner.RestoreRequests[0].Platform).IsNull();
+    await Assert.That(inner.RestoreRequests[0].Platform).IsEqualTo("Any CPU");
   }
 
   [Test]
