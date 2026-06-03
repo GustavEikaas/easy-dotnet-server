@@ -21,12 +21,17 @@ public class DebugSessionCoordinator(
   private readonly TaskCompletionSource<bool> _processStartedSource = new();
   private readonly TaskCompletionSource<int?> _debugeeProcessStartedSource = new();
   private readonly TaskCompletionSource _configurationDoneSource = new();
+  private readonly TaskCompletionSource _debugSessionStartedSource = new(TaskCreationOptions.RunContinuationsAsynchronously);
+  private readonly object _debugSessionStartedLock = new();
+  private bool _debugStartSignalSeen;
+  private bool _debuggerConfigurationDoneSeen;
   private int _isDisposing;
   private Func<Task>? _onDispose;
 
   public Task ProcessStarted => _processStartedSource.Task;
   public Task DebugeeProcessStarted => _debugeeProcessStartedSource.Task;
   public Task ConfigurationDone => _configurationDoneSource.Task;
+  public Task DebugSessionStarted => _debugSessionStartedSource.Task;
   public Task Completion => _completionSource.Task;
   public Task DisposalStarted => _disposalStartedSource.Task;
   public int Port => tcpServer.Port;
@@ -129,6 +134,60 @@ public class DebugSessionCoordinator(
 
     logger.LogInformation("Configuration done event reported");
     _configurationDoneSource.SetResult();
+  }
+
+  public void NotifyDebugStartSignal(string signal)
+  {
+    lock (_debugSessionStartedLock)
+    {
+      if (_debugStartSignalSeen)
+      {
+        logger.LogDebug("Debug session start signal already reported, ignoring signal: {Signal}", signal);
+        return;
+      }
+
+      logger.LogInformation("Debug session start signal reported by DAP {Signal}", signal);
+      _debugStartSignalSeen = true;
+      TryCompleteDebugSessionStarted();
+    }
+  }
+
+  public void NotifyDebuggerConfigurationDone()
+  {
+    lock (_debugSessionStartedLock)
+    {
+      if (_debuggerConfigurationDoneSeen)
+      {
+        logger.LogDebug("Debugger configurationDone response already reported");
+        return;
+      }
+
+      logger.LogInformation("Debugger configurationDone response reported");
+      _debuggerConfigurationDoneSeen = true;
+      TryCompleteDebugSessionStarted();
+    }
+  }
+
+  public void NotifyDebugSessionStartFailed(string command, string? message)
+  {
+    if (_debugSessionStartedSource.Task.IsCompleted)
+    {
+      return;
+    }
+
+    _debugSessionStartedSource.TrySetException(
+      new InvalidOperationException($"Debugger failed to {command}: {message ?? "No error message provided"}"));
+  }
+
+  private void TryCompleteDebugSessionStarted()
+  {
+    if (!_debugStartSignalSeen || !_debuggerConfigurationDoneSeen || _debugSessionStartedSource.Task.IsCompleted)
+    {
+      return;
+    }
+
+    logger.LogInformation("DAP debug session start conditions satisfied");
+    _debugSessionStartedSource.TrySetResult();
   }
 
   private void StartTelemetryMonitoring(int processId)

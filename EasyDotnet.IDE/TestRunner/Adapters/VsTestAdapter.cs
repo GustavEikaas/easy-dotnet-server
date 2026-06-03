@@ -257,11 +257,7 @@ public sealed class VsTestAdapter(
       if (session.StoppedTask.IsCompleted) onStopped();
 
       await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
-      await session.ProcessStarted;
-      //We add a delay to ensure the client is ready #gh785
-      await Task.Delay(1000, ct);
-      //This would replace the ProcessStarted and delay but we need help to regression test it
-      // await session.WaitForConfigurationDoneAsync();
+      await session.WaitForDebugSessionStartedAsync().WaitAsync(ct);
       return true;
     });
 

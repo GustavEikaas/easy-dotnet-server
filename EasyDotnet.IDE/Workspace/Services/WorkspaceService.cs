@@ -348,8 +348,7 @@ public class WorkspaceService(
           project.ProjectFullPath, strategy, ct);
 
       await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
-      await session.ProcessStarted;
-      await Task.Delay(1000, ct);
+      await session.WaitForDebugSessionStartedAsync().WaitAsync(ct);
     }
     catch
     {
