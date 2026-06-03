@@ -67,5 +67,6 @@ public class WorkspacePreBuildService(
         LineNumber: d.LineNumber,
         ColumnNumber: d.ColumnNumber,
         Text: string.IsNullOrEmpty(d.Code) ? d.Message ?? "" : $"[{d.Code}] {d.Message}",
-        Type: QuickFixItemType.Error));
+        Type: QuickFixItemType.Error))
+      .Distinct();
 }
