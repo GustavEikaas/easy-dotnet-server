@@ -1,4 +1,5 @@
 using EasyDotnet.ProjXLanguageServer.Services;
+using EasyDotnet.ProjXLanguageServer.Protocol;
 using Microsoft.VisualStudio.LanguageServer.Protocol;
 using StreamJsonRpc;
 
@@ -11,7 +12,7 @@ public class InitializeHandler(ISemanticTokensService semanticTokensService) : B
   {
     var result = new InitializeResult
     {
-      Capabilities = new ServerCapabilities
+      Capabilities = new ProjXServerCapabilities
       {
         CompletionProvider = new CompletionOptions
         {
