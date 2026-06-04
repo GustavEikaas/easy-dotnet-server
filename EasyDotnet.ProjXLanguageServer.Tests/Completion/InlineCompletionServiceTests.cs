@@ -17,7 +17,7 @@ public class InlineCompletionServiceTests
     var result = await Sut.GetInlineCompletionsAsync(Docs.Make(clean), line, character, default);
 
     await Assert.That(result.Items.Length).IsEqualTo(1);
-    await Assert.That(result.Items[0].InsertText).IsEqualTo("work></TargetFramework>");
+    await Assert.That(result.Items[0].InsertText.First).IsEqualTo("work></TargetFramework>");
   }
 
   [Test]
@@ -30,7 +30,7 @@ public class InlineCompletionServiceTests
     var result = await Sut.GetInlineCompletionsAsync(Docs.Make(clean), line, character, default);
 
     await Assert.That(result.Items.Length).IsEqualTo(1);
-    await Assert.That(result.Items[0].InsertText).IsEqualTo("></TargetFramework>");
+    await Assert.That(result.Items[0].InsertText.First).IsEqualTo("></TargetFramework>");
   }
 
   [Test]
