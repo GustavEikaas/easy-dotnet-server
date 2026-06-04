@@ -46,6 +46,8 @@ static class Program
             roslyn.SetDescription("Roslyn language server commands.");
             roslyn.AddCommand<RoslynStartCommand>("start")
             .WithDescription("Start the Roslyn Language Server over stdio.");
+            roslyn.AddCommand<RoslynExtensionInfoCommand>("extension-info")
+            .WithDescription("Print bundled EasyDotnet Roslyn extension metadata as JSON.");
             roslyn.AddCommand<RoslynToolInstallCommand>("install")
             .WithDescription("Install the roslyn-language-server global tool.");
             roslyn.AddCommand<RoslynToolUpdateCommand>("update")

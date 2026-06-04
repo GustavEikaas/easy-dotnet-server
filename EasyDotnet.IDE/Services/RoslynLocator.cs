@@ -5,6 +5,9 @@ namespace EasyDotnet.IDE.Services;
 public static class RoslynLocator
 {
   public const string ROSLYN_DLL_PATH_ENV = "EASY_DOTNET_ROSLYN_DLL_PATH";
+  private const string EasyDotnetAnalyzerFileName = "EasyDotnet.RoslynLanguageServices.dll";
+  private const string EasyDotnetRoslynLanguageServicesFileName = "EasyDotnet.RoslynLanguageServices.dll";
+  private const string ExternalAccessExtensionsFileName = "Microsoft.CodeAnalysis.ExternalAccess.Extensions.dll";
 
   public static string? GetCustomRoslynDllPath()
   {
@@ -48,6 +51,25 @@ public static class RoslynLocator
         .Where(File.Exists)];
   }
 
+  public static string GetEasyDotnetRoslynLanguageServicesPath()
+  {
+    var path = Path.Combine(GetRoslynBaseDir(), "Extensions", "EasyDotnet", EasyDotnetRoslynLanguageServicesFileName);
+    if (!File.Exists(path))
+    {
+      throw new FileNotFoundException(
+          "EasyDotnet.RoslynLanguageServices.dll was not found in the bundled Roslyn extension directory.",
+          path);
+    }
+
+    return path;
+  }
+
+  public static string? GetExternalAccessExtensionsPath()
+  {
+    var path = Path.Combine(GetRoslynBaseDir(), "DevKit", ExternalAccessExtensionsFileName);
+    return File.Exists(path) ? path : null;
+  }
+
   /// <summary>
   /// Returns the full paths of the Roslynator C# analyzer DLLs inside the .NET tool installation folder.
   /// Only the DLLs containing analyzers are returned.
@@ -61,7 +83,7 @@ public static class RoslynLocator
       throw new DirectoryNotFoundException($"EasyDotnet Analyzer folder not found: {analyzersDir}");
     }
 
-    var analyzerDlls = new[] { "EasyDotnet.RoslynLanguageServices.dll" };
+    var analyzerDlls = new[] { EasyDotnetAnalyzerFileName };
 
     return [.. analyzerDlls
         .Select(dll => Path.Combine(analyzersDir, dll))

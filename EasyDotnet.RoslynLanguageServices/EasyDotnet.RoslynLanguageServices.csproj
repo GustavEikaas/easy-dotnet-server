@@ -2,6 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>$(LowestNetCoreTfm)</TargetFramework>
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>
@@ -10,6 +11,13 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.0.0" />
+    <PackageDownload Include="Microsoft.CodeAnalysis.ExternalAccess.Extensions" Version="[5.0.0-1.25277.114]" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="Microsoft.CodeAnalysis.ExternalAccess.Extensions">
+      <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.externalaccess.extensions/5.0.0-1.25277.114/lib/netstandard2.0/Microsoft.CodeAnalysis.ExternalAccess.Extensions.dll</HintPath>
+    </Reference>
   </ItemGroup>
 
 </Project>

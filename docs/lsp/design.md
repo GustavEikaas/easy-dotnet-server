@@ -16,7 +16,7 @@ This launches the LSP server using **stdio communication**, making it compatible
 * **Automatic install:** If `roslyn-language-server` is missing, the server installs it with `dotnet tool install --global roslyn-language-server --prerelease`.
 * **Roslynator support:** By passing `--roslynator`, the server automatically loads Roslynator analyzers.
 * **Custom analyzers:** Additional analyzer assemblies can be loaded via `--analyzer <PATH>`.
-* **Optional tooling integrations:** DevKit dependencies and analyzer extensions can be specified.
+* **Optional tooling integrations:** The bundled EasyDotnet DevKit extension is inactive by default and can be loaded explicitly with `--easy-dotnet-extension`.
 
 ## Why the Server Provides LSP
 
@@ -50,6 +50,7 @@ dotnet easydotnet roslyn start [OPTIONS]
 Options:
   --version                Show the Roslyn version and exit
   --roslynator             Enable Roslynator analyzers (optional)
+  --easy-dotnet-extension  Enable the bundled EasyDotnet DevKit extension (optional)
   --analyzer <PATH>        Additional analyzer assemblies to load
   --devKitDependencyPath   Full path to DevKit dependencies (optional)
   --clientProcessId        Client process id Roslyn should monitor for shutdown
@@ -61,5 +62,6 @@ From the **server perspective**:
 
 * We provide a ready-to-use Roslyn LSP launcher with optional analyzers.
 * We handle all logging, workspace, and extension loading.
+* EasyDotnet DevKit extension assets are bundled with the IDE package but are not loaded by default.
 * Clients are expected to consume it using standard LSP protocols.
 * Updating the server automatically updates the underlying LSP and analyzers, keeping tooling current across clients.
