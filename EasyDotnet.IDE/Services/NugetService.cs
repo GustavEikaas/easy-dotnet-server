@@ -68,6 +68,25 @@ public class NugetService(
       List<string>? sourceNames = null)
       => searchService.GetVersionsAsync(packageId, includePrerelease, cancellationToken, sourceNames);
 
+  public async Task<IReadOnlyList<NuGetVersion>> GetNugetOrgPackageVersionsAsync(
+      string packageId,
+      CancellationToken cancellationToken,
+      bool includePrerelease = false)
+  {
+    DefaultCredentialServiceUtility.SetupDefaultCredentialService(NullLogger.Instance, nonInteractive: true);
+
+    using var cache = new SourceCacheContext();
+    var source = new PackageSource("https://api.nuget.org/v3/index.json", "nuget.org");
+    var repo = new SourceRepository(source, Repository.Provider.GetCoreV3());
+    var resource = await repo.GetResourceAsync<FindPackageByIdResource>(cancellationToken);
+    var versions = await resource.GetAllVersionsAsync(packageId, cache, NullLogger.Instance, cancellationToken);
+
+    return [.. versions
+        .Where(v => includePrerelease || !v.IsPrerelease)
+        .Distinct()
+        .OrderByDescending(v => v)];
+  }
+
   public Task<IReadOnlyDictionary<string, IReadOnlyList<IPackageSearchMetadata>>> SearchAllSourcesByNameAsync(
       string searchTerm,
       CancellationToken cancellationToken,

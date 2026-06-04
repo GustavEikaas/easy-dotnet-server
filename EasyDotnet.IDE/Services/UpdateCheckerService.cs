@@ -50,7 +50,7 @@ public class UpdateCheckerService(
 
       logger.LogDebug("Checking for updates to {PackageId} (current: {Version})", PackageId, currentVersion);
 
-      var versions = await nugetService.GetPackageVersionsAsync(PackageId, cancellationToken, false);
+      var versions = await nugetService.GetNugetOrgPackageVersionsAsync(PackageId, cancellationToken, false);
 
       var newerVersions = versions
         .Where(x => x.Version > currentVersion)
@@ -117,7 +117,7 @@ public class UpdateCheckerService(
 
       logger.LogDebug("Checking for updates to {PackageId} (current: {Version})", RoslynToolService.PackageId, currentVersion);
 
-      var versions = await nugetService.GetPackageVersionsAsync(RoslynToolService.PackageId, cancellationToken, true);
+      var versions = await nugetService.GetNugetOrgPackageVersionsAsync(RoslynToolService.PackageId, cancellationToken, true);
       var latest = versions.OrderByDescending(x => x).FirstOrDefault();
 
       await SaveLastCheckTimeAsync(appPaths.RoslynUpdateCheckCacheFile, DateTime.UtcNow);
