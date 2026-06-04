@@ -1,5 +1,5 @@
-using EasyDotnet.ProjXLanguageServer.Services;
 using EasyDotnet.ProjXLanguageServer.Protocol;
+using EasyDotnet.ProjXLanguageServer.Services;
 using Microsoft.VisualStudio.LanguageServer.Protocol;
 using StreamJsonRpc;
 
