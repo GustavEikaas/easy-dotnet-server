@@ -44,6 +44,9 @@ public abstract class WorkspaceRunStandaloneFileTests<TContainer> : WorkspaceRun
   }
 }
 
+[Collection(ContainerCollections.Sdk8Linux)]
 public sealed class WorkspaceRunStandaloneFileSdk8Linux : WorkspaceRunStandaloneFileTests<Sdk8LinuxContainer>;
+[Collection(ContainerCollections.Sdk9Linux)]
 public sealed class WorkspaceRunStandaloneFileSdk9Linux : WorkspaceRunStandaloneFileTests<Sdk9LinuxContainer>;
+[Collection(ContainerCollections.Sdk10Linux)]
 public sealed class WorkspaceRunStandaloneFileSdk10Linux : WorkspaceRunStandaloneFileTests<Sdk10LinuxContainer>;

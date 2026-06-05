@@ -29,6 +29,7 @@ namespace EasyDotnet.ContainerTests.GlobalJson;
 /// WITH FIX   : BuildServer is spawned with --fx-version pinned to .NET 8 → RuntimeVersionMajor == 8 → passes.
 /// </para>
 /// </summary>
+[Collection(ContainerCollections.MultiSdkLinux)]
 public sealed class GlobalJsonBuildServerTests : ContainerTestBase<MultiSdkLinuxContainer>
 {
   [Fact]

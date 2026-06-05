@@ -2,7 +2,6 @@ using System.Text;
 using System.Threading.Channels;
 using EasyDotnet.ContainerTests.Docker;
 using EasyDotnet.IDE.Models.Client;
-using StreamJsonRpc;
 using Xunit.Sdk;
 
 namespace EasyDotnet.ContainerTests.Workspace.Build;
@@ -50,9 +49,6 @@ public abstract class WorkspaceBuildTestBase<TContainer> : ContainerTestBase<TCo
 
   /// <summary>Total number of <c>promptSelection</c> calls received from the server so far.</summary>
   protected int SelectionCallCount => Volatile.Read(ref _selectionCallCount);
-
-  protected override void ConfigureRpc(JsonRpc rpc) =>
-    rpc.AddLocalRpcTarget(new RpcHandlers(this), new JsonRpcTargetOptions { DisposeOnDisconnect = false });
 
   /// <summary>
   /// Starts a <c>workspace/build</c> call, registers it as the active RPC scope, and returns the task.
@@ -173,38 +169,29 @@ public abstract class WorkspaceBuildTestBase<TContainer> : ContainerTestBase<TCo
     return sb.Length > 0 ? $"\n Pending notifications:{sb}" : string.Empty;
   }
 
-  private sealed class RpcHandlers(WorkspaceBuildTestBase<TContainer> test)
+  public override async Task<string?> PromptSelectionAsync(TestPromptSelectionRequest request)
   {
-    [JsonRpcMethod("promptSelection", UseSingleObjectParameterDeserialization = true)]
-    public async Task<string?> PromptSelection(TestPromptSelectionRequest request)
-    {
-      Interlocked.Increment(ref test._selectionCallCount);
-      var tcs = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
-      await test._selections.Writer.WriteAsync((request, tcs));
-      return await tcs.Task;
-    }
-
-    [JsonRpcMethod("runCommandManaged", UseSingleObjectParameterDeserialization = true)]
-    public Task<RunCommandResponse> RunCommandManaged(TestTrackedJob job)
-    {
-      test._runCommands.Writer.TryWrite(job);
-      return Task.FromResult(new RunCommandResponse(0));
-    }
-
-    [JsonRpcMethod("displayError", UseSingleObjectParameterDeserialization = true)]
-    public void DisplayError(TestDisplayMessage message) =>
-      test._displayErrors.Writer.TryWrite(message.Message);
-
-    [JsonRpcMethod("displayMessage", UseSingleObjectParameterDeserialization = true)]
-    public void DisplayMessage(TestDisplayMessage message) =>
-      test._displayMessages.Writer.TryWrite(message.Message);
-
-    [JsonRpcMethod("quickfix/set")]
-    public void SetQuickFix(TestQuickFixItem quickFixItem) =>
-      test._quickFixSets.Writer.TryWrite([quickFixItem]);
-
-    [JsonRpcMethod("quickfix/set-silent")]
-    public void SetQuickFixSilent(TestQuickFixItem quickFixItem) =>
-      test._quickFixSetsSilent.Writer.TryWrite([quickFixItem]);
+    Interlocked.Increment(ref _selectionCallCount);
+    var tcs = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+    await _selections.Writer.WriteAsync((request, tcs));
+    return await tcs.Task;
   }
+
+  public override Task<RunCommandResponse> RunCommandManagedAsync(TestTrackedJob job)
+  {
+    _runCommands.Writer.TryWrite(job);
+    return Task.FromResult(new RunCommandResponse(0));
+  }
+
+  public override void DisplayError(TestDisplayMessage message) =>
+    _displayErrors.Writer.TryWrite(message.Message);
+
+  public override void DisplayMessage(TestDisplayMessage message) =>
+    _displayMessages.Writer.TryWrite(message.Message);
+
+  public override void SetQuickFix(TestQuickFixItem[] quickFixItems) =>
+    _quickFixSets.Writer.TryWrite(quickFixItems);
+
+  public override void SetQuickFixSilent(TestQuickFixItem[] quickFixItems) =>
+    _quickFixSetsSilent.Writer.TryWrite(quickFixItems);
 }

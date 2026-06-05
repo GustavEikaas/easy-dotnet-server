@@ -192,6 +192,9 @@ public abstract class WorkspaceRunProjectTests<TContainer> : WorkspaceRunTestBas
   }
 }
 
+[Collection(ContainerCollections.Sdk8Linux)]
 public sealed class WorkspaceRunProjectSdk8Linux : WorkspaceRunProjectTests<Sdk8LinuxContainer>;
+[Collection(ContainerCollections.Sdk9Linux)]
 public sealed class WorkspaceRunProjectSdk9Linux : WorkspaceRunProjectTests<Sdk9LinuxContainer>;
+[Collection(ContainerCollections.Sdk10Linux)]
 public sealed class WorkspaceRunProjectSdk10Linux : WorkspaceRunProjectTests<Sdk10LinuxContainer>;

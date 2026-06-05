@@ -57,4 +57,5 @@ public abstract class WorkspaceDebugAttachTests<TContainer> : WorkspaceDebugAtta
     await CompleteJobAsync(job);
   }
 }
+[Collection(ContainerCollections.Sdk10Linux)]
 public sealed class WorkspaceDebugAttachSdk10Linux : WorkspaceDebugAttachTests<Sdk10LinuxContainer>;

@@ -138,4 +138,5 @@ public abstract class WorkspaceTestGlobalJsonTests<TContainer> : WorkspaceTestTe
   }
 }
 
+[Collection(ContainerCollections.Sdk10Linux)]
 public sealed class WorkspaceTestGlobalJsonSdk10Linux : WorkspaceTestGlobalJsonTests<Sdk10LinuxContainer>;

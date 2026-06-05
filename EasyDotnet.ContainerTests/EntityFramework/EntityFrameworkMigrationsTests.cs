@@ -1,6 +1,7 @@
 namespace EasyDotnet.ContainerTests.EntityFramework;
 
-public sealed class EntityFrameworkMigrationsTests : EntityFrameworkTestBase<EfFakeDotnetSdk10LinuxContainer>
+[Collection(EasyDotnet.ContainerTests.Docker.ContainerCollections.Sdk10Linux)]
+public sealed class EntityFrameworkMigrationsTests : EntityFrameworkTestBase<EasyDotnet.ContainerTests.Docker.Sdk10LinuxContainer>
 {
   [Fact]
   public async Task ListMigrations_OpensTimestampedMigrationFile()

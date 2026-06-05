@@ -67,4 +67,5 @@ public abstract class WorkspaceBuildNoSolutionTests<TContainer> : WorkspaceBuild
   }
 }
 
+[Collection(ContainerCollections.Sdk10Linux)]
 public sealed class WorkspaceBuildNoSolutionSdk10Linux : WorkspaceBuildNoSolutionTests<Sdk10LinuxContainer>;

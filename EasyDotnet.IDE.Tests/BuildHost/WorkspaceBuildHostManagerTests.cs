@@ -215,6 +215,8 @@ public sealed class WorkspaceBuildHostManagerTests
 
     public Task<string[]> GetLogsAsync(CancellationToken cancellationToken) => Task.FromResult(Array.Empty<string>());
 
+    public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
     private static async IAsyncEnumerable<T> Empty<T>()
     {
       await Task.CompletedTask;

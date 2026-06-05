@@ -74,4 +74,5 @@ public abstract class WorkspaceBuildTerminalTests<TContainer> : WorkspaceBuildTe
   }
 }
 
+[Collection(ContainerCollections.Sdk10Linux)]
 public sealed class WorkspaceBuildTerminalSdk10Linux : WorkspaceBuildTerminalTests<Sdk10LinuxContainer>;

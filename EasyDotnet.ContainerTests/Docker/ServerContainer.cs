@@ -128,6 +128,7 @@ public abstract class ServerContainer : IAsyncDisposable
     var builder = new ContainerBuilder(Image)
       .WithBindMount(feedPath, NugetContainerPath, AccessMode.ReadOnly)
       .WithBindMount(TmpMountPath, TmpMountPath, AccessMode.ReadWrite)
+      .WithEnvironment("EASYDOTNET_CONTAINER_TESTS", "1")
       .WithCommand("sh", "-c", installAndRun)
       .WithOutputConsumer(Consume.RedirectStdoutAndStderrToConsole())
       .WithWaitStrategy(Wait.ForUnixContainer()

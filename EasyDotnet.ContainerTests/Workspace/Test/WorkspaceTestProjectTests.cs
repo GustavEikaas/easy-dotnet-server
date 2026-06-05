@@ -157,4 +157,5 @@ public abstract class WorkspaceTestProjectTests<TContainer> : WorkspaceTestTestB
   }
 }
 
+[Collection(ContainerCollections.Sdk10Linux)]
 public sealed class WorkspaceTestProjectSdk10Linux : WorkspaceTestProjectTests<Sdk10LinuxContainer>;

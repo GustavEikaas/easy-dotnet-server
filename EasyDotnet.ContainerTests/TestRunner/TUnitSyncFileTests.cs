@@ -238,4 +238,5 @@ public abstract class TUnitSyncFileTests<TContainer> : TestRunnerTestBase<TConta
   }
 }
 
+[Collection(ContainerCollections.Sdk10Linux)]
 public sealed class TUnitSyncFileSdk10Linux : TUnitSyncFileTests<Sdk10LinuxContainer>;

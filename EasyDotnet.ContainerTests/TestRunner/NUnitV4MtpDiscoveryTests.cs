@@ -119,4 +119,5 @@ public abstract class NUnitV4MtpDiscoveryTests<TContainer> : TestRunnerTestBase<
       .Select(n => $"  [{n.Type.Type}] {n.Id} (display='{n.DisplayName}', parent={n.ParentId})"));
 }
 
+[Collection(ContainerCollections.Sdk10Linux)]
 public sealed class NUnitV4MtpDiscoverySdk10Linux : NUnitV4MtpDiscoveryTests<Sdk10LinuxContainer>;

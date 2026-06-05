@@ -58,5 +58,11 @@ public class DbContextCache(IAppPathsService appPathsService)
     await File.WriteAllTextAsync(_cacheFilePath, JsonSerializer.Serialize(cache, _jsonSerializerOptions));
   }
 
+  public void Clear()
+  {
+    if (File.Exists(_cacheFilePath))
+      File.Delete(_cacheFilePath);
+  }
+
   private static string GetKey(string ef, string startup) => $"{ef}::{startup}";
 }

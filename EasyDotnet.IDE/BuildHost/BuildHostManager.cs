@@ -175,6 +175,13 @@ public sealed class BuildHostManager(ILogger<BuildHostManager> logger, BuildHost
     }
   }
 
+  public Task ResetAsync(CancellationToken cancellationToken)
+  {
+    EnsureNotDisposed();
+    InvalidateConnection();
+    return Task.CompletedTask;
+  }
+
   public async Task<InstalledPackageReference[]> ListPackageReferencesAsync(string projectPath, CancellationToken cancellationToken)
   {
     EnsureNotDisposed();

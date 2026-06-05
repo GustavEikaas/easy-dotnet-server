@@ -1,7 +1,6 @@
 using System.Threading.Channels;
 using EasyDotnet.ContainerTests.Docker;
 using EasyDotnet.ContainerTests.Scaffold;
-using StreamJsonRpc;
 
 namespace EasyDotnet.ContainerTests.Initialize;
 
@@ -10,9 +9,6 @@ public abstract class InitializeContainerTests<TContainer> : ContainerTestBase<T
 {
   private readonly Channel<TestSolutionProjectsLoadedNotification> _projectsLoaded =
     Channel.CreateUnbounded<TestSolutionProjectsLoadedNotification>();
-
-  protected override void ConfigureRpc(JsonRpc rpc) =>
-    rpc.AddLocalRpcTarget(new RpcHandlers(this), new JsonRpcTargetOptions { DisposeOnDisconnect = false });
 
   [Fact]
   public async Task Initialize_WithScaffoldedSolution_ReturnsCapabilities()
@@ -74,19 +70,15 @@ public abstract class InitializeContainerTests<TContainer> : ContainerTestBase<T
     Assert.NotSame(readTask, completed);
   }
 
-  private sealed record TestSolutionProjectsLoadedNotification();
-
-  private sealed class RpcHandlers(InitializeContainerTests<TContainer> test)
+  public override void SolutionProjectsLoaded(TestSolutionProjectsLoadedNotification notification)
   {
-    [JsonRpcMethod("solution/projects-loaded", UseSingleObjectParameterDeserialization = true)]
-    public Task SolutionProjectsLoaded(TestSolutionProjectsLoadedNotification notification)
-    {
-      test._projectsLoaded.Writer.TryWrite(notification);
-      return Task.CompletedTask;
-    }
+    _projectsLoaded.Writer.TryWrite(notification);
   }
 }
 
+[Collection(ContainerCollections.Sdk8Linux)]
 public sealed class InitializeSdk8Linux : InitializeContainerTests<Sdk8LinuxContainer>;
+[Collection(ContainerCollections.Sdk9Linux)]
 public sealed class InitializeSdk9Linux : InitializeContainerTests<Sdk9LinuxContainer>;
+[Collection(ContainerCollections.Sdk10Linux)]
 public sealed class InitializeSdk10Linux : InitializeContainerTests<Sdk10LinuxContainer>;

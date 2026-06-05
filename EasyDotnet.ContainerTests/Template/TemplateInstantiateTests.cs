@@ -106,6 +106,9 @@ public abstract class TemplateInstantiateTests<TContainer> : TemplateInstantiate
   }
 }
 
+[Collection(ContainerCollections.Sdk8Linux)]
 public sealed class TemplateInstantiateSdk8Linux : TemplateInstantiateTests<Sdk8LinuxContainer>;
+[Collection(ContainerCollections.Sdk9Linux)]
 public sealed class TemplateInstantiateSdk9Linux : TemplateInstantiateTests<Sdk9LinuxContainer>;
+[Collection(ContainerCollections.Sdk10Linux)]
 public sealed class TemplateInstantiateSdk10Linux : TemplateInstantiateTests<Sdk10LinuxContainer>;

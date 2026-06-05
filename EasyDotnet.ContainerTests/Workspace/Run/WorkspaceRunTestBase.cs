@@ -2,7 +2,6 @@ using System.Text;
 using System.Threading.Channels;
 using EasyDotnet.ContainerTests.Docker;
 using EasyDotnet.IDE.Models.Client;
-using StreamJsonRpc;
 using Xunit.Sdk;
 
 namespace EasyDotnet.ContainerTests.Workspace.Run;
@@ -60,9 +59,6 @@ public abstract class WorkspaceRunTestBase<TContainer> : ContainerTestBase<TCont
 
   /// <summary>Total number of <c>promptSelection</c> calls received from the server so far.</summary>
   protected int SelectionCallCount => Volatile.Read(ref _selectionCallCount);
-
-  protected override void ConfigureRpc(JsonRpc rpc) =>
-    rpc.AddLocalRpcTarget(new RpcHandlers(this), new JsonRpcTargetOptions { DisposeOnDisconnect = false });
 
   /// <summary>
   /// Starts a <c>workspace/run</c> call, registers it as the active RPC scope, and returns the
@@ -153,32 +149,20 @@ public abstract class WorkspaceRunTestBase<TContainer> : ContainerTestBase<TCont
     return sb.Length > 0 ? $"\n Pending errors:{sb}" : string.Empty;
   }
 
-  private sealed class RpcHandlers(WorkspaceRunTestBase<TContainer> test)
+  public override async Task<string?> PromptSelectionAsync(TestPromptSelectionRequest request)
   {
-    [JsonRpcMethod("promptSelection", UseSingleObjectParameterDeserialization = true)]
-    public async Task<string?> PromptSelection(TestPromptSelectionRequest request)
-    {
-      Interlocked.Increment(ref test._selectionCallCount);
-      var tcs = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
-      await test._selections.Writer.WriteAsync((request, tcs));
-      return await tcs.Task;
-    }
-
-    /// <summary>
-    /// Captures the job then returns a successful response.
-    /// The test infrastructure sends <c>processExited</c> automatically via
-    /// <see cref="WorkspaceRunTestBase{TContainer}.ReceiveRunCommandAsync"/> to release the
-    /// terminal slot so subsequent runs in the same test can proceed.
-    /// </summary>
-    [JsonRpcMethod("runCommandManaged", UseSingleObjectParameterDeserialization = true)]
-    public Task<RunCommandResponse> RunCommandManaged(TestTrackedJob job)
-    {
-      test._runCommands.Writer.TryWrite(job);
-      return Task.FromResult(new RunCommandResponse(0));
-    }
-
-    [JsonRpcMethod("displayError", UseSingleObjectParameterDeserialization = true)]
-    public void DisplayError(TestDisplayMessage message) =>
-      test._displayErrors.Writer.TryWrite(message.Message);
+    Interlocked.Increment(ref _selectionCallCount);
+    var tcs = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+    await _selections.Writer.WriteAsync((request, tcs));
+    return await tcs.Task;
   }
+
+  public override Task<RunCommandResponse> RunCommandManagedAsync(TestTrackedJob job)
+  {
+    _runCommands.Writer.TryWrite(job);
+    return Task.FromResult(new RunCommandResponse(0));
+  }
+
+  public override void DisplayError(TestDisplayMessage message) =>
+    _displayErrors.Writer.TryWrite(message.Message);
 }

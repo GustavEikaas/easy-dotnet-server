@@ -175,4 +175,5 @@ public abstract class NUnitV3VsTestDiscoveryTests<TContainer> : TestRunnerTestBa
       .Select(n => $"  [{n.Type.Type}] {n.Id} (display='{n.DisplayName}', parent={n.ParentId})"));
 }
 
+[Collection(ContainerCollections.Sdk10Linux)]
 public sealed class NUnitV3VsTestDiscoverySdk10Linux : NUnitV3VsTestDiscoveryTests<Sdk10LinuxContainer>;

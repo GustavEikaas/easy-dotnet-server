@@ -121,4 +121,5 @@ public abstract class TUnitMtpDiscoveryTests<TContainer> : TestRunnerTestBase<TC
       .Select(n => $"  [{n.Type.Type}] {n.Id} (display='{n.DisplayName}', parent={n.ParentId})"));
 }
 
+[Collection(ContainerCollections.Sdk10Linux)]
 public sealed class TUnitMtpDiscoverySdk10Linux : TUnitMtpDiscoveryTests<Sdk10LinuxContainer>;

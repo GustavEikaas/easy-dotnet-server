@@ -56,4 +56,5 @@ public abstract class WorkspaceNugetPackAndPushTests<TContainer> : WorkspaceNuge
   }
 }
 
+[Collection(ContainerCollections.Sdk10Linux)]
 public sealed class WorkspaceNugetPackAndPushSdk10Linux : WorkspaceNugetPackAndPushTests<Sdk10LinuxContainer>;

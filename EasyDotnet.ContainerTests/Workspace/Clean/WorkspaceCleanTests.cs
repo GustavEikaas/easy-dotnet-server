@@ -119,4 +119,5 @@ public abstract class WorkspaceCleanTests<TContainer> : WorkspaceCleanTestBase<T
   }
 }
 
+[Collection(ContainerCollections.Sdk10Linux)]
 public sealed class WorkspaceCleanSdk10Linux : WorkspaceCleanTests<Sdk10LinuxContainer>;
