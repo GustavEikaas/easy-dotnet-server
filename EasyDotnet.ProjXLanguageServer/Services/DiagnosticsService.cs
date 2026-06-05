@@ -74,7 +74,7 @@ public class DiagnosticsService(IFileSystem fileSystem) : IDiagnosticsService
 
   private static void AddDuplicatePackageReferenceDiagnostics(CsprojDocument doc, List<Diagnostic> diagnostics)
   {
-    var seen = new Dictionary<string, IXmlElementSyntax>(StringComparer.OrdinalIgnoreCase);
+    var seen = new HashSet<(string Include, string Condition)>();
     foreach (var element in EnumerateElements(doc.Root))
     {
       if (!string.Equals(element.Name, "PackageReference", StringComparison.Ordinal))
@@ -88,7 +88,7 @@ public class DiagnosticsService(IFileSystem fileSystem) : IDiagnosticsService
       if (string.IsNullOrWhiteSpace(include))
         continue;
 
-      if (!seen.TryAdd(include, element))
+      if (!seen.Add((include.ToLowerInvariant(), GetConditionSignature(element))))
       {
         var node = (SyntaxNode)element;
         diagnostics.Add(new Diagnostic
@@ -109,17 +109,19 @@ public class DiagnosticsService(IFileSystem fileSystem) : IDiagnosticsService
     {
       if (!string.Equals(element.Name, "TargetFrameworks", StringComparison.Ordinal))
         continue;
-      if (element is not XmlElementSyntax full || full.StartTag == null || full.EndTag == null)
+
+      if (element is not XmlElementSyntax {StartTag: {} start, EndTag: {} end})
         continue;
 
-      var contentStart = full.StartTag.Start + full.StartTag.FullWidth;
-      var contentEnd = full.EndTag.Start;
+      var contentStart = start.Start + start.FullWidth;
+      var contentEnd = end.Start;
       if (contentEnd <= contentStart || contentEnd > doc.Text.Length)
         continue;
 
-      var inner = doc.Text.Substring(contentStart, contentEnd - contentStart);
-      var tfms = inner.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-      if (tfms.Length != 1)
+      // <TargetFrameworks> is a ';'-separated list. After trimming whitespace and any
+      // leading/trailing ';', a remaining ';' means there is more than one TFM.
+      var singleTfm = doc.Text.AsSpan(contentStart, contentEnd - contentStart).Trim().Trim(';').Trim();
+      if (singleTfm.IsEmpty || singleTfm.Contains(';'))
         continue;
 
       var node = (SyntaxNode)element;
@@ -129,7 +131,7 @@ public class DiagnosticsService(IFileSystem fileSystem) : IDiagnosticsService
         Severity = LspDiagnosticSeverity.Warning,
         Source = DiagnosticCodes.Source,
         Code = DiagnosticCodes.SingleTfmInTargetFrameworks,
-        Message = $"<TargetFrameworks> contains a single TFM '{tfms[0]}'; use <TargetFramework> instead.",
+        Message = $"<TargetFrameworks> contains a single TFM '{singleTfm}'; use <TargetFramework> instead.",
       });
     }
   }
@@ -150,7 +152,11 @@ public class DiagnosticsService(IFileSystem fileSystem) : IDiagnosticsService
         continue;
 
       if (string.Equals(name, "TargetFramework", StringComparison.Ordinal))
+      {
+        if (GetElementValue(doc, element).IsWhiteSpace())
+          continue;
         unconditionalSingles.Add(element);
+      }
       else
         unconditionalMultis.Add(element);
     }
@@ -167,7 +173,7 @@ public class DiagnosticsService(IFileSystem fileSystem) : IDiagnosticsService
         Severity = LspDiagnosticSeverity.Error,
         Source = DiagnosticCodes.Source,
         Code = DiagnosticCodes.ConflictingTargetFrameworkProperties,
-        Message = "Cannot specify both <TargetFramework> and <TargetFrameworks>; <TargetFrameworks> takes precedence.",
+        Message = "Cannot specify both <TargetFramework> and <TargetFrameworks>; <TargetFramework> takes precedence.",
       });
     }
   }
@@ -199,6 +205,34 @@ public class DiagnosticsService(IFileSystem fileSystem) : IDiagnosticsService
         Message = $"Closing tag '</{endName}>' does not match opening tag '<{startName}>'.",
       });
     }
+  }
+
+  private static string GetConditionSignature(IXmlElementSyntax element)
+  {
+    var conditions = new List<string>();
+    var current = element;
+    while (current != null)
+    {
+      foreach (var attr in current.AttributesNode)
+      {
+        if (string.Equals(attr.Name, "Condition", StringComparison.OrdinalIgnoreCase))
+          conditions.Add(attr.Value.Trim());
+      }
+      current = current.Parent;
+    }
+    return string.Join(" && ", conditions);
+  }
+
+  private static ReadOnlySpan<char> GetElementValue(CsprojDocument doc, IXmlElementSyntax element)
+  {
+    if (element is not XmlElementSyntax { StartTag: {} start, EndTag: {} end})
+      return default;
+
+    var contentStart = start.Start + start.FullWidth;
+    var contentEnd = end.Start;
+    return contentEnd <= contentStart || contentEnd > doc.Text.Length
+      ? default
+      : doc.Text.AsSpan(contentStart, contentEnd - contentStart);
   }
 
   private static bool HasConditionOnSelfOrAncestor(IXmlElementSyntax element)
