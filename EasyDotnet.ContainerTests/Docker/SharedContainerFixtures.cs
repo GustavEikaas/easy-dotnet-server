@@ -42,10 +42,7 @@ public class ServerContainerFixture<TContainer> : IAsyncLifetime
 
   public TContainer Container { get; } = new();
 
-  public ServerContainerFixture()
-  {
-    SharedContainerFixtureRegistry.Register(this);
-  }
+  public ServerContainerFixture() => SharedContainerFixtureRegistry.Register(this);
 
   public async Task InitializeAsync()
   {
