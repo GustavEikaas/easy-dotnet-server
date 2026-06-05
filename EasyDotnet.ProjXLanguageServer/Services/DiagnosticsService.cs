@@ -110,7 +110,7 @@ public class DiagnosticsService(IFileSystem fileSystem) : IDiagnosticsService
       if (!string.Equals(element.Name, "TargetFrameworks", StringComparison.Ordinal))
         continue;
 
-      if (element is not XmlElementSyntax {StartTag: {} start, EndTag: {} end})
+      if (element is not XmlElementSyntax { StartTag: { } start, EndTag: { } end })
         continue;
 
       var contentStart = start.Start + start.FullWidth;
@@ -225,7 +225,7 @@ public class DiagnosticsService(IFileSystem fileSystem) : IDiagnosticsService
 
   private static ReadOnlySpan<char> GetElementValue(CsprojDocument doc, IXmlElementSyntax element)
   {
-    if (element is not XmlElementSyntax { StartTag: {} start, EndTag: {} end})
+    if (element is not XmlElementSyntax { StartTag: { } start, EndTag: { } end })
       return default;
 
     var contentStart = start.Start + start.FullWidth;
