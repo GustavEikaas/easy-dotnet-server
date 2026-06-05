@@ -4,5 +4,6 @@ public enum Kind
 {
   Class,
   Record,
-  Interface
+  Interface,
+  Enum
 }

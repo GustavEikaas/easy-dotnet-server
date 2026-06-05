@@ -2,12 +2,14 @@ using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.Extensions;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Models.Client;
+using EasyDotnet.IDE.Picker.Models;
 using EasyDotnet.IDE.Roslyn;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using NJsonSchema;
 using NJsonSchema.CodeGeneration.CSharp;
+using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.NewFile;
 
@@ -50,8 +52,70 @@ public class NewFileService(IBuildHostManager buildHostManager, IEditorService e
       unit = unit.AddNewLinesAfterNamespaceDeclaration();
     }
 
-    await editorService.ApplyWorkspaceEdit(BuildEdit(filePath, unit.ToFullString()));
-    return true;
+    return await editorService.ApplyWorkspaceEdit(BuildEdit(filePath, unit.ToFullString()));
+  }
+
+  public async Task CreateItem(string outputPath, bool preferFileScopedNamespace, CancellationToken cancellationToken)
+  {
+    if (!Path.IsPathFullyQualified(outputPath))
+    {
+      throw new ArgumentException($"Output path must be absolute: {outputPath}", nameof(outputPath));
+    }
+
+    if (FindCsprojFromDirectory(outputPath) is null)
+    {
+      await editorService.DisplayError($"No .csproj file found for {outputPath}");
+      return;
+    }
+
+    var selection = await editorService.RequestPickerAsync(
+        "Type",
+        [
+          new PickerChoice<TypeKindChoice>("enum", "Enum", new TypeKindChoice(Kind.Enum)),
+          new PickerChoice<TypeKindChoice>("record", "Record", new TypeKindChoice(Kind.Record)),
+          new PickerChoice<TypeKindChoice>("interface", "Interface", new TypeKindChoice(Kind.Interface)),
+          new PickerChoice<TypeKindChoice>("class", "Class", new TypeKindChoice(Kind.Class))
+        ],
+        ct: cancellationToken);
+
+    if (selection is null)
+      return;
+
+    string? typeName;
+    try
+    {
+      typeName = await editorService.RequestString("Type name:", null);
+    }
+    catch (RemoteInvocationException e) when (e.Message.Contains("User aborted", StringComparison.OrdinalIgnoreCase))
+    {
+      return;
+    }
+
+    typeName = typeName?.Trim();
+    if (!IsValidTypeName(typeName))
+    {
+      await editorService.DisplayWarning($"Invalid C# type name: {typeName}");
+      return;
+    }
+
+    Directory.CreateDirectory(outputPath);
+    var filePath = Path.Combine(outputPath, $"{typeName}.cs");
+
+    if (File.Exists(filePath) && new FileInfo(filePath).Length > 0)
+    {
+      await editorService.DisplayWarning($"File already exists and is not empty: {filePath}");
+      return;
+    }
+
+    var success = await BootstrapFile(filePath, selection.Kind, preferFileScopedNamespace, cancellationToken);
+    if (success)
+    {
+      await editorService.RequestOpenBuffer(filePath);
+    }
+    else
+    {
+      await editorService.DisplayError("Failed to create new file");
+    }
   }
 
   public async Task<bool> BootstrapFileFromJson(string jsonData, string filePath, bool preferFileScopedNamespace, CancellationToken cancellationToken)
@@ -124,7 +188,22 @@ public class NewFileService(IBuildHostManager buildHostManager, IEditorService e
   private static string? FindCsprojFromFile(string filePath)
   {
     var dir = Path.GetDirectoryName(filePath);
-    return dir == null ? null : FindCsprojInDirectoryOrParents(dir);
+    return dir == null ? null : FindCsprojFromDirectory(dir);
+  }
+
+  private static string? FindCsprojFromDirectory(string directory)
+  {
+    var current = directory;
+    while (!Directory.Exists(current))
+    {
+      var parent = Directory.GetParent(current);
+      if (parent is null)
+        return null;
+
+      current = parent.FullName;
+    }
+
+    return FindCsprojInDirectoryOrParents(current);
   }
 
   private static string? FindCsprojInDirectoryOrParents(string directory)
@@ -160,7 +239,17 @@ public class NewFileService(IBuildHostManager buildHostManager, IEditorService e
           .WithParameterList(SyntaxFactory.ParameterList())
           .WithSemicolonToken(SyntaxFactory.Token(SyntaxKind.SemicolonToken)),
 
+      Kind.Enum => SyntaxFactory.EnumDeclaration(className)
+          .WithModifiers(modifiers)
+          .WithOpenBraceToken(SyntaxFactory.Token(SyntaxKind.OpenBraceToken))
+          .WithCloseBraceToken(SyntaxFactory.Token(SyntaxKind.CloseBraceToken)),
+
       _ => throw new ArgumentOutOfRangeException(nameof(kind))
     };
   }
+
+  private static bool IsValidTypeName(string? typeName) =>
+      typeName is not null && SyntaxFacts.IsValidIdentifier(typeName);
+
+  private sealed record TypeKindChoice(Kind Kind);
 }
