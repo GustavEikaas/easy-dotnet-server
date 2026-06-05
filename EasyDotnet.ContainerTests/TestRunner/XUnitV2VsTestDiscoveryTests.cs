@@ -211,4 +211,5 @@ public abstract class XUnitV2VsTestDiscoveryTests<TContainer> : TestRunnerTestBa
   }
 }
 
+[Collection(ContainerCollections.Sdk10Linux)]
 public sealed class XUnitV2VsTestDiscoverySdk10Linux : XUnitV2VsTestDiscoveryTests<Sdk10LinuxContainer>;

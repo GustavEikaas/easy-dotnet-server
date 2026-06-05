@@ -73,4 +73,5 @@ public abstract class WorkspaceNugetPackTests<TContainer> : WorkspaceNugetTestBa
   }
 }
 
+[Collection(ContainerCollections.Sdk10Linux)]
 public sealed class WorkspaceNugetPackSdk10Linux : WorkspaceNugetPackTests<Sdk10LinuxContainer>;

@@ -371,6 +371,12 @@ _No parameters_
 
 **Returns:** `Task`
 
+### `_server/test-reset`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+
+**Returns:** `Task`
+
 ---
 
 ## TestController

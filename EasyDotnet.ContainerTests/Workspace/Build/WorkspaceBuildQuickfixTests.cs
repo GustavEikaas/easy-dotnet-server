@@ -76,4 +76,5 @@ public abstract class WorkspaceBuildQuickfixTests<TContainer> : WorkspaceBuildTe
   }
 }
 
+[Collection(ContainerCollections.Sdk10Linux)]
 public sealed class WorkspaceBuildQuickfixSdk10Linux : WorkspaceBuildQuickfixTests<Sdk10LinuxContainer>;

@@ -2,11 +2,9 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
 using System.Threading.Channels;
-using DotNet.Testcontainers.Builders;
 using EasyDotnet.ContainerTests.Docker;
 using EasyDotnet.ContainerTests.Scaffold;
 using EasyDotnet.IDE.Models.Client;
-using StreamJsonRpc;
 
 namespace EasyDotnet.ContainerTests.EntityFramework;
 
@@ -42,9 +40,6 @@ public abstract class EntityFrameworkTestBase<TContainer> : ContainerTestBase<TC
 
   protected string? PromptStringResponse { get; set; }
   protected TestPromptSelectionRequest[] PromptSelectionRequests => [.. _selectionRequests];
-
-  protected override void ConfigureRpc(JsonRpc rpc) =>
-    rpc.AddLocalRpcTarget(new RpcHandlers(this), new JsonRpcTargetOptions { DisposeOnDisconnect = false });
 
   protected Task BeginListMigrations() =>
     BeginCall(Container.Rpc.InvokeAsync("ef/migrations-list"), RequestTimeout);
@@ -180,148 +175,41 @@ public abstract class EntityFrameworkTestBase<TContainer> : ContainerTestBase<TC
     }
   }
 
-  private sealed class RpcHandlers(EntityFrameworkTestBase<TContainer> test)
+  public override Task<string?> PromptSelectionAsync(TestPromptSelectionRequest request)
   {
-    [JsonRpcMethod("promptSelection", UseSingleObjectParameterDeserialization = true)]
-    public Task<string?> PromptSelection(TestPromptSelectionRequest request)
-    {
-      test._selectionRequests.Enqueue(request);
-      return Task.FromResult<string?>(request.Choices[0].Id);
-    }
-
-    [JsonRpcMethod("promptString", UseSingleObjectParameterDeserialization = true)]
-    public Task<string?> PromptString(TestPromptStringRequest request) =>
-      Task.FromResult(test.PromptStringResponse);
-
-    [JsonRpcMethod("picker/pick", UseSingleObjectParameterDeserialization = true)]
-    public async Task<TestPickerResult?> PickerPick(TestPickerRequest request)
-    {
-      var tcs = new TaskCompletionSource<string[]?>(TaskCreationOptions.RunContinuationsAsynchronously);
-      await test._pickers.Writer.WriteAsync((request, tcs));
-      var selectedIds = await tcs.Task;
-      return selectedIds is null ? null : new TestPickerResult(selectedIds);
-    }
-
-    [JsonRpcMethod("openBuffer", UseSingleObjectParameterDeserialization = true)]
-    public Task<bool> OpenBuffer(TestOpenBufferRequest request)
-    {
-      test._openBuffers.Writer.TryWrite(request);
-      return Task.FromResult(true);
-    }
-
-    [JsonRpcMethod("runCommandManaged", UseSingleObjectParameterDeserialization = true)]
-    public Task<RunCommandResponse> RunCommandManaged(TestTrackedJob job)
-    {
-      test._runCommands.Writer.TryWrite(job);
-      return Task.FromResult(new RunCommandResponse(0));
-    }
-
-    [JsonRpcMethod("displayMessage", UseSingleObjectParameterDeserialization = true)]
-    public void DisplayMessage(TestDisplayMessage message) =>
-      test._displayMessages.Writer.TryWrite(message.Message);
-
-    [JsonRpcMethod("displayError", UseSingleObjectParameterDeserialization = true)]
-    public void DisplayError(TestDisplayMessage message) =>
-      test._displayErrors.Writer.TryWrite(message.Message);
-
-    [JsonRpcMethod("quickfix/set")]
-    public void SetQuickFix(TestQuickFixItem[] quickFixItems) =>
-      test._quickFixSets.Writer.TryWrite(quickFixItems);
+    _selectionRequests.Enqueue(request);
+    return Task.FromResult<string?>(request.Choices[0].Id);
   }
-}
 
-public sealed class EfFakeDotnetSdk10LinuxContainer() : LinuxServerContainer("mcr.microsoft.com/dotnet/sdk:10.0")
-{
-  private readonly string _fakeBinPath = Path.Combine(Path.GetTempPath(), $"easydotnet-fake-dotnet-{Guid.NewGuid():N}");
+  public override Task<string?> PromptStringAsync(TestPromptStringRequest request) =>
+    Task.FromResult(PromptStringResponse);
 
-  public override int SdkMajorVersion => 10;
-
-  protected override ContainerBuilder ConfigureContainer(ContainerBuilder builder) =>
-    base.ConfigureContainer(builder)
-      .WithEnvironment("PATH", $"{_fakeBinPath}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin");
-
-  protected override Task OnBeforeStartAsync(CancellationToken ct)
+  public override async Task<TestPickerResult?> PickerPickAsync(TestPickerRequest request)
   {
-    Directory.CreateDirectory(_fakeBinPath);
-    var fakeDotnetEfPath = Path.Combine(_fakeBinPath, "dotnet-ef");
-
-    File.WriteAllText(fakeDotnetEfPath, """
-      #!/bin/sh
-
-      project_path=
-      prev=
-      for arg in "$@"; do
-        if [ "$prev" = "--project" ]; then
-          project_path=$arg
-          break
-        fi
-        prev=$arg
-      done
-
-      project_dir=
-      if [ -n "$project_path" ]; then
-        project_dir=$(dirname "$project_path")
-      fi
-
-      if [ "$1" = "dbcontext" ] && [ "$2" = "list" ]; then
-        cat <<'EOF'
-      info: Build started...
-      info: Build succeeded.
-      data: [
-      data:   {
-      data:     "fullName": "App.AppDbContext",
-      data:     "safeName": "AppDbContext",
-      data:     "name": "AppDbContext",
-      data:     "assemblyQualifiedName": "App.AppDbContext, App, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
-      data:   }
-      data: ]
-      EOF
-        exit 0
-      fi
-
-      if [ "$1" = "migrations" ] && [ "$2" = "list" ]; then
-        if [ -n "$project_dir" ] && [ -f "$project_dir/.empty-migrations" ]; then
-          cat <<'EOF'
-      info: Build started...
-      info: Build succeeded.
-      data: []
-      EOF
-          exit 0
-        fi
-
-        cat <<'EOF'
-      info: Build started...
-      info: Build succeeded.
-      data: [
-      data:   {
-      data:     "id": "20260519070000_Initial",
-      data:     "name": "Initial",
-      data:     "safeName": "Initial",
-      data:     "applied": true
-      data:   },
-      data:   {
-      data:     "id": "20260520083538_Add_Maintenance_Notification",
-      data:     "name": "Add_Maintenance_Notification",
-      data:     "safeName": "Add_Maintenance_Notification",
-      data:     "applied": null
-      data:   }
-      data: ]
-      EOF
-        exit 0
-      fi
-
-      echo "Unexpected dotnet-ef arguments: $@" >&2
-      exit 1
-      """);
-
-    if (!OperatingSystem.IsWindows())
-    {
-      File.SetUnixFileMode(fakeDotnetEfPath,
-        UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
-        UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
-        UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
-    }
-
-    return Task.CompletedTask;
+    var tcs = new TaskCompletionSource<string[]?>(TaskCreationOptions.RunContinuationsAsynchronously);
+    await _pickers.Writer.WriteAsync((request, tcs));
+    var selectedIds = await tcs.Task;
+    return selectedIds is null ? null : new TestPickerResult(selectedIds);
   }
+
+  public override Task<bool> OpenBufferAsync(TestOpenBufferRequest request)
+  {
+    _openBuffers.Writer.TryWrite(request);
+    return Task.FromResult(true);
+  }
+
+  public override Task<RunCommandResponse> RunCommandManagedAsync(TestTrackedJob job)
+  {
+    _runCommands.Writer.TryWrite(job);
+    return Task.FromResult(new RunCommandResponse(0));
+  }
+
+  public override void DisplayMessage(TestDisplayMessage message) =>
+    _displayMessages.Writer.TryWrite(message.Message);
+
+  public override void DisplayError(TestDisplayMessage message) =>
+    _displayErrors.Writer.TryWrite(message.Message);
+
+  public override void SetQuickFix(TestQuickFixItem[] quickFixItems) =>
+    _quickFixSets.Writer.TryWrite(quickFixItems);
 }

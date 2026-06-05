@@ -15,4 +15,5 @@ public interface IBuildHostManager
   Task<InstalledPackageReference[]> ListPackageReferencesAsync(string projectPath, CancellationToken cancellationToken);
   Task SetLogLevelAsync(string level, CancellationToken cancellationToken);
   Task<string[]> GetLogsAsync(CancellationToken cancellationToken);
+  Task ResetAsync(CancellationToken cancellationToken);
 }

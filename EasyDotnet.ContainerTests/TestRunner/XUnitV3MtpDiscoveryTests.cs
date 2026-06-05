@@ -195,4 +195,5 @@ public abstract class XUnitV3MtpDiscoveryTests<TContainer> : TestRunnerTestBase<
   }
 }
 
+[Collection(ContainerCollections.Sdk10Linux)]
 public sealed class XUnitV3MtpDiscoverySdk10Linux : XUnitV3MtpDiscoveryTests<Sdk10LinuxContainer>;

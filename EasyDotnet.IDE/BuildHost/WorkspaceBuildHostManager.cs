@@ -282,6 +282,9 @@ public class WorkspaceBuildHostManager : IBuildHostManager
   public Task<string[]> GetLogsAsync(CancellationToken cancellationToken) =>
       _innerManager.GetLogsAsync(cancellationToken);
 
+  public Task ResetAsync(CancellationToken cancellationToken) =>
+      _innerManager.ResetAsync(cancellationToken);
+
   public void InvalidateCache(string projectPath, string? config = null, string? platform = null) => _cache.Invalidate(projectPath, config, platform);
 
   public void ClearCache() => _cache.Clear(CacheInvalidationReason.ClearedAll);

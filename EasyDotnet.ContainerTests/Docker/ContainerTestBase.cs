@@ -1,5 +1,7 @@
 using System.Threading.Channels;
 using EasyDotnet.ContainerTests.Scaffold;
+using EasyDotnet.ContainerTests.TestRunner;
+using EasyDotnet.IDE.Models.Client;
 using StreamJsonRpc;
 using Xunit.Sdk;
 
@@ -10,7 +12,7 @@ namespace EasyDotnet.ContainerTests.Docker;
 /// Sets <see cref="ServerContainer.RpcConfigurator"/> via <see cref="ConfigureRpc"/> before
 /// starting the container so reverse-request handlers are registered before the first message.
 /// </summary>
-public abstract class ContainerTestBase<TContainer> : IAsyncLifetime
+public abstract class ContainerTestBase<TContainer> : IAsyncLifetime, ISharedContainerRpcTarget
   where TContainer : ServerContainer, new()
 {
   private static readonly TestClientInfo DefaultClientInfo = new("test", "3.0.0");
@@ -18,18 +20,64 @@ public abstract class ContainerTestBase<TContainer> : IAsyncLifetime
   private static readonly TimeSpan DefaultAfterScopeGrace = TimeSpan.FromSeconds(5);
   private static readonly TimeSpan DefaultQuietPeriod = TimeSpan.FromMilliseconds(250);
 
-  protected TContainer Container { get; } = new();
+  private SharedContainerLease<TContainer>? _lease;
 
-  public Task InitializeAsync()
+  protected TContainer Container => _lease?.Container
+    ?? throw new InvalidOperationException("The shared container has not been leased for this test yet.");
+
+  public async Task InitializeAsync()
   {
-    Container.RpcConfigurator = ConfigureRpc;
-    return Container.StartAsync();
+    _lease = await SharedContainerFixtureRegistry.Get<TContainer>().LeaseAsync(this);
   }
 
-  public async Task DisposeAsync() => await Container.DisposeAsync();
+  public async Task DisposeAsync()
+  {
+    if (_lease is not null)
+      await _lease.DisposeAsync();
+  }
 
   /// <summary>Override to register reverse-request handlers on the RPC connection.</summary>
   protected virtual void ConfigureRpc(JsonRpc rpc) { }
+
+  public virtual Task<string?> PromptSelectionAsync(TestPromptSelectionRequest request) =>
+    throw new NotSupportedException("This test did not expect promptSelection.");
+
+  public virtual Task<string[]?> PromptMultiSelectionAsync(TestPromptSelectionRequest request) =>
+    throw new NotSupportedException("This test did not expect promptMultiSelection.");
+
+  public virtual Task<string?> PromptStringAsync(TestPromptStringRequest request) =>
+    throw new NotSupportedException("This test did not expect promptString.");
+
+  public virtual Task<TestPickerResult?> PickerPickAsync(TestPickerRequest request) =>
+    throw new NotSupportedException("This test did not expect picker/pick.");
+
+  public virtual Task<bool> OpenBufferAsync(TestOpenBufferRequest request) =>
+    throw new NotSupportedException("This test did not expect openBuffer.");
+
+  public virtual Task<RunCommandResponse> RunCommandManagedAsync(TestTrackedJob job) =>
+    throw new NotSupportedException("This test did not expect runCommandManaged.");
+
+  public virtual void DisplayMessage(TestDisplayMessage message) { }
+
+  public virtual void DisplayError(TestDisplayMessage message) { }
+
+  public virtual void SetQuickFix(TestQuickFixItem[] quickFixItems) { }
+
+  public virtual void SetQuickFixSilent(TestQuickFixItem[] quickFixItems) { }
+
+  public virtual void SolutionProjectsLoaded(TestSolutionProjectsLoadedNotification notification) { }
+
+  public virtual void RegisterTest(TestRegisterTestPayload payload) { }
+
+  public virtual void RemoveTest(TestRemoveTestPayload payload) { }
+
+  public virtual void UpdateStatus(TestUpdateStatusPayload payload) { }
+
+  public virtual void UpdateStatusBatch(TestUpdateStatusBatchPayload payload) { }
+
+  public virtual void TestrunnerStatusUpdate(RunnerStatusDto status) { }
+
+  public virtual bool IsVisible() => true;
 
   /// <summary>
   /// Tracks the active RPC call so that <c>ReceiveXxx</c> helpers in derived classes can race

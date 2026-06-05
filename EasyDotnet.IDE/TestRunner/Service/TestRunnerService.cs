@@ -353,6 +353,41 @@ public class TestRunnerService(
     return;
   }
 
+  public async Task ResetForTestsAsync()
+  {
+    OperationControl? control;
+    CancellationTokenSource? cts;
+
+    lock (_opSync)
+    {
+      control = _operationControl;
+      cts = _operationCts;
+      _operationControl = null;
+      _operationCts = null;
+      _operationId = 0;
+      _operationStage = OperationStage.Idle;
+      _isInitialized = false;
+    }
+
+    try { cts?.Cancel(); } catch { }
+    try
+    {
+      if (control is not null)
+        await control.KillAsync(TimeSpan.FromSeconds(2));
+    }
+    catch { }
+    finally
+    {
+      cts?.Dispose();
+    }
+
+    operationLock.ForceReleaseIfHeld();
+    registry.Clear();
+    detailStore.ClearAll();
+    buildErrorStore.ClearAll();
+    await adapterResolver.InvalidateAllAsync();
+  }
+
   private async Task<bool> WaitForUnlockAsync(long operationId, TimeSpan timeout, CancellationToken ct)
   {
     var stopAt = DateTime.UtcNow + timeout;

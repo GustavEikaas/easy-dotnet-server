@@ -172,4 +172,5 @@ public abstract class MsTestVsTestDiscoveryTests<TContainer> : TestRunnerTestBas
       .Select(n => $"  [{n.Type.Type}] {n.Id} (display='{n.DisplayName}', parent={n.ParentId})"));
 }
 
+[Collection(ContainerCollections.Sdk10Linux)]
 public sealed class MsTestVsTestDiscoverySdk10Linux : MsTestVsTestDiscoveryTests<Sdk10LinuxContainer>;

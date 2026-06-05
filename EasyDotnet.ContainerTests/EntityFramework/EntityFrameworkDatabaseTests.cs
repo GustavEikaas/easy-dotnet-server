@@ -1,6 +1,7 @@
 namespace EasyDotnet.ContainerTests.EntityFramework;
 
-public sealed class EntityFrameworkDatabaseTests : EntityFrameworkTestBase<EfFakeDotnetSdk10LinuxContainer>
+[Collection(EasyDotnet.ContainerTests.Docker.ContainerCollections.Sdk10Linux)]
+public sealed class EntityFrameworkDatabaseTests : EntityFrameworkTestBase<EasyDotnet.ContainerTests.Docker.Sdk10LinuxContainer>
 {
   [Fact]
   public async Task UpdateDatabase_RunsDatabaseUpdate()

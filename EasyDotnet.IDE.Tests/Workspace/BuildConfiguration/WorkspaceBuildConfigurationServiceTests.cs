@@ -378,6 +378,8 @@ EndGlobal
 
     public Task<string[]> GetLogsAsync(CancellationToken cancellationToken) => Task.FromResult(Array.Empty<string>());
 
+    public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
     private static async IAsyncEnumerable<ProjectEvaluationResult> EmptyProjectEvaluations()
     {
       yield break;

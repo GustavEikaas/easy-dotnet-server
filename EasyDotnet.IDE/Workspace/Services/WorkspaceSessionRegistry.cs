@@ -86,4 +86,10 @@ public class WorkspaceSessionRegistry
   /// </summary>
   public IReadOnlyList<RunningProcessEntry> GetRunningProcesses() =>
     [.. _sessions.Values.OfType<RunningProcessEntry>()];
+
+  public void Clear()
+  {
+    _sessions.Clear();
+    _claimedEntries.Clear();
+  }
 }

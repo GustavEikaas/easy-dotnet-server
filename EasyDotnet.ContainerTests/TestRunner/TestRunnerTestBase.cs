@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using EasyDotnet.ContainerTests.Docker;
 using EasyDotnet.ContainerTests.TestRunner.Fixtures;
-using StreamJsonRpc;
 
 namespace EasyDotnet.ContainerTests.TestRunner;
 
@@ -49,9 +48,6 @@ public abstract class TestRunnerTestBase<TContainer> : ContainerTestBase<TContai
   protected int BatchedStatusUpdateCount => _batchedStatusUpdates;
   protected RunnerStatusDto? LastRunnerStatus => _lastRunnerStatus;
 
-  protected override void ConfigureRpc(JsonRpc rpc) =>
-    rpc.AddLocalRpcTarget(new RpcHandlers(this), new JsonRpcTargetOptions { DisposeOnDisconnect = false });
-
   /// <summary>
   /// Initializes the workspace against <paramref name="fixture"/>'s solution (or project root
   /// if no solution was written), then invokes <c>testrunner/initialize</c> and awaits completion.
@@ -82,49 +78,31 @@ public abstract class TestRunnerTestBase<TContainer> : ContainerTestBase<TContai
   protected IEnumerable<TestNodeDto> FindByDisplayName(string displayName) =>
     _nodes.Values.Where(n => n.DisplayName == displayName);
 
-  private sealed class RpcHandlers(TestRunnerTestBase<TContainer> owner)
+  public override void RegisterTest(TestRegisterTestPayload payload) =>
+    _nodes[payload.Test.Id] = payload.Test;
+
+  public override void RemoveTest(TestRemoveTestPayload payload) =>
+    _nodes.TryRemove(payload.Id, out _);
+
+  public override void UpdateStatus(TestUpdateStatusPayload payload)
   {
-    [JsonRpcMethod("registerTest", UseSingleObjectParameterDeserialization = true)]
-    public void RegisterTest(RegisterTestPayload payload) =>
-      owner._nodes[payload.Test.Id] = payload.Test;
-
-    [JsonRpcMethod("removeTest", UseSingleObjectParameterDeserialization = true)]
-    public void RemoveTest(RemoveTestPayload payload) =>
-      owner._nodes.TryRemove(payload.Id, out _);
-
-    [JsonRpcMethod("updateStatus", UseSingleObjectParameterDeserialization = true)]
-    public void UpdateStatus(UpdateStatusPayload payload)
-    {
-      Interlocked.Increment(ref owner._singleStatusNotifications);
-      if (payload.Status is { } s) owner.RecordStatus(payload.Id, s.Type);
-    }
-
-    [JsonRpcMethod("updateStatusBatch", UseSingleObjectParameterDeserialization = true)]
-    public void UpdateStatusBatch(UpdateStatusBatchPayload payload)
-    {
-      if (payload.Updates is null) return;
-      Interlocked.Increment(ref owner._batchStatusNotifications);
-      Interlocked.Add(ref owner._batchedStatusUpdates, payload.Updates.Count);
-      foreach (var u in payload.Updates)
-      {
-        if (u.Id is { } id && u.Status is { } s) owner.RecordStatus(id, s.Type);
-      }
-    }
-
-    [JsonRpcMethod("testrunner/statusUpdate", UseSingleObjectParameterDeserialization = true)]
-    public void TestrunnerStatusUpdate(RunnerStatusDto status) =>
-      owner._lastRunnerStatus = status;
-
-    [JsonRpcMethod("testrunner/isVisible")]
-    public bool IsVisible() => true;
+    Interlocked.Increment(ref _singleStatusNotifications);
+    if (payload.Status is { } s) RecordStatus(payload.Id, s.Type);
   }
 
-  private sealed record RegisterTestPayload(TestNodeDto Test);
-  private sealed record RemoveTestPayload(string Id);
-  private sealed record StatusDto(string Type);
-  private sealed record UpdateStatusPayload(string Id, StatusDto? Status, List<string>? AvailableActions);
-  private sealed record UpdateStatusBatchPayload(List<StatusUpdate>? Updates);
-  private sealed record StatusUpdate(string Id, StatusDto? Status, List<string>? AvailableActions);
+  public override void UpdateStatusBatch(TestUpdateStatusBatchPayload payload)
+  {
+    if (payload.Updates is null) return;
+    Interlocked.Increment(ref _batchStatusNotifications);
+    Interlocked.Add(ref _batchedStatusUpdates, payload.Updates.Count);
+    foreach (var u in payload.Updates)
+    {
+      if (u.Id is { } id && u.Status is { } s) RecordStatus(id, s.Type);
+    }
+  }
+
+  public override void TestrunnerStatusUpdate(RunnerStatusDto status) =>
+    _lastRunnerStatus = status;
 
   private void RecordStatus(string id, string type)
   {

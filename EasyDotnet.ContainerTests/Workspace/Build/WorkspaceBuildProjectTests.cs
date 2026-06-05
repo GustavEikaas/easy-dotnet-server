@@ -139,4 +139,5 @@ public abstract class WorkspaceBuildProjectTests<TContainer> : WorkspaceBuildTes
   }
 }
 
+[Collection(ContainerCollections.Sdk10Linux)]
 public sealed class WorkspaceBuildProjectSdk10Linux : WorkspaceBuildProjectTests<Sdk10LinuxContainer>;

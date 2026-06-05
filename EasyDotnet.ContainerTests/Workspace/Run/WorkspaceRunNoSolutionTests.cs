@@ -114,14 +114,21 @@ public abstract class WorkspaceRunNoSolutionSingleFileWithArgsTests<TContainer> 
   }
 }
 
+[Collection(ContainerCollections.Sdk8Linux)]
 public sealed class WorkspaceRunNoSolutionProjectSdk8Linux : WorkspaceRunNoSolutionProjectTests<Sdk8LinuxContainer>;
+[Collection(ContainerCollections.Sdk9Linux)]
 public sealed class WorkspaceRunNoSolutionProjectSdk9Linux : WorkspaceRunNoSolutionProjectTests<Sdk9LinuxContainer>;
+[Collection(ContainerCollections.Sdk10Linux)]
 public sealed class WorkspaceRunNoSolutionProjectSdk10Linux : WorkspaceRunNoSolutionProjectTests<Sdk10LinuxContainer>;
 
 // Single-file execution requires SDK 10+.
+[Collection(ContainerCollections.Sdk10Linux)]
 public sealed class WorkspaceRunNoSolutionSingleFileSdk10Linux : WorkspaceRunNoSolutionSingleFileTests<Sdk10LinuxContainer>;
+[Collection(ContainerCollections.Sdk10Linux)]
 public sealed class WorkspaceRunNoSolutionSingleFileWithArgsSdk10Linux : WorkspaceRunNoSolutionSingleFileWithArgsTests<Sdk10LinuxContainer>;
 
 // On SDK 8/9 the server must display an error and not attempt to run the file.
+[Collection(ContainerCollections.Sdk8Linux)]
 public sealed class WorkspaceRunNoSolutionSingleFileLegacySdk8Linux : WorkspaceRunNoSolutionSingleFileLegacySdkTests<Sdk8LinuxContainer>;
+[Collection(ContainerCollections.Sdk9Linux)]
 public sealed class WorkspaceRunNoSolutionSingleFileLegacySdk9Linux : WorkspaceRunNoSolutionSingleFileLegacySdkTests<Sdk9LinuxContainer>;
