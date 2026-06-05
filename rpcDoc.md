@@ -305,6 +305,31 @@
 
 **Returns:** `Task<BootstrapFileResultResponse>`
 
+### `new-file/bootstrap-file-v2`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| filePath | string |   |
+| kind | Kind |   |
+| preferFileScopedNamespace | bool |   |
+
+**Returns:** `Task<BootstrapFileResultResponse>`
+
+### `new-file/create-item`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | CreateItemRequest |   |
+
+**Returns:** `Task`
+
+### `new-file/json-code-gen-v2`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| jsonData | string |   |
+| filePath | string |   |
+| preferFileScopedNamespace | bool |   |
+
+**Returns:** `Task<BootstrapFileResultResponse>`
+
 ### `roslyn/bootstrap-file-v2`
 | Parameter | Type | Optional |
 |-----------|------|----------|
