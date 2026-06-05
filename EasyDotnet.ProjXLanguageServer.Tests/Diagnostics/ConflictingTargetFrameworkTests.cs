@@ -59,6 +59,23 @@ public class ConflictingTargetFrameworkTests
   }
 
   [Test]
+  public async Task EmptyTargetFramework_SupersedByTargetFrameworks_NoConflict()
+  {
+    var text =
+        """
+        <Project>
+          <PropertyGroup>
+            <TargetFramework />
+            <TargetFrameworks>net48;net10.0</TargetFrameworks>
+          </PropertyGroup>
+        </Project>
+        """;
+    var diagnostics = Build().GetDiagnostics(Docs.Make(text, "/repo/Self/Self.csproj"));
+    var matches = diagnostics.Where(d => d.Code?.Value?.ToString() == DiagnosticCodes.ConflictingTargetFrameworkProperties).ToArray();
+    await Assert.That(matches.Length).IsEqualTo(0);
+  }
+
+  [Test]
   public async Task OnlyTargetFrameworks_NoConflict()
   {
     var text = "<Project>\n  <PropertyGroup>\n    <TargetFrameworks>net8.0;net9.0</TargetFrameworks>\n  </PropertyGroup>\n</Project>";

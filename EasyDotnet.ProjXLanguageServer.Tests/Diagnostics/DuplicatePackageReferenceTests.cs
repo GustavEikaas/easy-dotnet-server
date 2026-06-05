@@ -50,6 +50,50 @@ public class DuplicatePackageReferenceTests
   }
 
   [Test]
+  public async Task SameReferenceButMutualExclusiveCondition_NoDiagnostics()
+  {
+    var fs = new MockFileSystem();
+    var sut = new DiagnosticsService(fs);
+
+    var text =
+        """
+        <Project>
+          <ItemGroup Condition=" '$(TargetFramework)' != 'net48' ">
+            <PackageReference Include="System.Text.Json" />
+          </ItemGroup>
+          <ItemGroup Condition=" '$(TargetFramework)' == 'net48' ">
+            <PackageReference Include="System.Text.Json" VersionOverride="9.0.10" />
+          </ItemGroup>
+        </Project>
+        """;
+    var diagnostics = sut.GetDiagnostics(Docs.Make(text, "/repo/Self/Self.csproj"));
+    var dupes = diagnostics.Where(d => d.Code?.Value?.ToString() == DiagnosticCodes.DuplicatePackageReference).ToArray();
+    await Assert.That(dupes.Length).IsEqualTo(0);
+  }
+
+  [Test]
+  public async Task DuplicateUnderIdenticalCondition_EmitsDiagnostic()
+  {
+    var fs = new MockFileSystem();
+    var sut = new DiagnosticsService(fs);
+
+    var text =
+        """
+        <Project>
+          <ItemGroup Condition=" '$(TargetFramework)' == 'net48' ">
+            <PackageReference Include="System.Text.Json" Version="9.0.0" />
+          </ItemGroup>
+          <ItemGroup Condition=" '$(TargetFramework)' == 'net48' ">
+            <PackageReference Include="System.Text.Json" Version="8.0.0" />
+          </ItemGroup>
+        </Project>
+        """;
+    var diagnostics = sut.GetDiagnostics(Docs.Make(text, "/repo/Self/Self.csproj"));
+    var dupes = diagnostics.Where(d => d.Code?.Value?.ToString() == DiagnosticCodes.DuplicatePackageReference).ToArray();
+    await Assert.That(dupes.Length).IsEqualTo(1);
+  }
+
+  [Test]
   public async Task UniquePackageReferences_NoDiagnostic()
   {
     var fs = new MockFileSystem();
