@@ -2,7 +2,6 @@ using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.IDE.BuildHost;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Notifications;
-using EasyDotnet.IDE.TestRunner;
 using EasyDotnet.IDE.TestRunner.Adapters;
 using EasyDotnet.IDE.TestRunner.Analysis;
 using EasyDotnet.IDE.TestRunner.Dispatch;
@@ -706,6 +705,7 @@ public class TestRunnerService(
             NodeType.TheoryGroup => "namespace",
             NodeType.TestMethod => "test",
             NodeType.Subcase => "test",
+            NodeType.ProbableTest => "test",
             _ => null
           };
           if (type is null) return null;
@@ -765,7 +765,11 @@ public class TestRunnerService(
         loc = TestSourceLocator.LookupMethod(parsed.Methods, lookupName);
       }
 
-      if (loc is null) continue;
+      if (loc is null)
+      {
+        registry.RemoveSubtree(node.Id);
+        continue;
+      }
 
       registry.UpdateLineNumbers(node.Id, loc.SignatureLine, loc.BodyStartLine, loc.EndLine);
       updates.Add(new LineNumberUpdateDto(node.Id, loc.SignatureLine, loc.BodyStartLine, loc.EndLine));
