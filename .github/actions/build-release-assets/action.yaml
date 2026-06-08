@@ -18,6 +18,10 @@ inputs:
     description: '(Cliffback) netcoredbg ARM release version'
     required: true
     default: '3.1.2-1054'
+  dncdbgArtifactsPath:
+    description: 'Path containing downloaded dncdbg platform artifacts'
+    required: false
+    default: ''
 
 runs:
   using: "composite"
@@ -122,3 +126,46 @@ runs:
         fi
 
         echo "All netcoredbg platforms bundled successfully!"
+
+    - name: Copy dncdbg Assets
+      if: ${{ inputs.dncdbgArtifactsPath != '' }}
+      shell: bash
+      run: |
+        DNCDBG_ARTIFACTS_PATH="${{ inputs.dncdbgArtifactsPath }}"
+        OUTPUT_PATH="${{ inputs.toolsOutputPath }}/dncdbg"
+
+        if [[ ! -d "$DNCDBG_ARTIFACTS_PATH" ]]; then
+          echo "::error::dncdbg artifacts path does not exist: $DNCDBG_ARTIFACTS_PATH"
+          exit 1
+        fi
+
+        mkdir -p "$OUTPUT_PATH"
+
+        found=0
+        for artifact_dir in "$DNCDBG_ARTIFACTS_PATH"/easy-dotnet-dncdbg-*; do
+          if [[ ! -d "$artifact_dir" ]]; then
+            continue
+          fi
+
+          rid="${artifact_dir##*/easy-dotnet-dncdbg-}"
+          target_dir="$OUTPUT_PATH/$rid"
+
+          mkdir -p "$target_dir"
+          cp -R "$artifact_dir"/. "$target_dir/"
+
+          if [[ "$rid" == win-* ]]; then
+            test -f "$target_dir/dncdbg.exe"
+          else
+            test -f "$target_dir/dncdbg"
+            chmod +x "$target_dir/dncdbg"
+          fi
+
+          test -f "$target_dir/ManagedPart.dll"
+          echo "✓ Copied dncdbg to $target_dir"
+          found=$((found + 1))
+        done
+
+        if [[ "$found" -eq 0 ]]; then
+          echo "::error::No dncdbg artifacts found under $DNCDBG_ARTIFACTS_PATH"
+          exit 1
+        fi

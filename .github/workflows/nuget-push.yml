@@ -6,10 +6,134 @@ on:
       - main
 
 permissions:
+  contents: read
   id-token: write
 
 jobs:
+  build-dncdbg:
+    name: Build dncdbg (${{ matrix.rid }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            os: ubuntu-24.04
+          - rid: linux-arm64
+            os: ubuntu-24.04-arm
+          - rid: osx-x64
+            os: macos-15-intel
+            cmakeArch: x86_64
+          - rid: osx-arm64
+            os: macos-15
+            cmakeArch: arm64
+          - rid: win-x64
+            os: windows-2025
+
+    steps:
+      - name: Checkout dncdbg
+        uses: actions/checkout@v4
+        with:
+          repository: viewizard/dncdbg
+          ref: 2b11e4e6a9ed4c6eb8830852f6c7a8539aa5a527
+          path: dncdbg
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake clang llvm build-essential
+
+      - name: Install macOS build dependencies
+        if: runner.os == 'macOS'
+        run: |
+          if ! command -v cmake >/dev/null 2>&1; then
+            brew install cmake
+          fi
+
+      - name: Configure dncdbg (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          CMAKE_ARGS=(
+            -S dncdbg
+            -B dncdbg/build
+            -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_INSTALL_PREFIX="$PWD/dncdbg/bin"
+            -DDOTNET_DIR="$DOTNET_ROOT"
+          )
+
+          if [[ "${{ runner.os }}" == "macOS" ]]; then
+            CMAKE_ARGS+=(-DCMAKE_OSX_ARCHITECTURES="${{ matrix.cmakeArch }}")
+          fi
+
+          CC=clang CXX=clang++ cmake "${CMAKE_ARGS[@]}"
+
+      - name: Build dncdbg (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          if [[ "${{ runner.os }}" == "macOS" ]]; then
+            parallelism="$(sysctl -n hw.ncpu)"
+          else
+            parallelism="$(nproc --all)"
+          fi
+
+          cmake --build dncdbg/build --target install --parallel "$parallelism"
+
+      - name: Configure dncdbg (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cmake `
+            -S dncdbg `
+            -B dncdbg/build `
+            -G "Visual Studio 17 2022" `
+            -A x64 `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_INSTALL_PREFIX="$PWD\dncdbg\bin" `
+            -DDOTNET_DIR="$env:DOTNET_ROOT"
+
+      - name: Build dncdbg (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: cmake --build dncdbg/build --target install --parallel $env:NUMBER_OF_PROCESSORS --config Release
+
+      - name: Verify dncdbg
+        shell: bash
+        run: |
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            DNCDBG_PATH="dncdbg/bin/dncdbg.exe"
+          else
+            DNCDBG_PATH="dncdbg/bin/dncdbg"
+          fi
+
+          test -f "$DNCDBG_PATH"
+          test -f "dncdbg/bin/ManagedPart.dll"
+          "$DNCDBG_PATH" --version
+
+      - name: Copy dncdbg licenses
+        shell: bash
+        run: |
+          mkdir -p dncdbg/bin/licenses
+          cp dncdbg/LICENSE dncdbg/bin/licenses/dncdbg-LICENSE
+          cp dncdbg/third_party/diagnostics/LICENSE.TXT dncdbg/bin/licenses/dotnet-diagnostics-LICENSE
+          cp dncdbg/third_party/json/LICENSE.MIT dncdbg/bin/licenses/json-LICENSE
+          cp dncdbg/third_party/tree-sitter/LICENSE dncdbg/bin/licenses/tree-sitter-LICENSE
+          cp dncdbg/third_party/tree-sitter-c-sharp/LICENSE dncdbg/bin/licenses/tree-sitter-c-sharp-LICENSE
+
+      - name: Upload dncdbg artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: easy-dotnet-dncdbg-${{ matrix.rid }}
+          path: dncdbg/bin/**
+          if-no-files-found: error
+
   publish:
+    needs: build-dncdbg
     runs-on: ubuntu-latest
 
     steps:
@@ -24,11 +148,27 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
+      - name: Download dncdbg artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: easy-dotnet-dncdbg-*
+          path: artifacts/dncdbg
+          merge-multiple: false
+
       - name: Build Release Assets
         uses: ./.github/actions/build-release-assets
+        with:
+          dncdbgArtifactsPath: artifacts/dncdbg
 
       - name: Pack
         run: dotnet pack ./EasyDotnet.IDE
+
+      - name: Verify package assets
+        run: |
+          unzip -l EasyDotnet.IDE/bin/Release/*.nupkg | tee /tmp/easy-dotnet-package.txt
+          for rid in linux-x64 linux-arm64 osx-x64 osx-arm64 win-x64; do
+            grep -q "tools/dncdbg/$rid/" /tmp/easy-dotnet-package.txt
+          done
 
       - name: NuGet login (OIDC → temp API key)
         uses: NuGet/login@v1
