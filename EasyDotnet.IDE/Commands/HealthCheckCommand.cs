@@ -22,17 +22,35 @@ public sealed class HealthCheckCommand : AsyncCommand<HealthCheckCommand.Setting
     [CommandOption("--debugger-bin-path <PATH>")]
     public string? DebuggerBinPath { get; init; }
 
+    [CommandOption("--debugger-engine <ENGINE>")]
+    public string? DebuggerEngine { get; init; }
+
     public override ValidationResult Validate()
     {
-      return Format is "json" or "markdown"
-          ? ValidationResult.Success()
-          : ValidationResult.Error("--format must be either json or markdown");
+      if (Format is not ("json" or "markdown"))
+      {
+        return ValidationResult.Error("--format must be either json or markdown");
+      }
+
+      if (!string.IsNullOrWhiteSpace(DebuggerEngine))
+      {
+        try
+        {
+          DebuggerLocator.ParseEngine(DebuggerEngine);
+        }
+        catch (ArgumentException ex)
+        {
+          return ValidationResult.Error(ex.Message);
+        }
+      }
+
+      return ValidationResult.Success();
     }
   }
 
   public override async Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
   {
-    var health = await GetHealthChecksAsync(settings.DebuggerBinPath, cancellationToken);
+    var health = await GetHealthChecksAsync(settings.DebuggerBinPath, settings.DebuggerEngine, cancellationToken);
 
     if (settings.Format == "markdown")
     {
@@ -44,11 +62,11 @@ public sealed class HealthCheckCommand : AsyncCommand<HealthCheckCommand.Setting
     return 0;
   }
 
-  private static async Task<HealthCheckItem[]> GetHealthChecksAsync(string? debuggerBinPath, CancellationToken cancellationToken)
+  private static async Task<HealthCheckItem[]> GetHealthChecksAsync(string? debuggerBinPath, string? debuggerEngine, CancellationToken cancellationToken)
   {
     var dotnet = await GetDotnetInfoAsync(cancellationToken);
     var roslyn = await RoslynToolService.GetStatusAsync(cancellationToken);
-    var netcoredbg = await GetNetCoreDbgInfoAsync(debuggerBinPath, cancellationToken);
+    var debugger = await GetDebuggerInfoAsync(debuggerBinPath, debuggerEngine, cancellationToken);
 
     List<HealthCheckItem> checks =
     [
@@ -80,7 +98,7 @@ public sealed class HealthCheckCommand : AsyncCommand<HealthCheckCommand.Setting
       checks.Add(HealthCheckItem.Ok("roslyn.tool", $"roslyn-language-server {roslyn.Version}"));
     }
 
-    checks.AddRange(GetNetCoreDbgHealthChecks(netcoredbg));
+    checks.AddRange(GetDebuggerHealthChecks(debugger));
 
     return [.. checks];
   }
@@ -108,107 +126,118 @@ public sealed class HealthCheckCommand : AsyncCommand<HealthCheckCommand.Setting
         Error: version.ExitCode == 0 ? null : version.Output);
   }
 
-  private static async Task<NetCoreDbgHealthInfo> GetNetCoreDbgInfoAsync(string? debuggerBinPath, CancellationToken cancellationToken)
+  private static async Task<DebuggerHealthInfo> GetDebuggerInfoAsync(string? debuggerBinPath, string? debuggerEngine, CancellationToken cancellationToken)
   {
-    var platform = GetNetCoreDbgPlatform();
-    var envPath = Environment.GetEnvironmentVariable(NetCoreDbgLocator.DEBUGGER_PATH_ENV);
+    var platform = DebuggerLocator.TryGetRuntimePlatform();
+    var envPath = Environment.GetEnvironmentVariable(DebuggerLocator.DEBUGGER_PATH_ENV);
     var customPath = !string.IsNullOrWhiteSpace(debuggerBinPath) ? debuggerBinPath : envPath;
-    var source = string.IsNullOrWhiteSpace(customPath)
-        ? "bundled"
-        : !string.IsNullOrWhiteSpace(debuggerBinPath)
-            ? "--debugger-bin-path"
-            : $"{NetCoreDbgLocator.DEBUGGER_PATH_ENV}";
 
     try
     {
-      var path = !string.IsNullOrWhiteSpace(customPath)
-          ? GetCustomNetCoreDbgPath(customPath)
-          : NetCoreDbgLocator.GetNetCoreDbgPath();
-      var version = await RunProcessAsync(path, ["--version"], cancellationToken);
+      var resolved = DebuggerLocator.ResolveDebugger(debuggerEngine, debuggerBinPath);
+      var version = await RunProcessAsync(resolved.Path, ["--version"], cancellationToken);
 
-      return new NetCoreDbgHealthInfo(
-          Source: source,
-          Platform: platform,
-          Path: path,
-          Version: version.ExitCode == 0 ? version.Output : null,
+      return new DebuggerHealthInfo(
+          Engine: DebuggerLocator.GetEngineName(resolved.Engine),
+          Source: resolved.Source,
+          Platform: resolved.Platform,
+          Path: resolved.Path,
+          Version: version.ExitCode == 0 ? ExtractFirstLine(version.Output) : null,
           Error: version.ExitCode == 0 ? null : version.Output);
     }
     catch (Exception ex)
     {
-      return new NetCoreDbgHealthInfo(
-          Source: source,
+      var engine = TryGetDebuggerEngineName(debuggerEngine);
+      return new DebuggerHealthInfo(
+          Engine: engine,
+          Source: GetDebuggerSource(debuggerBinPath, customPath),
           Platform: platform,
-          Path: GetExpectedNetCoreDbgPath(customPath, platform),
+          Path: GetExpectedDebuggerPath(customPath, platform, engine),
           Version: null,
           Error: ex.Message);
     }
   }
 
-  private static string GetCustomNetCoreDbgPath(string path)
+  private static IEnumerable<HealthCheckItem> GetDebuggerHealthChecks(DebuggerHealthInfo debugger)
   {
-    if (File.Exists(path))
-    {
-      return path;
-    }
+    yield return HealthCheckItem.Ok("debugger.engine", debugger.Engine);
+    yield return HealthCheckItem.Ok("debugger.source", debugger.Source);
+    yield return debugger.Platform is null
+        ? HealthCheckItem.Warn("debugger.platform", "Unable to determine debugger platform", [debugger.Error ?? "Unsupported OS or architecture"])
+        : HealthCheckItem.Ok("debugger.platform", debugger.Platform);
 
-    throw new FileNotFoundException("Custom netcoredbg executable not found", path);
-  }
-
-  private static IEnumerable<HealthCheckItem> GetNetCoreDbgHealthChecks(NetCoreDbgHealthInfo netcoredbg)
-  {
-    yield return HealthCheckItem.Ok("debugger.netcoredbg.source", netcoredbg.Source);
-    yield return netcoredbg.Platform is null
-        ? HealthCheckItem.Warn("debugger.netcoredbg.platform", "Unable to determine netcoredbg platform", [netcoredbg.Error ?? "Unsupported OS or architecture"])
-        : HealthCheckItem.Ok("debugger.netcoredbg.platform", netcoredbg.Platform);
-
-    if (string.IsNullOrWhiteSpace(netcoredbg.Path))
+    if (string.IsNullOrWhiteSpace(debugger.Path))
     {
       yield return HealthCheckItem.Warn(
-          "debugger.netcoredbg.path",
-          "netcoredbg was not found",
-          [netcoredbg.Error ?? "Install easy-dotnet with bundled assets or set EASY_DOTNET_DEBUGGER_BIN_PATH"]);
+          "debugger.path",
+          "Debugger was not found",
+          [debugger.Error ?? "Install easy-dotnet with bundled assets or set EASY_DOTNET_DEBUGGER_BIN_PATH"]);
       yield break;
     }
 
-    if (!File.Exists(netcoredbg.Path))
+    if (!File.Exists(debugger.Path))
     {
       yield return HealthCheckItem.Warn(
-          "debugger.netcoredbg.path",
-          netcoredbg.Path,
-          [netcoredbg.Error ?? "The resolved netcoredbg path does not exist"]);
+          "debugger.path",
+          debugger.Path,
+          [debugger.Error ?? "The resolved debugger path does not exist"]);
       yield break;
     }
 
-    yield return HealthCheckItem.Ok("debugger.netcoredbg.path", netcoredbg.Path);
+    yield return HealthCheckItem.Ok("debugger.path", debugger.Path);
 
-    yield return netcoredbg.Version is null
-        ? HealthCheckItem.Warn("debugger.netcoredbg.version", "Unable to read netcoredbg --version", [netcoredbg.Error ?? "The command exited without version output"])
-        : HealthCheckItem.Ok("debugger.netcoredbg.version", netcoredbg.Version);
+    yield return debugger.Version is null
+        ? HealthCheckItem.Warn("debugger.version", $"Unable to read {debugger.Engine} --version", [debugger.Error ?? "The command exited without version output"])
+        : HealthCheckItem.Ok("debugger.version", debugger.Version);
   }
 
-  private static string? GetNetCoreDbgPlatform()
+  private static string TryGetDebuggerEngineName(string? debuggerEngine)
   {
     try
     {
-      return NetCoreDbgLocator.GetRuntimePlatform();
+      return DebuggerLocator.GetEngineName(DebuggerLocator.GetConfiguredEngine(debuggerEngine));
     }
-    catch
+    catch (ArgumentException)
     {
-      return null;
+      return !string.IsNullOrWhiteSpace(debuggerEngine)
+          ? debuggerEngine
+          : Environment.GetEnvironmentVariable(DebuggerLocator.DEBUGGER_ENGINE_ENV) ?? "unknown";
     }
   }
 
-  private static string? GetExpectedNetCoreDbgPath(string? customPath, string? platform)
+  private static string GetDebuggerSource(string? debuggerBinPath, string? customPath) =>
+    string.IsNullOrWhiteSpace(customPath)
+        ? "bundled"
+        : !string.IsNullOrWhiteSpace(debuggerBinPath)
+            ? "--debugger-bin-path"
+            : DebuggerLocator.DEBUGGER_PATH_ENV;
+
+  private static string? GetExpectedDebuggerPath(string? customPath, string? platform, string engine)
   {
     if (!string.IsNullOrWhiteSpace(customPath))
     {
       return customPath;
     }
 
-    return platform is null
-        ? null
-        : NetCoreDbgLocator.GetBundledNetCoreDbgPath(platform);
+    if (platform is null)
+    {
+      return null;
+    }
+
+    try
+    {
+      return DebuggerLocator.GetBundledDebuggerPath(DebuggerLocator.ParseEngine(engine), platform);
+    }
+    catch (ArgumentException)
+    {
+      return null;
+    }
   }
+
+  private static string? ExtractFirstLine(string output) =>
+      output.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(l => l.Trim())
+            .FirstOrDefault(l => l.Length > 0);
 
   private static async Task<CommandOutput> RunProcessAsync(string fileName, IReadOnlyList<string> arguments, CancellationToken cancellationToken)
   {
@@ -247,7 +276,7 @@ public sealed class HealthCheckCommand : AsyncCommand<HealthCheckCommand.Setting
 
   private sealed record CommandOutput(int ExitCode, string Output);
   private sealed record DotnetHealthInfo(string? Version, string[] Sdks, string? Error);
-  private sealed record NetCoreDbgHealthInfo(string Source, string? Platform, string? Path, string? Version, string? Error);
+  private sealed record DebuggerHealthInfo(string Engine, string Source, string? Platform, string? Path, string? Version, string? Error);
   private sealed record HealthCheckItem(string Type, string Name, string Value, string[] Advice)
   {
     public static HealthCheckItem Ok(string name, string value) => new("ok", name, value, []);
