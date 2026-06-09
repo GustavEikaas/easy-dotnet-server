@@ -28,11 +28,14 @@ jobs:
             os: macos-15
             cmakeArch: arm64
           - rid: win-x64
-            os: windows-2025
+            os: windows-2025-vs2026
 
     steps:
-      - name: Checkout repo
+      - name: Checkout build-dncdbg action
         uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/actions/build-dncdbg
+          sparse-checkout-cone-mode: false
 
       - name: Build dncdbg
         uses: ./.github/actions/build-dncdbg
