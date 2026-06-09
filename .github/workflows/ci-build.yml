@@ -44,11 +44,12 @@ jobs:
             -A x64 `
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_INSTALL_PREFIX="$PWD\dncdbg\bin" `
-            -DDOTNET_DIR="$env:DOTNET_ROOT"
+            -DDOTNET_DIR="$env:DOTNET_ROOT" `
+            -DCMAKE_VS_GLOBALS="ResolveNuGetPackages=false;ResolvePackageAssets=false"
 
       - name: Build dncdbg (Windows)
         shell: pwsh
-        run: cmake --build dncdbg/build --target install --parallel $env:NUMBER_OF_PROCESSORS --config Release
+        run: cmake --build dncdbg/build --target install --parallel $env:NUMBER_OF_PROCESSORS --config Release -- /p:ResolveNuGetPackages=false
 
       - name: Verify dncdbg
         shell: bash
