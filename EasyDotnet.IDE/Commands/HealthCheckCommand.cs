@@ -142,7 +142,7 @@ public sealed class HealthCheckCommand : AsyncCommand<HealthCheckCommand.Setting
           Source: resolved.Source,
           Platform: resolved.Platform,
           Path: resolved.Path,
-          Version: version.ExitCode == 0 ? version.Output : null,
+          Version: version.ExitCode == 0 ? ExtractFirstLine(version.Output) : null,
           Error: version.ExitCode == 0 ? null : version.Output);
     }
     catch (Exception ex)
@@ -233,6 +233,11 @@ public sealed class HealthCheckCommand : AsyncCommand<HealthCheckCommand.Setting
       return null;
     }
   }
+
+  private static string? ExtractFirstLine(string output) =>
+      output.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(l => l.Trim())
+            .FirstOrDefault(l => l.Length > 0);
 
   private static async Task<CommandOutput> RunProcessAsync(string fileName, IReadOnlyList<string> arguments, CancellationToken cancellationToken)
   {
