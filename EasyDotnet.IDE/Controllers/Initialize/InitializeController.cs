@@ -59,7 +59,7 @@ public class InitializeController(
     clientService.UseVisualStudio = clientService.ClientOptions.UseVisualStudio;
 
     var debuggerOptions = clientService.ClientOptions.DebuggerOptions ?? new DebuggerOptions();
-    var binaryPath = debuggerOptions.BinaryPath ?? TryGetNetcoreDbgPath();
+    var binaryPath = debuggerOptions.BinaryPath ?? TryGetDebuggerPath(debuggerOptions.Engine);
 
     clientService.ClientOptions = clientService.ClientOptions with
     {
@@ -107,17 +107,21 @@ public class InitializeController(
     }
   }
 
-  private string? TryGetNetcoreDbgPath()
+  private string? TryGetDebuggerPath(string? engineName = null)
   {
     try
     {
-      var debuggerPath = NetCoreDbgLocator.GetNetCoreDbgPath();
-      logger.LogInformation("Using bundled netcoredg: {debuggerPath}", debuggerPath);
-      return debuggerPath;
+      var debugger = DebuggerLocator.ResolveDebugger(engineName);
+      logger.LogInformation(
+          "Using {debuggerEngine} debugger from {debuggerSource}: {debuggerPath}",
+          DebuggerLocator.GetEngineName(debugger.Engine),
+          debugger.Source,
+          debugger.Path);
+      return debugger.Path;
     }
     catch (Exception e)
     {
-      logger.LogError(e, "Failed to locate netcoredbg");
+      logger.LogError(e, "Failed to locate debugger");
     }
     return null;
   }

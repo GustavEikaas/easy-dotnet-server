@@ -1,0 +1,126 @@
+name: Build dncdbg
+description: "Checkout, configure and build dncdbg for a given RID"
+
+inputs:
+  rid:
+    description: 'Runtime identifier (linux-x64, linux-arm64, osx-x64, osx-arm64, win-x64)'
+    required: true
+  cmakeArch:
+    description: 'CMake OSX architecture (x86_64 or arm64). Required for macOS RIDs.'
+    required: false
+    default: ''
+  dncdbgRef:
+    description: 'dncdbg git ref to check out'
+    required: false
+    default: '2b11e4e6a9ed4c6eb8830852f6c7a8539aa5a527'
+    #Samsung/netcoredbg/pull/219 feat: enable Nullable<T> inspection for complex types (Guid?, DateTime?, etc.)
+    #Samsung/netcoredbg/pull/228 feat: support primary constructors
+
+runs:
+  using: "composite"
+  steps:
+    - name: Restore dncdbg/bin from cache
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: dncdbg/bin
+        key: dncdbg-${{ runner.os }}-${{ inputs.rid }}-${{ inputs.dncdbgRef }}-${{ hashFiles('./.github/actions/build-dncdbg/action.yaml') }}
+
+    - name: Checkout dncdbg
+      if: steps.cache.outputs.cache-hit != 'true'
+      uses: actions/checkout@v4
+      with:
+        repository: viewizard/dncdbg
+        ref: ${{ inputs.dncdbgRef }}
+        path: dncdbg
+
+    - name: Setup .NET
+      if: steps.cache.outputs.cache-hit != 'true'
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Patch dncdbg buildinfo.cpp for MSVC (extern vs constexpr linkage)
+      if: steps.cache.outputs.cache-hit != 'true' && runner.os == 'Windows'
+      shell: bash
+      run: sed -i 's/^constexpr std::string_view/extern const std::string_view/' dncdbg/src/buildinfo.cpp
+
+    - name: Setup MSVC dev environment
+      if: steps.cache.outputs.cache-hit != 'true' && runner.os == 'Windows'
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+
+    - name: Install Linux build dependencies
+      if: steps.cache.outputs.cache-hit != 'true' && runner.os == 'Linux'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake clang llvm build-essential
+
+    - name: Install macOS build dependencies
+      if: steps.cache.outputs.cache-hit != 'true' && runner.os == 'macOS'
+      shell: bash
+      run: |
+        if ! command -v cmake >/dev/null 2>&1; then
+          brew install cmake
+        fi
+
+    - name: Configure dncdbg (Unix)
+      if: steps.cache.outputs.cache-hit != 'true' && runner.os != 'Windows'
+      shell: bash
+      run: |
+        CMAKE_ARGS=(
+          -S dncdbg
+          -B dncdbg/build
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_INSTALL_PREFIX="$PWD/dncdbg/bin"
+          -DDOTNET_DIR="$DOTNET_ROOT"
+        )
+
+        if [[ "${{ runner.os }}" == "macOS" ]]; then
+          CMAKE_ARGS+=(-DCMAKE_OSX_ARCHITECTURES="${{ inputs.cmakeArch }}")
+        fi
+
+        CC=clang CXX=clang++ cmake "${CMAKE_ARGS[@]}"
+
+    - name: Build dncdbg (Unix)
+      if: steps.cache.outputs.cache-hit != 'true' && runner.os != 'Windows'
+      shell: bash
+      run: |
+        if [[ "${{ runner.os }}" == "macOS" ]]; then
+          parallelism="$(sysctl -n hw.ncpu)"
+        else
+          parallelism="$(nproc --all)"
+        fi
+
+        time cmake --build dncdbg/build --target install --parallel "$parallelism"
+
+    - name: Configure dncdbg (Windows)
+      if: steps.cache.outputs.cache-hit != 'true' && runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        cmake `
+          -S dncdbg `
+          -B dncdbg/build `
+          -G "Visual Studio 18 2026" `
+          -A x64 `
+          -DCMAKE_BUILD_TYPE=Release `
+          -DCMAKE_INSTALL_PREFIX="$PWD\dncdbg\bin" `
+          -DDOTNET_DIR="$env:DOTNET_ROOT"
+
+    - name: Build dncdbg (Windows)
+      if: steps.cache.outputs.cache-hit != 'true' && runner.os == 'Windows'
+      shell: pwsh
+      run: cmake --build dncdbg/build --target install --parallel $env:NUMBER_OF_PROCESSORS --config Release -- /p:ResolveNuGetPackages=false
+
+    - name: Copy dncdbg licenses
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        mkdir -p dncdbg/bin/licenses
+        cp dncdbg/LICENSE dncdbg/bin/licenses/dncdbg-LICENSE
+        cp dncdbg/third_party/diagnostics/LICENSE.TXT dncdbg/bin/licenses/dotnet-diagnostics-LICENSE
+        cp dncdbg/third_party/json/LICENSE.MIT dncdbg/bin/licenses/json-LICENSE
+        cp dncdbg/third_party/tree-sitter/LICENSE dncdbg/bin/licenses/tree-sitter-LICENSE
+        cp dncdbg/third_party/tree-sitter-c-sharp/LICENSE dncdbg/bin/licenses/tree-sitter-c-sharp-LICENSE
