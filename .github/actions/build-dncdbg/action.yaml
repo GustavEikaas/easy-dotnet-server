@@ -77,13 +77,14 @@ runs:
       if: runner.os != 'Windows'
       shell: bash
       run: |
+        set -x
         if [[ "${{ runner.os }}" == "macOS" ]]; then
           parallelism="$(sysctl -n hw.ncpu)"
         else
           parallelism="$(nproc --all)"
         fi
 
-        cmake --build dncdbg/build --target install --parallel "$parallelism"
+        time cmake --build dncdbg/build --target install --parallel "$parallelism" --verbose
 
     - name: Configure dncdbg (Windows)
       if: runner.os == 'Windows'

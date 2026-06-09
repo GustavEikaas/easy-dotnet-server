@@ -13,6 +13,7 @@ jobs:
   build-dncdbg:
     name: Build dncdbg (${{ matrix.rid }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
