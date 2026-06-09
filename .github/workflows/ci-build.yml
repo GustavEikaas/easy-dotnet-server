@@ -24,6 +24,12 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Patch dncdbg buildinfo.cpp for MSVC (extern vs constexpr linkage)
+        shell: bash
+        run: |
+          sed -i 's/^constexpr std::string_view/extern constexpr std::string_view/' dncdbg/src/buildinfo.cpp
+          grep -n "constexpr std::string_view" dncdbg/src/buildinfo.cpp
+
       - name: Setup MSVC dev environment
         uses: ilammy/msvc-dev-cmd@v1
         with:
