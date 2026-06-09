@@ -43,7 +43,7 @@ jobs:
 
       - name: Build dncdbg
         shell: pwsh
-        run: cmake --build dncdbg/build --target install --parallel $env:NUMBER_OF_PROCESSORS --config Release
+        run: cmake --build dncdbg/build --target install --parallel $env:NUMBER_OF_PROCESSORS --config Release -- /p:ResolveNuGetPackages=false
 
       - name: Verify dncdbg
         shell: bash
