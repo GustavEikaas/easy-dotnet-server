@@ -1,0 +1,126 @@
+name: Build dncdbg
+description: "Checkout, configure and build dncdbg for a given RID"
+
+inputs:
+  rid:
+    description: 'Runtime identifier (linux-x64, linux-arm64, osx-x64, osx-arm64, win-x64)'
+    required: true
+  cmakeArch:
+    description: 'CMake OSX architecture (x86_64 or arm64). Required for macOS RIDs.'
+    required: false
+    default: ''
+  dncdbgRef:
+    description: 'dncdbg git ref to check out'
+    required: false
+    default: '2b11e4e6a9ed4c6eb8830852f6c7a8539aa5a527'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout dncdbg
+      uses: actions/checkout@v4
+      with:
+        repository: viewizard/dncdbg
+        ref: ${{ inputs.dncdbgRef }}
+        path: dncdbg
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Patch dncdbg buildinfo.cpp for MSVC (extern vs constexpr linkage)
+      shell: bash
+      run: sed -i 's/^constexpr std::string_view/extern const std::string_view/' dncdbg/src/buildinfo.cpp
+
+    - name: Setup MSVC dev environment
+      if: runner.os == 'Windows'
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+
+    - name: Install Linux build dependencies
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake clang llvm build-essential
+
+    - name: Install macOS build dependencies
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        if ! command -v cmake >/dev/null 2>&1; then
+          brew install cmake
+        fi
+
+    - name: Configure dncdbg (Unix)
+      if: runner.os != 'Windows'
+      shell: bash
+      run: |
+        CMAKE_ARGS=(
+          -S dncdbg
+          -B dncdbg/build
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_INSTALL_PREFIX="$PWD/dncdbg/bin"
+          -DDOTNET_DIR="$DOTNET_ROOT"
+        )
+
+        if [[ "${{ runner.os }}" == "macOS" ]]; then
+          CMAKE_ARGS+=(-DCMAKE_OSX_ARCHITECTURES="${{ inputs.cmakeArch }}")
+        fi
+
+        CC=clang CXX=clang++ cmake "${CMAKE_ARGS[@]}"
+
+    - name: Build dncdbg (Unix)
+      if: runner.os != 'Windows'
+      shell: bash
+      run: |
+        if [[ "${{ runner.os }}" == "macOS" ]]; then
+          parallelism="$(sysctl -n hw.ncpu)"
+        else
+          parallelism="$(nproc --all)"
+        fi
+
+        cmake --build dncdbg/build --target install --parallel "$parallelism"
+
+    - name: Configure dncdbg (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        cmake `
+          -S dncdbg `
+          -B dncdbg/build `
+          -G "Visual Studio 17 2022" `
+          -A x64 `
+          -DCMAKE_BUILD_TYPE=Release `
+          -DCMAKE_INSTALL_PREFIX="$PWD\dncdbg\bin" `
+          -DDOTNET_DIR="$env:DOTNET_ROOT"
+
+    - name: Build dncdbg (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: cmake --build dncdbg/build --target install --parallel $env:NUMBER_OF_PROCESSORS --config Release -- /p:ResolveNuGetPackages=false
+
+    - name: Verify dncdbg
+      shell: bash
+      run: |
+        if [[ "${{ runner.os }}" == "Windows" ]]; then
+          DNCDBG_PATH="dncdbg/bin/dncdbg.exe"
+        else
+          DNCDBG_PATH="dncdbg/bin/dncdbg"
+        fi
+
+        test -f "$DNCDBG_PATH"
+        test -f "dncdbg/bin/ManagedPart.dll"
+        "$DNCDBG_PATH" --version
+
+    - name: Copy dncdbg licenses
+      shell: bash
+      run: |
+        mkdir -p dncdbg/bin/licenses
+        cp dncdbg/LICENSE dncdbg/bin/licenses/dncdbg-LICENSE
+        cp dncdbg/third_party/diagnostics/LICENSE.TXT dncdbg/bin/licenses/dotnet-diagnostics-LICENSE
+        cp dncdbg/third_party/json/LICENSE.MIT dncdbg/bin/licenses/json-LICENSE
+        cp dncdbg/third_party/tree-sitter/LICENSE dncdbg/bin/licenses/tree-sitter-LICENSE
+        cp dncdbg/third_party/tree-sitter-c-sharp/LICENSE dncdbg/bin/licenses/tree-sitter-c-sharp-LICENSE
