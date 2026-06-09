@@ -28,7 +28,7 @@ jobs:
         shell: bash
         run: |
           sed -i 's/^constexpr std::string_view/extern const std::string_view/' dncdbg/src/buildinfo.cpp
-          grep -n "constexpr std::string_view" dncdbg/src/buildinfo.cpp
+          grep -n "std::string_view" dncdbg/src/buildinfo.cpp
 
       - name: Setup MSVC dev environment
         uses: ilammy/msvc-dev-cmd@v1
