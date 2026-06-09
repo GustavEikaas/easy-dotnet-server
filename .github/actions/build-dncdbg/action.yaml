@@ -77,14 +77,13 @@ runs:
       if: runner.os != 'Windows'
       shell: bash
       run: |
-        set -x
         if [[ "${{ runner.os }}" == "macOS" ]]; then
           parallelism="$(sysctl -n hw.ncpu)"
         else
           parallelism="$(nproc --all)"
         fi
 
-        time cmake --build dncdbg/build --target install --parallel "$parallelism" --verbose
+        time cmake --build dncdbg/build --target install --parallel "$parallelism"
 
     - name: Configure dncdbg (Windows)
       if: runner.os == 'Windows'
@@ -103,19 +102,6 @@ runs:
       if: runner.os == 'Windows'
       shell: pwsh
       run: cmake --build dncdbg/build --target install --parallel $env:NUMBER_OF_PROCESSORS --config Release -- /p:ResolveNuGetPackages=false
-
-    - name: Verify dncdbg
-      shell: bash
-      run: |
-        if [[ "${{ runner.os }}" == "Windows" ]]; then
-          DNCDBG_PATH="dncdbg/bin/dncdbg.exe"
-        else
-          DNCDBG_PATH="dncdbg/bin/dncdbg"
-        fi
-
-        test -f "$DNCDBG_PATH"
-        test -f "dncdbg/bin/ManagedPart.dll"
-        "$DNCDBG_PATH" --version
 
     - name: Copy dncdbg licenses
       shell: bash

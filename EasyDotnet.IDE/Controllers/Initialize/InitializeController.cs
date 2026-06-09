@@ -59,7 +59,7 @@ public class InitializeController(
     clientService.UseVisualStudio = clientService.ClientOptions.UseVisualStudio;
 
     var debuggerOptions = clientService.ClientOptions.DebuggerOptions ?? new DebuggerOptions();
-    var binaryPath = debuggerOptions.BinaryPath ?? TryGetDebuggerPath();
+    var binaryPath = debuggerOptions.BinaryPath ?? TryGetDebuggerPath(debuggerOptions.Engine);
 
     clientService.ClientOptions = clientService.ClientOptions with
     {
@@ -107,11 +107,11 @@ public class InitializeController(
     }
   }
 
-  private string? TryGetDebuggerPath()
+  private string? TryGetDebuggerPath(string? engineName = null)
   {
     try
     {
-      var debugger = DebuggerLocator.ResolveDebugger();
+      var debugger = DebuggerLocator.ResolveDebugger(engineName);
       logger.LogInformation(
           "Using {debuggerEngine} debugger from {debuggerSource}: {debuggerPath}",
           DebuggerLocator.GetEngineName(debugger.Engine),
