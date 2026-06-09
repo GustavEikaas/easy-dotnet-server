@@ -13,6 +13,8 @@ inputs:
     description: 'dncdbg git ref to check out'
     required: false
     default: '2b11e4e6a9ed4c6eb8830852f6c7a8539aa5a527'
+    #Samsung/netcoredbg/pull/219 feat: enable Nullable<T> inspection for complex types (Guid?, DateTime?, etc.)
+    #Samsung/netcoredbg/pull/228 feat: support primary constructors
 
 runs:
   using: "composite"
