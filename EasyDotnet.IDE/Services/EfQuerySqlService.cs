@@ -41,8 +41,17 @@ public class EfQuerySqlService(
   SettingsService settingsService,
   IClientService clientService,
   WorkspaceProjectResolver projectResolver,
-  WorkspaceBuildHostManager buildHostManager)
+  WorkspaceBuildHostManager buildHostManager) : IDisposable
 {
+  public void Dispose()
+  {
+    _runnerDaemon?.Dispose();
+    _runnerDaemon = null;
+    _workspaceCache?.Workspace.Dispose();
+    _workspaceCache = null;
+    GC.SuppressFinalize(this);
+  }
+
   private static readonly SymbolDisplayFormat FullNameFormat =
     SymbolDisplayFormat.FullyQualifiedFormat.WithGlobalNamespaceStyle(SymbolDisplayGlobalNamespaceStyle.Omitted);
 
@@ -50,6 +59,9 @@ public class EfQuerySqlService(
 
   private readonly SemaphoreSlim _workspaceLock = new(1, 1);
   private WorkspaceCacheEntry? _workspaceCache;
+
+  private readonly SemaphoreSlim _runnerLock = new(1, 1);
+  private RunnerDaemon? _runnerDaemon;
 
   private sealed class WorkspaceCacheEntry
   {
@@ -136,10 +148,12 @@ public class EfQuerySqlService(
 
   public async Task<EfGeneratedSqlResult> GetGeneratedSqlAsync(string sourceFilePath, int line, int character, CancellationToken cancellationToken)
   {
+    var started = Stopwatch.GetTimestamp();
     var targetCsproj = FindCsprojFromFile(sourceFilePath)
       ?? throw new FileNotFoundException($"Failed to resolve csproj for file: {sourceFilePath}");
 
     var startup = await ResolveStartupProjectAsync(targetCsproj, sourceFilePath, cancellationToken);
+    var resolveDone = Stopwatch.GetTimestamp();
     var warnings = new List<string>(startup.Warnings);
 
     EfGeneratedSqlResult Fail(string errorMessage) =>
@@ -188,9 +202,20 @@ public class EfQuerySqlService(
       return Fail("No EF Core query found at cursor position");
     }
 
+    var pathsStarted = Stopwatch.GetTimestamp();
     var (startupAssemblyPath, workingDirectory) = await ResolveExecutionPathsAsync(analysis, startup, warnings, cancellationToken);
 
+    var runnerStarted = Stopwatch.GetTimestamp();
     var (sql, errorMessage) = await RunQueryRunnerAsync(analysis, startupAssemblyPath, workingDirectory, cancellationToken);
+
+    logger.LogInformation(
+      "EF SQL timings: resolve={Resolve}ms build+analysis={BuildAnalysis}ms paths={Paths}ms runner={Runner}ms total={Total}ms",
+      (int)Stopwatch.GetElapsedTime(started, resolveDone).TotalMilliseconds,
+      (int)Stopwatch.GetElapsedTime(resolveDone, pathsStarted).TotalMilliseconds,
+      (int)Stopwatch.GetElapsedTime(pathsStarted, runnerStarted).TotalMilliseconds,
+      (int)Stopwatch.GetElapsedTime(runnerStarted).TotalMilliseconds,
+      (int)Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+
     return new EfGeneratedSqlResult(sql is not null, sql, errorMessage, targetCsproj, startup.CsprojPath, startup.Source, warnings);
   }
 
@@ -263,8 +288,17 @@ public class EfQuerySqlService(
   /// </summary>
   private async Task<string?> BuildProjectsAsync(string[] projectPaths, bool restore, CancellationToken cancellationToken)
   {
+    // A single shared TFM opts the build server into its fast up-to-date check, making no-op
+    // rebuilds near-instant. Multi-TFM projects fall back to a regular incremental build.
+    string? targetFramework = null;
+    if (!restore)
+    {
+      var tfms = await Task.WhenAll(projectPaths.Select(x => buildHostManager.ResolveSingleTfmAsync(x, configuration: null, platform: null, ct: cancellationToken)));
+      targetFramework = tfms.Distinct().Count() == 1 ? tfms[0] : null;
+    }
+
     var results = await buildHostManager
-      .BatchBuildAsync(new BatchBuildRequest(projectPaths, Configuration: null, RestoreBeforeBuild: restore), cancellationToken)
+      .BatchBuildAsync(new BatchBuildRequest(projectPaths, Configuration: null, TargetFramework: targetFramework, RestoreBeforeBuild: restore), cancellationToken)
       .ToListAsync(cancellationToken);
 
     var failed = results
@@ -465,49 +499,182 @@ public class EfQuerySqlService(
           _ => throw new InvalidOperationException()
         }).ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)))];
 
+  /// <summary>
+  /// The runner is kept alive as a daemon: process start, assembly loading and the Roslyn
+  /// scripting JIT dominate translation time (~3s) while a warm request is an order of magnitude
+  /// cheaper. The daemon reloads user assemblies itself when the build output changes.
+  /// </summary>
   private async Task<(string? Sql, string? ErrorMessage)> RunQueryRunnerAsync(
     EfQueryAnalysis analysis,
     string? startupAssemblyPath,
     string workingDirectory,
     CancellationToken cancellationToken)
   {
-    var runnerPath = EfQueryRunnerLocator.GetPath();
-    var queryB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(analysis.QueryText));
-    var localsB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(analysis.Locals)));
-    var usingsB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(analysis.Usings)));
+    var request = JsonSerializer.Serialize(new
+    {
+      contextType = analysis.ContextTypeName,
+      queryB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(analysis.QueryText)),
+      localsB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(analysis.Locals))),
+      usingsB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(analysis.Usings)))
+    });
 
-    var hostAssemblyPath = startupAssemblyPath ?? analysis.TargetAssemblyPath;
+    await _runnerLock.WaitAsync(cancellationToken);
+    try
+    {
+      var key = $"{analysis.TargetAssemblyPath}|{startupAssemblyPath}";
+      for (var attempt = 0; attempt < 2; attempt++)
+      {
+        if (_runnerDaemon is null || _runnerDaemon.Key != key || _runnerDaemon.Process.HasExited)
+        {
+          _runnerDaemon?.Dispose();
+          _runnerDaemon = null;
+          _runnerDaemon = await SpawnRunnerDaemonAsync(analysis.TargetAssemblyPath, startupAssemblyPath, workingDirectory, key, cancellationToken);
+          if (_runnerDaemon is null)
+          {
+            return (null, "Failed to start the EF query runner");
+          }
+        }
+
+        await _runnerDaemon.Process.StandardInput.WriteLineAsync(request.AsMemory(), cancellationToken);
+        await _runnerDaemon.Process.StandardInput.FlushAsync(cancellationToken);
+
+        var resultLine = await ReadJsonLineAsync(_runnerDaemon.Process.StandardOutput, TimeSpan.FromMinutes(2), cancellationToken);
+        if (resultLine is null)
+        {
+          // Daemon died or hung; retry once with a fresh process
+          _runnerDaemon.Dispose();
+          _runnerDaemon = null;
+          continue;
+        }
+
+        var result = JsonSerializer.Deserialize<RunnerResult>(resultLine, WebJsonOptions);
+        return result?.Sql is not null
+          ? (result.Sql, null)
+          : (null, result?.Error ?? "Unknown error from EF query runner");
+      }
+
+      return (null, "EF query runner did not respond");
+    }
+    finally
+    {
+      _runnerLock.Release();
+    }
+  }
+
+  private async Task<RunnerDaemon?> SpawnRunnerDaemonAsync(string targetAssemblyPath, string? startupAssemblyPath, string workingDirectory, string key, CancellationToken cancellationToken)
+  {
+    var runnerPath = EfQueryRunnerLocator.GetPath();
+    var hostAssemblyPath = startupAssemblyPath ?? targetAssemblyPath;
     var runtimeConfigPath = Path.Combine(
       Path.GetDirectoryName(hostAssemblyPath)!,
       $"{Path.GetFileNameWithoutExtension(hostAssemblyPath)}.runtimeconfig.json");
 
     var runtimeConfigArg = File.Exists(runtimeConfigPath) ? $"--runtimeconfig \"{runtimeConfigPath}\" " : "";
     var startupAssemblyArg = startupAssemblyPath is not null ? $"--startup-assembly \"{startupAssemblyPath}\" " : "";
-    var arguments = $"exec {runtimeConfigArg}\"{runnerPath}\" " +
-      $"--target-assembly \"{analysis.TargetAssemblyPath}\" " +
-      startupAssemblyArg +
-      $"--context-type \"{analysis.ContextTypeName}\" " +
-      $"--query-b64 {queryB64} " +
-      $"--locals-b64 {localsB64} " +
-      $"--usings-b64 {usingsB64}";
+    var arguments = $"exec {runtimeConfigArg}\"{runnerPath}\" --daemon " +
+      $"--target-assembly \"{targetAssemblyPath}\" " +
+      startupAssemblyArg.TrimEnd();
 
-    logger.LogDebug("Running EF query runner: dotnet {Arguments}", arguments);
+    logger.LogDebug("Starting EF query runner daemon: dotnet {Arguments}", arguments);
 
-    var (_, output) = await RunProcessAsync("dotnet", arguments, workingDirectory, cancellationToken);
-
-    var resultLine = output
-      .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-      .LastOrDefault(x => x.StartsWith('{'));
-
-    if (resultLine is null)
+    var process = new Process
     {
-      return (null, $"EF query runner produced no result:{Environment.NewLine}{output}");
-    }
+      StartInfo = new ProcessStartInfo
+      {
+        FileName = "dotnet",
+        Arguments = arguments,
+        WorkingDirectory = workingDirectory,
+        RedirectStandardInput = true,
+        RedirectStandardOutput = true,
+        RedirectStandardError = true,
+        CreateNoWindow = true
+      }
+    };
 
-    var result = JsonSerializer.Deserialize<RunnerResult>(resultLine, WebJsonOptions);
-    return result?.Sql is not null
-      ? (result.Sql, null)
-      : (null, result?.Error ?? "Unknown error from EF query runner");
+    try
+    {
+      process.Start();
+      _ = DrainStdErrAsync(process);
+
+      var readyLine = await ReadJsonLineAsync(process.StandardOutput, TimeSpan.FromMinutes(2), cancellationToken);
+      if (readyLine is null)
+      {
+        process.Kill(entireProcessTree: true);
+        process.Dispose();
+        return null;
+      }
+
+      return new RunnerDaemon { Key = key, Process = process };
+    }
+    catch (Exception ex)
+    {
+      logger.LogWarning(ex, "Failed to start EF query runner daemon");
+      process.Dispose();
+      return null;
+    }
+  }
+
+  private async Task DrainStdErrAsync(Process process)
+  {
+    try
+    {
+      string? line;
+      while ((line = await process.StandardError.ReadLineAsync()) is not null)
+      {
+        logger.LogDebug("EF query runner: {Line}", line);
+      }
+    }
+    catch
+    {
+      // Reader breaks when the daemon exits
+    }
+  }
+
+  private static async Task<string?> ReadJsonLineAsync(StreamReader reader, TimeSpan timeout, CancellationToken cancellationToken)
+  {
+    using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+    cts.CancelAfter(timeout);
+    try
+    {
+      while (true)
+      {
+        var line = await reader.ReadLineAsync(cts.Token);
+        if (line is null)
+        {
+          return null;
+        }
+        if (line.TrimStart().StartsWith('{'))
+        {
+          return line.Trim();
+        }
+      }
+    }
+    catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+    {
+      return null;
+    }
+  }
+
+  private sealed class RunnerDaemon : IDisposable
+  {
+    public required string Key { get; init; }
+    public required Process Process { get; init; }
+
+    public void Dispose()
+    {
+      try
+      {
+        if (!Process.HasExited)
+        {
+          Process.Kill(entireProcessTree: true);
+        }
+      }
+      catch
+      {
+        // Already gone
+      }
+      Process.Dispose();
+    }
   }
 
   private sealed record RunnerResult(string? Sql, string? Error);
