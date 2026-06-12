@@ -70,6 +70,7 @@ public static class DiModules
     services.AddSingleton<IVisualStudioLocator, VisualStudioLocator>();
     services.AddSingleton<IFileSystem, FileSystem>();
     services.AddSingleton<RoslynService>();
+    services.AddSingleton<EfQuerySqlService>();
     services.AddSingleton<ISolutionService, SolutionService>();
     services.AddSingleton<IProcessQueue, ProcessQueue>();
     services.AddSingleton<TemplateEngineService>();
