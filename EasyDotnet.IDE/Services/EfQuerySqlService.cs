@@ -10,6 +10,7 @@ using EasyDotnet.RoslynLanguageServices.EfQuery;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.MSBuild;
+using Microsoft.CodeAnalysis.Text;
 using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.IDE.Services;
@@ -47,6 +48,92 @@ public class EfQuerySqlService(
 
   private static readonly JsonSerializerOptions WebJsonOptions = new(JsonSerializerDefaults.Web);
 
+  private readonly SemaphoreSlim _workspaceLock = new(1, 1);
+  private WorkspaceCacheEntry? _workspaceCache;
+
+  private sealed class WorkspaceCacheEntry
+  {
+    public required string CsprojPath { get; init; }
+    public required MSBuildWorkspace Workspace { get; init; }
+    public required Microsoft.CodeAnalysis.Project Project { get; set; }
+    public required DateTime RefreshedAt { get; set; }
+  }
+
+  /// <summary>
+  /// Caches the most recently used MSBuildWorkspace: the project load (MSBuild evaluation + full
+  /// compilation setup) dominates request latency, while repeat invocations on the same project
+  /// only need changed documents re-read from disk. A full reload happens when the csproj, the
+  /// restore assets or any referenced assembly changed.
+  /// </summary>
+  private async Task<Microsoft.CodeAnalysis.Project> GetOrLoadProjectAsync(string csprojPath, bool forceReload, CancellationToken cancellationToken)
+  {
+    await _workspaceLock.WaitAsync(cancellationToken);
+    try
+    {
+      if (forceReload || !IsCacheValid(csprojPath))
+      {
+        _workspaceCache?.Workspace.Dispose();
+        _workspaceCache = null;
+
+        var loadStarted = DateTime.UtcNow;
+        var workspace = MSBuildWorkspace.Create();
+        var project = await workspace.OpenProjectAsync(csprojPath, cancellationToken: cancellationToken);
+        _workspaceCache = new WorkspaceCacheEntry { CsprojPath = csprojPath, Workspace = workspace, Project = project, RefreshedAt = loadStarted };
+        return project;
+      }
+
+      RefreshChangedDocuments(_workspaceCache!);
+      return _workspaceCache!.Project;
+    }
+    finally
+    {
+      _workspaceLock.Release();
+    }
+  }
+
+  private bool IsCacheValid(string csprojPath)
+  {
+    if (_workspaceCache is null || !PathsEqual(_workspaceCache.CsprojPath, csprojPath))
+    {
+      return false;
+    }
+
+    var assetsPath = Path.Combine(Path.GetDirectoryName(csprojPath)!, "obj", "project.assets.json");
+    if (File.GetLastWriteTimeUtc(csprojPath) > _workspaceCache.RefreshedAt
+      || (File.Exists(assetsPath) && File.GetLastWriteTimeUtc(assetsPath) > _workspaceCache.RefreshedAt))
+    {
+      return false;
+    }
+
+    // Referenced assemblies (project references surface as metadata dlls here) changed on disk,
+    // e.g. a dependency project was rebuilt with new API surface.
+    return !_workspaceCache.Project.MetadataReferences
+      .OfType<PortableExecutableReference>()
+      .Any(x => x.FilePath is not null && File.Exists(x.FilePath) && File.GetLastWriteTimeUtc(x.FilePath) > _workspaceCache.RefreshedAt);
+  }
+
+  private static void RefreshChangedDocuments(WorkspaceCacheEntry entry)
+  {
+    var refreshStarted = DateTime.UtcNow;
+    var changedDocumentIds = entry.Project.Documents
+      .Where(x => x.FilePath is not null && File.Exists(x.FilePath) && File.GetLastWriteTimeUtc(x.FilePath) > entry.RefreshedAt)
+      .Select(x => x.Id)
+      .ToList();
+
+    var project = entry.Project;
+    foreach (var documentId in changedDocumentIds)
+    {
+      var document = project.GetDocument(documentId)!;
+      project = document.WithText(SourceText.From(File.ReadAllText(document.FilePath!))).Project;
+    }
+
+    entry.Project = project;
+    entry.RefreshedAt = refreshStarted;
+  }
+
+  private static Document? FindDocument(Microsoft.CodeAnalysis.Project project, string sourceFilePath) =>
+    project.Documents.FirstOrDefault(d => string.Equals(d.FilePath, sourceFilePath, StringComparison.OrdinalIgnoreCase));
+
   public async Task<EfGeneratedSqlResult> GetGeneratedSqlAsync(string sourceFilePath, int line, int character, CancellationToken cancellationToken)
   {
     var targetCsproj = FindCsprojFromFile(sourceFilePath)
@@ -62,13 +149,40 @@ public class EfQuerySqlService(
       ? [targetCsproj]
       : [targetCsproj, startup.CsprojPath];
 
-    var buildError = await BuildProjectsAsync(projectsToBuild, cancellationToken);
-    if (buildError is not null)
+    // Restore is only needed before the very first build of a project; afterwards the build and
+    // the Roslyn analysis are independent and run in parallel.
+    var restoreNeeded = projectsToBuild.Any(x => !File.Exists(Path.Combine(Path.GetDirectoryName(x)!, "obj", "project.assets.json")));
+    var buildTask = BuildProjectsAsync(projectsToBuild, restoreNeeded, cancellationToken);
+
+    EfQueryAnalysis? analysis;
+    if (restoreNeeded)
     {
-      return Fail(buildError);
+      var buildError = await buildTask;
+      if (buildError is not null)
+      {
+        return Fail(buildError);
+      }
+      analysis = await AnalyzeQueryAsync(targetCsproj, sourceFilePath, line, character, cancellationToken);
+    }
+    else
+    {
+      var analysisTask = AnalyzeQueryAsync(targetCsproj, sourceFilePath, line, character, cancellationToken);
+      var buildError = await buildTask;
+      if (buildError is not null)
+      {
+        try
+        {
+          await analysisTask;
+        }
+        catch (Exception ex)
+        {
+          logger.LogDebug(ex, "Analysis failed while build was already failing");
+        }
+        return Fail(buildError);
+      }
+      analysis = await analysisTask;
     }
 
-    var analysis = await AnalyzeQueryAsync(targetCsproj, sourceFilePath, line, character, cancellationToken);
     if (analysis is null)
     {
       return Fail("No EF Core query found at cursor position");
@@ -147,10 +261,10 @@ public class EfQuerySqlService(
   /// Builds the given projects in one batch on the persistent build server (restore included).
   /// Returns null on success, otherwise an error message with the build diagnostics.
   /// </summary>
-  private async Task<string?> BuildProjectsAsync(string[] projectPaths, CancellationToken cancellationToken)
+  private async Task<string?> BuildProjectsAsync(string[] projectPaths, bool restore, CancellationToken cancellationToken)
   {
     var results = await buildHostManager
-      .BatchBuildAsync(new BatchBuildRequest(projectPaths, Configuration: null, RestoreBeforeBuild: true), cancellationToken)
+      .BatchBuildAsync(new BatchBuildRequest(projectPaths, Configuration: null, RestoreBeforeBuild: restore), cancellationToken)
       .ToListAsync(cancellationToken);
 
     var failed = results
@@ -199,11 +313,15 @@ public class EfQuerySqlService(
 
   private async Task<EfQueryAnalysis?> AnalyzeQueryAsync(string csprojPath, string sourceFilePath, int line, int character, CancellationToken cancellationToken)
   {
-    using var workspace = MSBuildWorkspace.Create();
-
-    var project = await workspace.OpenProjectAsync(csprojPath, cancellationToken: cancellationToken);
-    var document = project.Documents.FirstOrDefault(d => string.Equals(d.FilePath, sourceFilePath, StringComparison.OrdinalIgnoreCase))
-      ?? throw new FileNotFoundException($"Document not found in project: {sourceFilePath}");
+    var project = await GetOrLoadProjectAsync(csprojPath, forceReload: false, cancellationToken);
+    var document = FindDocument(project, sourceFilePath);
+    if (document is null)
+    {
+      // The file may have been created after the workspace snapshot was taken
+      project = await GetOrLoadProjectAsync(csprojPath, forceReload: true, cancellationToken);
+      document = FindDocument(project, sourceFilePath)
+        ?? throw new FileNotFoundException($"Document not found in project: {sourceFilePath}");
+    }
 
     var root = await document.GetSyntaxRootAsync(cancellationToken);
     var semanticModel = await document.GetSemanticModelAsync(cancellationToken);

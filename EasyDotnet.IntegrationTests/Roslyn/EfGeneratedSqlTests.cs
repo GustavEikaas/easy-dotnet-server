@@ -69,6 +69,31 @@ public class EfGeneratedSqlTests
   }
 
   [Fact]
+  public async Task GetEfGeneratedSql_RepeatCallAfterFileEdit_UsesCachedWorkspaceAndReflectsChange()
+  {
+    using var tempProject = new TempEfCoreProject();
+    using var server = await RpcTestServerInstantiator.GetInitializedStreamServer();
+    var (line, character) = tempProject.GetQueryCursor();
+
+    var first = await server.InvokeWithParameterObjectAsync<EfGeneratedSqlResponse>(
+      "roslyn/ef-generated-sql",
+      new { sourceFilePath = tempProject.ProgramCsPath, line, character });
+
+    Assert.True(first.Success, first.ErrorMessage);
+    Assert.Contains(">", first.Sql);
+
+    var source = File.ReadAllText(tempProject.ProgramCsPath);
+    File.WriteAllText(tempProject.ProgramCsPath, source.Replace("b.Id > minId", "b.Id < minId"));
+
+    var second = await server.InvokeWithParameterObjectAsync<EfGeneratedSqlResponse>(
+      "roslyn/ef-generated-sql",
+      new { sourceFilePath = tempProject.ProgramCsPath, line, character });
+
+    Assert.True(second.Success, second.ErrorMessage);
+    Assert.Contains("<", second.Sql);
+  }
+
+  [Fact]
   public async Task GetEfGeneratedSql_NoQueryAtCursor_ReturnsError()
   {
     using var tempProject = new TempEfCoreProject();
