@@ -10,8 +10,6 @@ static class Program
   {
     var app = new CommandApp<RunCommand>();
 
-    Console.ReadLine();
-
     app.Configure(config =>
     {
       config.SetApplicationName("easydotnet");
