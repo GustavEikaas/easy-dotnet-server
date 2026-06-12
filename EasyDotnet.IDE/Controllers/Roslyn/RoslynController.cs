@@ -7,8 +7,15 @@ using StreamJsonRpc;
 
 namespace EasyDotnet.Controllers.Roslyn;
 
-public class RoslynController(RoslynService roslynService) : BaseController
+public class RoslynController(RoslynService roslynService, EfQuerySqlService efQuerySqlService) : BaseController
 {
+  [JsonRpcMethod("roslyn/ef-generated-sql")]
+  public async Task<EfGeneratedSqlResponse> GetEfGeneratedSql(string sourceFilePath, int line, int character, CancellationToken cancellationToken)
+  {
+    var result = await efQuerySqlService.GetGeneratedSqlAsync(sourceFilePath, line, character, cancellationToken);
+    return new EfGeneratedSqlResponse(result.Success, result.Sql, result.ErrorMessage, result.TargetProject, result.StartupProject, result.StartupProjectSource, result.Warnings);
+  }
+
   [JsonRpcMethod("roslyn/scope-variables")]
   public async Task<IAsyncEnumerable<VariableResultResponse>> GetVariablesFromScopes(string sourceFilePath, int lineNumber)
   {

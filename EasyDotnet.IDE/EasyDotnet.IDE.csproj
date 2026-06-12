@@ -6,7 +6,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>dotnet-easydotnet</ToolCommandName>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
-    <Version>3.3.1</Version>
+    <Version>3.3.2</Version>
     <Authors>Gustav Eikaas</Authors>
     <PackageId>EasyDotnet</PackageId>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
@@ -54,12 +54,27 @@
     <PackageReference Include="System.CommandLine" Version="2.0.3" />
   </ItemGroup>
   <ItemGroup>
+    <!-- Shared source with the Roslyn LSP extension; an assembly reference would couple this
+         project to the extension's pinned Roslyn version. -->
+    <Compile Include="..\EasyDotnet.RoslynLanguageServices\EfQuery\EfQueryDetector.cs" Link="Services\EfQueryDetector.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\EasyDotnet.Nuget\EasyDotnet.Nuget.csproj" />
     <ProjectReference Include="..\EasyDotnet.Debugger\EasyDotnet.Debugger.csproj" />
     <ProjectReference Include="..\EasyDotnet.ProjXLanguageServer\EasyDotnet.ProjXLanguageServer.csproj" />
     <ProjectReference Include="..\EasyDotnet.BuildServer.Contracts\EasyDotnet.BuildServer.Contracts.csproj" />
     <ProjectReference Include="..\EasyDotnet.AppWrapper.Contracts\EasyDotnet.AppWrapper.Contracts.csproj" />
   </ItemGroup>
+
+  <Target Name="PublishEfQueryRunner" BeforeTargets="Build">
+    <PropertyGroup>
+      <EfQueryRunnerOutputPath>$(OutputPath)Tools\EfQueryRunner\</EfQueryRunnerOutputPath>
+    </PropertyGroup>
+    <Message Text="Publishing EfQueryRunner for net8.0..." Importance="high" />
+    <MSBuild Projects="..\EasyDotnet.EfQueryRunner\EasyDotnet.EfQueryRunner.csproj" Targets="Publish" Properties="TargetFramework=net8.0;Configuration=$(Configuration);PublishDir=$(MSBuildProjectDirectory)\$(EfQueryRunnerOutputPath)net8.0\;SelfContained=false" />
+    <Message Text="EfQueryRunner publish complete at $(EfQueryRunnerOutputPath)" Importance="high" />
+  </Target>
 
   <Target Name="PublishAppWrapper" BeforeTargets="Build">
     <PropertyGroup>

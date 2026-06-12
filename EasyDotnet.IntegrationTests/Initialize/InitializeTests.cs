@@ -11,7 +11,7 @@ public sealed record TestServerCapabilities(List<string> Routes, List<string> Se
 
 public sealed record TestInitializeRequest(TestClientInfo ClientInfo, TestProjectInfo ProjectInfo);
 
-public sealed record TestProjectInfo(string RootDir);
+public sealed record TestProjectInfo(string RootDir, string? SolutionFile = null);
 
 public sealed record TestClientInfo(string Name, string? Version);
 
