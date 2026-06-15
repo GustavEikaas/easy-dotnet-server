@@ -192,6 +192,127 @@ public abstract class XUnitV2VsTestDiscoveryTests<TContainer> : TestRunnerTestBa
     Assert.NotNull(methodWithRunning);
   }
 
+  [Fact]
+  public async Task SyncFile_OnFSharpFile_KeepsNodesAndRunStillReportsResults()
+  {
+    using var fixture = new TestProjectFixtureBuilder()
+      .WithName("Sample.FSharpXUnitV2SyncRun")
+      .WithFramework(TestFrameworkKind.XUnitV2VsTestFSharp)
+      .WithFile("Tests.fs", TestFixtures.FSharpXUnitMixedDottedNames)
+      .Build();
+
+    await InitializeTestRunnerAsync(fixture);
+
+    Assert.Equal(2, NodesOfType(NodeTypeNames.TestMethod).Count());
+
+    // The Roslyn source locator is C#-only, so syncing an .fs file finds no methods.
+    // The server must NOT treat that as "every test was deleted" and wipe the nodes —
+    // that regression made a subsequent run bail with nothing to execute.
+    var fsPath = Path.Combine(fixture.ProjectDir, "Tests.fs");
+    await Container.Rpc.TestRunnerSyncFileAsync(fsPath, TestFixtures.FSharpXUnitMixedDottedNames, version: 1);
+
+    Assert.True(
+      NodesOfType(NodeTypeNames.TestMethod).Count() == 2,
+      $"syncFile on an .fs file must not remove discovered nodes. Node dump:\n{DumpNodes()}");
+
+    // And a run after the sync must still discover + execute the tests.
+    var project = Assert.Single(NodesOfType(NodeTypeNames.Project));
+    await BeginCall(Container.Rpc.TestRunnerRunAsync(project.Id), TimeSpan.FromMinutes(2));
+
+    Assert.All(NodesOfType(NodeTypeNames.TestMethod), method =>
+      Assert.True(
+        LastStatusKind.TryGetValue(method.Id, out var kind) && kind == "Passed",
+        $"Expected F# test {method.DisplayName} to pass after syncFile. Node dump:\n{DumpNodes()}"));
+  }
+
+  [Fact]
+  public async Task Run_ProjectWithFailingTest_ReportsFailedLeafAndAggregatesToParent()
+  {
+    using var fixture = new TestProjectFixtureBuilder()
+      .WithName("Sample.XUnitV2PassFail")
+      .WithFramework(TestFrameworkKind.XUnitV2VsTest)
+      .WithFile("Cases.cs", TestFixtures.XUnitPassingAndFailing)
+      .Build();
+
+    await InitializeTestRunnerAsync(fixture);
+
+    var project = Assert.Single(NodesOfType(NodeTypeNames.Project));
+    var testClass = Assert.Single(NodesOfType(NodeTypeNames.TestClass), n => n.DisplayName == "Cases");
+    var passes = Assert.Single(NodesOfType(NodeTypeNames.TestMethod), n => n.DisplayName == "Passes");
+    var fails = Assert.Single(NodesOfType(NodeTypeNames.TestMethod), n => n.DisplayName == "Fails");
+
+    await BeginCall(Container.Rpc.TestRunnerRunAsync(project.Id), TimeSpan.FromMinutes(2));
+
+    Assert.Equal("Passed", LastStatusKind.GetValueOrDefault(passes.Id));
+    Assert.Equal("Failed", LastStatusKind.GetValueOrDefault(fails.Id));
+
+    // A single failing child must drag the parent class aggregate to Failed.
+    Assert.Equal("Failed", LastStatusKind.GetValueOrDefault(testClass.Id));
+
+    Assert.NotNull(LastRunnerStatus);
+    Assert.Equal(1, LastRunnerStatus!.TotalPassed);
+    Assert.Equal(1, LastRunnerStatus.TotalFailed);
+  }
+
+  [Fact]
+  public async Task RunSolution_AfterTestRemovedFromSource_PrunesStaleTestAndRunsSurvivor()
+  {
+    const string twoMethods = """
+      using Xunit;
+
+      namespace Sample.SolutionPrune;
+
+      public class C
+      {
+          [Fact]
+          public void Keep() => Assert.True(true);
+
+          [Fact]
+          public void Removed() => Assert.True(true);
+      }
+      """;
+
+    const string onlyKeep = """
+      using Xunit;
+
+      namespace Sample.SolutionPrune;
+
+      public class C
+      {
+          [Fact]
+          public void Keep() => Assert.True(true);
+      }
+      """;
+
+    using var fixture = new TestProjectFixtureBuilder()
+      .WithName("Sample.XUnitV2SolutionPrune")
+      .WithFramework(TestFrameworkKind.XUnitV2VsTest)
+      .WithFile("Tests.cs", twoMethods)
+      .Build();
+
+    await InitializeTestRunnerAsync(fixture);
+
+    // Both tests are discovered from the freshly built DLL at open time.
+    var keep = Assert.Single(NodesOfType(NodeTypeNames.TestMethod), n => n.DisplayName == "Keep");
+    Assert.Single(NodesOfType(NodeTypeNames.TestMethod), n => n.DisplayName == "Removed");
+
+    // Delete one test from source without re-discovering. The node is now stale: still
+    // in the tree (and the on-disk DLL), but gone from source.
+    await File.WriteAllTextAsync(Path.Combine(fixture.ProjectDir, "Tests.cs"), onlyKeep);
+
+    // Running the whole solution must rebuild + re-discover, pruning the removed test
+    // before the run. Before the fix the solution path skipped discovery, so "Removed"
+    // lingered with no status while the run executed the stale node set.
+    var solution = Assert.Single(NodesOfType(NodeTypeNames.Solution));
+    await BeginCall(Container.Rpc.TestRunnerRunAsync(solution.Id), TimeSpan.FromMinutes(2));
+
+    var survivors = NodesOfType(NodeTypeNames.TestMethod).ToList();
+    Assert.True(
+      survivors.Count == 1 && survivors[0].DisplayName == "Keep",
+      $"Expected only 'Keep' to remain after the solution run. Node dump:\n{DumpNodes()}");
+    Assert.Equal("Passed", LastStatusKind.GetValueOrDefault(keep.Id));
+  }
+
   private string DumpNodes() =>
     string.Join("\n", Nodes.Values
       .OrderBy(n => n.Id)

@@ -197,6 +197,13 @@ public abstract class ServerContainer : IAsyncDisposable
   protected virtual Task OnBeforeStartAsync(CancellationToken ct) => Task.CompletedTask;
 
   /// <summary>
+  /// Called at the end of <see cref="DisposeAsync"/> after the container has been removed.
+  /// Override to clean up host-side artifacts the container wrote through bind mounts
+  /// (e.g. a per-container HOME under <c>/tmp</c>) so they don't accumulate across runs.
+  /// </summary>
+  protected virtual ValueTask OnAfterDisposeAsync() => ValueTask.CompletedTask;
+
+  /// <summary>
   /// Called with the <see cref="JsonRpc"/> instance immediately before <see cref="JsonRpc.StartListening"/>.
   /// Override to register local RPC method handlers for server-initiated reverse requests
   /// (e.g. <c>promptSelection</c>, <c>runCommandManaged</c>) via
@@ -254,5 +261,7 @@ public abstract class ServerContainer : IAsyncDisposable
     {
       Console.WriteLine($"Tool install cleanup failed for '{_toolInstallPath}': {ex}");
     }
+
+    await OnAfterDisposeAsync();
   }
 }
