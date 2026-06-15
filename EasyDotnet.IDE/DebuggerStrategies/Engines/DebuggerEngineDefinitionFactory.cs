@@ -28,9 +28,7 @@ public sealed class DebuggerEngineDefinitionFactory : IDebuggerEngineDefinitionF
 
   private static SharpDbgEngineDefinition BuildSharpDbg(string dllPath)
   {
-    // SharpDbg is a managed DLL — launch it via the dotnet host on PATH.
-    var dotnetPath = ResolveDotnetHost();
-    return new SharpDbgEngineDefinition(dotnetPath, dllPath);
+    return new SharpDbgEngineDefinition("dotnet", dllPath);
   }
 
   private static CustomBinaryEngineDefinition BuildCustom(string binaryPath, DebuggerOptions? options)
@@ -50,16 +48,5 @@ public sealed class DebuggerEngineDefinitionFactory : IDebuggerEngineDefinitionF
       return envArgs.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
     return null;
-  }
-
-  private static string ResolveDotnetHost()
-  {
-    // Prefer the dotnet host that launched this process (guaranteed present),
-    // falling back to the name on PATH.
-    var processPath = Environment.GetEnvironmentVariable("DOTNET_HOST_PATH");
-    if (!string.IsNullOrWhiteSpace(processPath) && File.Exists(processPath))
-      return processPath;
-
-    return OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet";
   }
 }
