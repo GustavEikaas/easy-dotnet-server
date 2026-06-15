@@ -28,7 +28,7 @@ public sealed class DebuggerEngineDefinitionFactory : IDebuggerEngineDefinitionF
 
   private static SharpDbgEngineDefinition BuildSharpDbg(string dllPath)
   {
-    return new SharpDbgEngineDefinition("dotnet", dllPath);
+    return new SharpDbgEngineDefinition(dllPath);
   }
 
   private static CustomBinaryEngineDefinition BuildCustom(string binaryPath, DebuggerOptions? options)
