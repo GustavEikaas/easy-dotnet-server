@@ -176,6 +176,41 @@ public abstract class XUnitV3MtpDiscoveryTests<TContainer> : TestRunnerTestBase<
     Assert.NotNull(methodWithRunning);
   }
 
+  [Fact]
+  public async Task Run_SingleTestMethod_RunsThatLeafAndLeavesSiblingsUntouched()
+  {
+    using var fixture = new TestProjectFixtureBuilder()
+      .WithName("Sample.XUnitV3SingleLeaf")
+      .WithFramework(TestFrameworkKind.XUnitV3Mtp)
+      .WithFile("SlowTests.cs", TestFixtures.XUnitSlowTests)
+      .Build();
+
+    await InitializeTestRunnerAsync(fixture);
+
+    var methods = NodesOfType(NodeTypeNames.TestMethod).ToList();
+    Assert.Equal(3, methods.Count);
+
+    var target = Assert.Single(methods, m => m.DisplayName == "A");
+
+    await BeginCall(Container.Rpc.TestRunnerRunAsync(target.Id), TimeSpan.FromMinutes(2));
+
+    // The leaf we asked for must run end-to-end. This is the path that regressed:
+    // running a single discovered leaf re-discovers, then RunNodeAsync executes only
+    // that node — before the fix it could bail after discovery with no run at all.
+    Assert.True(
+      StatusHistory.TryGetValue(target.Id, out var history) &&
+        HistoryContainsInOrder(history, "Queued", "Running", "Passed"),
+      $"Expected {target.DisplayName} to go Queued→Running→Passed. Node dump:\n{DumpNodes()}");
+
+    // The other two leaves were not in the run set, so they must never have started.
+    foreach (var sibling in methods.Where(m => m.Id != target.Id))
+    {
+      Assert.False(
+        LastStatusKind.TryGetValue(sibling.Id, out var kind) && kind is "Running" or "Passed" or "Failed",
+        $"Sibling {sibling.DisplayName} should not have run, but saw status '{kind}'.");
+    }
+  }
+
   private string DumpNodes() =>
     string.Join("\n", Nodes.Values
       .OrderBy(n => n.Id)

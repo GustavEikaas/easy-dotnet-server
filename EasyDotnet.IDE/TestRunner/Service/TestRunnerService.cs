@@ -744,6 +744,11 @@ public class TestRunnerService(
     var parsed = TestSourceLocator.ParseContent(req.Content);
     var updates = new List<LineNumberUpdateDto>();
 
+    // The source locator is C#-only — a non-.cs file parses to an empty method
+    // map, so every node would falsely look "deleted". Only trust a locator miss
+    // as a real deletion for C# files.
+    var isCSharp = req.Path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase);
+
     // --- 1. Update line numbers for all already-registered nodes in this file ---
     foreach (var node in registry.GetNodesForFile(req.Path))
     {
@@ -767,7 +772,12 @@ public class TestRunnerService(
 
       if (loc is null)
       {
-        registry.RemoveSubtree(node.Id);
+        // Only treat a locator miss as a real deletion when the signal is
+        // trustworthy: the file is C# (the locator can parse it) and no run/
+        // discovery is in flight (whose results depend on this node + its native
+        // mapping). Otherwise leave the node — discovery reconciles deletions.
+        if (isCSharp && !operationLock.IsLocked)
+          registry.RemoveSubtree(node.Id);
         continue;
       }
 
@@ -1008,6 +1018,19 @@ public class TestRunnerService(
       await dispatcher.SendRunnerStatusAsync(BuildIdleStatus(), token.OperationId);
       return new OperationResult(Success: failedProjectIds.Count == 0);
     }
+
+    // Re-discover every runnable project against the freshly built DLLs before running,
+    // exactly like ExecuteSingleProjectAsync does. Without this a solution run executes
+    // the stale node set (whatever was discovered when the runner opened) against the new
+    // assemblies, so tests removed from source linger and never report a result.
+    await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus("Discovering", OverallStatus.Discovering), token.OperationId);
+    await Task.WhenAll(runnableProjects.Select(p =>
+    {
+      var pn = projectNodes.First(n => string.Equals(n.FilePath, p.ProjectFullPath, StringComparison.OrdinalIgnoreCase));
+      return executor.DiscoverProjectAsync(p, pn.ParentId ?? nodeId, control, token);
+    }));
+
+    token.Ct.ThrowIfCancellationRequested();
 
     var totalLeafCount = runnableProjects
         .Sum(p =>

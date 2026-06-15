@@ -258,6 +258,26 @@ public static class TestFixtures
     """;
 
   /// <summary>
+  /// One passing and one failing xUnit fact in the same class. Used to assert the
+  /// runner reports a Failed terminal status on the failing leaf and aggregates the
+  /// failure up to the parent class. Source shared between xUnit v2 and v3.
+  /// </summary>
+  public const string XUnitPassingAndFailing = """
+    using Xunit;
+
+    namespace Sample.PassFail;
+
+    public class Cases
+    {
+        [Fact]
+        public void Passes() => Assert.True(true);
+
+        [Fact]
+        public void Fails() => Assert.True(false);
+    }
+    """;
+
+  /// <summary>
   /// Expected 0-based line positions for <see cref="XUnitLocationMarker"/>.
   /// </summary>
   public static class XUnitLocationLines
