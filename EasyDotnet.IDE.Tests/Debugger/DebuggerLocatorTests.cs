@@ -121,6 +121,61 @@ public class DebuggerLocatorTests
     Assert.Throws<ArgumentException>(() => DebuggerLocator.GetConfiguredEngine());
   }
 
+  [Test]
+  public async Task ParseEngine_RecognisesSharpDbg()
+  {
+    await Assert.That(DebuggerLocator.ParseEngine("sharpdbg")).IsEqualTo(DebuggerEngine.SharpDbg);
+    await Assert.That(DebuggerLocator.ParseEngine("sharp")).IsEqualTo(DebuggerEngine.SharpDbg);
+  }
+
+  [Test]
+  public async Task ParseEngine_RecognisesCustom()
+  {
+    await Assert.That(DebuggerLocator.ParseEngine("custom")).IsEqualTo(DebuggerEngine.Custom);
+  }
+
+  [Test]
+  public async Task ResolveDebugger_UsesSharpDbgEngine_WhenEnvVarSet()
+  {
+    Environment.SetEnvironmentVariable(NetCoreDbgLocator.DEBUGGER_PATH_ENV, null);
+    Environment.SetEnvironmentVariable(DebuggerLocator.DEBUGGER_ENGINE_ENV, "sharpdbg");
+
+    var engine = DebuggerLocator.GetConfiguredEngine();
+
+    await Assert.That(engine).IsEqualTo(DebuggerEngine.SharpDbg);
+  }
+
+  [Test]
+  public async Task ResolveDebugger_CustomEngine_UsesPathFromEnvVar()
+  {
+    var customPath = Path.GetTempFileName();
+    try
+    {
+      Environment.SetEnvironmentVariable(NetCoreDbgLocator.DEBUGGER_PATH_ENV, customPath);
+      Environment.SetEnvironmentVariable(DebuggerLocator.DEBUGGER_ENGINE_ENV, "custom");
+
+      var debugger = DebuggerLocator.ResolveDebugger();
+
+      await Assert.That(debugger.Engine).IsEqualTo(DebuggerEngine.Custom);
+      await Assert.That(debugger.Path).IsEqualTo(customPath);
+    }
+    finally
+    {
+      File.Delete(customPath);
+      Environment.SetEnvironmentVariable(NetCoreDbgLocator.DEBUGGER_PATH_ENV, null);
+      Environment.SetEnvironmentVariable(DebuggerLocator.DEBUGGER_ENGINE_ENV, null);
+    }
+  }
+
+  [Test]
+  public void ResolveDebugger_CustomEngine_ThrowsWhenNoBinaryPath()
+  {
+    Environment.SetEnvironmentVariable(NetCoreDbgLocator.DEBUGGER_PATH_ENV, null);
+    Environment.SetEnvironmentVariable(DebuggerLocator.DEBUGGER_ENGINE_ENV, "custom");
+
+    Assert.Throws<InvalidOperationException>(() => DebuggerLocator.ResolveDebugger());
+  }
+
   [After(Test)]
   public void Cleanup()
   {

@@ -6,7 +6,9 @@ namespace EasyDotnet.IDE.Services;
 public enum DebuggerEngine
 {
   NetCoreDbg,
-  DncDbg
+  DncDbg,
+  SharpDbg,
+  Custom,
 }
 
 public sealed record DebuggerResolution(DebuggerEngine Engine, string Source, string? Platform, string Path);
@@ -15,28 +17,50 @@ public static class DebuggerLocator
 {
   public const string DEBUGGER_PATH_ENV = "EASY_DOTNET_DEBUGGER_BIN_PATH";
   public const string DEBUGGER_ENGINE_ENV = "EASY_DOTNET_DEBUGGER_ENGINE";
+  public const string DEBUGGER_BIN_ARGS_ENV = "EASY_DOTNET_DEBUGGER_BIN_ARGS";
 
   public static DebuggerResolution ResolveDebugger(string? engineName = null, string? debuggerBinPath = null)
   {
-    var customPath = !string.IsNullOrWhiteSpace(debuggerBinPath)
-        ? debuggerBinPath
-        : Environment.GetEnvironmentVariable(DEBUGGER_PATH_ENV);
     var engine = GetConfiguredEngine(engineName);
 
-    if (!string.IsNullOrWhiteSpace(customPath))
+    // Custom engine: user supplies the binary path directly (no bundled fallback).
+    if (engine == DebuggerEngine.Custom)
     {
-      if (File.Exists(customPath))
+      var customPath = !string.IsNullOrWhiteSpace(debuggerBinPath)
+          ? debuggerBinPath
+          : Environment.GetEnvironmentVariable(DEBUGGER_PATH_ENV);
+
+      if (string.IsNullOrWhiteSpace(customPath))
+        throw new InvalidOperationException(
+          $"Engine '{GetEngineName(engine)}' requires a binary path. " +
+          $"Set {DEBUGGER_PATH_ENV} or pass --debugger-bin-path.");
+
+      if (!File.Exists(customPath))
+        throw new FileNotFoundException(
+          $"Custom debugger executable not found", customPath);
+
+      return new DebuggerResolution(engine, DEBUGGER_PATH_ENV, TryGetRuntimePlatform(), customPath);
+    }
+
+    // For all known engines: prefer an explicit override path, then fall back to bundled.
+    var overridePath = !string.IsNullOrWhiteSpace(debuggerBinPath)
+        ? debuggerBinPath
+        : Environment.GetEnvironmentVariable(DEBUGGER_PATH_ENV);
+
+    if (!string.IsNullOrWhiteSpace(overridePath))
+    {
+      if (File.Exists(overridePath))
       {
         return new DebuggerResolution(
             engine,
             !string.IsNullOrWhiteSpace(debuggerBinPath) ? "--debugger-bin-path" : DEBUGGER_PATH_ENV,
             TryGetRuntimePlatform(),
-            customPath);
+            overridePath);
       }
 
       throw new FileNotFoundException(
           $"Custom debugger executable specified in {(!string.IsNullOrWhiteSpace(debuggerBinPath) ? "--debugger-bin-path" : DEBUGGER_PATH_ENV)} not found",
-          customPath);
+          overridePath);
     }
 
     var platform = GetRuntimePlatform();
@@ -70,8 +94,10 @@ public static class DebuggerLocator
     {
       "netcoredbg" or "netcore" => DebuggerEngine.NetCoreDbg,
       "dncdbg" or "dnc" => DebuggerEngine.DncDbg,
+      "sharpdbg" or "sharp" => DebuggerEngine.SharpDbg,
+      "custom" => DebuggerEngine.Custom,
       _ => throw new ArgumentException(
-          $"Unsupported debugger engine '{engineName}'. Supported values are 'netcoredbg' and 'dncdbg'.",
+          $"Unsupported debugger engine '{engineName}'. Supported values: netcoredbg, dncdbg, sharpdbg, custom.",
           nameof(engineName))
     };
 
@@ -130,6 +156,8 @@ public static class DebuggerLocator
     {
       DebuggerEngine.NetCoreDbg => "netcoredbg",
       DebuggerEngine.DncDbg => "dncdbg",
+      DebuggerEngine.SharpDbg => "sharpdbg",
+      DebuggerEngine.Custom => "custom",
       _ => throw new ArgumentOutOfRangeException(nameof(engine), engine, null)
     };
 
@@ -140,6 +168,8 @@ public static class DebuggerLocator
     {
       DebuggerEngine.NetCoreDbg => OperatingSystem.IsWindows() ? "netcoredbg.exe" : "netcoredbg",
       DebuggerEngine.DncDbg => OperatingSystem.IsWindows() ? "dncdbg.exe" : "dncdbg",
+      DebuggerEngine.SharpDbg => "sharpdbg.dll",
+      DebuggerEngine.Custom => throw new InvalidOperationException("Custom engine has no bundled executable"),
       _ => throw new ArgumentOutOfRangeException(nameof(engine), engine, null)
     };
 

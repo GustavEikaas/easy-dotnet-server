@@ -121,6 +121,7 @@ public class DebuggerMessageInterceptorTests
         NullLogger<ValueConverterService>.Instance,
         NullLoggerFactory.Instance),
       applyValueConverters: false,
+      advertiseCompletions: true,
       _ => { },
       onDebugStartSignal,
       onDebuggerConfigurationDone,

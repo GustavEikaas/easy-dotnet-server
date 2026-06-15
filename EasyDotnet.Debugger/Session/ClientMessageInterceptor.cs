@@ -13,6 +13,7 @@ public class ClientMessageInterceptor(
   Func<InterceptableAttachRequest, Task<InterceptableAttachRequest>> attachRequestRewriter,
   Action<int> onDebugeeProcessStarted,
   Action onConfigurationDone,
+  bool rewriteEvaluateAssignments,
   FrameSourceTracker? frameSourceTracker = null
   ) : IDapMessageInterceptor
 {
@@ -36,7 +37,7 @@ public class ClientMessageInterceptor(
         InterceptableCompletionsRequest complReq => await HandleCompletionsRequestAsync(complReq, proxy, cancellationToken),
         ScopesRequest scopesReq => HandleScopesRequest(scopesReq, proxy),
         SetBreakpointsRequest bpReq => HandleBreakpointsRequest(bpReq),
-        Request req when req.Command == "evaluate" => await HandleEvaluateRequestAsync(req, proxy, cancellationToken),
+        Request req when req.Command == "evaluate" && rewriteEvaluateAssignments => await HandleEvaluateRequestAsync(req, proxy, cancellationToken),
         Request req => LogAndPassthrough(req),
         _ => throw new Exception($"Unsupported DAP message from client: {message}")
       };

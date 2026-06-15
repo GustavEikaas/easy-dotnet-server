@@ -38,7 +38,8 @@ public class ClientMessageInterceptorTests
         NullLoggerFactory.Instance),
       request => Task.FromResult(request),
       _ => { },
-      () => { });
+      () => { },
+      rewriteEvaluateAssignments: true);
 
     var request = new Request
     {

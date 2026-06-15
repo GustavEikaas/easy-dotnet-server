@@ -7,6 +7,6 @@ public interface IDebugSessionFactory
 {
   DebugSession Create(
     Func<InterceptableAttachRequest, IDebuggerProxy, Task<InterceptableAttachRequest>> attachRequestRewriter,
-    bool applyValueConverters,
+    DebuggerProxyFeatures features,
     IVariableLocationResolver? variableLocationResolver = null);
 }

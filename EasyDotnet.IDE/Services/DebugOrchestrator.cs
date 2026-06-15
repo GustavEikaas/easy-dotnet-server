@@ -3,6 +3,7 @@ using EasyDotnet.Debugger;
 using EasyDotnet.Debugger.Interfaces;
 using EasyDotnet.Debugger.Messages;
 using EasyDotnet.Debugger.Services;
+using EasyDotnet.IDE.DebuggerStrategies.Engines;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Types;
 using Microsoft.Extensions.Logging;
@@ -37,6 +38,7 @@ public class DebugOrchestrator(
     IEditorService editorService,
     IClientService clientService,
     IVariableLocationResolver variableLocationResolver,
+    IDebuggerEngineDefinitionFactory engineDefinitionFactory,
     ILogger<DebugOrchestrator> logger) : IDebugOrchestrator
 {
   private readonly ConcurrentDictionary<string, Debugger.DebugSession> _sessionServices = new();
@@ -141,9 +143,15 @@ public class DebugOrchestrator(
 
     try
     {
-      var binaryPath = clientService.ClientOptions?.DebuggerOptions?.BinaryPath;
-      if (string.IsNullOrEmpty(binaryPath))
-        throw new InvalidOperationException("Failed to start debugger, no binary path provided");
+      var debuggerOptions = clientService.ClientOptions?.DebuggerOptions;
+      var engineDefinition = engineDefinitionFactory.Create(debuggerOptions);
+
+      // ApplyValueConverters is client-controlled but only works with compatible engines.
+      var features = engineDefinition.Features with
+      {
+        SupportsValueConverters = engineDefinition.Features.SupportsValueConverters
+          && (debuggerOptions?.ApplyValueConverters ?? false),
+      };
 
       var session = debugSessionFactory.Create(
           async (dapRequest, proxy) =>
@@ -151,7 +159,7 @@ public class DebugOrchestrator(
             await strategy.TransformRequestAsync(dapRequest, proxy);
             return dapRequest;
           },
-          clientService?.ClientOptions?.DebuggerOptions?.ApplyValueConverters ?? false,
+          features,
           variableLocationResolver);
 
       _sessionServices[sessionKey] = session;
@@ -176,7 +184,8 @@ public class DebugOrchestrator(
       try
       {
         session.Start(
-            binaryPath,
+            engineDefinition.BinaryPath,
+            engineDefinition.ProcessArguments,
             (ex) =>
             {
               editorService.DisplayError(ex.Message);

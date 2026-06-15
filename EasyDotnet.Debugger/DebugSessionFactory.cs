@@ -10,9 +10,11 @@ public class DebugSessionFactory(ILoggerFactory loggerFactory) : IDebugSessionFa
 {
   public DebugSession Create(
     Func<InterceptableAttachRequest, IDebuggerProxy, Task<InterceptableAttachRequest>> attachRequestRewriter,
-    bool applyValueConverters,
+    DebuggerProxyFeatures features,
     IVariableLocationResolver? variableLocationResolver = null)
   {
+    var applyValueConverters = features.SupportsValueConverters;
+
     var valueConverterService = new ValueConverterService(
       loggerFactory.CreateLogger<ValueConverterService>(),
       loggerFactory);
@@ -25,7 +27,9 @@ public class DebugSessionFactory(ILoggerFactory loggerFactory) : IDebugSessionFa
 
     DebugSessionCoordinator? coordinator = null;
 
-    var frameSourceTracker = variableLocationResolver is not null ? new FrameSourceTracker() : null;
+    var frameSourceTracker = features.DecorateVariableLocations && variableLocationResolver is not null
+      ? new FrameSourceTracker()
+      : null;
 
     var clientInterceptor = new ClientMessageInterceptor(
       loggerFactory.CreateLogger<ClientMessageInterceptor>(),
@@ -33,18 +37,20 @@ public class DebugSessionFactory(ILoggerFactory loggerFactory) : IDebugSessionFa
       (a) => attachRequestRewriter(a, coordinator!.Proxy!),
       processId => coordinator?.NotifyDebugeeProcessStarted(processId),
       () => coordinator?.NotifyConfigurationDone(),
+      features.RewriteEvaluateAssignments,
       frameSourceTracker);
 
     var debuggerInterceptor = new DebuggerMessageInterceptor(
       loggerFactory.CreateLogger<DebuggerMessageInterceptor>(),
       valueConverterService,
       applyValueConverters,
+      features.AdvertiseCompletions,
       processId => coordinator?.NotifyDebugeeProcessStarted(processId),
       signal => coordinator?.NotifyDebugStartSignal(signal),
       () => coordinator?.NotifyDebuggerConfigurationDone(),
       (command, message) => coordinator?.NotifyDebugSessionStartFailed(command, message),
       frameSourceTracker,
-      variableLocationResolver);
+      features.DecorateVariableLocations ? variableLocationResolver : null);
 
     coordinator = new DebugSessionCoordinator(
      loggerFactory.CreateLogger<DebugSessionCoordinator>(),
@@ -52,6 +58,7 @@ public class DebugSessionFactory(ILoggerFactory loggerFactory) : IDebugSessionFa
      processHost,
      clientInterceptor,
      debuggerInterceptor,
+     features.EmitTelemetry,
      loggerFactory.CreateLogger<DebuggerProxy>());
 
     return new DebugSession(coordinator);

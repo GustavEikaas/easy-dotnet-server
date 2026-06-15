@@ -22,7 +22,8 @@ public class RunInTerminalStrategy(
   IStartupHookService startupHookService,
   IHttpClientFactory httpClientFactory,
   ILaunchProfileService launchProfileService,
-  IAppWrapperManager appWrapperManager) : IDebugSessionStrategy
+  IAppWrapperManager appWrapperManager,
+  DebuggerProxyFeatures features) : IDebugSessionStrategy
 {
   private LaunchProfile? _activeProfile;
   private int _pid;
@@ -56,6 +57,22 @@ public class RunInTerminalStrategy(
   }
 
   public async Task TransformRequestAsync(InterceptableAttachRequest request, IDebuggerProxy proxy)
+  {
+    if (features.InterceptRunInTerminal)
+    {
+      await TransformViaStartupHookAsync(request, proxy);
+    }
+    else
+    {
+      TransformToLaunchRequest(request);
+    }
+  }
+
+  /// <summary>
+  /// NetCoreDbg path: proxy spawns the process via startup hook, sends <c>runInTerminal</c>
+  /// to the client, then rewrites the DAP request to <c>attach</c>+PID.
+  /// </summary>
+  private async Task TransformViaStartupHookAsync(InterceptableAttachRequest request, IDebuggerProxy proxy)
   {
     var profileEnv = LaunchProfileUtils.GetEnvironmentVariables(_activeProfile);
     _hookSession = startupHookService.CreateSession(profileEnv);
@@ -110,6 +127,32 @@ public class RunInTerminalStrategy(
         IsSet(ref _debugSessionStartedFlag));
 
     TryResumeIfReady();
+  }
+
+  /// <summary>
+  /// SharpDbg path: rewrite the client's attach request to a <c>launch</c> request with
+  /// the correct project args, cwd, and environment. SharpDbg will then send its own
+  /// <c>runInTerminal</c> reverse request to the client.
+  /// </summary>
+  private void TransformToLaunchRequest(InterceptableAttachRequest request)
+  {
+    var cwd = LaunchProfileUtils.ResolveCwd(_activeProfile, project.Raw);
+    var profileEnv = LaunchProfileUtils.GetEnvironmentVariables(_activeProfile);
+    var runCommand = WorkspaceRunCommandBuilder.Build(
+        project.Raw,
+        _activeProfile,
+        BuildCommandLineArgs(),
+        profileEnv);
+
+    request.Type = "request";
+    request.Command = "launch";
+    request.Arguments.Request = "launch";
+    request.Arguments.Program = runCommand.Executable;
+    request.Arguments.Args = runCommand.Arguments.ToArray();
+    request.Arguments.Cwd = cwd;
+    request.Arguments.Env = runCommand.EnvironmentVariables;
+
+    logger.LogInformation("Rewritten to launch request for SharpDbg (program: {Program})", runCommand.Executable);
   }
 
   public Task<int>? GetProcessIdAsync() => Task.FromResult(_pid);

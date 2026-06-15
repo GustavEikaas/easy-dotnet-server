@@ -10,6 +10,7 @@ public class DebuggerMessageInterceptor(
   ILogger<DebuggerMessageInterceptor> logger,
   ValueConverterService valueConverterService,
   bool applyValueConverters,
+  bool advertiseCompletions,
   Action<int> onDebugeeProcessStarted,
   Action<string> onDebugStartSignal,
   Action onDebuggerConfigurationDone,
@@ -72,7 +73,7 @@ public class DebuggerMessageInterceptor(
     }
 
     valueConverterService.FormatEvaluateResponse(response);
-    AdvertiseCompletionsCapability(response);
+    AdvertiseCompletionsCapability(response, advertiseCompletions);
     return Task.FromResult<ProtocolMessage?>(response);
   }
 
@@ -107,9 +108,9 @@ public class DebuggerMessageInterceptor(
     => command.Equals("attach", StringComparison.OrdinalIgnoreCase)
        || command.Equals("launch", StringComparison.OrdinalIgnoreCase);
 
-  private static void AdvertiseCompletionsCapability(Response response)
+  private static void AdvertiseCompletionsCapability(Response response, bool advertise)
   {
-    if (!response.Success || !string.Equals(response.Command, "initialize", StringComparison.OrdinalIgnoreCase))
+    if (!advertise || !response.Success || !string.Equals(response.Command, "initialize", StringComparison.OrdinalIgnoreCase))
     {
       return;
     }

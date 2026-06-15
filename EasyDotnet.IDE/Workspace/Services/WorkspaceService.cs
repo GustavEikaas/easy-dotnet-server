@@ -2,6 +2,7 @@ using System.CommandLine.Parsing;
 using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.IDE.BuildHost;
 using EasyDotnet.IDE.DebuggerStrategies;
+using EasyDotnet.IDE.DebuggerStrategies.Engines;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Models.Client;
 using EasyDotnet.IDE.Models.LaunchProfile;
@@ -21,6 +22,8 @@ public class WorkspaceService(
     WorkspaceBuildHostManager buildHostManager,
     IDebugOrchestrator debugOrchestrator,
     IDebugStrategyFactory debugStrategyFactory,
+    IDebuggerEngineDefinitionFactory engineDefinitionFactory,
+    IClientService clientService,
     ILogger<WorkspaceService> logger)
 {
   public async Task RunAsync(WorkspaceRunRequest request, CancellationToken ct)
@@ -339,7 +342,8 @@ public class WorkspaceService(
     sessionRegistry.TryClaim(sessionKey, project.ProjectName, isDebug: true);
     _ = NotifyRunningSessionsAsync();
 
-    var strategy = debugStrategyFactory.CreateRunInTerminalStrategy(project, launchProfileName, cliArgs);
+    var engineDef = engineDefinitionFactory.Create(clientService.ClientOptions?.DebuggerOptions);
+    var strategy = debugStrategyFactory.CreateRunInTerminalStrategy(project, launchProfileName, engineDef.Features, cliArgs);
 
     EasyDotnet.Debugger.DebugSession session;
     try

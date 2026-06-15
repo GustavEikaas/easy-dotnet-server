@@ -9,6 +9,7 @@ using EasyDotnet.IDE.AppWrapper;
 using EasyDotnet.IDE.BuildHost;
 using EasyDotnet.IDE.Dap;
 using EasyDotnet.IDE.DebuggerStrategies;
+using EasyDotnet.IDE.DebuggerStrategies.Engines;
 using EasyDotnet.IDE.Editor;
 using EasyDotnet.IDE.EntityFramework;
 using EasyDotnet.IDE.Interfaces;
@@ -88,6 +89,7 @@ public static class DiModules
     services.AddSingleton<PickerScopeFactory>();
     services.AddSingleton<IPickerService, PickerService>();
     services.AddSingleton<IDebugStrategyFactory, DebugStrategyFactory>();
+    services.AddSingleton<IDebuggerEngineDefinitionFactory, DebuggerEngineDefinitionFactory>();
     services.AddSingleton<AppWrapperManager>();
     services.AddSingleton<IAppWrapperManager>(sp => sp.GetRequiredService<AppWrapperManager>());
     services.AddSingleton<AppWrapperPipeListener>();

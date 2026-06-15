@@ -12,6 +12,7 @@ public class DebugSessionCoordinator(
   IDebuggerProcessHost processHost,
   IDapMessageInterceptor clientInterceptor,
   IDapMessageInterceptor debuggerInterceptor,
+  bool emitTelemetry,
   ILogger<DebuggerProxy> proxyLogger) : IAsyncDisposable
 {
   public DebuggerProxy? Proxy;
@@ -44,6 +45,7 @@ public class DebugSessionCoordinator(
 
   public void Start(
    string debuggerBinaryPath,
+   IReadOnlyList<string> processArguments,
    Action<Exception> onProcessFailedToStart,
    Func<Task> onDispose,
    CancellationToken cancellationToken)
@@ -71,7 +73,7 @@ public class DebugSessionCoordinator(
 
         try
         {
-          processHost.Start(debuggerBinaryPath, "--interpreter=vscode");
+          processHost.Start(debuggerBinaryPath, processArguments);
           _processStartedSource.SetResult(true);
           logger.LogInformation("Debugger process started successfully");
         }
@@ -192,7 +194,7 @@ public class DebugSessionCoordinator(
 
   private void StartTelemetryMonitoring(int processId)
   {
-    if (_cts is null)
+    if (!emitTelemetry || _cts is null)
     {
       return;
     }

@@ -17,14 +17,13 @@ public class DebuggerProcessHost(ILogger<DebuggerProcessHost> logger) : IDebugge
 
   public event EventHandler? Exited;
 
-  public void Start(string binaryPath, string arguments)
+  public void Start(string binaryPath, IReadOnlyList<string> arguments)
   {
     _process = new Process
     {
       StartInfo = new ProcessStartInfo
       {
         FileName = binaryPath,
-        Arguments = arguments,
         RedirectStandardInput = true,
         RedirectStandardOutput = true,
         RedirectStandardError = true,
@@ -33,6 +32,9 @@ public class DebuggerProcessHost(ILogger<DebuggerProcessHost> logger) : IDebugge
       },
       EnableRaisingEvents = true,
     };
+
+    foreach (var arg in arguments)
+      _process.StartInfo.ArgumentList.Add(arg);
 
     _process.Exited += (sender, args) =>
     {
