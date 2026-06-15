@@ -107,7 +107,6 @@ public class TestRunnerService(
 
   public async Task<InitializeResult> InitializeAsync(string solutionPath, CancellationToken ct)
   {
-    // Fast path: already initialized, avoid MSBuild entirely.
     if (_isInitialized) return new InitializeResult(Success: true);
 
     var opCts = new CancellationTokenSource();
@@ -116,7 +115,6 @@ public class TestRunnerService(
     using var token = await operationLock.WaitAcquireAsync("initialize", ct, opCts.Token);
     TrackOperationStart(token, opCts, control);
 
-    // Double-check after acquiring the lock: another caller may have initialized while we waited.
     if (_isInitialized)
     {
       TrackOperationEnd(token);
@@ -290,10 +288,8 @@ public class TestRunnerService(
       if (_operationCts is null || _operationControl is null || _operationId == 0 || _operationStage == OperationStage.Idle)
         return;
 
-      // Snapshot for use outside the lock.
       snap = (_operationStage, _operationId, _operationCts, _operationControl);
 
-      // Transition (1st cancel => cancelling, 2nd => killing)
       _operationStage = _operationStage switch
       {
         OperationStage.Running => OperationStage.Cancelling,
@@ -313,26 +309,20 @@ public class TestRunnerService(
 
     if (stage != OperationStage.Cancelling)
     {
-      // Already killing — idempotent.
       return;
     }
 
-    // Cancelling → escalate to kill.
     await dispatcher.SendRunnerStatusAsync(BuildKillingStatus(), operationId);
     try { cts.Cancel(); } catch { }
 
-    // Hard stop external resources (best effort).
     try { await control.KillAsync(timeout: TimeSpan.FromSeconds(2)); } catch { }
 
-    // Prefer the "normal" path: let the operation unwind and release the semaphore.
     var released = await WaitForUnlockAsync(operationId, timeout: TimeSpan.FromSeconds(2), ct);
 
     if (!released)
     {
-      // Last resort: recover usability even if the underlying operation is stuck.
       operationLock.ForceReleaseIfHeld();
 
-      // Clear local state so new operations can proceed immediately.
       lock (_opSync)
       {
         if (_operationId == operationId)
@@ -345,7 +335,6 @@ public class TestRunnerService(
       }
     }
 
-    // Reset UI regardless of operationId gating.
     await ResetTransientNodesAsync(operationId: null, markCancelled: true);
     await dispatcher.SendRunnerStatusAsync(BuildKilledStatus(), operationId: null);
 
@@ -744,12 +733,8 @@ public class TestRunnerService(
     var parsed = TestSourceLocator.ParseContent(req.Content);
     var updates = new List<LineNumberUpdateDto>();
 
-    // The source locator is C#-only — a non-.cs file parses to an empty method
-    // map, so every node would falsely look "deleted". Only trust a locator miss
-    // as a real deletion for C# files.
     var isCSharp = req.Path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase);
 
-    // --- 1. Update line numbers for all already-registered nodes in this file ---
     foreach (var node in registry.GetNodesForFile(req.Path))
     {
       TestMethodLocation? loc;
@@ -772,10 +757,6 @@ public class TestRunnerService(
 
       if (loc is null)
       {
-        // Only treat a locator miss as a real deletion when the signal is
-        // trustworthy: the file is C# (the locator can parse it) and no run/
-        // discovery is in flight (whose results depend on this node + its native
-        // mapping). Otherwise leave the node — discovery reconciles deletions.
         if (isCSharp && !operationLock.IsLocked)
           registry.RemoveSubtree(node.Id);
         continue;
@@ -785,17 +766,11 @@ public class TestRunnerService(
       updates.Add(new LineNumberUpdateDto(node.Id, loc.SignatureLine, loc.BodyStartLine, loc.EndLine));
     }
 
-    // --- 2. Synthesise ProbableTest nodes for newly-written test methods ---
-    //
-    // Only methods whose containing class IS already in the registry can get a
-    // probable node — we need the classNodeId to build the stable ID.
     var existingProbableIds = registry.GetNodesForFile(req.Path)
         .Where(n => n.Type is NodeType.ProbableTest)
         .Select(n => n.Id)
         .ToHashSet(StringComparer.Ordinal);
 
-    // Build a set of signature lines already occupied by real (non-probable) nodes.
-    // Any probable method whose line overlaps a real node is discarded — it's already discovered.
     var realNodeLines = registry.GetNodesForFile(req.Path)
         .Where(n => n.Type is not NodeType.ProbableTest && n.SignatureLine.HasValue)
         .Select(n => n.SignatureLine!.Value)
@@ -805,11 +780,9 @@ public class TestRunnerService(
 
     foreach (var probable in parsed.ProbableMethods)
     {
-      // Discard if any real node already occupies the same signature line
       if (realNodeLines.Contains(probable.Location.SignatureLine))
         continue;
 
-      // Find the registered class node for this file + class name
       var classNode = registry.GetNodesForFile(req.Path)
           .FirstOrDefault(n =>
               n.Type is NodeType.TestClass &&
@@ -824,13 +797,11 @@ public class TestRunnerService(
       var existing = registry.Get(probableId);
       if (existing?.Type is NodeType.ProbableTest)
       {
-        // Already known probable — update line numbers and include in updates
         registry.UpdateLineNumbers(probableId, probable.Location.SignatureLine, probable.Location.BodyStartLine, probable.Location.EndLine);
         updates.Add(new LineNumberUpdateDto(probableId, probable.Location.SignatureLine, probable.Location.BodyStartLine, probable.Location.EndLine));
         continue;
       }
 
-      // New probable — synthesise FQN by walking up through namespace segments
       var fqn = BuildFqn(classNode, probable.MethodName);
 
       var probableNode = new TestNode(
@@ -852,7 +823,6 @@ public class TestRunnerService(
       updates.Add(new LineNumberUpdateDto(probableId, probable.Location.SignatureLine, probable.Location.BodyStartLine, probable.Location.EndLine));
     }
 
-    // --- 3. Remove probable nodes whose methods are no longer in the source ---
     foreach (var staleId in existingProbableIds)
     {
       if (newProbableIds.Contains(staleId)) continue;
@@ -1019,10 +989,6 @@ public class TestRunnerService(
       return new OperationResult(Success: failedProjectIds.Count == 0);
     }
 
-    // Re-discover every runnable project against the freshly built DLLs before running,
-    // exactly like ExecuteSingleProjectAsync does. Without this a solution run executes
-    // the stale node set (whatever was discovered when the runner opened) against the new
-    // assemblies, so tests removed from source linger and never report a result.
     await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus("Discovering", OverallStatus.Discovering), token.OperationId);
     await Task.WhenAll(runnableProjects.Select(p =>
     {
@@ -1087,10 +1053,6 @@ public class TestRunnerService(
     var project = await ResolveProjectAsync(projectId, token.Ct)
         ?? throw new InvalidOperationException($"Project {projectId} not found");
 
-    // Snapshot probable metadata before re-discovery wipes the node. After discovery
-    // we try to resolve the successor (real TestMethod / TheoryGroup) by file + class +
-    // method name — adapters disagree on whether discovered.MethodName is short or FQN,
-    // so the probable's stable id doesn't always survive rediscovery.
     var probableSnapshot = node.Type is NodeType.ProbableTest
         ? (FilePath: node.FilePath, ParentId: node.ParentId, MethodName: node.DisplayName)
         : default;
@@ -1131,10 +1093,6 @@ public class TestRunnerService(
       return new OperationResult(Success: false);
     }
 
-    // Re-discover after a successful build so any newly-written tests (with or
-    // without probable nodes) are registered and emitted to the client before
-    // RunNodeAsync collects its leaf set.  This also covers MTP, which has no
-    // internal pre-run discovery of its own.
     var solutionNodeId = registry.Get(projectId)?.ParentId;
     if (solutionNodeId is not null)
     {
@@ -1142,8 +1100,6 @@ public class TestRunnerService(
       await executor.DiscoverProjectAsync(project, solutionNodeId, control, token);
     }
 
-    // If the caller handed us a ProbableTest id that discovery just replaced under a
-    // different stable id, redirect to the successor so this first run actually fires.
     var runNodeId = ResolveProbableSuccessor(nodeId, probableSnapshot);
 
     await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus(debug ? "Debugging" : "Running", debug ? OverallStatus.Debugging : OverallStatus.Running), token.OperationId);
