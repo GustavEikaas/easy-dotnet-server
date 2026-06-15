@@ -8,6 +8,7 @@ static class Program
 {
   public static async Task<int> Main(string[] args)
   {
+    Console.WriteLine(Environment.ProcessId);
     var app = new CommandApp<RunCommand>();
 
     app.Configure(config =>
