@@ -22,6 +22,26 @@ public abstract class LinuxServerContainer(string image) : ServerContainer
       .WithEnvironment("DOTNET_NOLOGO", "1");
 
   /// <summary>
+  /// The container writes its NuGet cache + tool install into <see cref="_homePath"/>, which
+  /// lives under the bind-mounted <c>/tmp</c> and so survives on the host after <c>docker rm</c>.
+  /// Delete it on teardown so these (~tens of MB each) don't accumulate across runs and fill /tmp.
+  /// </summary>
+  protected override ValueTask OnAfterDisposeAsync()
+  {
+    try
+    {
+      if (Directory.Exists(_homePath))
+        Directory.Delete(_homePath, recursive: true);
+    }
+    catch (Exception ex)
+    {
+      Console.WriteLine($"Home dir cleanup failed for '{_homePath}': {ex}");
+    }
+
+    return ValueTask.CompletedTask;
+  }
+
+  /// <summary>
   /// Runs the container as the same UID:GID as the test process so the Unix Domain
   /// Socket at /tmp/CoreFxPipe_* is writable by the host process connecting from outside.
   /// </summary>
