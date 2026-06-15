@@ -43,7 +43,7 @@ dotnet-easydotnet healthcheck
 
 It returns a deterministic JSON array of health items with `type`, `name`, `value`, and `advice` fields. Use `--format markdown` for readable terminal output.
 Pass `--debugger-bin-path <PATH>` to make the debugger health rows reflect a client-provided debugger path.
-Pass `--debugger-engine netcoredbg|dncdbg` to check a specific bundled debugger engine.
+Pass `--debugger-engine netcoredbg|dncdbg|sharpdbg|custom` to check a specific debugger engine.
 
 ## Configuration
 
@@ -71,24 +71,38 @@ export EASY_DOTNET_ROSLYN_DLL_PATH="/path/to/custom/Microsoft.CodeAnalysis.Langu
 
 ### Debugger
 
-easy-dotnet bundles `netcoredbg` as the default debugger. It can also bundle `dncdbg`, an experimental and faster-moving fork intended for users who want to try debugger fixes earlier.
+easy-dotnet bundles `netcoredbg` as the default debugger. Three bundled engines are available, plus a `custom` option for bringing your own binary.
 
-You can select or override the debugger using environment variables:
+| Engine | Description |
+|--------|-------------|
+| `netcoredbg` | Default. Stable, widely supported. |
+| `dncdbg` | Experimental fork of netcoredbg — faster-moving, picks up fixes earlier. |
+| `sharpdbg` | SharpDbg — a newer debugger that handles `runInTerminal` natively. Proxy polyfills are minimal. |
+| `custom` | User-supplied binary. All proxy polyfills are disabled by default since the debugger's capabilities are unknown. |
 
 #### Environment Variables
 
 | Variable | Description |
 |----------|-------------|
-| `EASY_DOTNET_DEBUGGER_ENGINE` | Bundled debugger engine to use: `netcoredbg` or `dncdbg`. Defaults to `netcoredbg`. |
-| `EASY_DOTNET_DEBUGGER_BIN_PATH` | Full path to a custom debugger executable. This overrides the bundled engine path. |
+| `EASY_DOTNET_DEBUGGER_ENGINE` | Debugger engine to use: `netcoredbg`, `dncdbg`, `sharpdbg`, or `custom`. Defaults to `netcoredbg`. |
+| `EASY_DOTNET_DEBUGGER_BIN_PATH` | Full path to a debugger executable. Overrides the bundled path for known engines; required for `custom`. |
+| `EASY_DOTNET_DEBUGGER_BIN_ARGS` | Space-separated CLI arguments passed to the debugger process when using the `custom` engine. |
 
 #### Examples
 ```bash
 # Try the bundled experimental dncdbg debugger
 export EASY_DOTNET_DEBUGGER_ENGINE="dncdbg"
 
-# Use a custom debugger executable (most common for testing local builds)
+# Use the bundled SharpDbg engine
+export EASY_DOTNET_DEBUGGER_ENGINE="sharpdbg"
+
+# Use a custom debugger executable
+export EASY_DOTNET_DEBUGGER_ENGINE="custom"
+export EASY_DOTNET_DEBUGGER_BIN_PATH="/path/to/my-debugger"
+export EASY_DOTNET_DEBUGGER_BIN_ARGS="--interpreter=vscode"
+
+# Override the binary path for a known engine (e.g. local netcoredbg build)
 export EASY_DOTNET_DEBUGGER_BIN_PATH="/path/to/custom/netcoredbg"
 ```
 
-> **Note:** `dncdbg` support is experimental. Report bugs that are clearly specific to `dncdbg` in the `dncdbg` repository; report issues that affect `netcoredbg` or both projects upstream to `netcoredbg`.
+> **Note:** `dncdbg` support is experimental. Report bugs specific to `dncdbg` in the `dncdbg` repository; report issues affecting `netcoredbg` or both projects upstream to `netcoredbg`.

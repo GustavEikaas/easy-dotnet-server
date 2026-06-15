@@ -34,7 +34,9 @@ public class DebuggerProcessHost(ILogger<DebuggerProcessHost> logger) : IDebugge
     };
 
     foreach (var arg in arguments)
+    {
       _process.StartInfo.ArgumentList.Add(arg);
+    }
 
     _process.Exited += (sender, args) =>
     {

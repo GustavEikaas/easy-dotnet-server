@@ -146,7 +146,6 @@ public class DebugOrchestrator(
       var debuggerOptions = clientService.ClientOptions?.DebuggerOptions;
       var engineDefinition = engineDefinitionFactory.Create(debuggerOptions);
 
-      // ApplyValueConverters is client-controlled but only works with compatible engines.
       var features = engineDefinition.Features with
       {
         SupportsValueConverters = engineDefinition.Features.SupportsValueConverters

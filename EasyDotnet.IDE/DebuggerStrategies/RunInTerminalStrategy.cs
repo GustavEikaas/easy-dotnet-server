@@ -128,11 +128,8 @@ public class RunInTerminalStrategy(
 
     TryResumeIfReady();
   }
-
   /// <summary>
-  /// SharpDbg path: rewrite the client's attach request to a <c>launch</c> request with
-  /// the correct project args, cwd, and environment. SharpDbg will then send its own
-  /// <c>runInTerminal</c> reverse request to the client.
+  /// Client supports runInTerminal so we rewrite the request to launch and attach all the env vars
   /// </summary>
   private void TransformToLaunchRequest(InterceptableAttachRequest request)
   {
@@ -147,8 +144,9 @@ public class RunInTerminalStrategy(
     request.Type = "request";
     request.Command = "launch";
     request.Arguments.Request = "launch";
+    request.Arguments.ProcessId = null;
     request.Arguments.Program = runCommand.Executable;
-    request.Arguments.Args = runCommand.Arguments.ToArray();
+    request.Arguments.Args = [.. runCommand.Arguments];
     request.Arguments.Cwd = cwd;
     request.Arguments.Env = runCommand.EnvironmentVariables;
 
