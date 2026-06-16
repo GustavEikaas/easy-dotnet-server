@@ -40,8 +40,7 @@ public class SettingsSerializerTests
     await Assert.That(result).IsNotNull();
     await Assert.That(result?.Defaults?.TestProject).IsEqualTo("SomeTest");
 
-    // Read is a pure read — it must not write the file back (no lock contention,
-    // no LastAccessed touch). The on-disk content stays byte-for-byte identical.
+
     var afterRead = _fileSystem.File.ReadAllText(TestPath);
     await Assert.That(afterRead).IsEqualTo(json);
   }

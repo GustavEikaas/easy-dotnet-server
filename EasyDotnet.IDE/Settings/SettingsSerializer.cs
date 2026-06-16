@@ -42,10 +42,6 @@ public class SettingsSerializer(IFileSystem fileSystem, ILogger<SettingsSerializ
         return default;
       }
 
-      // Intentionally a pure read: no write-back here. LastAccessed is bumped on
-      // real saves instead. Touching the file on every read doubled lock exposure
-      // on Windows (and made the GC's own scan mutate the files it reads), and a
-      // lost lock race on that cosmetic write would discard settings we read fine.
       return settings;
     }
     catch (JsonException ex)
