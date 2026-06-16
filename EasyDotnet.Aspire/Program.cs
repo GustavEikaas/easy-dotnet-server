@@ -1,5 +1,6 @@
 using System.IO.Pipes;
 using EasyDotnet.Aspire;
+using EasyDotnet.Aspire.Logging;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Serialization;
 using StreamJsonRpc;
@@ -11,7 +12,14 @@ if (pipeName is null)
   return 1;
 }
 
-using var loggerFactory = LoggerFactory.Create(b => b.AddSimpleConsole(o => o.SingleLine = true));
+// Logs are buffered in a ring sink (pulled by the IDE via _server/logdump) and mirrored to stderr.
+var ringState = new RingLogState(ParseLogLevel(args));
+using var loggerFactory = LoggerFactory.Create(b =>
+{
+  b.ClearProviders();
+  b.SetMinimumLevel(LogLevel.Trace); // RingLogState does the dynamic filtering
+  b.AddProvider(new RingLoggerProvider(ringState));
+});
 var logger = loggerFactory.CreateLogger("EasyDotnet.Aspire");
 
 var pipeServer = new NamedPipeServerStream(
@@ -34,6 +42,7 @@ var rpc = new JsonRpc(new HeaderDelimitedMessageHandler(pipeServer, pipeServer, 
 var ide = new IdeCallback(rpc);
 await using var server = new AspireServer(ide, loggerFactory);
 rpc.AddLocalRpcTarget(server);
+rpc.AddLocalRpcTarget(new ServerLogHandler(ringState));
 
 rpc.StartListening();
 logger.LogInformation("Aspire host ready");
@@ -51,4 +60,16 @@ static string? ParsePipe(string[] args)
     }
   }
   return null;
+}
+
+static LogLevel ParseLogLevel(string[] args)
+{
+  foreach (var arg in args)
+  {
+    if (arg.StartsWith("--log-level=", StringComparison.OrdinalIgnoreCase))
+    {
+      return RingLogState.Parse(arg["--log-level=".Length..]);
+    }
+  }
+  return LogLevel.Information;
 }

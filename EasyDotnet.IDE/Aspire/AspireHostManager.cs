@@ -39,6 +39,41 @@ public sealed class AspireHostManager(ILogger<AspireHostManager> logger, AspireH
     }
   }
 
+  /// <summary>Pulls the Aspire host's log ring buffer (DCP server included). Empty if not running.</summary>
+  public async Task<string[]> GetLogsAsync(CancellationToken ct = default)
+  {
+    if (_rpc?.IsDisposed != false || _process?.HasExited != false)
+    {
+      return [];
+    }
+    try
+    {
+      return await _rpc.InvokeAsync<string[]>("_server/logdump").WaitAsync(ct);
+    }
+    catch (ConnectionLostException)
+    {
+      InvalidateConnection();
+      return [];
+    }
+  }
+
+  /// <summary>Propagates the IDE log level to a running Aspire host. No-op if not running.</summary>
+  public async Task SetLogLevelAsync(string level, CancellationToken ct = default)
+  {
+    if (_rpc?.IsDisposed != false || _process?.HasExited != false)
+    {
+      return;
+    }
+    try
+    {
+      await _rpc.InvokeWithParameterObjectAsync("_server/setLogLevel", new { level }, ct);
+    }
+    catch (ConnectionLostException)
+    {
+      InvalidateConnection();
+    }
+  }
+
   private async Task<JsonRpc> GetRpcClientAsync()
   {
     if (_rpc?.IsDisposed == false && _process?.HasExited == false)

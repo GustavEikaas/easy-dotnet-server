@@ -9,6 +9,7 @@ namespace EasyDotnet.IDE.Controllers;
 public class ServerController(
     LogLevelState logLevelState,
     IBuildHostManager buildHostManager,
+    IDE.Aspire.AspireHostManager aspireHostManager,
     ILogger<ServerController> logger) : BaseController
 {
   public sealed record SetLogLevelRequest(string Level);
@@ -20,6 +21,7 @@ public class ServerController(
     logLevelState.Set(parsed);
     logger.LogInformation("Log level set to {Level}", parsed);
     await buildHostManager.SetLogLevelAsync(parsed.ToString(), ct);
+    await aspireHostManager.SetLogLevelAsync(parsed.ToString(), ct);
   }
 
   [JsonRpcMethod("_server/logdump")]
@@ -28,4 +30,8 @@ public class ServerController(
   [JsonRpcMethod("_server/logdump/buildserver")]
   public Task<string[]> LogDumpBuildServer(CancellationToken ct) =>
       buildHostManager.GetLogsAsync(ct);
+
+  [JsonRpcMethod("_server/logdump/aspire")]
+  public Task<string[]> LogDumpAspire(CancellationToken ct) =>
+      aspireHostManager.GetLogsAsync(ct);
 }

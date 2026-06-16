@@ -44,8 +44,9 @@ public sealed class RunSessionManager(IIdeCallback ide, ILogger<RunSessionManage
     _sessions[runId] = 0;
     _ = Task.Run(() => RunAsync(runId, request), CancellationToken.None);
 
-    logger.LogInformation("Created run session {RunId} for {Project} (mode={Mode})",
-        runId, config.ProjectPath, config.Mode);
+    var aspnetUrls = request.EnvironmentVariables.TryGetValue("ASPNETCORE_URLS", out var urls) ? urls : "<unset>";
+    logger.LogInformation("Created run session {RunId} for {Project} (mode={Mode}, debug={Debug}, ASPNETCORE_URLS={Urls})",
+        runId, config.ProjectPath, config.Mode, request.Debug, aspnetUrls);
     return runId;
   }
 
@@ -62,6 +63,7 @@ public sealed class RunSessionManager(IIdeCallback ide, ILogger<RunSessionManage
     var sink = Notifications;
     if (sink is not null)
     {
+      logger.LogInformation("Notifying DCP processRestarted: run {RunId} pid {Pid}", runId, pid);
       await sink.SendAsync(new ProcessRestartedNotification(runId, (uint)pid), CancellationToken.None);
     }
   }
@@ -103,6 +105,7 @@ public sealed class RunSessionManager(IIdeCallback ide, ILogger<RunSessionManage
       var sink = Notifications;
       if (sink is not null)
       {
+        logger.LogInformation("Notifying DCP sessionTerminated: run {RunId} exit {ExitCode}", runId, exitCode);
         await sink.SendAsync(new SessionTerminatedNotification(runId, exitCode), CancellationToken.None);
       }
     }

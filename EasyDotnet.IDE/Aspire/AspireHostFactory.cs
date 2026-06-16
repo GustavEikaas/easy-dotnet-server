@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO.Pipes;
 using System.Reflection;
+using EasyDotnet.IDE.Logging;
 using EasyDotnet.IDE.Utils;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Serialization;
@@ -13,7 +14,7 @@ namespace EasyDotnet.IDE.Aspire;
 /// a named pipe (mirrors <see cref="BuildHost.BuildHostFactory"/>). Registers the
 /// editor callback target so the Aspire host can drive managed runs.
 /// </summary>
-public class AspireHostFactory(ILogger<AspireHostFactory> logger, AspireRunService runService, AspireDebugService debugService)
+public class AspireHostFactory(ILogger<AspireHostFactory> logger, AspireRunService runService, AspireDebugService debugService, LogLevelState logLevelState)
 {
   public async Task<(Process, JsonRpc)> StartServerAsync()
   {
@@ -54,7 +55,7 @@ public class AspireHostFactory(ILogger<AspireHostFactory> logger, AspireRunServi
     var startInfo = new ProcessStartInfo
     {
       FileName = "dotnet",
-      Arguments = $"exec \"{dllPath}\" --pipe \"{pipeName}\"",
+      Arguments = $"exec \"{dllPath}\" --pipe \"{pipeName}\" --log-level={logLevelState.Current}",
       UseShellExecute = false,
       CreateNoWindow = true,
       RedirectStandardError = true,
