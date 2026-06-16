@@ -53,7 +53,7 @@ public class WorkspaceService(
     var project = target.Project!;
     if (project.Raw.IsAspireHost)
     {
-      await DispatchAspireRunAsync(project, ct);
+      await DispatchAspireRunAsync(project, target.LaunchProfile, ct);
       return;
     }
     await DispatchRunAsync(project, target.LaunchProfile, request.CliArgs, ct);
@@ -63,7 +63,7 @@ public class WorkspaceService(
   // (reusing the standard pre-build, which also builds the referenced resource
   // projects), then hand off to the isolated Aspire host which stands up the DCP
   // server and relays each resource run back through the editor.
-  private async Task DispatchAspireRunAsync(ValidatedDotnetProject project, CancellationToken ct)
+  private async Task DispatchAspireRunAsync(ValidatedDotnetProject project, LaunchProfile? launchProfile, CancellationToken ct)
   {
     if (!await preBuildService.BuildBeforeRunAsync(project.ProjectFullPath, project.ProjectName, ct))
     {
@@ -72,7 +72,7 @@ public class WorkspaceService(
 
     try
     {
-      await aspireHostManager.LaunchAsync(project.ProjectFullPath, debug: false, ct);
+      await aspireHostManager.LaunchAsync(project.ProjectFullPath, launchProfile, debug: false, ct);
     }
     catch (Exception ex)
     {
@@ -93,7 +93,7 @@ public class WorkspaceService(
 
     try
     {
-      await aspireHostManager.LaunchAsync(project.ProjectFullPath, debug: true, ct);
+      await aspireHostManager.LaunchAsync(project.ProjectFullPath, null, debug: true, ct);
     }
     catch (Exception ex)
     {

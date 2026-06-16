@@ -39,20 +39,18 @@ public sealed class AspireServer(IIdeCallback ide, ILoggerFactory loggerFactory)
       var connection = await _dcp.StartAsync(ct);
       _log.LogInformation("Launching AppHost {Project} against DCP endpoint :{Port}", request.AppHostProjectPath, connection.Port);
 
-      var env = new Dictionary<string, string>
-      {
-        // host:port form (e.g. "localhost:36593"), matching the reference extension. DCP also
-        // accepts a bare port, but Aspire's dashboard env handler requires the host:port form.
-        ["DEBUG_SESSION_PORT"] = "localhost:" + connection.Port.ToString(CultureInfo.InvariantCulture),
-        ["DEBUG_SESSION_TOKEN"] = connection.Token,
-        ["DEBUG_SESSION_SERVER_CERTIFICATE"] = connection.CertificateBase64,
-        ["DEBUG_SESSION_INFO"] = connection.InfoJson,
-        // Tells DCP whether to request Debug mode for resources (resources only; the AppHost
-        // itself still runs as a managed process either way).
-        ["DEBUG_SESSION_RUN_MODE"] = request.Debug ? LaunchModes.Debug : LaunchModes.NoDebug,
-        // TODO(aspire-mvp): product decision — only needed when the dashboard binds http.
-        ["ASPIRE_ALLOW_UNSECURED_TRANSPORT"] = "true",
-      };
+      var env = new Dictionary<string, string>(request.EnvironmentVariables ?? []);
+      // host:port form (e.g. "localhost:36593"), matching the reference extension. DCP also
+      // accepts a bare port, but Aspire's dashboard env handler requires the host:port form.
+      env["DEBUG_SESSION_PORT"] = "localhost:" + connection.Port.ToString(CultureInfo.InvariantCulture);
+      env["DEBUG_SESSION_TOKEN"] = connection.Token;
+      env["DEBUG_SESSION_SERVER_CERTIFICATE"] = connection.CertificateBase64;
+      env["DEBUG_SESSION_INFO"] = connection.InfoJson;
+      // Tells DCP whether to request Debug mode for resources (resources only; the AppHost
+      // itself still runs as a managed process either way).
+      env["DEBUG_SESSION_RUN_MODE"] = request.Debug ? LaunchModes.Debug : LaunchModes.NoDebug;
+      // TODO(aspire-mvp): product decision — only needed when the dashboard binds http.
+      env["ASPIRE_ALLOW_UNSECURED_TRANSPORT"] = "true";
 
       // The AppHost is relayed through the same IDE run path as any resource: the IDE
       // resolves the executable from the project and injects the DEBUG_SESSION_* env.

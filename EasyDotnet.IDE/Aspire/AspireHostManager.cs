@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using EasyDotnet.Aspire.Contracts;
+using EasyDotnet.IDE.Models.LaunchProfile;
 using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
 
@@ -15,11 +16,14 @@ public sealed class AspireHostManager(ILogger<AspireHostManager> logger, AspireH
   private JsonRpc? _rpc;
   private readonly SemaphoreSlim _connectionLock = new(1, 1);
 
-  public async Task<LaunchAppHostResponse> LaunchAsync(string appHostProjectPath, bool debug, CancellationToken ct)
+  public async Task<LaunchAppHostResponse> LaunchAsync(string appHostProjectPath, LaunchProfile? launchProfile, bool debug, CancellationToken ct)
   {
     var rpc = await GetRpcClientAsync();
+    var envVars = launchProfile?.EnvironmentVariables is { Count: > 0 } ev
+        ? new Dictionary<string, string>(ev)
+        : null;
     return await rpc.InvokeWithParameterObjectAsync<LaunchAppHostResponse>(
-        AspireRpcMethods.Launch, new LaunchAppHostRequest(appHostProjectPath, debug), ct);
+        AspireRpcMethods.Launch, new LaunchAppHostRequest(appHostProjectPath, debug, envVars), ct);
   }
 
   public async Task ShutdownAsync(CancellationToken ct = default)

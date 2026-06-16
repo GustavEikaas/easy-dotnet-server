@@ -37,8 +37,17 @@ public static class AspireRunIds
 /// that DCP connects back to it via the injected <c>DEBUG_SESSION_*</c> env vars.
 /// When <paramref name="Debug"/> is true the AppHost is launched with
 /// <c>DEBUG_SESSION_RUN_MODE=Debug</c>, so DCP requests Debug mode for resources.
+/// <para>
+/// <paramref name="EnvironmentVariables"/> carries any extra env vars from the
+/// selected launch profile (e.g. ASPNETCORE_ENVIRONMENT). They are merged into
+/// the process environment before the <c>DEBUG_SESSION_*</c> vars, so the DCP
+/// session vars always take precedence.
+/// </para>
 /// </summary>
-public sealed record LaunchAppHostRequest(string AppHostProjectPath, bool Debug = false);
+public sealed record LaunchAppHostRequest(
+    string AppHostProjectPath,
+    bool Debug = false,
+    Dictionary<string, string>? EnvironmentVariables = null);
 
 public sealed record LaunchAppHostResponse(bool Started);
 
