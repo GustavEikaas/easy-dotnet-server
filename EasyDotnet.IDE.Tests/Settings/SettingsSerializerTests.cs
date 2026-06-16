@@ -40,7 +40,6 @@ public class SettingsSerializerTests
     await Assert.That(result).IsNotNull();
     await Assert.That(result?.Defaults?.TestProject).IsEqualTo("SomeTest");
 
-
     var afterRead = _fileSystem.File.ReadAllText(TestPath);
     await Assert.That(afterRead).IsEqualTo(json);
   }
