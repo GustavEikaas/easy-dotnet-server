@@ -42,10 +42,6 @@ public class SettingsSerializer(IFileSystem fileSystem, ILogger<SettingsSerializ
         return default;
       }
 
-      // Update last accessed time
-      settings.Metadata.LastAccessed = DateTime.UtcNow;
-      Write(filePath, settings);
-
       return settings;
     }
     catch (JsonException ex)

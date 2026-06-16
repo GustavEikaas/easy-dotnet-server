@@ -29,9 +29,8 @@ public class SettingsSerializerTests
   }
 
   [Test]
-  public async Task Read_ValidJson_ReturnsSettingsAndUpdateLastAccessed()
+  public async Task Read_ValidJson_ReturnsSettingsWithoutMutatingFile()
   {
-    var originalTime = DateTime.UtcNow.AddDays(-1);
     var settings = new SolutionSettings() { Metadata = new() { OriginalPath = "/tmp" }, Defaults = new() { TestProject = "SomeTest" } };
     var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
     _fileSystem.AddFile(TestPath, new MockFileData(json));
@@ -40,10 +39,9 @@ public class SettingsSerializerTests
 
     await Assert.That(result).IsNotNull();
     await Assert.That(result?.Defaults?.TestProject).IsEqualTo("SomeTest");
-    await Assert.That(result!.Metadata!.LastAccessed).IsGreaterThan(originalTime);
 
-    var updatedJson = _fileSystem.File.ReadAllText(TestPath);
-    await Assert.That(updatedJson).Contains("lastAccessed");
+    var afterRead = _fileSystem.File.ReadAllText(TestPath);
+    await Assert.That(afterRead).IsEqualTo(json);
   }
 
   [Test]
