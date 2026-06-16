@@ -84,7 +84,7 @@ public class WorkspaceService(
   // Same as DispatchAspireRunAsync but launches in Debug mode: the AppHost gets
   // DEBUG_SESSION_RUN_MODE=Debug so DCP requests Debug for resources, which the editor
   // then runs under the debugger.
-  private async Task DispatchAspireDebugAsync(ValidatedDotnetProject project, CancellationToken ct)
+  private async Task DispatchAspireDebugAsync(ValidatedDotnetProject project, LaunchProfile? launchProfile, CancellationToken ct)
   {
     if (!await preBuildService.BuildBeforeRunAsync(project.ProjectFullPath, project.ProjectName, ct))
     {
@@ -93,7 +93,7 @@ public class WorkspaceService(
 
     try
     {
-      await aspireHostManager.LaunchAsync(project.ProjectFullPath, null, debug: true, ct);
+      await aspireHostManager.LaunchAsync(project.ProjectFullPath, launchProfile, debug: true, ct);
     }
     catch (Exception ex)
     {
@@ -126,7 +126,7 @@ public class WorkspaceService(
       var project = target.Project!;
       if (project.Raw.IsAspireHost)
       {
-        await DispatchAspireDebugAsync(project, ct);
+        await DispatchAspireDebugAsync(project, target.LaunchProfile, ct);
         return;
       }
 
