@@ -59,7 +59,17 @@
     <ProjectReference Include="..\EasyDotnet.ProjXLanguageServer\EasyDotnet.ProjXLanguageServer.csproj" />
     <ProjectReference Include="..\EasyDotnet.BuildServer.Contracts\EasyDotnet.BuildServer.Contracts.csproj" />
     <ProjectReference Include="..\EasyDotnet.AppWrapper.Contracts\EasyDotnet.AppWrapper.Contracts.csproj" />
+    <ProjectReference Include="..\EasyDotnet.Aspire.Contracts\EasyDotnet.Aspire.Contracts.csproj" />
   </ItemGroup>
+
+  <Target Name="PublishAspire" BeforeTargets="Build">
+    <PropertyGroup>
+      <AspireOutputPath>$(OutputPath)Tools\Aspire\</AspireOutputPath>
+    </PropertyGroup>
+    <Message Text="Publishing Aspire host for net8.0..." Importance="high" />
+    <MSBuild Projects="..\EasyDotnet.Aspire\EasyDotnet.Aspire.csproj" Targets="Publish" Properties="TargetFramework=net8.0;Configuration=$(Configuration);PublishDir=$(MSBuildProjectDirectory)\$(AspireOutputPath)net8.0\;SelfContained=false" />
+    <Message Text="Aspire host publish complete at $(AspireOutputPath)" Importance="high" />
+  </Target>
 
   <Target Name="PublishAppWrapper" BeforeTargets="Build">
     <PropertyGroup>

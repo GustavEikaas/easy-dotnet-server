@@ -19,14 +19,16 @@ public class WorkspaceStopService(
       return;
     }
 
-    var running = sessionRegistry.GetRunningProcesses();
+    // Only top-level sessions are pickable. Child sessions (e.g. Aspire resources under their
+    // AppHost) are stopped by stopping their parent, so they must not appear in the picker.
+    var running = sessionRegistry.GetRunningProcesses().Where(p => p.ParentKey is null).ToList();
 
     //TODO: support killing debugging sessions
     // Debug sessions never receive a PID — their teardown goes through the DAP client.
     // Only raise "still starting" when there are non-debug sessions without a PID yet.
     if (running.Count == 0)
     {
-      var hasNonDebug = allSessions.Any(s => !s.IsDebugging);
+      var hasNonDebug = allSessions.Any(s => s.ParentKey is null && !s.IsDebugging);
       var msg = hasNonDebug
           ? "Projects are still starting, please wait"
           : "Debug sessions must be stopped from the debugger";
@@ -40,6 +42,13 @@ public class WorkspaceStopService(
 
     if (target is null)
       return;
+
+    // Stop children first (e.g. Aspire resources) so killing the parent (AppHost) doesn't
+    // orphan them when its DCP instance dies before it can stop them itself.
+    foreach (var child in sessionRegistry.GetChildProcesses(target.SessionKey))
+    {
+      KillProcess(child);
+    }
 
     KillProcess(target);
   }

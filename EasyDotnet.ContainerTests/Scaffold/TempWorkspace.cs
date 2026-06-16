@@ -483,6 +483,13 @@ public sealed class TempProjectBuilder
   }
 
   /// <summary>
+  /// Marks the project as an Aspire AppHost by setting <c>IsAspireHost=true</c> (the same signal
+  /// the Aspire.AppHost.Sdk emits). The project still builds as a plain console app — no Aspire
+  /// SDK/packages are added. Exercises the workspace/run → DCP routing without the real workload.
+  /// </summary>
+  public TempProjectBuilder AsAspireHost() => WithProperty("IsAspireHost", "true");
+
+  /// <summary>
   /// Marks the project as packable with an explicit <c>PackageId</c> and <c>Version</c>.
   /// Forces <c>OutputType=Library</c> so the produced nupkg is a normal package.
   /// </summary>

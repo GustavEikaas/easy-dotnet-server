@@ -21,6 +21,7 @@ public class WorkspaceService(
     WorkspaceBuildHostManager buildHostManager,
     IDebugOrchestrator debugOrchestrator,
     IDebugStrategyFactory debugStrategyFactory,
+    Aspire.AspireHostManager aspireHostManager,
     ILogger<WorkspaceService> logger)
 {
   public async Task RunAsync(WorkspaceRunRequest request, CancellationToken ct)
@@ -50,7 +51,34 @@ public class WorkspaceService(
     }
 
     var project = target.Project!;
+    if (project.Raw.IsAspireHost)
+    {
+      await DispatchAspireRunAsync(project, ct);
+      return;
+    }
     await DispatchRunAsync(project, target.LaunchProfile, request.CliArgs, ct);
+  }
+
+  // Aspire AppHost projects are run through the DCP integration: build first
+  // (reusing the standard pre-build, which also builds the referenced resource
+  // projects), then hand off to the isolated Aspire host which stands up the DCP
+  // server and relays each resource run back through the editor.
+  private async Task DispatchAspireRunAsync(ValidatedDotnetProject project, CancellationToken ct)
+  {
+    if (!await preBuildService.BuildBeforeRunAsync(project.ProjectFullPath, project.ProjectName, ct))
+    {
+      return;
+    }
+
+    try
+    {
+      await aspireHostManager.LaunchAsync(project.ProjectFullPath, ct);
+    }
+    catch (Exception ex)
+    {
+      logger.LogError(ex, "Failed to start Aspire AppHost {ProjectName}", project.ProjectName);
+      await editorService.DisplayError($"Failed to start Aspire app {project.ProjectName}: {ex.Message}");
+    }
   }
 
   public async Task DebugAsync(WorkspaceDebugRequest request, CancellationToken ct)

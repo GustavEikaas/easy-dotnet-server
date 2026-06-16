@@ -6,6 +6,9 @@
   </Configurations>
   <Project Path="EasyDotnet.AppWrapper.Contracts/EasyDotnet.AppWrapper.Contracts.csproj" />
   <Project Path="EasyDotnet.AppWrapper/EasyDotnet.AppWrapper.csproj" />
+  <Project Path="EasyDotnet.Aspire.Contracts/EasyDotnet.Aspire.Contracts.csproj" />
+  <Project Path="EasyDotnet.Aspire/EasyDotnet.Aspire.csproj" />
+  <Project Path="EasyDotnet.Aspire.Tests/EasyDotnet.Aspire.Tests.csproj" />
   <Project Path="EasyDotnet.BuildServer.Contracts/EasyDotnet.BuildServer.Contracts.csproj" />
   <Project Path="EasyDotnet.BuildServer/EasyDotnet.BuildServer.csproj" />
   <Project Path="EasyDotnet.BuildServer.SmokeTests/EasyDotnet.BuildServer.SmokeTests.csproj" />
