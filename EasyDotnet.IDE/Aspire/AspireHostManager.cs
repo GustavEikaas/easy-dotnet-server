@@ -19,9 +19,8 @@ public sealed class AspireHostManager(ILogger<AspireHostManager> logger, AspireH
   public async Task<LaunchAppHostResponse> LaunchAsync(string appHostProjectPath, LaunchProfile? launchProfile, bool debug, CancellationToken ct)
   {
     var rpc = await GetRpcClientAsync();
-    var envVars = launchProfile?.EnvironmentVariables is { Count: > 0 } ev
-        ? new Dictionary<string, string>(ev)
-        : null;
+    var env = LaunchProfileUtils.GetEnvironmentVariables(launchProfile);
+    var envVars = env.Count > 0 ? env : null;
     return await rpc.InvokeWithParameterObjectAsync<LaunchAppHostResponse>(
         AspireRpcMethods.Launch, new LaunchAppHostRequest(appHostProjectPath, debug, envVars), ct);
   }
