@@ -193,10 +193,32 @@ public class DcpServerProtocolTests
     await Assert.That(second.StatusCode).IsEqualTo(HttpStatusCode.Unauthorized);
   }
 
-  private static async Task<string> PutRunSessionAsync(HttpClient http, string projectPath)
+  [Test]
+  public async Task RunSession_Mode_MapsToDebugFlag()
+  {
+    var credentials = CertificateFactory.Create();
+    var ide = new RecordingIde();
+    var runSessions = new RunSessionManager.RunSessionManager(ide, NullLogger<RunSessionManager.RunSessionManager>.Instance);
+    await using var server = new DcpServerImpl(credentials, runSessions, NullLoggerFactory.Instance);
+    var connection = await server.StartAsync(CancellationToken.None);
+
+    using var handler = new HttpClientHandler { ServerCertificateCustomValidationCallback = (_, _, _, _) => true };
+    using var http = new HttpClient(handler) { BaseAddress = new Uri($"https://localhost:{connection.Port}") };
+    http.DefaultRequestHeaders.Authorization = new("Bearer", connection.Token);
+    http.DefaultRequestHeaders.Add(InstanceHeader, InstanceId);
+
+    await PutRunSessionAsync(http, "/work/Api/Api.csproj", LaunchModes.Debug);
+    await PutRunSessionAsync(http, "/work/Web/Web.csproj", LaunchModes.NoDebug);
+
+    await WaitForAsync(() => ide.Runs.Count == 2);
+    await Assert.That(ide.Runs.Single(r => r.ProjectPath.Contains("Api")).Debug).IsTrue();
+    await Assert.That(ide.Runs.Single(r => r.ProjectPath.Contains("Web")).Debug).IsFalse();
+  }
+
+  private static async Task<string> PutRunSessionAsync(HttpClient http, string projectPath, string mode = LaunchModes.NoDebug)
   {
     var payload = new RunSessionPayload(
-        LaunchConfigurations: [new LaunchConfiguration(LaunchConfigurationTypes.Project, projectPath, LaunchModes.NoDebug, null, null)],
+        LaunchConfigurations: [new LaunchConfiguration(LaunchConfigurationTypes.Project, projectPath, mode, null, null)],
         Env: [new EnvVar("ASPNETCORE_URLS", "http://localhost:0")],
         Args: null);
 

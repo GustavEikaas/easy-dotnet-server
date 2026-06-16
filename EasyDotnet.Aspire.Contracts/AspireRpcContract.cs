@@ -35,8 +35,10 @@ public static class AspireRunIds
 /// <summary>
 /// IDE -&gt; Aspire. Starts a DCP server and launches the given AppHost project so
 /// that DCP connects back to it via the injected <c>DEBUG_SESSION_*</c> env vars.
+/// When <paramref name="Debug"/> is true the AppHost is launched with
+/// <c>DEBUG_SESSION_RUN_MODE=Debug</c>, so DCP requests Debug mode for resources.
 /// </summary>
-public sealed record LaunchAppHostRequest(string AppHostProjectPath);
+public sealed record LaunchAppHostRequest(string AppHostProjectPath, bool Debug = false);
 
 public sealed record LaunchAppHostResponse(bool Started);
 
@@ -55,7 +57,8 @@ public sealed record RunManagedResourceRequest(
     string RunId,
     string ProjectPath,
     List<string>? Args,
-    Dictionary<string, string> EnvironmentVariables);
+    Dictionary<string, string> EnvironmentVariables,
+    bool Debug = false);
 
 public sealed record RunManagedResourceResponse(int ExitCode);
 

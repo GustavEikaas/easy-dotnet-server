@@ -47,6 +47,9 @@ public sealed class AspireServer(IIdeCallback ide, ILoggerFactory loggerFactory)
         ["DEBUG_SESSION_TOKEN"] = connection.Token,
         ["DEBUG_SESSION_SERVER_CERTIFICATE"] = connection.CertificateBase64,
         ["DEBUG_SESSION_INFO"] = connection.InfoJson,
+        // Tells DCP whether to request Debug mode for resources (resources only; the AppHost
+        // itself still runs as a managed process either way).
+        ["DEBUG_SESSION_RUN_MODE"] = request.Debug ? LaunchModes.Debug : LaunchModes.NoDebug,
         // TODO(aspire-mvp): product decision — only needed when the dashboard binds http.
         ["ASPIRE_ALLOW_UNSECURED_TRANSPORT"] = "true",
       };

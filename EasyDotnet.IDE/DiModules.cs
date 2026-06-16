@@ -94,6 +94,7 @@ public static class DiModules
     services.AddSingleton<BuildHostFactory>();
     services.AddSingleton<IBuildHostManager, BuildHostManager>();
     services.AddSingleton<IDE.Aspire.AspireRunService>();
+    services.AddSingleton<IDE.Aspire.AspireDebugService>();
     services.AddSingleton<IDE.Aspire.AspireHostFactory>();
     services.AddSingleton<IDE.Aspire.AspireHostManager>();
     services.AddSingleton<ProjectEvaluationCache>();

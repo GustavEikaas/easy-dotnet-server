@@ -6,7 +6,7 @@ namespace EasyDotnet.IDE.DebuggerStrategies;
 
 public interface IDebugStrategyFactory
 {
-  RunInTerminalStrategy CreateRunInTerminalStrategy(ValidatedDotnetProject project, string? launchProfileName, string? cliArgs = null);
+  RunInTerminalStrategy CreateRunInTerminalStrategy(ValidatedDotnetProject project, string? launchProfileName, string? cliArgs = null, IReadOnlyDictionary<string, string>? extraEnv = null);
   StandardAttachStrategy CreateStandardAttachStrategy(int pid, string? cwd = null);
 }
 
@@ -17,7 +17,7 @@ public class DebugStrategyFactory(
   IStartupHookService startupHookService,
   IAppWrapperManager appWrapperManager) : IDebugStrategyFactory
 {
-  public RunInTerminalStrategy CreateRunInTerminalStrategy(ValidatedDotnetProject project, string? launchProfileName, string? cliArgs = null) => new(
+  public RunInTerminalStrategy CreateRunInTerminalStrategy(ValidatedDotnetProject project, string? launchProfileName, string? cliArgs = null, IReadOnlyDictionary<string, string>? extraEnv = null) => new(
     project,
     launchProfileName,
     cliArgs,
@@ -25,7 +25,8 @@ public class DebugStrategyFactory(
     startupHookService,
     httpClientFactory,
     launchProfileService,
-    appWrapperManager);
+    appWrapperManager,
+    extraEnv);
 
   public StandardAttachStrategy CreateStandardAttachStrategy(int pid, string? cwd = null) => new(
     loggerFactory.CreateLogger<StandardAttachStrategy>(),

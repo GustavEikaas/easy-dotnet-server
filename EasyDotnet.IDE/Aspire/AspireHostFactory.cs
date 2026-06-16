@@ -13,7 +13,7 @@ namespace EasyDotnet.IDE.Aspire;
 /// a named pipe (mirrors <see cref="BuildHost.BuildHostFactory"/>). Registers the
 /// editor callback target so the Aspire host can drive managed runs.
 /// </summary>
-public class AspireHostFactory(ILogger<AspireHostFactory> logger, AspireRunService runService)
+public class AspireHostFactory(ILogger<AspireHostFactory> logger, AspireRunService runService, AspireDebugService debugService)
 {
   public async Task<(Process, JsonRpc)> StartServerAsync()
   {
@@ -29,7 +29,7 @@ public class AspireHostFactory(ILogger<AspireHostFactory> logger, AspireRunServi
       await ConnectWithRetryAsync(clientStream, cts.Token);
 
       var rpc = new JsonRpc(new HeaderDelimitedMessageHandler(clientStream, clientStream, CreateJsonMessageFormatter()));
-      rpc.AddLocalRpcTarget(new AspireEditorCallbackTarget(runService, rpc));
+      rpc.AddLocalRpcTarget(new AspireEditorCallbackTarget(runService, debugService, rpc));
       rpc.StartListening();
 
       logger.LogInformation("Connected to Aspire host.");

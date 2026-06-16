@@ -15,11 +15,11 @@ public sealed class AspireHostManager(ILogger<AspireHostManager> logger, AspireH
   private JsonRpc? _rpc;
   private readonly SemaphoreSlim _connectionLock = new(1, 1);
 
-  public async Task<LaunchAppHostResponse> LaunchAsync(string appHostProjectPath, CancellationToken ct)
+  public async Task<LaunchAppHostResponse> LaunchAsync(string appHostProjectPath, bool debug, CancellationToken ct)
   {
     var rpc = await GetRpcClientAsync();
     return await rpc.InvokeWithParameterObjectAsync<LaunchAppHostResponse>(
-        AspireRpcMethods.Launch, new LaunchAppHostRequest(appHostProjectPath), ct);
+        AspireRpcMethods.Launch, new LaunchAppHostRequest(appHostProjectPath, debug), ct);
   }
 
   public async Task ShutdownAsync(CancellationToken ct = default)

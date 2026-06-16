@@ -43,6 +43,7 @@ public class DebugSessionFactory(ILoggerFactory loggerFactory) : IDebugSessionFa
       signal => coordinator?.NotifyDebugStartSignal(signal),
       () => coordinator?.NotifyDebuggerConfigurationDone(),
       (command, message) => coordinator?.NotifyDebugSessionStartFailed(command, message),
+      exitCode => coordinator?.NotifyExited(exitCode),
       frameSourceTracker,
       variableLocationResolver);
 

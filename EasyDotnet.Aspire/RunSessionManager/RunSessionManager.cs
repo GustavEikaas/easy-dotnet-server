@@ -144,6 +144,7 @@ public sealed class RunSessionManager(IIdeCallback ide, ILogger<RunSessionManage
       env[e.Name] = e.Value ?? string.Empty;
     }
 
-    return new RunManagedResourceRequest(runId, projectPath, payload.Args, env);
+    var debug = string.Equals(config.Mode, LaunchModes.Debug, StringComparison.OrdinalIgnoreCase);
+    return new RunManagedResourceRequest(runId, projectPath, payload.Args, env, debug);
   }
 }

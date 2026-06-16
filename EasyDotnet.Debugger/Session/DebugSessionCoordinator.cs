@@ -37,6 +37,13 @@ public class DebugSessionCoordinator(
   public int Port => tcpServer.Port;
   public int? ProcessId => processHost?.ProcessId;
 
+  /// <summary>Exit code from the DAP <c>exited</c> event, if one was observed.</summary>
+  public int? ExitCode { get; private set; }
+  public void NotifyExited(int? exitCode) => ExitCode = exitCode;
+
+  /// <summary>PID of the debugged process (not netcoredbg), once the process event fires.</summary>
+  public int? DebugeeProcessId { get; private set; }
+
   private static readonly JsonSerializerOptions SerializerOptions = new()
   {
     PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -120,6 +127,7 @@ public class DebugSessionCoordinator(
     }
 
     logger.LogInformation("Debugee process started: {processId}", processId);
+    DebugeeProcessId = processId;
     _debugeeProcessStartedSource.SetResult(processId);
 
     StartTelemetryMonitoring(processId);
