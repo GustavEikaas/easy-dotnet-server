@@ -49,8 +49,6 @@ public sealed class AspireServer(IIdeCallback ide, ILoggerFactory loggerFactory)
       // Tells DCP whether to request Debug mode for resources (resources only; the AppHost
       // itself still runs as a managed process either way).
       env["DEBUG_SESSION_RUN_MODE"] = request.Debug ? LaunchModes.Debug : LaunchModes.NoDebug;
-      // TODO(aspire-mvp): product decision — only needed when the dashboard binds http.
-      env["ASPIRE_ALLOW_UNSECURED_TRANSPORT"] = "true";
 
       // The AppHost is relayed through the same IDE run path as any resource: the IDE
       // resolves the executable from the project and injects the DEBUG_SESSION_* env.

@@ -3,11 +3,6 @@ using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Aspire.Logging;
 
-/// <summary>
-/// <see cref="ILoggerProvider"/> that formats logs into the <see cref="RingLogState.Sink"/> (for
-/// <c>_server/logdump</c>) and also writes to stderr (captured live by the IDE's AspireHostFactory).
-/// Level filtering is dynamic via <see cref="RingLogState"/>.
-/// </summary>
 public sealed class RingLoggerProvider(RingLogState state) : ILoggerProvider
 {
   public ILogger CreateLogger(string categoryName) => new RingLogger(categoryName, state);

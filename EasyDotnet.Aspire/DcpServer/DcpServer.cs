@@ -8,8 +8,6 @@ using EasyDotnet.Aspire.RunSessionManager;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Aspire.DcpServer;
@@ -37,6 +35,7 @@ public sealed class DcpServer(DcpCredentials credentials, RunSessionManager.RunS
   private WebSocket? _notifySocket;
   private readonly SemaphoreSlim _sendLock = new(1, 1);
   private string? _boundInstanceId;
+  private int _versionWarned;
 
   public async Task<DcpServerConnectionInfo> StartAsync(CancellationToken ct)
   {
@@ -55,6 +54,7 @@ public sealed class DcpServer(DcpCredentials credentials, RunSessionManager.RunS
         await WriteErrorAsync(ctx, StatusCodes.Status401Unauthorized, error, ctx.RequestAborted);
         return;
       }
+      WarnIfNewerApiVersion(ctx);
       await next();
     });
 
@@ -69,6 +69,27 @@ public sealed class DcpServer(DcpCredentials credentials, RunSessionManager.RunS
     var port = ResolvePort(app);
     _log.LogInformation("DCP server listening on https://localhost:{Port}", port);
     return new DcpServerConnectionInfo(port, credentials.Token, credentials.CertificateBase64, JsonSerializer.Serialize(Info, JsonOptions));
+  }
+
+  // DCP appends ?api-version=<date> to every request except /info, and auto-downgrades to the
+  // newest version we advertise in /info. A newer requested version is therefore harmless, but
+  // worth surfacing once: it signals the AppHost's DCP speaks a protocol we haven't caught up to.
+  // Versions are YYYY-MM-DD, so ordinal comparison matches chronological order.
+  private void WarnIfNewerApiVersion(HttpContext ctx)
+  {
+    var apiVersion = ctx.Request.Query["api-version"].ToString();
+    if (string.IsNullOrEmpty(apiVersion)
+        || string.CompareOrdinal(apiVersion, DcpProtocolVersions.V20240303) <= 0)
+    {
+      return;
+    }
+    if (Interlocked.Exchange(ref _versionWarned, 1) == 0)
+    {
+      _log.LogWarning(
+          "DCP requested api-version {Requested}, newer than the supported {Supported}. "
+          + "DCP auto-downgrades, but the IDE-execution protocol support may be out of date.",
+          apiVersion, DcpProtocolVersions.V20240303);
+    }
   }
 
   private bool TryAuthorize(HttpContext ctx, out ErrorDetail error)

@@ -1,9 +1,5 @@
 namespace EasyDotnet.Aspire.Logging;
 
-/// <summary>
-/// Fixed-capacity, thread-safe ring buffer of formatted log lines. Mirrors the BuildServer's
-/// sink so the Aspire host's logs (including the DCP server) can be pulled via <c>_server/logdump</c>.
-/// </summary>
 public sealed class InMemoryRingSink(int capacity)
 {
   private readonly object _gate = new();

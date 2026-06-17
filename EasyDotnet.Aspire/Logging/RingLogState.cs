@@ -2,10 +2,6 @@ using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.Aspire.Logging;
 
-/// <summary>
-/// Holds the Aspire host's log ring buffer and a runtime-adjustable minimum level
-/// (set by the IDE via <c>_server/setLogLevel</c>).
-/// </summary>
 public sealed class RingLogState(LogLevel initial)
 {
   private volatile int _minLevel = (int)initial;

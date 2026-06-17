@@ -11,10 +11,6 @@ public static class NotificationTypes
   public const string SessionMessage = "sessionMessage";
 }
 
-/// <summary>
-/// host -&gt; DCP notification emitted when the resource process (re)starts.
-/// May be omitted if the PID is unknown.
-/// </summary>
 public sealed record ProcessRestartedNotification(
     [property: JsonPropertyName("session_id")] string SessionId,
     [property: JsonPropertyName("pid")] uint Pid)
@@ -23,10 +19,6 @@ public sealed record ProcessRestartedNotification(
   public string NotificationType => NotificationTypes.ProcessRestarted;
 }
 
-/// <summary>
-/// host -&gt; DCP notification emitted when the run session ends.
-/// <c>exit_code</c> may be omitted if it could not be captured.
-/// </summary>
 public sealed record SessionTerminatedNotification(
     [property: JsonPropertyName("session_id")] string SessionId,
     [property: JsonPropertyName("exit_code")] int? ExitCode)
