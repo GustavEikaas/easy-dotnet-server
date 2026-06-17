@@ -14,6 +14,7 @@ public class DebuggerMessageInterceptor(
   Action<string> onDebugStartSignal,
   Action onDebuggerConfigurationDone,
   Action<string, string?> onDebugSessionStartFailed,
+  Action<int?>? onExited = null,
   FrameSourceTracker? frameSourceTracker = null,
   IVariableLocationResolver? variableLocationResolver = null) : IDapMessageInterceptor
 
@@ -278,6 +279,7 @@ public class DebuggerMessageInterceptor(
     else if (evt.EventName == "exited")
     {
       LogExitedEvent(evt);
+      onExited?.Invoke(GetExitCode(evt));
     }
     else if (evt.EventName == "process")
     {

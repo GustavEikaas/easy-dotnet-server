@@ -22,7 +22,8 @@ public class RunInTerminalStrategy(
   IStartupHookService startupHookService,
   IHttpClientFactory httpClientFactory,
   ILaunchProfileService launchProfileService,
-  IAppWrapperManager appWrapperManager) : IDebugSessionStrategy
+  IAppWrapperManager appWrapperManager,
+  IReadOnlyDictionary<string, string>? extraEnv = null) : IDebugSessionStrategy
 {
   private LaunchProfile? _activeProfile;
   private int _pid;
@@ -58,6 +59,13 @@ public class RunInTerminalStrategy(
   public async Task TransformRequestAsync(InterceptableAttachRequest request, IDebuggerProxy proxy)
   {
     var profileEnv = LaunchProfileUtils.GetEnvironmentVariables(_activeProfile);
+    if (extraEnv is not null)
+    {
+      foreach (var kv in extraEnv)
+      {
+        profileEnv[kv.Key] = kv.Value;
+      }
+    }
     _hookSession = startupHookService.CreateSession(profileEnv);
 
     var cwd = LaunchProfileUtils.ResolveCwd(_activeProfile, project.Raw);

@@ -88,7 +88,7 @@ public class WorkspaceProjectResolver(
     var options = new List<SelectionOption>();
     if (includeScriptOption)
       options.Add(new SelectionOption(SingleFileOptionId, $"{Path.GetFileName(singleFilePath)} (script)"));
-    options.AddRange(projects.Select(p => new SelectionOption(ProjectKey(p), $"{p.ProjectName} ({p.TargetFramework})")));
+    options.AddRange(projects.Select(p => new SelectionOption(ProjectKey(p), ProjectLabel(p))));
 
     var selected = await editorService.RequestSelection($"Pick project to {operationLabel}", [.. options]);
     if (selected is null) return null;
@@ -178,7 +178,7 @@ public class WorkspaceProjectResolver(
     if (projects.Count == 1) return projects[0];
 
     var options = projects
-        .Select(p => new SelectionOption(ProjectKey(p), $"{p.ProjectName} ({p.TargetFramework})"))
+        .Select(p => new SelectionOption(ProjectKey(p), ProjectLabel(p)))
         .ToArray();
 
     var selected = await editorService.RequestSelection(prompt, options);
@@ -225,6 +225,11 @@ public class WorkspaceProjectResolver(
   }
 
   private static string ProjectKey(ValidatedDotnetProject p) => $"{p.ProjectFullPath}:{p.TargetFramework}";
+
+  private static string ProjectLabel(ValidatedDotnetProject p) =>
+      p.Raw.IsAspireHost
+          ? $"{p.ProjectName} ({p.TargetFramework}) [aspire]"
+          : $"{p.ProjectName} ({p.TargetFramework})";
 
   private static ResolvedExecutionTarget ProjectTarget(ValidatedDotnetProject p) =>
       new() { Kind = ExecutionTargetKind.Project, Project = p };

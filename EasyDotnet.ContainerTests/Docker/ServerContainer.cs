@@ -28,6 +28,14 @@ public abstract class ServerContainer : IAsyncDisposable
 
   public JsonRpc Rpc { get; private set; } = null!;
 
+  /// <summary>
+  /// Executes a command inside the running container (exec form, no shell). Used by e2e tests
+  /// that act as the editor and must actually run the processes the server asks for. Blocks
+  /// until the command exits.
+  /// </summary>
+  public Task<ExecResult> ExecAsync(IList<string> command, CancellationToken ct = default) =>
+    _container.ExecAsync(command, ct);
+
   protected abstract string Image { get; }
   protected abstract string TmpMountPath { get; }
 

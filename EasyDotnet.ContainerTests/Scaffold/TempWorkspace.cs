@@ -483,6 +483,22 @@ public sealed class TempProjectBuilder
   }
 
   /// <summary>
+  /// Marks the project as an Aspire AppHost by setting <c>IsAspireHost=true</c> (the same signal
+  /// the Aspire.AppHost.Sdk emits) alongside <c>AspireHostingSDKVersion=9.0.0</c>. The project
+  /// still builds as a plain console app — no Aspire SDK/packages are added — and exercises the
+  /// workspace/run → DCP routing without the real workload.
+  /// <para>
+  /// The SDK version is required: the .NET SDK's <c>_CheckForAspireWorkloadDeprecation</c> target
+  /// hard-errors on any <c>IsAspireHost</c> project whose <c>AspireHostingSDKVersion</c> is empty
+  /// or &lt; 9.0.0 (treating it as a deprecated workload-based host), which would fail restore/build.
+  /// Presenting a 9.0+ version skips that check while keeping <c>IsAspireHost=true</c> for routing.
+  /// </para>
+  /// </summary>
+  public TempProjectBuilder AsAspireHost() =>
+      WithProperty("IsAspireHost", "true")
+      .WithProperty("AspireHostingSDKVersion", "9.0.0");
+
+  /// <summary>
   /// Marks the project as packable with an explicit <c>PackageId</c> and <c>Version</c>.
   /// Forces <c>OutputType=Library</c> so the produced nupkg is a normal package.
   /// </summary>

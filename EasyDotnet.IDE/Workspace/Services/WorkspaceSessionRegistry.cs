@@ -7,10 +7,11 @@ public record RunningProcessEntry(
     string ProjectName,
     string ProjectFullPath,
     string? TargetFramework,
-    int Pid
+    int Pid,
+    string? ParentKey = null
 );
 
-public record RunningSessionEntry(string ProjectName, bool IsDebugging);
+public record RunningSessionEntry(string ProjectName, bool IsDebugging, string? ParentKey = null);
 
 /// <summary>
 /// Combined session mutex and process data store, keyed by session key
@@ -36,14 +37,22 @@ public class WorkspaceSessionRegistry
   private readonly ConcurrentDictionary<string, RunningProcessEntry?> _sessions = new();
   private readonly ConcurrentDictionary<string, RunningSessionEntry> _claimedEntries = new();
 
-  /// <summary>Claims the slot. Returns <c>false</c> if already active.</summary>
-  public bool TryClaim(string key, string projectName, bool isDebug = false)
+  /// <summary>
+  /// Claims the slot. Returns <c>false</c> if already active. <paramref name="parentKey"/> marks
+  /// this session as a child of another (e.g. an Aspire resource under its AppHost), so callers
+  /// like the stop picker can present only top-level sessions and cascade to children.
+  /// </summary>
+  public bool TryClaim(string key, string projectName, bool isDebug = false, string? parentKey = null)
   {
     if (!_sessions.TryAdd(key, null))
       return false;
-    _claimedEntries[key] = new RunningSessionEntry(projectName, isDebug);
+    _claimedEntries[key] = new RunningSessionEntry(projectName, isDebug, parentKey);
     return true;
   }
+
+  /// <summary>Returns the live processes whose parent session is <paramref name="parentKey"/>.</summary>
+  public IReadOnlyList<RunningProcessEntry> GetChildProcesses(string parentKey) =>
+    [.. _sessions.Values.OfType<RunningProcessEntry>().Where(p => p.ParentKey == parentKey)];
 
   /// <summary>Returns <c>true</c> if a slot exists for the given key.</summary>
   public bool IsActive(string key) => _sessions.ContainsKey(key);

@@ -17,6 +17,8 @@ public class DebugSession : IAsyncDisposable
   public Task ProcessStarted => _coordinator.ProcessStarted;
   public Task DebugeeProcessStarted => _coordinator.DebugeeProcessStarted;
   public int? ProcessId => _coordinator.ProcessId;
+  public int? DebugeeProcessId => _coordinator.DebugeeProcessId;
+  public int? ExitCode => _coordinator.ExitCode;
   public int Port => _coordinator.Port;
 
   internal DebugSession(DebugSessionCoordinator coordinator)

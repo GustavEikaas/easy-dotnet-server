@@ -21,6 +21,7 @@ public class WorkspaceService(
     WorkspaceBuildHostManager buildHostManager,
     IDebugOrchestrator debugOrchestrator,
     IDebugStrategyFactory debugStrategyFactory,
+    Aspire.AspireHostManager aspireHostManager,
     ILogger<WorkspaceService> logger)
 {
   public async Task RunAsync(WorkspaceRunRequest request, CancellationToken ct)
@@ -50,7 +51,30 @@ public class WorkspaceService(
     }
 
     var project = target.Project!;
+    if (project.Raw.IsAspireHost)
+    {
+      await DispatchAspireStartAsync(project, target.LaunchProfile, false, ct);
+      return;
+    }
     await DispatchRunAsync(project, target.LaunchProfile, request.CliArgs, ct);
+  }
+
+  private async Task DispatchAspireStartAsync(ValidatedDotnetProject project, LaunchProfile? launchProfile, bool debug, CancellationToken ct)
+  {
+    if (!await preBuildService.BuildBeforeRunAsync(project.ProjectFullPath, project.ProjectName, ct))
+    {
+      return;
+    }
+
+    try
+    {
+      await aspireHostManager.LaunchAsync(project.ProjectFullPath, launchProfile, debug: debug, ct);
+    }
+    catch (Exception ex)
+    {
+      logger.LogError(ex, "Failed to start Aspire AppHost {ProjectName}", project.ProjectName);
+      await editorService.DisplayError($"Failed to start Aspire app {project.ProjectName}: {ex.Message}");
+    }
   }
 
   public async Task DebugAsync(WorkspaceDebugRequest request, CancellationToken ct)
@@ -75,6 +99,12 @@ public class WorkspaceService(
       }
 
       var project = target.Project!;
+      if (project.Raw.IsAspireHost)
+      {
+        await DispatchAspireStartAsync(project, target.LaunchProfile, true, ct);
+        return;
+      }
+
       if (!await preBuildService.BuildBeforeRunAsync(project.ProjectFullPath, project.ProjectName, ct))
       {
         return;
@@ -341,7 +371,7 @@ public class WorkspaceService(
 
     var strategy = debugStrategyFactory.CreateRunInTerminalStrategy(project, launchProfileName, cliArgs);
 
-    EasyDotnet.Debugger.DebugSession session;
+    Debugger.DebugSession session;
     try
     {
       session = await debugOrchestrator.StartClientDebugSessionAsync(
