@@ -95,6 +95,13 @@ public sealed class AspireServer(IIdeCallback ide, ILoggerFactory loggerFactory)
   [JsonRpcMethod(AspireRpcMethods.Shutdown)]
   public async Task ShutdownAsync()
   {
+    // Stop child resources before tearing down: when the AppHost exits, DCP is gone and
+    // can no longer reap them, so the managed resource processes would otherwise be orphaned.
+    var runSessions = _runSessions;
+    if (runSessions is not null)
+    {
+      await runSessions.StopAllAsync(CancellationToken.None);
+    }
     if (_dcp is not null)
     {
       await _dcp.DisposeAsync();

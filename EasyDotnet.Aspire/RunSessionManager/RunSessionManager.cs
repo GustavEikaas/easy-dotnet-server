@@ -58,6 +58,25 @@ public sealed class RunSessionManager(IIdeCallback ide, ILogger<RunSessionManage
     return true;
   }
 
+  /// <summary>
+  /// Terminates every tracked run session. Called when the AppHost exits — its child
+  /// resources are managed processes that would otherwise be orphaned. Each child's own
+  /// <see cref="RunAsync"/> removes it from <see cref="_sessions"/> as it dies, so this is
+  /// best-effort: failures are logged, never thrown, so teardown always completes.
+  /// </summary>
+  public Task StopAllAsync(CancellationToken ct) =>
+      Task.WhenAll(_sessions.Keys.Select(async runId =>
+      {
+        try
+        {
+          await ide.StopManagedResourceAsync(runId, ct);
+        }
+        catch (Exception ex)
+        {
+          logger.LogWarning(ex, "Failed to stop run session {RunId} during shutdown", runId);
+        }
+      }));
+
   private async Task RunAsync(string runId, RunManagedResourceRequest request)
   {
     int? exitCode = null;
