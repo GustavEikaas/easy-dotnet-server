@@ -358,6 +358,12 @@ _No parameters_
 
 **Returns:** `String[]`
 
+### `_server/logdump/aspire`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+
+**Returns:** `Task<String[]>`
+
 ### `_server/logdump/buildserver`
 | Parameter | Type | Optional |
 |-----------|------|----------|
