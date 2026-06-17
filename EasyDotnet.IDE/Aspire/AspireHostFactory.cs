@@ -9,11 +9,6 @@ using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.Aspire;
 
-/// <summary>
-/// Spawns the isolated <c>EasyDotnet.Aspire</c> host process and connects to it over
-/// a named pipe (mirrors <see cref="BuildHost.BuildHostFactory"/>). Registers the
-/// editor callback target so the Aspire host can drive managed runs.
-/// </summary>
 public class AspireHostFactory(ILogger<AspireHostFactory> logger, AspireRunService runService, AspireDebugService debugService, LogLevelState logLevelState)
 {
   public async Task<(Process, JsonRpc)> StartServerAsync()
@@ -100,8 +95,6 @@ public class AspireHostFactory(ILogger<AspireHostFactory> logger, AspireRunServi
 
   private static class AspireHostLocator
   {
-    // Mirrors AppWrapperLocator: PublishAspire emits Tools/Aspire/net8.0 which the IDE
-    // csproj's Tools/** None glob packs to tools/Aspire/net8.0 in the tool package.
     public static string GetAspireHost()
     {
 #if DEBUG

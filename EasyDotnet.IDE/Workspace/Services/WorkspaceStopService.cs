@@ -19,8 +19,7 @@ public class WorkspaceStopService(
       return;
     }
 
-    // Only top-level sessions are pickable. Child sessions (e.g. Aspire resources under their
-    // AppHost) are stopped by stopping their parent, so they must not appear in the picker.
+    // Items with parents stem from aspire
     var running = sessionRegistry.GetRunningProcesses().Where(p => p.ParentKey is null).ToList();
 
     //TODO: support killing debugging sessions
@@ -43,8 +42,7 @@ public class WorkspaceStopService(
     if (target is null)
       return;
 
-    // Stop children first (e.g. Aspire resources) so killing the parent (AppHost) doesn't
-    // orphan them when its DCP instance dies before it can stop them itself.
+    // Stop children first (e.g. Aspire resources) so killing the parent (AppHost) doesn't orphan them 
     foreach (var child in sessionRegistry.GetChildProcesses(target.SessionKey))
     {
       KillProcess(child);

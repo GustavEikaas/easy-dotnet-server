@@ -7,8 +7,7 @@ using StreamJsonRpc;
 namespace EasyDotnet.IDE.Aspire;
 
 /// <summary>
-/// Owns the lifetime of the spawned Aspire host process + its RPC connection,
-/// spawning it on demand (mirrors <see cref="BuildHost.BuildHostManager"/>).
+/// Owns the lifetime of the spawned Aspire host process + its RPC connection, spawning it on demand
 /// </summary>
 public sealed class AspireHostManager(ILogger<AspireHostManager> logger, AspireHostFactory factory) : IAsyncDisposable
 {
@@ -25,24 +24,7 @@ public sealed class AspireHostManager(ILogger<AspireHostManager> logger, AspireH
         AspireRpcMethods.Launch, new LaunchAppHostRequest(appHostProjectPath, debug, envVars), ct);
   }
 
-  public async Task ShutdownAsync(CancellationToken ct = default)
-  {
-    if (_rpc?.IsDisposed != false || _process?.HasExited != false)
-    {
-      return;
-    }
-    try
-    {
-      await _rpc.InvokeAsync(AspireRpcMethods.Shutdown).WaitAsync(ct);
-    }
-    catch (ConnectionLostException) { }
-    finally
-    {
-      InvalidateConnection();
-    }
-  }
 
-  /// <summary>Pulls the Aspire host's log ring buffer (DCP server included). Empty if not running.</summary>
   public async Task<string[]> GetLogsAsync(CancellationToken ct = default)
   {
     if (_rpc?.IsDisposed != false || _process?.HasExited != false)
@@ -60,7 +42,6 @@ public sealed class AspireHostManager(ILogger<AspireHostManager> logger, AspireH
     }
   }
 
-  /// <summary>Propagates the IDE log level to a running Aspire host. No-op if not running.</summary>
   public async Task SetLogLevelAsync(string level, CancellationToken ct = default)
   {
     if (_rpc?.IsDisposed != false || _process?.HasExited != false)

@@ -53,17 +53,13 @@ public class WorkspaceService(
     var project = target.Project!;
     if (project.Raw.IsAspireHost)
     {
-      await DispatchAspireRunAsync(project, target.LaunchProfile, ct);
+      await DispatchAspireStartAsync(project, target.LaunchProfile, false, ct);
       return;
     }
     await DispatchRunAsync(project, target.LaunchProfile, request.CliArgs, ct);
   }
 
-  // Aspire AppHost projects are run through the DCP integration: build first
-  // (reusing the standard pre-build, which also builds the referenced resource
-  // projects), then hand off to the isolated Aspire host which stands up the DCP
-  // server and relays each resource run back through the editor.
-  private async Task DispatchAspireRunAsync(ValidatedDotnetProject project, LaunchProfile? launchProfile, CancellationToken ct)
+  private async Task DispatchAspireStartAsync(ValidatedDotnetProject project, LaunchProfile? launchProfile, bool debug, CancellationToken ct)
   {
     if (!await preBuildService.BuildBeforeRunAsync(project.ProjectFullPath, project.ProjectName, ct))
     {
@@ -72,33 +68,12 @@ public class WorkspaceService(
 
     try
     {
-      await aspireHostManager.LaunchAsync(project.ProjectFullPath, launchProfile, debug: false, ct);
+      await aspireHostManager.LaunchAsync(project.ProjectFullPath, launchProfile, debug: debug, ct);
     }
     catch (Exception ex)
     {
       logger.LogError(ex, "Failed to start Aspire AppHost {ProjectName}", project.ProjectName);
       await editorService.DisplayError($"Failed to start Aspire app {project.ProjectName}: {ex.Message}");
-    }
-  }
-
-  // Same as DispatchAspireRunAsync but launches in Debug mode: the AppHost gets
-  // DEBUG_SESSION_RUN_MODE=Debug so DCP requests Debug for resources, which the editor
-  // then runs under the debugger.
-  private async Task DispatchAspireDebugAsync(ValidatedDotnetProject project, LaunchProfile? launchProfile, CancellationToken ct)
-  {
-    if (!await preBuildService.BuildBeforeRunAsync(project.ProjectFullPath, project.ProjectName, ct))
-    {
-      return;
-    }
-
-    try
-    {
-      await aspireHostManager.LaunchAsync(project.ProjectFullPath, launchProfile, debug: true, ct);
-    }
-    catch (Exception ex)
-    {
-      logger.LogError(ex, "Failed to start Aspire AppHost {ProjectName} in debug mode", project.ProjectName);
-      await editorService.DisplayError($"Failed to debug Aspire app {project.ProjectName}: {ex.Message}");
     }
   }
 
@@ -126,7 +101,7 @@ public class WorkspaceService(
       var project = target.Project!;
       if (project.Raw.IsAspireHost)
       {
-        await DispatchAspireDebugAsync(project, target.LaunchProfile, ct);
+        await DispatchAspireStartAsync(project, target.LaunchProfile, true, ct);
         return;
       }
 
@@ -396,7 +371,7 @@ public class WorkspaceService(
 
     var strategy = debugStrategyFactory.CreateRunInTerminalStrategy(project, launchProfileName, cliArgs);
 
-    EasyDotnet.Debugger.DebugSession session;
+    Debugger.DebugSession session;
     try
     {
       session = await debugOrchestrator.StartClientDebugSessionAsync(

@@ -9,7 +9,7 @@ namespace EasyDotnet.IDE.Controllers;
 public class ServerController(
     LogLevelState logLevelState,
     IBuildHostManager buildHostManager,
-    IDE.Aspire.AspireHostManager aspireHostManager,
+    Aspire.AspireHostManager aspireHostManager,
     ILogger<ServerController> logger) : BaseController
 {
   public sealed record SetLogLevelRequest(string Level);

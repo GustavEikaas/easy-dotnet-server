@@ -29,21 +29,9 @@ internal static class StartupHook
       client.Flush();
       LogIfDebug("PID written and flushed.");
 
-      var resumeTimeout = GetResumeTimeout();
-      LogIfDebug($"Waiting for resume byte (timeout {resumeTimeout.TotalSeconds:0}s)...");
-      using var cts = new CancellationTokenSource(resumeTimeout);
-      try
-      {
-        var buf = new byte[1];
-        var read = client.ReadAsync(buf.AsMemory(0, 1), cts.Token).AsTask().GetAwaiter().GetResult();
-        LogIfDebug(read == 0 ? "Pipe closed before resume byte; continuing" : "Received resume byte");
-      }
-      catch (OperationCanceledException)
-      {
-        // Don't hang the process forever if the resume signal never arrives (e.g. the debugger
-        // failed to attach). Continue running un-attached rather than blocking startup indefinitely.
-        LogIfDebug($"Timed out after {resumeTimeout.TotalSeconds:0}s waiting for resume byte; continuing without debugger attach");
-      }
+      LogIfDebug("Waiting for resume byte...");
+      client.ReadByte();
+      LogIfDebug("Received resume byte");
     }
     catch (Exception ex)
     {
@@ -51,14 +39,6 @@ internal static class StartupHook
       LogIfDebug(ex.StackTrace ?? "<no stack>");
       throw;
     }
-  }
-
-  private static TimeSpan GetResumeTimeout()
-  {
-    var raw = Environment.GetEnvironmentVariable("EASY_DOTNET_HOOK_RESUME_TIMEOUT_MS");
-    return int.TryParse(raw, out var ms) && ms > 0
-        ? TimeSpan.FromMilliseconds(ms)
-        : TimeSpan.FromSeconds(30);
   }
 
   private static string? ReadAndDiscardHookPipe()

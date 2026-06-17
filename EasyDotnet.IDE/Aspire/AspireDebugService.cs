@@ -15,8 +15,7 @@ namespace EasyDotnet.IDE.Aspire;
 /// Debugs a DCP resource (mode=Debug) on behalf of the spawned Aspire host, reusing the same
 /// machinery as <c>WorkspaceService.StartDebugSessionAsync</c>: launch the project under netcoredbg
 /// (with DCP's env injected), tell Neovim to attach via <see cref="IEditorService.RequestStartDebugSession"/>,
-/// then block until the debug session ends and report the exit code. Mirrors <see cref="AspireRunService"/>
-/// for the Debug path. Resources only — the AppHost is always a managed run.
+/// then block until the debug session ends and report the exit code. Mirrors <see cref="AspireRunService"/> for the Debug path
 /// </summary>
 public sealed class AspireDebugService(
     WorkspaceBuildHostManager buildHostManager,
@@ -30,13 +29,11 @@ public sealed class AspireDebugService(
   private readonly ConcurrentDictionary<string, DebugSession> _sessions = new();
   private readonly ConcurrentDictionary<string, int> _sessionIds = new();
 
-  public async Task<int> DebugAsync(RunManagedResourceRequest request, Func<int, Task>? reportPid, CancellationToken ct)
+  public async Task<int> DebugAsync(RunManagedResourceRequest request, Func<int, Task> reportPid, CancellationToken ct)
   {
-    var project = await ResolveProjectAsync(request.ProjectPath, ct)
-        ?? throw new InvalidOperationException($"Could not evaluate project '{request.ProjectPath}' for debug");
+    var project = await ResolveProjectAsync(request.ProjectPath, ct) ?? throw new InvalidOperationException($"Could not evaluate project '{request.ProjectPath}' for debug");
 
-    logger.LogInformation("Debugging Aspire resource {RunId} from {Project} ({Tfm})",
-        request.RunId, project.ProjectName, project.TargetFramework);
+    logger.LogInformation("Debugging Aspire resource {RunId} from {Project} ({Tfm})", request.RunId, project.ProjectName, project.TargetFramework);
 
     var sessionKey = SessionKey(request.RunId);
     var parentKey = SessionKey(AspireRunIds.AppHost);
@@ -46,30 +43,22 @@ public sealed class AspireDebugService(
     DebugSession? session = null;
     try
     {
-      // No launch profile: DCP's env[] is authoritative and injected as extraEnv.
       var cliArgs = request.Args is { Count: > 0 } ? string.Join(' ', request.Args) : null;
-      var strategy = debugStrategyFactory.CreateRunInTerminalStrategy(
-          project, launchProfileName: null, cliArgs: cliArgs, extraEnv: request.EnvironmentVariables);
+      var strategy = debugStrategyFactory.CreateRunInTerminalStrategy(project, launchProfileName: null, cliArgs: cliArgs, extraEnv: request.EnvironmentVariables);
 
       session = await debugOrchestrator.StartClientDebugSessionAsync(project.ProjectFullPath, strategy, ct);
       _sessions[request.RunId] = session;
 
-      var sessionId = await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
-      _sessionIds[request.RunId] = sessionId;
+      _sessionIds[request.RunId] = await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
       await session.WaitForDebugSessionStartedAsync().WaitAsync(ct);
 
-      // Report the debuggee PID (not netcoredbg) to DCP + the running UI once it's known.
       _ = session.DebugeeProcessStarted.ContinueWith(_ =>
       {
         if (session.DebugeeProcessId is int pid && pid > 0)
         {
-          sessionRegistry.SetProcessInfo(sessionKey, new RunningProcessEntry(
-              sessionKey, project.ProjectName, project.ProjectFullPath, project.TargetFramework, pid, parentKey));
+          sessionRegistry.SetProcessInfo(sessionKey, new RunningProcessEntry(sessionKey, project.ProjectName, project.ProjectFullPath, project.TargetFramework, pid, parentKey));
           _ = NotifyRunningSessionsAsync();
-          if (reportPid is not null)
-          {
-            _ = reportPid(pid);
-          }
+          reportPid(pid);
         }
       }, TaskScheduler.Default);
 
@@ -87,8 +76,6 @@ public sealed class AspireDebugService(
 
   /// <summary>
   /// Terminates the debug session backing <paramref name="runId"/> (DCP <c>DELETE /run_session</c>).
-  /// Ending the session makes the in-flight <see cref="DebugAsync"/> complete, releasing the session
-  /// and letting the Aspire host emit <c>sessionTerminated</c>.
   /// </summary>
   public async Task StopAsync(string runId)
   {
@@ -104,14 +91,12 @@ public sealed class AspireDebugService(
       }
     }
 
-    // Ensure teardown even if the editor ignored the terminate request.
     if (_sessions.TryGetValue(runId, out var session))
     {
       await session.ForceDisposeAsync();
     }
   }
 
-  /// <summary>True if the runId is a debug session this service owns.</summary>
   public bool Owns(string runId) => _sessions.ContainsKey(runId);
 
   private static string SessionKey(string runId) => $"aspire:{runId}";

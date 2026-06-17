@@ -59,7 +59,6 @@ public class RunInTerminalStrategy(
   public async Task TransformRequestAsync(InterceptableAttachRequest request, IDebuggerProxy proxy)
   {
     var profileEnv = LaunchProfileUtils.GetEnvironmentVariables(_activeProfile);
-    // Caller-supplied env (e.g. Aspire DCP resource env) overrides launch-profile values.
     if (extraEnv is not null)
     {
       foreach (var kv in extraEnv)
