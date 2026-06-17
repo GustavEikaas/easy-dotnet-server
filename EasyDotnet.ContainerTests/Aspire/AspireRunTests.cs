@@ -53,5 +53,4 @@ public abstract class AspireRunTests<TContainer> : AspireRunTestBase<TContainer>
   }
 }
 
-public sealed class AspireRunSdk8Linux : AspireRunTests<Sdk8LinuxContainer>;
 public sealed class AspireRunSdk10Linux : AspireRunTests<Sdk10LinuxContainer>;
