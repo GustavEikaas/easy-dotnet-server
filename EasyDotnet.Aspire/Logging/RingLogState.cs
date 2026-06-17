@@ -12,7 +12,6 @@ public sealed class RingLogState(LogLevel initial)
   public bool IsEnabled(LogLevel level) => level != LogLevel.None && level >= MinLevel;
   public void SetLevel(LogLevel level) => _minLevel = (int)level;
 
-  /// <summary>Parses both LogLevel and the IDE's SourceLevels names ("Verbose", "Information", …).</summary>
   public static LogLevel Parse(string value) => value.Trim().ToLowerInvariant() switch
   {
     "off" or "none" => LogLevel.None,

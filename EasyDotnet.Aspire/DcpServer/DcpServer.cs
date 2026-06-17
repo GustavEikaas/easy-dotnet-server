@@ -112,8 +112,6 @@ public sealed class DcpServer(DcpCredentials credentials, RunSessionManager.RunS
       return false;
     }
 
-    // This server is spawned to serve exactly one DCP instance. Pin to the first instance-id
-    // seen and reject any other, so it can never be used out of the context it was created for.
     var instanceId = ctx.Request.Headers["Microsoft-Developer-DCP-Instance-ID"].ToString();
     if (string.IsNullOrEmpty(instanceId))
     {
@@ -196,8 +194,6 @@ public sealed class DcpServer(DcpCredentials credentials, RunSessionManager.RunS
     string runId;
     try
     {
-      // Validation is synchronous, so an invalid/unsupported request fails the PUT here
-      // rather than returning 201 and silently failing later.
       runId = runSessions.CreateRunSession(payload);
     }
     catch (DcpRunSessionException ex)
@@ -238,7 +234,7 @@ public sealed class DcpServer(DcpCredentials credentials, RunSessionManager.RunS
     }
     catch (ObjectDisposedException)
     {
-      return; // raced with shutdown
+      return;
     }
 
     try
@@ -267,12 +263,6 @@ public sealed class DcpServer(DcpCredentials credentials, RunSessionManager.RunS
 
   public async ValueTask DisposeAsync()
   {
-    // Disposed once per instance (AspireServer guards via its single _dcp field), so no
-    // re-entrancy guard is needed; the disposes below are individually idempotent anyway.
-
-    // Spec: send a WebSocket Close before terminating the connection. CloseOutputAsync only
-    // sends the close frame (the notify read loop receives the peer's close and exits), and
-    // takes the send lock so it can't interleave with an in-flight notification.
     await CloseNotifySocketAsync();
 
     credentials.ServerCertificate.Dispose();
