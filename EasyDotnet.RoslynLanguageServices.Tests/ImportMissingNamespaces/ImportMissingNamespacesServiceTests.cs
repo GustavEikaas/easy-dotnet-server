@@ -65,6 +65,21 @@ public sealed class ImportMissingNamespacesServiceTests
   }
 
   [Test]
+  public async Task MultipleMissing_AcrossSourceAndMetadata_ResolvesAll()
+  {
+    using var workspace = new AdhocWorkspace();
+    var project = CreateProject(workspace);
+    project = project.AddDocument("Cmd.cs", SourceText.From("namespace App.Commands;\npublic sealed class RunCommand { }\n"), filePath: "/tmp/Cmd.cs").Project;
+    var usage = "namespace App;\nclass Program { void M() { var a = new RunCommand(); var v = Assembly.GetExecutingAssembly(); var b = new StringBuilder(); } }\n";
+    var document = project.AddDocument("Program.cs", SourceText.From(usage), filePath: "/tmp/Program.cs");
+
+    var response = await ImportMissingNamespacesService.ImportMissingNamespacesAsync(document, CancellationToken.None);
+
+    await Assert.That(response.CanImport).IsTrue();
+    await Assert.That(response.Usings).IsEquivalentTo(new[] { "using App.Commands;", "using System.Reflection;", "using System.Text;" });
+  }
+
+  [Test]
   public async Task NothingMissing_ReturnsNo()
   {
     var document = CreateDocument("/tmp/Use.cs", "public class Use { int Value; }\n");
