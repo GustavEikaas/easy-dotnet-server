@@ -19,9 +19,9 @@ public static class MsBuildPlatform
     }
 
     var trimmed = platform.Trim();
-    var collapsed = trimmed.Replace(" ", "", System.StringComparison.Ordinal);
+    var collapsed = trimmed.Replace(" ", "", StringComparison.Ordinal);
 
-    return string.Equals(collapsed, ProjectAnyCpu, System.StringComparison.OrdinalIgnoreCase)
+    return string.Equals(collapsed, ProjectAnyCpu, StringComparison.OrdinalIgnoreCase)
         ? null
         : trimmed;
   }

@@ -2,7 +2,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-namespace EasyDotnet.Extensions;
+namespace EasyDotnet.IDE.Extensions;
 
 public static class CompilationUnitSyntaxExtensions
 {

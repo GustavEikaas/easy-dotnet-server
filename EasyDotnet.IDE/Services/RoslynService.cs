@@ -1,6 +1,6 @@
 using System.Threading.Channels;
 using EasyDotnet.BuildServer.Contracts;
-using EasyDotnet.Controllers.Roslyn;
+using EasyDotnet.IDE.Controllers.Roslyn;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.MSBuild;

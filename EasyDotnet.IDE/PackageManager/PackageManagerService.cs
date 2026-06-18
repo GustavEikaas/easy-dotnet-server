@@ -1,5 +1,5 @@
 using EasyDotnet.BuildServer.Contracts;
-using EasyDotnet.Controllers.Nuget;
+using EasyDotnet.IDE.Controllers.Nuget;
 using EasyDotnet.IDE.Editor;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Models.Client.Quickfix;

@@ -1,8 +1,6 @@
-using System;
-using System.Collections.Generic;
 using NuGet.Protocol.Core.Types;
 
-namespace EasyDotnet.Controllers.Nuget;
+namespace EasyDotnet.IDE.Controllers.Nuget;
 
 public sealed record NugetPackageMetadata(
     string Source,
