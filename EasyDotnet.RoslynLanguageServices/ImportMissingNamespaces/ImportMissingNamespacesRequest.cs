@@ -1,0 +1,3 @@
+namespace EasyDotnet.RoslynLanguageServices.ImportMissingNamespaces;
+
+public sealed record ImportMissingNamespacesRequest();
