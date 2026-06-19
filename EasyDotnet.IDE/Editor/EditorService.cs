@@ -71,7 +71,13 @@ public class EditorService(
     var guid = editorProcessManagerService.RegisterJob();
     var session = startupHookService.CreateSession(request.EnvironmentVariables);
 
+
     var command = BuildRunCommand(request, session.EnvironmentVariables);
+
+    if (command.Executable == "godot")
+    {
+      command.EnvironmentVariables.Remove("DOTNET_STARTUP_HOOKS");
+    }
 
     try
     {

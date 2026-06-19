@@ -40,19 +40,24 @@ public static class WorkspaceRunCommandBuilder
     return new RunCommand(
         command.Executable,
         command.Arguments,
-        LaunchProfileUtils.ResolveCwd(launchProfile, project),
+        command.Cwd ?? LaunchProfileUtils.ResolveCwd(launchProfile, project),
         env);
   }
 
-  private static (string Executable, List<string> Arguments) ResolveSdkRunCommand(DotnetProject project)
+  private static (string Executable, List<string> Arguments, string? Cwd) ResolveSdkRunCommand(DotnetProject project)
   {
     if (!string.IsNullOrWhiteSpace(project.RunCommand))
     {
       var args = string.IsNullOrWhiteSpace(project.RunArguments)
-          ? new List<string>()
+          ? []
           : CommandLineParser.SplitCommandLine(project.RunArguments).ToList();
 
-      return (project.RunCommand!, args);
+      return (project.RunCommand, args, null);
+    }
+
+    if (project.UsingGodotNETSdk)
+    {
+      return ("godot", [], project.ProjectDir);
     }
 
     if (string.IsNullOrWhiteSpace(project.TargetPath))
@@ -63,10 +68,10 @@ public static class WorkspaceRunCommandBuilder
     if (string.Equals(project.TargetFrameworkIdentifier, ".NETCoreApp", StringComparison.OrdinalIgnoreCase)
         && Path.GetExtension(project.TargetPath).Equals(".dll", StringComparison.OrdinalIgnoreCase))
     {
-      return ("dotnet", ["exec", project.TargetPath]);
+      return ("dotnet", ["exec", project.TargetPath], null);
     }
 
-    return (project.TargetPath, []);
+    return (project.TargetPath, [], null);
   }
 
   private static void AddDotnetRootForAppHost(DotnetProject project, Dictionary<string, string> env)

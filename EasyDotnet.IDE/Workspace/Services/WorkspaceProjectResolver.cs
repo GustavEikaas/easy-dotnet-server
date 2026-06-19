@@ -228,7 +228,9 @@ public class WorkspaceProjectResolver(
 
   private static string ProjectLabel(ValidatedDotnetProject p) =>
       p.Raw.IsAspireHost
-          ? $"{p.ProjectName} ({p.TargetFramework}) [aspire]"
+          ? $"{p.ProjectName} ({p.TargetFramework}) [aspire]" :
+          p.Raw.UsingGodotNETSdk
+          ? $"{p.ProjectName} ({p.TargetFramework})  [godot]"
           : $"{p.ProjectName} ({p.TargetFramework})";
 
   private static ResolvedExecutionTarget ProjectTarget(ValidatedDotnetProject p) =>

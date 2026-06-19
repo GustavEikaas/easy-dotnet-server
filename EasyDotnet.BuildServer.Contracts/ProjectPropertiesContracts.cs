@@ -183,7 +183,8 @@ public sealed record ValidatedDotnetProject
           Raw.HasRuntimeOutput
           || !string.IsNullOrWhiteSpace(Raw.RunCommand)
           || OutputType.Equals("Exe", StringComparison.OrdinalIgnoreCase)
-          || OutputType.Equals("WinExe", StringComparison.OrdinalIgnoreCase));
+          || OutputType.Equals("WinExe", StringComparison.OrdinalIgnoreCase)
+          || Raw.UsingGodotNETSdk);
 
   public bool IsMTP => Raw.IsTestingPlatformApplication;
 
