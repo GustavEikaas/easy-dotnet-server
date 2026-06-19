@@ -1,11 +1,8 @@
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
+using EasyDotnet.Controllers;
 using EasyDotnet.Services;
 using StreamJsonRpc;
 
-namespace EasyDotnet.Controllers.Outdated;
+namespace EasyDotnet.IDE.Controllers.Outdated;
 
 public class OutdatedController(OutdatedService oudatedService) : BaseController
 {
@@ -17,8 +14,7 @@ public class OutdatedController(OutdatedService oudatedService) : BaseController
     var dependencies = await oudatedService.AnalyzeProjectDependenciesAsync(
                         targetPath,
                         includeTransitive: includeTransitive ?? false,
-                        includeUpToDate: true
-                    );
+                        includeUpToDate: true);
 
     return dependencies.Select(x => x.ToResponse()).AsAsyncEnumerable();
   }

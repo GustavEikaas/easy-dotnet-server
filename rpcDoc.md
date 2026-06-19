@@ -1,35 +1,3 @@
-## RoslynController
-
-### `roslyn/get-workspace-diagnostics`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| targetPath | string |   |
-| includeWarnings | bool | ✅  |
-
-**Returns:** `IAsyncEnumerable<DiagnosticMessage>`
-
-### `roslyn/scope-variables`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| sourceFilePath | string |   |
-| lineNumber | int |   |
-
-**Returns:** `Task<IAsyncEnumerable<VariableResultResponse>>`
-
----
-
-## OutdatedController
-
-### `outdated/packages`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| targetPath | string |   |
-| includeTransitive | bool? | ✅  |
-
-**Returns:** `Task<IAsyncEnumerable<OutdatedDependencyInfoResponse>>`
-
----
-
 ## WorkspaceController
 
 ### `workspace/build`
@@ -278,13 +246,6 @@
 
 **Returns:** `Task`
 
-### `nuget/list-installed`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| request | ListInstalledRequest |   |
-
-**Returns:** `Task<InstalledPackageReference[]>`
-
 ### `nuget/remove-package`
 | Parameter | Type | Optional |
 |-----------|------|----------|
@@ -379,6 +340,47 @@ _No parameters_
 
 ---
 
+## EntityFrameworkController
+
+### `ef/database-drop`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+
+**Returns:** `Task`
+
+### `ef/database-update`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+
+**Returns:** `Task`
+
+### `ef/migrations-add`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| migrationName | string | ✅  |
+
+**Returns:** `Task`
+
+### `ef/migrations-apply`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+
+**Returns:** `Task`
+
+### `ef/migrations-list`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+
+**Returns:** `Task`
+
+### `ef/migrations-remove`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+
+**Returns:** `Task`
+
+---
+
 ## TestController
 
 ### `test/set-project-run-settings`
@@ -426,6 +428,38 @@ _No parameters_
 
 ---
 
+## RoslynController
+
+### `roslyn/get-workspace-diagnostics`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| targetPath | string |   |
+| includeWarnings | bool | ✅  |
+
+**Returns:** `IAsyncEnumerable<DiagnosticMessage>`
+
+### `roslyn/scope-variables`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| sourceFilePath | string |   |
+| lineNumber | int |   |
+
+**Returns:** `Task<IAsyncEnumerable<VariableResultResponse>>`
+
+---
+
+## OutdatedController
+
+### `outdated/packages`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| targetPath | string |   |
+| includeTransitive | bool? | ✅  |
+
+**Returns:** `Task<IAsyncEnumerable<OutdatedDependencyInfoResponse>>`
+
+---
+
 ## NugetController
 
 ### `nuget/get-package-versions`
@@ -436,13 +470,6 @@ _No parameters_
 | includePrerelease | bool | ✅  |
 
 **Returns:** `Task<IAsyncEnumerable<string>>`
-
-### `nuget/restore`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| targetPath | string |   |
-
-**Returns:** `Task<RestoreResult>`
 
 ### `nuget/search-packages`
 | Parameter | Type | Optional |
@@ -462,87 +489,6 @@ _No parameters_
 | request | InitializeRequest |   |
 
 **Returns:** `Task<InitializeResponse>`
-
----
-
-## EntityFrameworkController
-
-### `ef/database-drop`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-
-**Returns:** `Task`
-
-### `ef/database-update`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-
-**Returns:** `Task`
-
-### `ef/migrations-add`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| migrationName | string | ✅  |
-
-**Returns:** `Task`
-
-### `ef/migrations-apply`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-
-**Returns:** `Task`
-
-### `ef/migrations-list`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-
-**Returns:** `Task`
-
-### `ef/migrations-remove`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-
-**Returns:** `Task`
-
----
-
-## DefaultController
-
-### `set-default-build-project`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| projectPath | string |   |
-
-**Returns:** `Void`
-
-### `set-default-launch-profile`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| projectPath | string |   |
-| launchProfile | string |   |
-
-**Returns:** `Void`
-
-### `set-default-startup-project`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| projectPath | string |   |
-
-**Returns:** `Void`
-
-### `set-default-test-project`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| projectPath | string |   |
-
-**Returns:** `Void`
-
-### `set-default-view-project`
-| Parameter | Type | Optional |
-|-----------|------|----------|
-| projectPath | string |   |
-
-**Returns:** `Void`
 
 ---
 

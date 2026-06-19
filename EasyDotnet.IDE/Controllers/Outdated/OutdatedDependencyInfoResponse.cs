@@ -1,6 +1,6 @@
 using static EasyDotnet.Services.OutdatedService;
 
-namespace EasyDotnet.Controllers.Outdated;
+namespace EasyDotnet.IDE.Controllers.Outdated;
 
 public sealed record OutdatedDependencyInfoResponse(
       string Name,

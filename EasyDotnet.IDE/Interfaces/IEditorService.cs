@@ -1,7 +1,6 @@
 using EasyDotnet.IDE.Models.Client;
 using EasyDotnet.IDE.Models.Client.Prompt;
 using EasyDotnet.IDE.Models.Client.Quickfix;
-using EasyDotnet.IDE.Picker;
 using EasyDotnet.IDE.Picker.Models;
 
 namespace EasyDotnet.IDE.Interfaces;

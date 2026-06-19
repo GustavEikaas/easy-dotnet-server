@@ -1,5 +1,4 @@
 using EasyDotnet.Controllers;
-using EasyDotnet.Controllers.Template;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.TemplateEngine.PostActionHandlers;
 using Microsoft.TemplateEngine.Utils;
