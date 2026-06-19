@@ -1,5 +1,3 @@
-using System;
-
 namespace EasyDotnet.IDE.Notifications;
 
 [AttributeUsage(AttributeTargets.Method)]

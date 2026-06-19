@@ -1,5 +1,4 @@
 using EasyDotnet.Controllers;
-using EasyDotnet.Controllers.Solution;
 using EasyDotnet.IDE.Interfaces;
 using StreamJsonRpc;
 

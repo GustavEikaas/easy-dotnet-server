@@ -7,7 +7,7 @@ public static class CompatCommandHandler
 {
   public static async Task<int> RunProcessAsync(string fileName, string arguments)
   {
-    using var process = new System.Diagnostics.Process
+    using var process = new Process
     {
       StartInfo = new ProcessStartInfo
       {
@@ -44,9 +44,9 @@ public static class CompatCommandHandler
         .Spinner(Spinner.Known.Dots)
         .StartAsync("[yellow]Building project...[/]", async ctx =>
         {
-          var process = new System.Diagnostics.Process
+          var process = new Process
           {
-            StartInfo = new System.Diagnostics.ProcessStartInfo
+            StartInfo = new ProcessStartInfo
             {
               FileName = msbuildPath,
               Arguments = $"\"{projectPath}\" /nologo /m /verbosity:minimal",

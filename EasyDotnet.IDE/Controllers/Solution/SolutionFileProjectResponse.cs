@@ -1,4 +1,4 @@
-namespace EasyDotnet.Controllers.Solution;
+namespace EasyDotnet.IDE.Controllers.Solution;
 
 public sealed record SolutionFileProjectResponse(
     string ProjectName,

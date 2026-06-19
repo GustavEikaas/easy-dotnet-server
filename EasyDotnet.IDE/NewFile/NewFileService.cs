@@ -1,5 +1,5 @@
 using EasyDotnet.BuildServer.Contracts;
-using EasyDotnet.Extensions;
+using EasyDotnet.IDE.Extensions;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Models.Client;
 using EasyDotnet.IDE.Picker.Models;

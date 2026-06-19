@@ -1,11 +1,8 @@
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
+using EasyDotnet.Controllers;
 using EasyDotnet.IDE.Services;
 using StreamJsonRpc;
 
-namespace EasyDotnet.Controllers.Roslyn;
+namespace EasyDotnet.IDE.Controllers.Roslyn;
 
 public class RoslynController(RoslynService roslynService) : BaseController
 {

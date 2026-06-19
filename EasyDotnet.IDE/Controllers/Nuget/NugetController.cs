@@ -1,5 +1,4 @@
 using EasyDotnet.Controllers;
-using EasyDotnet.Controllers.Nuget;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.Services;
 using StreamJsonRpc;
@@ -8,15 +7,6 @@ namespace EasyDotnet.IDE.Controllers.Nuget;
 
 public class NugetController(IClientService clientService, NugetService nugetService) : BaseController
 {
-  [JsonRpcMethod("nuget/restore")]
-  public async Task<RestoreResult> RestorePackages(string targetPath)
-  {
-    clientService.ThrowIfNotInitialized();
-
-    var result = await nugetService.RestorePackagesAsync(targetPath, CancellationToken.None);
-    return result;
-  }
-
   [JsonRpcMethod("nuget/get-package-versions")]
   public async Task<IAsyncEnumerable<string>> GetPackageVersions(string packageId, List<string>? sources = null, bool includePrerelease = false)
   {
@@ -38,10 +28,8 @@ public class NugetController(IClientService clientService, NugetService nugetSer
 
     var packages = await nugetService.SearchAllSourcesByNameAsync(searchTerm, new CancellationToken(), take: 10, includePrerelease: false, sources);
 
-    var list = packages
+    return packages
         .SelectMany(kvp => kvp.Value.Select(x => NugetPackageMetadata.From(x, kvp.Key)))
         .AsAsyncEnumerable();
-
-    return list;
   }
 }

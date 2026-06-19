@@ -1,4 +1,4 @@
-namespace EasyDotnet.Controllers.Roslyn;
+namespace EasyDotnet.IDE.Controllers.Roslyn;
 
 public sealed record DiagnosticPosition(int Line, int Character);
 public sealed record DiagnosticRange(DiagnosticPosition Start, DiagnosticPosition End);

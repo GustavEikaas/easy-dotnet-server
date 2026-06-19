@@ -1,4 +1,4 @@
-using EasyDotnet.Controllers.Roslyn;
+using EasyDotnet.IDE.Controllers.Roslyn;
 using EasyDotnet.IntegrationTests.Utils;
 
 namespace EasyDotnet.IntegrationTests.Roslyn;
