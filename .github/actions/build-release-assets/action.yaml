@@ -34,7 +34,6 @@ runs:
       shell: bash
       run: dotnet build -c Release --no-restore
 
-
     - name: Build and Copy Roslyn Assets
       shell: bash
       run: |
@@ -56,68 +55,6 @@ runs:
         unzip -o artifacts/roslynator/roslynator.nupkg -d artifacts/roslynator/extracted
         cp artifacts/roslynator/extracted/analyzers/dotnet/roslyn4.7/cs/*.dll "$OUTPUT_PATH/"
         echo "✓ Analyzer assets copied to $OUTPUT_PATH"
-
-    - name: Download and Extract netcoredbg
-      shell: bash
-      run: |
-        NETCOREDBG_VERSION="${{ inputs.netcoredbgVersion }}"
-        NETCOREDBG_MACOS_ARM_VERSION="${{ inputs.netcoredbgArmVersion }}"
-
-        OUTPUT_PATH="${{ inputs.toolsOutputPath }}/netcoredbg"
-        ARTIFACTS_DIR="artifacts/netcoredbg"
-        
-        mkdir -p "$ARTIFACTS_DIR"
-        mkdir -p "$OUTPUT_PATH"
-        
-        declare -A platforms=(
-          ["linux-amd64"]="linux-x64"
-          ["linux-arm64"]="linux-arm64"
-          ["osx-amd64"]="osx-x64"
-          ["win64"]="win-x64"
-        )
-
-        # Download Samsung repo platforms
-        for platform in "${!platforms[@]}"; do
-          target_dir="${platforms[$platform]}"
-          echo "Downloading netcoredbg for $platform..."
-          
-          if [[ "$platform" == "win64" ]]; then
-            curl -L -o "$ARTIFACTS_DIR/netcoredbg-${platform}.zip" \
-              "https://github.com/Samsung/netcoredbg/releases/download/${NETCOREDBG_VERSION}/netcoredbg-${platform}.zip"
-            unzip -q "$ARTIFACTS_DIR/netcoredbg-${platform}.zip" -d "$ARTIFACTS_DIR/${platform}"
-          else
-            curl -L -o "$ARTIFACTS_DIR/netcoredbg-${platform}.tar.gz" \
-              "https://github.com/Samsung/netcoredbg/releases/download/${NETCOREDBG_VERSION}/netcoredbg-${platform}.tar.gz"
-            mkdir -p "$ARTIFACTS_DIR/${platform}"
-            tar -xzf "$ARTIFACTS_DIR/netcoredbg-${platform}.tar.gz" -C "$ARTIFACTS_DIR/${platform}"
-          fi
-          
-          mkdir -p "$OUTPUT_PATH/${target_dir}"
-          cp -r "$ARTIFACTS_DIR/${platform}/netcoredbg/"* "$OUTPUT_PATH/${target_dir}/"
-          echo "✓ Extracted netcoredbg to $OUTPUT_PATH/${target_dir}"
-        done
-
-        ARM_PLATFORM="osx-arm64"
-        ARM_TARGET_DIR="osx-arm64"
-        echo "Downloading netcoredbg (macOS ARM64) from Cliffback..."
-
-        DOWNLOAD_URL="https://github.com/Cliffback/netcoredbg-macOS-arm64.nvim/releases/download/${NETCOREDBG_MACOS_ARM_VERSION}/netcoredbg-osx-arm64.tar.gz"
-        DOWNLOAD_PATH="$ARTIFACTS_DIR/netcoredbg-${ARM_PLATFORM}.tar.gz"
-
-        curl -sSL -o "$DOWNLOAD_PATH" "$DOWNLOAD_URL"
-        mkdir -p "$ARTIFACTS_DIR/${ARM_PLATFORM}"
-
-        if file "$DOWNLOAD_PATH" | grep -qi 'gzip compressed'; then
-          tar -xzf "$DOWNLOAD_PATH" -C "$ARTIFACTS_DIR/${ARM_PLATFORM}"
-          mkdir -p "$OUTPUT_PATH/${ARM_TARGET_DIR}"
-          cp -r "$ARTIFACTS_DIR/${ARM_PLATFORM}/netcoredbg/"* "$OUTPUT_PATH/${ARM_TARGET_DIR}/"
-          echo "✓ Extracted netcoredbg (macOS ARM64) to $OUTPUT_PATH/${ARM_TARGET_DIR}"
-        else
-          echo "::error::Downloaded netcoredbg-osx-arm64.tar.gz is not a valid gzipped tarball!"
-          exit 1
-        fi
-
-        echo "All netcoredbg platforms bundled successfully!"
 
     - name: Download and Extract SharpDbg
       shell: bash
@@ -143,46 +80,3 @@ runs:
         cp -R "$PAYLOAD_DIR/." "$OUTPUT_PATH/"
         test -f "$OUTPUT_PATH/SharpDbg.Cli.dll"
         echo "✓ Extracted SharpDbg to $OUTPUT_PATH"
-
-    - name: Copy dncdbg Assets
-      if: ${{ inputs.dncdbgArtifactsPath != '' }}
-      shell: bash
-      run: |
-        DNCDBG_ARTIFACTS_PATH="${{ inputs.dncdbgArtifactsPath }}"
-        OUTPUT_PATH="${{ inputs.toolsOutputPath }}/dncdbg"
-
-        if [[ ! -d "$DNCDBG_ARTIFACTS_PATH" ]]; then
-          echo "::error::dncdbg artifacts path does not exist: $DNCDBG_ARTIFACTS_PATH"
-          exit 1
-        fi
-
-        mkdir -p "$OUTPUT_PATH"
-
-        found=0
-        for artifact_dir in "$DNCDBG_ARTIFACTS_PATH"/easy-dotnet-dncdbg-*; do
-          if [[ ! -d "$artifact_dir" ]]; then
-            continue
-          fi
-
-          rid="${artifact_dir##*/easy-dotnet-dncdbg-}"
-          target_dir="$OUTPUT_PATH/$rid"
-
-          mkdir -p "$target_dir"
-          cp -R "$artifact_dir"/. "$target_dir/"
-
-          if [[ "$rid" == win-* ]]; then
-            test -f "$target_dir/dncdbg.exe"
-          else
-            test -f "$target_dir/dncdbg"
-            chmod +x "$target_dir/dncdbg"
-          fi
-
-          test -f "$target_dir/ManagedPart.dll"
-          echo "✓ Copied dncdbg to $target_dir"
-          found=$((found + 1))
-        done
-
-        if [[ "$found" -eq 0 ]]; then
-          echo "::error::No dncdbg artifacts found under $DNCDBG_ARTIFACTS_PATH"
-          exit 1
-        fi

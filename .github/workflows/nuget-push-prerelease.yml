@@ -25,49 +25,7 @@ permissions:
   id-token: write
 
 jobs:
-  build-dncdbg:
-    name: Build dncdbg (${{ matrix.rid }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 25
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - rid: linux-x64
-            os: ubuntu-24.04
-          - rid: linux-arm64
-            os: ubuntu-24.04-arm
-          - rid: osx-x64
-            os: macos-15-intel
-            cmakeArch: x86_64
-          - rid: osx-arm64
-            os: macos-15
-            cmakeArch: arm64
-          - rid: win-x64
-            os: windows-2025-vs2026
-
-    steps:
-      - name: Checkout build-dncdbg action
-        uses: actions/checkout@v4
-        with:
-          sparse-checkout: .github/actions/build-dncdbg
-          sparse-checkout-cone-mode: false
-
-      - name: Build dncdbg
-        uses: ./.github/actions/build-dncdbg
-        with:
-          rid: ${{ matrix.rid }}
-          cmakeArch: ${{ matrix.cmakeArch }}
-
-      - name: Upload dncdbg artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: easy-dotnet-dncdbg-${{ matrix.rid }}
-          path: dncdbg/bin/**
-          if-no-files-found: error
-
   publish-prerelease:
-    needs: build-dncdbg
     runs-on: ubuntu-latest
 
     steps:
@@ -81,13 +39,6 @@ jobs:
 
       - name: Restore dependencies
         run: dotnet restore
-
-      - name: Download dncdbg artifacts
-        uses: actions/download-artifact@v8
-        with:
-          pattern: easy-dotnet-dncdbg-*
-          path: artifacts/dncdbg
-          merge-multiple: false
 
       - name: Build Release Assets
         uses: ./.github/actions/build-release-assets
