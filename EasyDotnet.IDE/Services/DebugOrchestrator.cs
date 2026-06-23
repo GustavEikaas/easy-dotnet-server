@@ -145,6 +145,9 @@ public class DebugOrchestrator(
       if (string.IsNullOrEmpty(binaryPath))
         throw new InvalidOperationException("Failed to start debugger, no binary path provided");
 
+      var debuggerEngine = DebuggerLocator.GetConfiguredEngine(clientService.ClientOptions?.DebuggerOptions?.Engine);
+      var (debuggerFileName, debuggerArguments) = DebuggerLocator.GetLaunchCommand(debuggerEngine, binaryPath);
+
       var session = debugSessionFactory.Create(
           async (dapRequest, proxy) =>
           {
@@ -176,7 +179,8 @@ public class DebugOrchestrator(
       try
       {
         session.Start(
-            binaryPath,
+            debuggerFileName,
+            debuggerArguments,
             (ex) =>
             {
               editorService.DisplayError(ex.Message);

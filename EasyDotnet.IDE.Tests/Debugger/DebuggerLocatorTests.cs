@@ -54,7 +54,7 @@ public class DebuggerLocatorTests
   }
 
   [Test]
-  public async Task ResolveDebugger_UsesCustomPath_WhenDncDbgEngineSet()
+  public async Task ResolveDebugger_CustomPathOverridesConfiguredEngine()
   {
     var customDebuggerPath = Path.GetTempFileName();
     try
@@ -64,9 +64,12 @@ public class DebuggerLocatorTests
 
       var debugger = DebuggerLocator.ResolveDebugger();
 
-      await Assert.That(debugger.Engine).IsEqualTo(DebuggerEngine.DncDbg);
+      // A custom binary path is run as the Custom engine, ignoring the configured engine.
+      await Assert.That(debugger.Engine).IsEqualTo(DebuggerEngine.Custom);
       await Assert.That(debugger.Source).IsEqualTo(DebuggerLocator.DEBUGGER_PATH_ENV);
       await Assert.That(debugger.Path).IsEqualTo(customDebuggerPath);
+      await Assert.That(debugger.FileName).IsEqualTo(customDebuggerPath);
+      await Assert.That(debugger.Arguments).IsEquivalentTo(new[] { "--interpreter=vscode" });
     }
     finally
     {
@@ -111,6 +114,131 @@ public class DebuggerLocatorTests
       Environment.SetEnvironmentVariable(NetCoreDbgLocator.DEBUGGER_PATH_ENV, null);
       Environment.SetEnvironmentVariable(DebuggerLocator.DEBUGGER_ENGINE_ENV, null);
     }
+  }
+
+  [Test]
+  public async Task ResolveDebugger_UsesSharpDbgEngine_WhenEnvVarSet()
+  {
+    Environment.SetEnvironmentVariable(NetCoreDbgLocator.DEBUGGER_PATH_ENV, null);
+    Environment.SetEnvironmentVariable(DebuggerLocator.DEBUGGER_ENGINE_ENV, "sharpdbg");
+
+    var engine = DebuggerLocator.GetConfiguredEngine();
+
+    await Assert.That(engine).IsEqualTo(DebuggerEngine.SharpDbg);
+  }
+
+  [Test]
+  public async Task ResolveDebugger_LaunchesSharpDbgViaDotnetMuxer_WhenEngineSet()
+  {
+    Environment.SetEnvironmentVariable(NetCoreDbgLocator.DEBUGGER_PATH_ENV, null);
+    Environment.SetEnvironmentVariable(DebuggerLocator.DEBUGGER_ENGINE_ENV, "sharpdbg");
+
+    var platform = DebuggerLocator.GetRuntimePlatform();
+    var expectedPath = DebuggerLocator.GetBundledDebuggerPath(DebuggerEngine.SharpDbg, platform);
+    var existed = File.Exists(expectedPath);
+
+    try
+    {
+      Directory.CreateDirectory(Path.GetDirectoryName(expectedPath)!);
+      if (!existed)
+      {
+        await File.WriteAllTextAsync(expectedPath, "");
+      }
+
+      var debugger = DebuggerLocator.ResolveDebugger();
+
+      await Assert.That(debugger.Engine).IsEqualTo(DebuggerEngine.SharpDbg);
+      await Assert.That(debugger.Source).IsEqualTo("bundled");
+      await Assert.That(debugger.Path).IsEqualTo(expectedPath);
+      // SharpDbg is a managed dll, launched through the dotnet muxer.
+      await Assert.That(debugger.FileName).IsEqualTo("dotnet");
+      await Assert.That(debugger.Arguments).IsEquivalentTo(new[] { expectedPath, "--interpreter=vscode" });
+    }
+    finally
+    {
+      if (!existed && File.Exists(expectedPath))
+      {
+        File.Delete(expectedPath);
+      }
+
+      Environment.SetEnvironmentVariable(NetCoreDbgLocator.DEBUGGER_PATH_ENV, null);
+      Environment.SetEnvironmentVariable(DebuggerLocator.DEBUGGER_ENGINE_ENV, null);
+    }
+  }
+
+  [Test]
+  public async Task GetLaunchCommand_LaunchesNativeDebuggerDirectly()
+  {
+    var (fileName, arguments) = DebuggerLocator.GetLaunchCommand(DebuggerEngine.NetCoreDbg, "/tools/netcoredbg/netcoredbg");
+
+    await Assert.That(fileName).IsEqualTo("/tools/netcoredbg/netcoredbg");
+    await Assert.That(arguments).IsEquivalentTo(new[] { "--interpreter=vscode" });
+  }
+
+  [Test]
+  public async Task GetLaunchCommand_LaunchesSharpDbgViaDotnetMuxer()
+  {
+    var (fileName, arguments) = DebuggerLocator.GetLaunchCommand(DebuggerEngine.SharpDbg, "/tools/sharpdbg/SharpDbg.Cli.dll");
+
+    await Assert.That(fileName).IsEqualTo("dotnet");
+    await Assert.That(arguments).IsEquivalentTo(new[] { "/tools/sharpdbg/SharpDbg.Cli.dll", "--interpreter=vscode" });
+  }
+
+  [Test]
+  public async Task GetVersionCommand_RoutesThroughTheEngineRunner()
+  {
+    var (nativeFileName, nativeArgs) = DebuggerLocator.GetVersionCommand(DebuggerEngine.NetCoreDbg, "/tools/netcoredbg/netcoredbg");
+    await Assert.That(nativeFileName).IsEqualTo("/tools/netcoredbg/netcoredbg");
+    await Assert.That(nativeArgs).IsEquivalentTo(new[] { "--version" });
+
+    var (sharpFileName, sharpArgs) = DebuggerLocator.GetVersionCommand(DebuggerEngine.SharpDbg, "/tools/sharpdbg/SharpDbg.Cli.dll");
+    await Assert.That(sharpFileName).IsEqualTo("dotnet");
+    await Assert.That(sharpArgs).IsEquivalentTo(new[] { "/tools/sharpdbg/SharpDbg.Cli.dll", "--version" });
+  }
+
+  [Test]
+  public async Task GetConfiguredEngine_UsesCustom_WhenBinaryPathProvidedWithoutEngine()
+  {
+    Environment.SetEnvironmentVariable(NetCoreDbgLocator.DEBUGGER_PATH_ENV, null);
+    Environment.SetEnvironmentVariable(DebuggerLocator.DEBUGGER_ENGINE_ENV, null);
+
+    var engine = DebuggerLocator.GetConfiguredEngine(engineName: null, debuggerBinPath: "/path/to/vsdbg");
+
+    await Assert.That(engine).IsEqualTo(DebuggerEngine.Custom);
+  }
+
+  [Test]
+  public async Task ResolveDebugger_UsesCustomEngine_ForCustomBinaryPathWithoutEngine()
+  {
+    var customDebuggerPath = Path.GetTempFileName();
+    try
+    {
+      Environment.SetEnvironmentVariable(NetCoreDbgLocator.DEBUGGER_PATH_ENV, null);
+      Environment.SetEnvironmentVariable(DebuggerLocator.DEBUGGER_ENGINE_ENV, null);
+
+      var debugger = DebuggerLocator.ResolveDebugger(engineName: null, debuggerBinPath: customDebuggerPath);
+
+      await Assert.That(debugger.Engine).IsEqualTo(DebuggerEngine.Custom);
+      await Assert.That(debugger.Source).IsEqualTo("--debugger-bin-path");
+      await Assert.That(debugger.Path).IsEqualTo(customDebuggerPath);
+      // Optimistically run the binary directly as a DAP server.
+      await Assert.That(debugger.FileName).IsEqualTo(customDebuggerPath);
+      await Assert.That(debugger.Arguments).IsEquivalentTo(new[] { "--interpreter=vscode" });
+    }
+    finally
+    {
+      File.Delete(customDebuggerPath);
+      Environment.SetEnvironmentVariable(NetCoreDbgLocator.DEBUGGER_PATH_ENV, null);
+    }
+  }
+
+  [Test]
+  public async Task GetLaunchCommand_RunsCustomEngineDirectly()
+  {
+    var (fileName, arguments) = DebuggerLocator.GetLaunchCommand(DebuggerEngine.Custom, "/path/to/vsdbg");
+
+    await Assert.That(fileName).IsEqualTo("/path/to/vsdbg");
+    await Assert.That(arguments).IsEquivalentTo(new[] { "--interpreter=vscode" });
   }
 
   [Test]

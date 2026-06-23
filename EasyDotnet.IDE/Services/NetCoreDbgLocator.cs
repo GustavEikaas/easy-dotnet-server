@@ -6,10 +6,18 @@ namespace EasyDotnet.IDE.Services;
 public enum DebuggerEngine
 {
   NetCoreDbg,
-  DncDbg
+  DncDbg,
+  SharpDbg,
+  Custom
 }
 
-public sealed record DebuggerResolution(DebuggerEngine Engine, string Source, string? Platform, string Path);
+public sealed record DebuggerResolution(
+    DebuggerEngine Engine,
+    string Source,
+    string? Platform,
+    string Path,
+    string FileName,
+    IReadOnlyList<string> Arguments);
 
 public static class DebuggerLocator
 {
@@ -21,17 +29,20 @@ public static class DebuggerLocator
     var customPath = !string.IsNullOrWhiteSpace(debuggerBinPath)
         ? debuggerBinPath
         : Environment.GetEnvironmentVariable(DEBUGGER_PATH_ENV);
-    var engine = GetConfiguredEngine(engineName);
+    var engine = GetConfiguredEngine(engineName, customPath);
 
     if (!string.IsNullOrWhiteSpace(customPath))
     {
       if (File.Exists(customPath))
       {
+        var (customFileName, customArgs) = GetLaunchCommand(engine, customPath);
         return new DebuggerResolution(
             engine,
             !string.IsNullOrWhiteSpace(debuggerBinPath) ? "--debugger-bin-path" : DEBUGGER_PATH_ENV,
             TryGetRuntimePlatform(),
-            customPath);
+            customPath,
+            customFileName,
+            customArgs);
       }
 
       throw new FileNotFoundException(
@@ -45,17 +56,31 @@ public static class DebuggerLocator
     if (!File.Exists(debuggerPath))
     {
       throw new FileNotFoundException(
-          $"{GetEngineExecutableName(engine)} executable not found for platform '{platform}'",
+          $"{DebuggerEngineFactory.Get(engine).Name} executable not found for platform '{platform}'",
           debuggerPath);
     }
 
-    return new DebuggerResolution(engine, "bundled", platform, debuggerPath);
+    var (fileName, arguments) = GetLaunchCommand(engine, debuggerPath);
+    return new DebuggerResolution(engine, "bundled", platform, debuggerPath, fileName, arguments);
   }
+
+  public static (string FileName, IReadOnlyList<string> Arguments) GetLaunchCommand(DebuggerEngine engine, string debuggerPath) =>
+    DebuggerEngineFactory.Get(engine).BuildLaunchCommand(debuggerPath);
+
+  public static (string FileName, IReadOnlyList<string> Arguments) GetVersionCommand(DebuggerEngine engine, string debuggerPath) =>
+    DebuggerEngineFactory.Get(engine).BuildVersionCommand(debuggerPath);
 
   public static string GetDebuggerPath(string? engineName = null) => ResolveDebugger(engineName).Path;
 
-  public static DebuggerEngine GetConfiguredEngine(string? engineName = null)
+  public static DebuggerEngine GetConfiguredEngine(string? engineName = null, string? debuggerBinPath = null)
   {
+    var customPath = !string.IsNullOrWhiteSpace(debuggerBinPath)
+        ? debuggerBinPath
+        : Environment.GetEnvironmentVariable(DEBUGGER_PATH_ENV);
+
+    if (!string.IsNullOrWhiteSpace(customPath))
+      return DebuggerEngine.Custom;
+
     var configuredEngine = !string.IsNullOrWhiteSpace(engineName)
         ? engineName
         : Environment.GetEnvironmentVariable(DEBUGGER_ENGINE_ENV);
@@ -65,22 +90,10 @@ public static class DebuggerLocator
         : ParseEngine(configuredEngine);
   }
 
-  public static DebuggerEngine ParseEngine(string engineName) =>
-    engineName.Trim().ToLowerInvariant() switch
-    {
-      "netcoredbg" or "netcore" => DebuggerEngine.NetCoreDbg,
-      "dncdbg" or "dnc" => DebuggerEngine.DncDbg,
-      _ => throw new ArgumentException(
-          $"Unsupported debugger engine '{engineName}'. Supported values are 'netcoredbg' and 'dncdbg'.",
-          nameof(engineName))
-    };
+  public static DebuggerEngine ParseEngine(string engineName) => DebuggerEngineFactory.Parse(engineName).Engine;
 
-  public static string GetBundledDebuggerPath(DebuggerEngine engine, string platform)
-  {
-    var debuggerDir = Path.Combine(GetToolsBaseDir(), GetEngineDirectoryName(engine));
-    var platformDir = Path.Combine(debuggerDir, platform);
-    return Path.Combine(platformDir, GetEngineExecutableName(engine));
-  }
+  public static string GetBundledDebuggerPath(DebuggerEngine engine, string platform) =>
+    Path.Combine(GetToolsBaseDir(), DebuggerEngineFactory.Get(engine).GetBundledRelativePath(platform));
 
   public static string GetRuntimePlatform()
   {
@@ -125,23 +138,7 @@ public static class DebuggerLocator
     }
   }
 
-  public static string GetEngineName(DebuggerEngine engine) =>
-    engine switch
-    {
-      DebuggerEngine.NetCoreDbg => "netcoredbg",
-      DebuggerEngine.DncDbg => "dncdbg",
-      _ => throw new ArgumentOutOfRangeException(nameof(engine), engine, null)
-    };
-
-  private static string GetEngineDirectoryName(DebuggerEngine engine) => GetEngineName(engine);
-
-  private static string GetEngineExecutableName(DebuggerEngine engine) =>
-    engine switch
-    {
-      DebuggerEngine.NetCoreDbg => OperatingSystem.IsWindows() ? "netcoredbg.exe" : "netcoredbg",
-      DebuggerEngine.DncDbg => OperatingSystem.IsWindows() ? "dncdbg.exe" : "dncdbg",
-      _ => throw new ArgumentOutOfRangeException(nameof(engine), engine, null)
-    };
+  public static string GetEngineName(DebuggerEngine engine) => DebuggerEngineFactory.Get(engine).Name;
 
   private static string GetToolsBaseDir()
   {

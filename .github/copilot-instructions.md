@@ -16,6 +16,7 @@ This is the **C# server** for the easy-dotnet Neovim plugin. It is the brain of 
 | `$HOME/repo/roslyn` | Roslyn source — reference for compiler/analysis APIs |
 | `$HOME/repo/msbuild` | MsBuild source — reference for MSBuild APIs |
 | `$HOME/repo/netcoredbg` | Debugger source — reference for debug adapter behavior |
+| `$HOME/repo/sharpdbg` | SharpDbg source — managed (C#) DAP debugger, bundled as the `sharpdbg` engine |
 
 Always consult these when implementing features that touch build, analysis, or debugging. **Behavior must match or closely approximate Visual Studio and Rider.** MSBuild is a complex beast — when in doubt, check what the SDK does.
 
