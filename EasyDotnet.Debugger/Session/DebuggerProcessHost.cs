@@ -17,20 +17,26 @@ public class DebuggerProcessHost(ILogger<DebuggerProcessHost> logger) : IDebugge
 
   public event EventHandler? Exited;
 
-  public void Start(string binaryPath, string arguments)
+  public void Start(string fileName, IReadOnlyList<string> arguments)
   {
+    var startInfo = new ProcessStartInfo
+    {
+      FileName = fileName,
+      RedirectStandardInput = true,
+      RedirectStandardOutput = true,
+      RedirectStandardError = true,
+      UseShellExecute = false,
+      CreateNoWindow = true
+    };
+
+    foreach (var argument in arguments)
+    {
+      startInfo.ArgumentList.Add(argument);
+    }
+
     _process = new Process
     {
-      StartInfo = new ProcessStartInfo
-      {
-        FileName = binaryPath,
-        Arguments = arguments,
-        RedirectStandardInput = true,
-        RedirectStandardOutput = true,
-        RedirectStandardError = true,
-        UseShellExecute = false,
-        CreateNoWindow = true
-      },
+      StartInfo = startInfo,
       EnableRaisingEvents = true,
     };
 
@@ -44,7 +50,7 @@ public class DebuggerProcessHost(ILogger<DebuggerProcessHost> logger) : IDebugge
     {
       if (!string.IsNullOrWhiteSpace(e.Data))
       {
-        logger.LogInformation("netcoredbg stderr: {Line}", e.Data);
+        logger.LogInformation("Debugger stderr: {Line}", e.Data);
       }
     };
 

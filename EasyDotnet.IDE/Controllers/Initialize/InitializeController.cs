@@ -59,11 +59,12 @@ public class InitializeController(
     clientService.UseVisualStudio = clientService.ClientOptions.UseVisualStudio;
 
     var debuggerOptions = clientService.ClientOptions.DebuggerOptions ?? new DebuggerOptions();
+    var engine = DebuggerLocator.GetConfiguredEngine(debuggerOptions.Engine, debuggerOptions.BinaryPath);
     var binaryPath = debuggerOptions.BinaryPath ?? TryGetDebuggerPath(debuggerOptions.Engine);
 
     clientService.ClientOptions = clientService.ClientOptions with
     {
-      DebuggerOptions = debuggerOptions with { BinaryPath = binaryPath }
+      DebuggerOptions = debuggerOptions with { BinaryPath = binaryPath, Engine = DebuggerLocator.GetEngineName(engine) }
     };
 
     var supportsSingleFileExecution = sdkService.QuerySdkInstallations().Any(x => x.Version.Major >= 10);

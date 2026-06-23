@@ -135,7 +135,8 @@ public sealed class HealthCheckCommand : AsyncCommand<HealthCheckCommand.Setting
     try
     {
       var resolved = DebuggerLocator.ResolveDebugger(debuggerEngine, debuggerBinPath);
-      var version = await RunProcessAsync(resolved.Path, ["--version"], cancellationToken);
+      var (versionFileName, versionArgs) = DebuggerLocator.GetVersionCommand(resolved.Engine, resolved.Path);
+      var version = await RunProcessAsync(versionFileName, versionArgs, cancellationToken);
 
       return new DebuggerHealthInfo(
           Engine: DebuggerLocator.GetEngineName(resolved.Engine),
@@ -228,7 +229,8 @@ public sealed class HealthCheckCommand : AsyncCommand<HealthCheckCommand.Setting
     {
       return DebuggerLocator.GetBundledDebuggerPath(DebuggerLocator.ParseEngine(engine), platform);
     }
-    catch (ArgumentException)
+    // ArgumentException: unknown engine name; NotSupportedException: engine has no bundled binary (custom).
+    catch (Exception e) when (e is ArgumentException or NotSupportedException)
     {
       return null;
     }

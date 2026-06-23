@@ -18,6 +18,10 @@ inputs:
     description: '(Cliffback) netcoredbg ARM release version'
     required: true
     default: '3.1.2-1054'
+  sharpdbgVersion:
+    description: 'SharpDbg.Cli dotnet tool version'
+    required: true
+    default: '0.1.2'
   dncdbgArtifactsPath:
     description: 'Path containing downloaded dncdbg platform artifacts'
     required: false
@@ -114,6 +118,31 @@ runs:
         fi
 
         echo "All netcoredbg platforms bundled successfully!"
+
+    - name: Download and Extract SharpDbg
+      shell: bash
+      run: |
+        SHARPDBG_VERSION="${{ inputs.sharpdbgVersion }}"
+        OUTPUT_PATH="${{ inputs.toolsOutputPath }}/sharpdbg"
+        ARTIFACTS_DIR="artifacts/sharpdbg"
+
+        mkdir -p "$ARTIFACTS_DIR"
+        mkdir -p "$OUTPUT_PATH"
+
+        echo "Downloading SharpDbg.Cli ${SHARPDBG_VERSION} from NuGet..."
+        curl -L -o "$ARTIFACTS_DIR/sharpdbg.nupkg" \
+          "https://www.nuget.org/api/v2/package/SharpDbg.Cli/${SHARPDBG_VERSION}"
+
+        unzip -q -o "$ARTIFACTS_DIR/sharpdbg.nupkg" "tools/*/any/*" -d "$ARTIFACTS_DIR/extracted"
+        PAYLOAD_DIR=$(dirname "$(find "$ARTIFACTS_DIR/extracted/tools" -name 'SharpDbg.Cli.dll' | head -n1)")
+        if [[ -z "$PAYLOAD_DIR" || ! -f "$PAYLOAD_DIR/SharpDbg.Cli.dll" ]]; then
+          echo "::error::SharpDbg.Cli.dll not found in downloaded package"
+          exit 1
+        fi
+
+        cp -R "$PAYLOAD_DIR/." "$OUTPUT_PATH/"
+        test -f "$OUTPUT_PATH/SharpDbg.Cli.dll"
+        echo "✓ Extracted SharpDbg to $OUTPUT_PATH"
 
     - name: Copy dncdbg Assets
       if: ${{ inputs.dncdbgArtifactsPath != '' }}

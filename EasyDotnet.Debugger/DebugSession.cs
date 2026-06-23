@@ -34,10 +34,11 @@ public class DebugSession : IAsyncDisposable
   }
 
   public void Start(
-    string binaryPath,
+    string fileName,
+    IReadOnlyList<string> arguments,
     Action<Exception> onProcessFailedToStart,
     Func<Task> onDispose,
-    CancellationToken cancellationToken) => _coordinator.Start(binaryPath, onProcessFailedToStart, onDispose, cancellationToken);
+    CancellationToken cancellationToken) => _coordinator.Start(fileName, arguments, onProcessFailedToStart, onDispose, cancellationToken);
   public void NotifyDebugeeProcessStarted(int processId) => _coordinator.NotifyDebugeeProcessStarted(processId);
   public async ValueTask DisposeAsync() => await _coordinator.DisposeAsync();
   public async ValueTask ForceDisposeAsync() => await _coordinator.ForceDisposeAsync();
