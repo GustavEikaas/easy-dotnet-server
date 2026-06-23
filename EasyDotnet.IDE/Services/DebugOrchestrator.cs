@@ -147,6 +147,7 @@ public class DebugOrchestrator(
 
       var debuggerEngine = DebuggerLocator.GetConfiguredEngine(clientService.ClientOptions?.DebuggerOptions?.Engine);
       var (debuggerFileName, debuggerArguments) = DebuggerLocator.GetLaunchCommand(debuggerEngine, binaryPath);
+      var applyValueConverters = debuggerEngine != DebuggerEngine.SharpDbg && (clientService?.ClientOptions?.DebuggerOptions?.ApplyValueConverters ?? false);
 
       var session = debugSessionFactory.Create(
           async (dapRequest, proxy) =>
@@ -154,7 +155,7 @@ public class DebugOrchestrator(
             await strategy.TransformRequestAsync(dapRequest, proxy);
             return dapRequest;
           },
-          clientService?.ClientOptions?.DebuggerOptions?.ApplyValueConverters ?? false,
+          applyValueConverters,
           variableLocationResolver);
 
       _sessionServices[sessionKey] = session;
