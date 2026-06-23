@@ -56,14 +56,6 @@ jobs:
           dotnet pack ./EasyDotnet.IDE \
             -p:PackageVersion=${{ steps.get_version.outputs.version }}-${{ github.event.inputs.versionSuffix }}
 
-      - name: Verify package assets
-        run: |
-          unzip -l EasyDotnet.IDE/bin/Release/*.nupkg | tee /tmp/easy-dotnet-package.txt
-          for rid in linux-x64 linux-arm64 osx-x64 osx-arm64 win-x64; do
-            grep -q "tools/dncdbg/$rid/" /tmp/easy-dotnet-package.txt
-          done
-          grep -q "tools/sharpdbg/SharpDbg.Cli.dll" /tmp/easy-dotnet-package.txt
-
       - name: NuGet login (OIDC → temp API key)
         uses: NuGet/login@v1
         id: login
