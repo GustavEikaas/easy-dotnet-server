@@ -49,15 +49,20 @@ public static class WorkspaceRunCommandBuilder
     if (!string.IsNullOrWhiteSpace(project.RunCommand))
     {
       var args = string.IsNullOrWhiteSpace(project.RunArguments)
-          ? new List<string>()
+          ? []
           : CommandLineParser.SplitCommandLine(project.RunArguments).ToList();
 
-      return (project.RunCommand!, args);
+      return (project.RunCommand, args);
     }
 
     if (string.IsNullOrWhiteSpace(project.TargetPath))
     {
       throw new InvalidOperationException("Project has no target path to run.");
+    }
+
+    if (project.UsingGodotNETSdk)
+    {
+      return ("godot", []);
     }
 
     if (string.Equals(project.TargetFrameworkIdentifier, ".NETCoreApp", StringComparison.OrdinalIgnoreCase)

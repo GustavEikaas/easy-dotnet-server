@@ -24,7 +24,7 @@ public class AppWrapperHandler
   }
 
   [JsonRpcMethod("appWrapper/run", UseSingleObjectParameterDeserialization = true)]
-  public async Task RunAsync(RunAppCommand command, CancellationToken ct)
+  public async Task<int> RunAsync(RunAppCommand command, CancellationToken ct)
   {
     var startInfo = new ProcessStartInfo
     {
@@ -52,31 +52,36 @@ public class AppWrapperHandler
 
     process.Start();
 
-    try
+    _ = Task.Run(async () =>
     {
-      await process.WaitForExitAsync(ct);
-    }
-    catch (OperationCanceledException)
-    {
-      await process.WaitForExitAsync(CancellationToken.None);
-    }
+      try
+      {
+        await process.WaitForExitAsync(ct);
+      }
+      catch (OperationCanceledException)
+      {
+        await process.WaitForExitAsync(CancellationToken.None);
+      }
 
-    var exitCode = process.ExitCode;
-    _currentProcess = null;
+      var exitCode = process.ExitCode;
+      _currentProcess = null;
 
-    Console.WriteLine();
-    var codeText = exitCode == 134 ? "" : $" (code {exitCode})";
-    AnsiConsole.MarkupLine($"[dim]App has exited{codeText}. This window will be reused.[/]");
-    Console.WriteLine();
+      Console.WriteLine();
+      var codeText = exitCode == 134 ? "" : $" (code {exitCode})";
+      AnsiConsole.MarkupLine($"[dim]App has exited{codeText}. This window will be reused.[/]");
+      Console.WriteLine();
 
-    try
-    {
-      await _rpc.NotifyWithParameterObjectAsync("appWrapper/exited", new AppExitedNotification(command.JobId, exitCode));
-    }
-    catch (Exception ex)
-    {
-      Console.Error.WriteLine($"[AppWrapper] Failed to notify IDE of exit: {ex.Message}");
-    }
+      try
+      {
+        await _rpc.NotifyWithParameterObjectAsync("appWrapper/exited", new AppExitedNotification(command.JobId, exitCode));
+      }
+      catch (Exception ex)
+      {
+        Console.Error.WriteLine($"[AppWrapper] Failed to notify IDE of exit: {ex.Message}");
+      }
+    });
+
+    return process.Id;
   }
 
   public void KillCurrentProcess()

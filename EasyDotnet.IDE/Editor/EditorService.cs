@@ -15,7 +15,6 @@ namespace EasyDotnet.IDE.Editor;
 
 public class EditorService(
   IEditorProcessManagerService editorProcessManagerService,
-  IStartupHookService startupHookService,
   IBuildHostManager buildHostManager,
   IClientService clientService,
   IAppWrapperManager appWrapperManager,
@@ -69,44 +68,29 @@ public class EditorService(
   public async Task<Guid> StartRunProjectAsync(RunProjectRequest request, CancellationToken ct = default)
   {
     var guid = editorProcessManagerService.RegisterJob();
-    var session = startupHookService.CreateSession(request.EnvironmentVariables);
-
-    var command = BuildRunCommand(request, session.EnvironmentVariables);
+    var command = BuildRunCommand(request, request.EnvironmentVariables ?? []);
 
     try
     {
       if (clientService.HasExternalTerminal)
       {
         var wrapper = await appWrapperManager.GetOrSpawnAsync(ct);
-        await wrapper.SendRunCommandAsync(guid, command, ct);
+        var pid = await wrapper.SendRunCommandAsync(guid, command, ct);
+        request.OnPidReceived?.Invoke(pid);
       }
       else
       {
         var projectName = request.Project.ProjectName ?? Path.GetFileNameWithoutExtension(request.Project.MSBuildProjectFullPath);
         var slotId = $"run:{projectName}";
-        await jsonRpc.InvokeWithParameterObjectAsync("runCommandManaged", new TrackedJob(guid, command, slotId), ct);
+        var res = await jsonRpc.InvokeWithParameterObjectAsync<RunCommandResponse>("runCommandManaged", new TrackedJob(guid, command, slotId), ct);
+        request.OnPidReceived?.Invoke(res.ProcessId);
       }
     }
     catch (Exception e)
     {
-      await session.DisposeAsync();
       editorProcessManagerService.SetFailedToStart(guid, null, e.Message);
       throw;
     }
-
-    _ = Task.Run(async () =>
-    {
-      await using (session)
-      {
-        try
-        {
-          var pid = await session.WaitForPidAsync(CancellationToken.None);
-          session.Resume();
-          request.OnPidReceived?.Invoke(pid);
-        }
-        catch { }
-      }
-    }, CancellationToken.None);
 
     return guid;
   }
