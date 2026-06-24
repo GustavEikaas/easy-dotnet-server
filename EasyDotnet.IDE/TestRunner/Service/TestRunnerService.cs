@@ -716,17 +716,17 @@ public class TestRunnerService(
 
   public Dictionary<string, NeotestBatchResultDto> GetNeotestBatchResults(string[] ids) =>
       ids
-          .Select(id => (id, detail: detailStore.Get(id)))
+          .Select(id => (id, detail: detailStore.Get(id), node: registry.Get(id)))
           .Where(x => x.detail is not null)
           .ToDictionary(
               x => x.id,
               x => new NeotestBatchResultDto(
                   Outcome: x.detail!.Outcome,
                   ErrorMessage: x.detail.ErrorMessage.Length > 0 ? x.detail.ErrorMessage : null,
-                  FailingFrame: x.detail.FailingFrame is { } ff
-                      ? new StackFrameDto(ff.OriginalText, ff.File, ff.Line, ff.IsUserCode)
-                      : null,
-                  Stdout: x.detail.Stdout.Length > 0 ? x.detail.Stdout : null));
+                  FailingFrame: x.detail.FailingFrame is { } ff ? StackFrameDto.Create(ff, x.node!) : null,
+                  Stdout: x.detail.Stdout.Length > 0 ? x.detail.Stdout : null
+                )
+              );
 
   public async Task<SyncFileResult> SyncFileAsync(SyncFileRequest req)
   {
@@ -1310,7 +1310,22 @@ public record GetResultsResult(
     StackFrameDto? FailingFrame,
     string? DurationDisplay
 );
-public record StackFrameDto(string OriginalText, string? File, int? Line, bool IsUserCode);
+
+public record StackFrameDto(string OriginalText, string? File, int? Line, bool IsUserCode, bool? IsFromTest = null)
+{
+  public static StackFrameDto Create(ParsedStackFrame frame, TestNode node)
+  {
+    bool? isFromTest = null;
+
+    if (frame.Line.HasValue && node is { BodyStartLine: not null, EndLine: not null })
+    {
+      isFromTest = string.Equals(frame.File, node.FilePath, StringComparison.OrdinalIgnoreCase) && frame.Line.Value >= node.BodyStartLine.Value && frame.Line.Value <= node.EndLine.Value;
+    }
+
+    return new StackFrameDto(OriginalText: frame.OriginalText, File: frame.File, Line: frame.Line, IsUserCode: frame.IsUserCode, IsFromTest: isFromTest);
+  }
+}
+
 public record SyncFileRequest(string Path, string Content, int Version);
 public record SyncFileResult(LineNumberUpdateDto[] Updates, int Version);
 public record LineNumberUpdateDto(string Id, int SignatureLine, int BodyStartLine, int EndLine);
