@@ -10,15 +10,15 @@ When using `runInTerminal` request the client is responsible for starting your p
 
 We use the [`DOTNET_STARTUP_HOOKS`](https://github.com/dotnet/runtime/blob/main/docs/design/features/host-startup-hook.md) environment variable to securely pause the .NET runtime *before* the user's code is JIT-compiled.
 
-When the IDE launches the target application, it forcefully injects this `StartupHook.dll`. This tiny library does two things: it connects to a local Named Pipe (via JSON-RPC) and immediately reports its PID, then it physically blocks the main thread from continuing.
+When the IDE launches the target application, it forcefully injects this `StartupHook.dll`. This tiny library connects to a local Named Pipe and then physically blocks the main thread from continuing until the IDE signals it to resume.
 
 ### How the Flow Works
 
 1. The IDE Server intercepts the user's `launch` request and sends a `runInTerminal` reverse request to the DAP client (Neovim).
-2. Neovim natively allocates a terminal buffer (or external window) and executes the target `.NET` application directly, injecting the `DOTNET_STARTUP_HOOKS` environment variable.
-3. The target app boots, loads the Hook, connects to the IDE Server via a Named Pipe, and writes its 32-bit Process ID (PID).
+2. Neovim natively allocates a terminal buffer (or external window) and executes the target `.NET` application directly, injecting the `DOTNET_STARTUP_HOOKS` environment variable. Neovim responds with the launched process's PID.
+3. The target app boots, loads the Hook, and connects to the IDE Server via a Named Pipe.
 4. The Hook immediately freezes the application's main thread by blocking on a read stream.
-5. The IDE Server receives the PID, mutates the original `launch` command into an `attach` command, and forwards it to `netcoredbg`.
+5. The IDE Server mutates the original `launch` command into an `attach` command and forwards it to `netcoredbg`.
 6. `netcoredbg` securely attaches to the frozen process and configures all user breakpoints.
 7. Upon receiving `configurationDone` it sends a 1-byte `resume` signal over the Named Pipe.
 8. The Hook unblocks, the target app executes, and startup breakpoints are hit flawlessly.

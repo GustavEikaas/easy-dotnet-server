@@ -273,11 +273,11 @@ public class RunInTerminalResponseBody
    * The process ID. The value should be less than or equal to 2147483647
    * (2^31-1).
    */
-  public int ProcessId;
+  public int ProcessId { get; set; }
 
   /**
    * The process ID of the terminal shell. The value should be less than or
    * equal to 2147483647 (2^31-1).
    */
-  public int ShellProcessId;
+  public int ShellProcessId { get; set; }
 }

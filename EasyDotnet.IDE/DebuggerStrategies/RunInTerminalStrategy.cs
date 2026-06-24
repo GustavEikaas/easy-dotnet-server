@@ -66,7 +66,20 @@ public class RunInTerminalStrategy(
         profileEnv[kv.Key] = kv.Value;
       }
     }
-    _hookSession = startupHookService.CreateSession(profileEnv);
+    // Godot does not honor DOTNET_STARTUP_HOOKS, if we inject the hook it will be run downstream in sub-processes causing issues 
+    // We currently have no way of suspending and resuming meaning we attach as fast as possible but breakpoints very early might be missed
+    var isGodot = project.Raw.UsingGodotNETSdk;
+
+    Dictionary<string, string> runEnv;
+    if (isGodot)
+    {
+      runEnv = profileEnv;
+    }
+    else
+    {
+      _hookSession = startupHookService.CreateSession(profileEnv);
+      runEnv = _hookSession.EnvironmentVariables;
+    }
 
     var cwd = LaunchProfileUtils.ResolveCwd(_activeProfile, project.Raw);
     var terminalKind = ExtractTerminalKind(request.Arguments.Console);
@@ -74,12 +87,13 @@ public class RunInTerminalStrategy(
         project.Raw,
         _activeProfile,
         BuildCommandLineArgs(),
-        _hookSession.EnvironmentVariables);
+        runEnv);
 
     if (terminalKind == RunInTerminalKind.External)
     {
       _wrapperHandle = await appWrapperManager.GetOrSpawnAsync(CancellationToken.None);
-      await _wrapperHandle.SendRunCommandAsync(Guid.NewGuid(), runCommand, CancellationToken.None);
+      _pid = await _wrapperHandle.SendRunCommandAsync(Guid.NewGuid(), runCommand, CancellationToken.None);
+      SetFlag(ref _pidReceivedFlag);
     }
     else
     {
@@ -89,17 +103,26 @@ public class RunInTerminalStrategy(
 
       logger.LogInformation("Sending runInTerminal request to Neovim: {payload}", JsonSerializer.Serialize(runInTerminalReq, _jsonSerializerOptions));
       var termResponse = await proxy.RunClientRequestAsync(runInTerminalReq, CancellationToken.None);
-
       if (!termResponse.Success)
       {
         throw new InvalidOperationException($"Neovim failed to launch terminal: {termResponse.Message}");
       }
-      logger.LogInformation("runInTerminal response from Neovim");
+      if (termResponse is not RunInTerminalResponse runInTerminalResponse)
+      {
+        throw new InvalidOperationException($"Unexpected response type for runInTerminal: {termResponse.GetType().Name}");
+      }
+      _pid = runInTerminalResponse.Body.ProcessId;
+      logger.LogInformation("runInTerminal response from Neovim (Pid: {Pid})", _pid);
+      SetFlag(ref _pidReceivedFlag);
     }
 
-    _pid = await _hookSession.WaitForPidAsync();
-    SetFlag(ref _pidReceivedFlag);
-    logger.LogInformation("Received attach PID {Pid} from Startup Hook", _pid);
+    // The hook keeps the runtime suspended until we resume it; wait for it to connect so
+    // the resume signal lands. Godot has no hook, so we attach to the running process.
+    if (!isGodot)
+    {
+      await _hookSession!.WaitForConnectionAsync();
+    }
+    logger.LogInformation("Attaching to PID {Pid}", _pid);
 
     request.Type = "request";
     request.Command = "attach";
