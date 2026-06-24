@@ -369,6 +369,7 @@ public class WorkspaceService(
     sessionRegistry.TryClaim(sessionKey, project.ProjectName, isDebug: true);
     _ = NotifyRunningSessionsAsync();
 
+    //TODO: godot bascially copy runInTerminalStrategy but dont suspend
     var strategy = debugStrategyFactory.CreateRunInTerminalStrategy(project, launchProfileName, cliArgs);
 
     Debugger.DebugSession session;

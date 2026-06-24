@@ -4,15 +4,14 @@ namespace EasyDotnet.IDE.Services;
 
 public static class RoslynLocator
 {
-  public const string ROSLYN_DLL_PATH_ENV = "EASY_DOTNET_ROSLYN_DLL_PATH";
   private const string EasyDotnetAnalyzerFileName = "EasyDotnet.RoslynLanguageServices.dll";
   private const string EasyDotnetRoslynLanguageServicesFileName = "EasyDotnet.RoslynLanguageServices.dll";
   private const string ExternalAccessExtensionsFileName = "Microsoft.CodeAnalysis.ExternalAccess.Extensions.dll";
 
   public static string? GetCustomRoslynDllPath()
   {
-    var customDllPath = Environment.GetEnvironmentVariable(ROSLYN_DLL_PATH_ENV);
-    if (string.IsNullOrWhiteSpace(customDllPath))
+    var customDllPath = WellKnownEnvironment.RoslynPath.Value;
+    if (customDllPath is null)
     {
       return null;
     }
@@ -22,9 +21,7 @@ public static class RoslynLocator
       return customDllPath;
     }
 
-    throw new FileNotFoundException(
-        $"Custom Roslyn DLL specified in {ROSLYN_DLL_PATH_ENV} not found",
-        customDllPath);
+    throw new FileNotFoundException($"Custom Roslyn DLL specified in {WellKnownEnvironment.RoslynPath.Name} not found", customDllPath);
   }
 
   /// <summary>
@@ -42,8 +39,8 @@ public static class RoslynLocator
 
     var analyzerDlls = new[]
     {
-            "Roslynator.CSharp.Analyzers.dll",
-            "Roslynator.CSharp.Analyzers.CodeFixes.dll"
+      "Roslynator.CSharp.Analyzers.dll",
+      "Roslynator.CSharp.Analyzers.CodeFixes.dll"
     };
 
     return [.. analyzerDlls

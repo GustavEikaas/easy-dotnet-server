@@ -62,7 +62,8 @@ public static class WorkspaceRunCommandBuilder
 
     if (project.UsingGodotNETSdk)
     {
-      return ("godot", []);
+      var runCommand = WellKnownEnvironment.GodotBinPath.GetValueOrDefault("godot");
+      return (runCommand, []);
     }
 
     if (string.Equals(project.TargetFrameworkIdentifier, ".NETCoreApp", StringComparison.OrdinalIgnoreCase)

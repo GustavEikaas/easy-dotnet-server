@@ -129,8 +129,7 @@ public sealed class HealthCheckCommand : AsyncCommand<HealthCheckCommand.Setting
   private static async Task<DebuggerHealthInfo> GetDebuggerInfoAsync(string? debuggerBinPath, string? debuggerEngine, CancellationToken cancellationToken)
   {
     var platform = DebuggerLocator.TryGetRuntimePlatform();
-    var envPath = Environment.GetEnvironmentVariable(DebuggerLocator.DEBUGGER_PATH_ENV);
-    var customPath = !string.IsNullOrWhiteSpace(debuggerBinPath) ? debuggerBinPath : envPath;
+    var customPath = !string.IsNullOrWhiteSpace(debuggerBinPath) ? debuggerBinPath : WellKnownEnvironment.DebuggerBinPath.Value;
 
     try
     {
@@ -151,7 +150,7 @@ public sealed class HealthCheckCommand : AsyncCommand<HealthCheckCommand.Setting
       var engine = TryGetDebuggerEngineName(debuggerEngine);
       return new DebuggerHealthInfo(
           Engine: engine,
-          Source: GetDebuggerSource(debuggerBinPath, customPath),
+          Source: GetDebuggerSource(debuggerBinPath, customPath) ?? "unknown",
           Platform: platform,
           Path: GetExpectedDebuggerPath(customPath, platform, engine),
           Version: null,
@@ -202,16 +201,16 @@ public sealed class HealthCheckCommand : AsyncCommand<HealthCheckCommand.Setting
     {
       return !string.IsNullOrWhiteSpace(debuggerEngine)
           ? debuggerEngine
-          : Environment.GetEnvironmentVariable(DebuggerLocator.DEBUGGER_ENGINE_ENV) ?? "unknown";
+          : WellKnownEnvironment.DebuggerEngine.Value ?? "unknown";
     }
   }
 
-  private static string GetDebuggerSource(string? debuggerBinPath, string? customPath) =>
+  private static string? GetDebuggerSource(string? debuggerBinPath, string? customPath) =>
     string.IsNullOrWhiteSpace(customPath)
         ? "bundled"
         : !string.IsNullOrWhiteSpace(debuggerBinPath)
             ? "--debugger-bin-path"
-            : DebuggerLocator.DEBUGGER_PATH_ENV;
+            : WellKnownEnvironment.DebuggerBinPath.Value;
 
   private static string? GetExpectedDebuggerPath(string? customPath, string? platform, string engine)
   {
