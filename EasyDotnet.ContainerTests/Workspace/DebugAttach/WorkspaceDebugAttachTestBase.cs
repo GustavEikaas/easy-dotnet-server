@@ -1,8 +1,6 @@
-using System.IO.Pipes;
 using System.Text;
 using System.Threading.Channels;
 using EasyDotnet.ContainerTests.Docker;
-using EasyDotnet.ContainerTests.Scaffold;
 using EasyDotnet.ContainerTests.Workspace.Run;
 using EasyDotnet.IDE.Models.Client;
 using StreamJsonRpc;
@@ -15,11 +13,11 @@ namespace EasyDotnet.ContainerTests.Workspace.DebugAttach;
 ///
 /// Handles two phases:
 ///
-/// Phase 1 — run: <c>runCommandManaged</c> is captured, a background task connects to the
-/// startup hook pipe (<c>EASY_DOTNET_HOOK_PIPE</c>), writes a fake PID (<see cref="FakePid"/>)
-/// and reads the resume byte. <see cref="ReceiveRunJobAsync"/> waits until that pipe exchange
-/// completes, guaranteeing the server's <c>OnPidReceived</c> callback has fired and the
-/// <c>RunningProcessRegistry</c> is populated before the test proceeds.
+/// Phase 1 — run: <c>runCommandManaged</c> is captured and answered with a fake PID
+/// (<see cref="FakePid"/>) in the <c>RunCommandResponse</c>. The server reads the PID from
+/// that response and fires <c>OnPidReceived</c> before <c>workspace/run</c> returns, so by
+/// the time <see cref="ReceiveRunJobAsync"/> completes the <c>RunningProcessRegistry</c> is
+/// populated.
 ///
 /// Phase 2 — debug-attach: <c>picker/pick</c> reverse requests are captured and held until
 /// the test calls <see cref="ReceivePickerAsync"/>, which supplies the response ids (or
@@ -46,8 +44,6 @@ public abstract class WorkspaceDebugAttachTestBase<TContainer> : ContainerTestBa
   private static readonly TimeSpan PickerTimeout = TimeSpan.FromSeconds(30);
   private static readonly TimeSpan DebugAttachTimeout = TimeSpan.FromMinutes(1);
   private static readonly TimeSpan ProcessExitTimeout = TimeSpan.FromSeconds(10);
-
-  private Task? _pidInjectionTask;
 
   private readonly Channel<TestTrackedJob> _runJobs =
     Channel.CreateUnbounded<TestTrackedJob>();
@@ -77,31 +73,16 @@ public abstract class WorkspaceDebugAttachTestBase<TContainer> : ContainerTestBa
     BeginCall(Container.Rpc.WorkspaceDebugAttachAsync(), DebugAttachTimeout);
 
   /// <summary>
-  /// Waits for the next <c>runCommandManaged</c> call, then waits for the startup hook pipe
-  /// exchange (fake PID written, resume byte consumed) to complete. Returns only once the
-  /// server's <c>OnPidReceived</c> has fired and the registry entry exists.
+  /// Waits for the next <c>runCommandManaged</c> call. The handler answers with
+  /// <see cref="FakePid"/>, which the server records via <c>OnPidReceived</c> before
+  /// <c>workspace/run</c> returns, so the registry entry exists once this completes.
   /// </summary>
-  protected async Task<TestTrackedJob> ReceiveRunJobAsync()
-  {
-    var job = await ReceiveAsync(
+  protected async Task<TestTrackedJob> ReceiveRunJobAsync() =>
+    await ReceiveAsync(
       _runJobs.Reader,
       "runCommandManaged",
       RunTimeout,
       CollectPendingErrors);
-
-    try
-    {
-      if (_pidInjectionTask is not null)
-        await _pidInjectionTask.WaitAsync(RunTimeout);
-    }
-    catch (Exception ex)
-    {
-      throw new XunitException(
-        $"runCommandManaged was received, but startup-hook PID injection failed: {ex.Message}.{CollectPendingErrors()}");
-    }
-
-    return job;
-  }
 
   /// <summary>
   /// Signals the server that the tracked job's process has exited, triggering registry cleanup.
@@ -236,18 +217,14 @@ public abstract class WorkspaceDebugAttachTestBase<TContainer> : ContainerTestBa
   private sealed class RpcHandlers(WorkspaceDebugAttachTestBase<TContainer> test)
   {
     /// <summary>
-    /// Captures the job, fires a background task to inject the fake PID via the startup hook
-    /// pipe, and returns immediately so the server can proceed to start its pipe listener.
+    /// Captures the job and answers with the fake PID. The server reads the PID from this
+    /// response (no startup-hook pipe is involved in the run path).
     /// </summary>
     [JsonRpcMethod("runCommandManaged", UseSingleObjectParameterDeserialization = true)]
     public Task<RunCommandResponse> RunCommandManaged(TestTrackedJob job)
     {
       test._runJobs.Writer.TryWrite(job);
-
-      if (job.Command.EnvironmentVariables.TryGetValue("EASY_DOTNET_HOOK_PIPE", out var pipeName))
-        test._pidInjectionTask = InjectPidAsync(pipeName, FakePid);
-
-      return Task.FromResult(new RunCommandResponse(0));
+      return Task.FromResult(new RunCommandResponse(FakePid));
     }
 
     [JsonRpcMethod("picker/pick", UseSingleObjectParameterDeserialization = true)]
@@ -262,23 +239,5 @@ public abstract class WorkspaceDebugAttachTestBase<TContainer> : ContainerTestBa
     [JsonRpcMethod("displayError", UseSingleObjectParameterDeserialization = true)]
     public void DisplayError(TestDisplayMessage message) =>
       test._displayErrors.Writer.TryWrite(message.Message);
-
-    /// <summary>
-    /// Connects to the startup hook named pipe, writes the fake PID as a little-endian int32,
-    /// and reads the single resume byte the server sends after calling <c>session.Resume()</c>.
-    /// The pipe is created by <c>StartupHookService.CreateSession</c> (a <c>NamedPipeServerStream</c>
-    /// at <c>/tmp/CoreFxPipe_&lt;name&gt;</c>), accessible from the host because <c>/tmp</c>
-    /// is bind-mounted into the test container.
-    /// </summary>
-    private static async Task InjectPidAsync(string pipeName, int pid)
-    {
-      using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
-      // ConnectAsync blocks until the server calls WaitForConnectionAsync (started in the
-      // background task that runs after runCommandManaged returns).
-      await pipe.ConnectAsync(10_000);
-      await pipe.WriteAsync(BitConverter.GetBytes(pid));
-      await pipe.FlushAsync();
-      _ = pipe.ReadByte(); // consume the resume byte written by session.Resume()
-    }
   }
 }

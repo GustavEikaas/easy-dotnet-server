@@ -182,6 +182,7 @@ public sealed record ValidatedDotnetProject
       && (
           Raw.HasRuntimeOutput
           || !string.IsNullOrWhiteSpace(Raw.RunCommand)
+          || Raw.UsingGodotNETSdk
           || OutputType.Equals("Exe", StringComparison.OrdinalIgnoreCase)
           || OutputType.Equals("WinExe", StringComparison.OrdinalIgnoreCase));
 

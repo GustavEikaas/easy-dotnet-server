@@ -58,7 +58,7 @@ public class RoslynLocatorTests
   [After(Test)]
   public void Cleanup()
   {
-    Environment.SetEnvironmentVariable(RoslynLocator.ROSLYN_DLL_PATH_ENV, null);
+    Environment.SetEnvironmentVariable(WellKnownEnvironment.RoslynPath.Name, null);
 
     var toolsDir = Path.Combine(GetTestProjectDir(), "tools");
     if (Directory.Exists(toolsDir))

@@ -21,14 +21,6 @@ internal static class StartupHook
       client.Connect(5000);
       LogIfDebug($"Pipe connected: {client.IsConnected}");
 
-      var pid = Environment.ProcessId;
-      LogIfDebug($"Sending PID: {pid}");
-      var pidBytes = BitConverter.GetBytes(pid);
-      LogIfDebug($"Writing {pidBytes.Length} bytes to pipe...");
-      client.Write(pidBytes, 0, pidBytes.Length);
-      client.Flush();
-      LogIfDebug("PID written and flushed.");
-
       LogIfDebug("Waiting for resume byte...");
       client.ReadByte();
       LogIfDebug("Received resume byte");

@@ -67,6 +67,11 @@ public static partial class LaunchProfileUtils
       return NormalizePath(project.RunWorkingDirectory);
     }
 
+    if (project.UsingGodotNETSdk && project.ProjectDir != null)
+    {
+      return project.ProjectDir;
+    }
+
     return NormalizePath(
         Path.GetDirectoryName(project.TargetPath) ?? project.ProjectDir!);
   }

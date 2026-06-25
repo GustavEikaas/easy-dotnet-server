@@ -6,7 +6,7 @@ namespace EasyDotnet.IDE.AppWrapper;
 
 public class AppWrapperHandle(AppWrapperEntry entry) : IAppWrapperHandle
 {
-  public async Task SendRunCommandAsync(Guid jobId, RunCommand command, CancellationToken ct)
+  public async Task<int> SendRunCommandAsync(Guid jobId, RunCommand command, CancellationToken ct)
   {
     var runAppCommand = new RunAppCommand(
         jobId,
@@ -17,8 +17,9 @@ public class AppWrapperHandle(AppWrapperEntry entry) : IAppWrapperHandle
 
     try
     {
-      await entry.Rpc.NotifyWithParameterObjectAsync("appWrapper/run", runAppCommand);
+      var pid = await entry.Rpc.InvokeWithParameterObjectAsync<int>("appWrapper/run", runAppCommand, ct);
       entry.SetJob(jobId);
+      return pid;
     }
     catch
     {
