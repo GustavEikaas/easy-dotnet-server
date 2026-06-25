@@ -1311,11 +1311,11 @@ public record GetResultsResult(
     string? DurationDisplay
 );
 
-public record StackFrameDto(string OriginalText, string? File, int? Line, bool IsUserCode, bool? IsFromTest = null)
+public record StackFrameDto(string OriginalText, string? File, int? Line, bool IsUserCode, bool IsFromTest = false)
 {
   public static StackFrameDto Create(ParsedStackFrame frame, TestNode node)
   {
-    bool? isFromTest = null;
+    var isFromTest = false;
 
     if (frame.Line.HasValue && node is { BodyStartLine: not null, EndLine: not null })
     {
