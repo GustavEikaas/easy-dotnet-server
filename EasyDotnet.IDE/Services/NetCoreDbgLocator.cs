@@ -21,14 +21,11 @@ public sealed record DebuggerResolution(
 
 public static class DebuggerLocator
 {
-  public const string DEBUGGER_PATH_ENV = "EASY_DOTNET_DEBUGGER_BIN_PATH";
-  public const string DEBUGGER_ENGINE_ENV = "EASY_DOTNET_DEBUGGER_ENGINE";
-
   public static DebuggerResolution ResolveDebugger(string? engineName = null, string? debuggerBinPath = null)
   {
     var customPath = !string.IsNullOrWhiteSpace(debuggerBinPath)
         ? debuggerBinPath
-        : Environment.GetEnvironmentVariable(DEBUGGER_PATH_ENV);
+        : WellKnownEnvironment.DebuggerBinPath.Value;
     var engine = GetConfiguredEngine(engineName, customPath);
 
     if (!string.IsNullOrWhiteSpace(customPath))
@@ -38,7 +35,7 @@ public static class DebuggerLocator
         var (customFileName, customArgs) = GetLaunchCommand(engine, customPath);
         return new DebuggerResolution(
             engine,
-            !string.IsNullOrWhiteSpace(debuggerBinPath) ? "--debugger-bin-path" : DEBUGGER_PATH_ENV,
+            !string.IsNullOrWhiteSpace(debuggerBinPath) ? "--debugger-bin-path" : WellKnownEnvironment.DebuggerBinPath.Name,
             TryGetRuntimePlatform(),
             customPath,
             customFileName,
@@ -46,7 +43,7 @@ public static class DebuggerLocator
       }
 
       throw new FileNotFoundException(
-          $"Custom debugger executable specified in {(!string.IsNullOrWhiteSpace(debuggerBinPath) ? "--debugger-bin-path" : DEBUGGER_PATH_ENV)} not found",
+          $"Custom debugger executable specified in {(!string.IsNullOrWhiteSpace(debuggerBinPath) ? "--debugger-bin-path" : WellKnownEnvironment.DebuggerBinPath.Name)} not found",
           customPath);
     }
 
@@ -76,14 +73,14 @@ public static class DebuggerLocator
   {
     var customPath = !string.IsNullOrWhiteSpace(debuggerBinPath)
         ? debuggerBinPath
-        : Environment.GetEnvironmentVariable(DEBUGGER_PATH_ENV);
+        : WellKnownEnvironment.DebuggerBinPath.Value;
 
     if (!string.IsNullOrWhiteSpace(customPath))
       return DebuggerEngine.Custom;
 
     var configuredEngine = !string.IsNullOrWhiteSpace(engineName)
         ? engineName
-        : Environment.GetEnvironmentVariable(DEBUGGER_ENGINE_ENV);
+        : WellKnownEnvironment.DebuggerEngine.Value;
 
     return string.IsNullOrWhiteSpace(configuredEngine)
         ? DebuggerEngine.NetCoreDbg
@@ -153,7 +150,6 @@ public static class DebuggerLocator
 
 public static class NetCoreDbgLocator
 {
-  public const string DEBUGGER_PATH_ENV = DebuggerLocator.DEBUGGER_PATH_ENV;
 
   /// <summary>
   /// Returns the full path to the netcoredbg executable for the current platform.

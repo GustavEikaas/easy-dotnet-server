@@ -9,8 +9,8 @@ public class DebuggerLocatorTests
   [Test]
   public void GetDebuggerPath_UsesBundledVersion_WhenNoEnvVarSet()
   {
-    Environment.SetEnvironmentVariable(NetCoreDbgLocator.DEBUGGER_PATH_ENV, null);
-    Environment.SetEnvironmentVariable(DebuggerLocator.DEBUGGER_ENGINE_ENV, null);
+    Environment.SetEnvironmentVariable(WellKnownEnvironment.DebuggerBinPath.Name, null);
+    Environment.SetEnvironmentVariable(WellKnownEnvironment.DebuggerEngine.Name, null);
     Assert.Throws<FileNotFoundException>(() => NetCoreDbgLocator.GetNetCoreDbgPath());
   }
 
@@ -20,22 +20,22 @@ public class DebuggerLocatorTests
     var customDebuggerPath = Path.GetTempFileName();
     try
     {
-      Environment.SetEnvironmentVariable(NetCoreDbgLocator.DEBUGGER_PATH_ENV, customDebuggerPath);
-      var path = NetCoreDbgLocator.GetNetCoreDbgPath();
-      await Assert.That(path).IsEqualTo(customDebuggerPath);
+      Environment.SetEnvironmentVariable(WellKnownEnvironment.DebuggerBinPath.Name, customDebuggerPath);
+      var path = DebuggerLocator.ResolveDebugger(null, null);
+      await Assert.That(path.Path).IsEqualTo(customDebuggerPath);
     }
     finally
     {
       File.Delete(customDebuggerPath);
-      Environment.SetEnvironmentVariable(NetCoreDbgLocator.DEBUGGER_PATH_ENV, null);
+      Environment.SetEnvironmentVariable(WellKnownEnvironment.DebuggerBinPath.Name, null);
     }
   }
 
   [Test]
   public async Task ResolveDebugger_DefaultsToNetCoreDbg()
   {
-    Environment.SetEnvironmentVariable(NetCoreDbgLocator.DEBUGGER_PATH_ENV, null);
-    Environment.SetEnvironmentVariable(DebuggerLocator.DEBUGGER_ENGINE_ENV, null);
+    Environment.SetEnvironmentVariable(WellKnownEnvironment.DebuggerBinPath.Name, null);
+    Environment.SetEnvironmentVariable(WellKnownEnvironment.DebuggerEngine.Name, null);
 
     var engine = DebuggerLocator.GetConfiguredEngine();
 
@@ -45,8 +45,8 @@ public class DebuggerLocatorTests
   [Test]
   public async Task ResolveDebugger_UsesDncDbgEngine_WhenEnvVarSet()
   {
-    Environment.SetEnvironmentVariable(NetCoreDbgLocator.DEBUGGER_PATH_ENV, null);
-    Environment.SetEnvironmentVariable(DebuggerLocator.DEBUGGER_ENGINE_ENV, "dncdbg");
+    Environment.SetEnvironmentVariable(WellKnownEnvironment.DebuggerBinPath.Name, null);
+    Environment.SetEnvironmentVariable(WellKnownEnvironment.DebuggerEngine.Name, "dncdbg");
 
     var engine = DebuggerLocator.GetConfiguredEngine();
 
@@ -59,31 +59,31 @@ public class DebuggerLocatorTests
     var customDebuggerPath = Path.GetTempFileName();
     try
     {
-      Environment.SetEnvironmentVariable(NetCoreDbgLocator.DEBUGGER_PATH_ENV, customDebuggerPath);
-      Environment.SetEnvironmentVariable(DebuggerLocator.DEBUGGER_ENGINE_ENV, "dncdbg");
+      Environment.SetEnvironmentVariable(WellKnownEnvironment.DebuggerBinPath.Name, customDebuggerPath);
+      Environment.SetEnvironmentVariable(WellKnownEnvironment.DebuggerEngine.Name, "dncdbg");
 
       var debugger = DebuggerLocator.ResolveDebugger();
 
       // A custom binary path is run as the Custom engine, ignoring the configured engine.
       await Assert.That(debugger.Engine).IsEqualTo(DebuggerEngine.Custom);
-      await Assert.That(debugger.Source).IsEqualTo(DebuggerLocator.DEBUGGER_PATH_ENV);
+      await Assert.That(debugger.Source).IsEqualTo(WellKnownEnvironment.DebuggerBinPath.Name);
       await Assert.That(debugger.Path).IsEqualTo(customDebuggerPath);
       await Assert.That(debugger.FileName).IsEqualTo(customDebuggerPath);
-      await Assert.That(debugger.Arguments).IsEquivalentTo(new[] { "--interpreter=vscode" });
+      await Assert.That(debugger.Arguments).IsEquivalentTo(["--interpreter=vscode"]);
     }
     finally
     {
       File.Delete(customDebuggerPath);
-      Environment.SetEnvironmentVariable(NetCoreDbgLocator.DEBUGGER_PATH_ENV, null);
-      Environment.SetEnvironmentVariable(DebuggerLocator.DEBUGGER_ENGINE_ENV, null);
+      Environment.SetEnvironmentVariable(WellKnownEnvironment.DebuggerBinPath.Name, null);
+      Environment.SetEnvironmentVariable(WellKnownEnvironment.DebuggerEngine.Name, null);
     }
   }
 
   [Test]
   public async Task ResolveDebugger_UsesBundledDncDbgPath_WhenEngineSet()
   {
-    Environment.SetEnvironmentVariable(NetCoreDbgLocator.DEBUGGER_PATH_ENV, null);
-    Environment.SetEnvironmentVariable(DebuggerLocator.DEBUGGER_ENGINE_ENV, "dncdbg");
+    Environment.SetEnvironmentVariable(WellKnownEnvironment.DebuggerBinPath.Name, null);
+    Environment.SetEnvironmentVariable(WellKnownEnvironment.DebuggerEngine.Name, "dncdbg");
 
     var platform = DebuggerLocator.GetRuntimePlatform();
     var expectedPath = DebuggerLocator.GetBundledDebuggerPath(DebuggerEngine.DncDbg, platform);
@@ -111,16 +111,16 @@ public class DebuggerLocatorTests
         File.Delete(expectedPath);
       }
 
-      Environment.SetEnvironmentVariable(NetCoreDbgLocator.DEBUGGER_PATH_ENV, null);
-      Environment.SetEnvironmentVariable(DebuggerLocator.DEBUGGER_ENGINE_ENV, null);
+      Environment.SetEnvironmentVariable(WellKnownEnvironment.DebuggerBinPath.Name, null);
+      Environment.SetEnvironmentVariable(WellKnownEnvironment.DebuggerEngine.Name, null);
     }
   }
 
   [Test]
   public async Task ResolveDebugger_UsesSharpDbgEngine_WhenEnvVarSet()
   {
-    Environment.SetEnvironmentVariable(NetCoreDbgLocator.DEBUGGER_PATH_ENV, null);
-    Environment.SetEnvironmentVariable(DebuggerLocator.DEBUGGER_ENGINE_ENV, "sharpdbg");
+    Environment.SetEnvironmentVariable(WellKnownEnvironment.DebuggerBinPath.Name, null);
+    Environment.SetEnvironmentVariable(WellKnownEnvironment.DebuggerEngine.Name, "sharpdbg");
 
     var engine = DebuggerLocator.GetConfiguredEngine();
 
@@ -130,8 +130,8 @@ public class DebuggerLocatorTests
   [Test]
   public async Task ResolveDebugger_LaunchesSharpDbgViaDotnetMuxer_WhenEngineSet()
   {
-    Environment.SetEnvironmentVariable(NetCoreDbgLocator.DEBUGGER_PATH_ENV, null);
-    Environment.SetEnvironmentVariable(DebuggerLocator.DEBUGGER_ENGINE_ENV, "sharpdbg");
+    Environment.SetEnvironmentVariable(WellKnownEnvironment.DebuggerBinPath.Name, null);
+    Environment.SetEnvironmentVariable(WellKnownEnvironment.DebuggerEngine.Name, "sharpdbg");
 
     var platform = DebuggerLocator.GetRuntimePlatform();
     var expectedPath = DebuggerLocator.GetBundledDebuggerPath(DebuggerEngine.SharpDbg, platform);
@@ -161,8 +161,8 @@ public class DebuggerLocatorTests
         File.Delete(expectedPath);
       }
 
-      Environment.SetEnvironmentVariable(NetCoreDbgLocator.DEBUGGER_PATH_ENV, null);
-      Environment.SetEnvironmentVariable(DebuggerLocator.DEBUGGER_ENGINE_ENV, null);
+      Environment.SetEnvironmentVariable(WellKnownEnvironment.DebuggerBinPath.Name, null);
+      Environment.SetEnvironmentVariable(WellKnownEnvironment.DebuggerEngine.Name, null);
     }
   }
 
@@ -199,8 +199,8 @@ public class DebuggerLocatorTests
   [Test]
   public async Task GetConfiguredEngine_UsesCustom_WhenBinaryPathProvidedWithoutEngine()
   {
-    Environment.SetEnvironmentVariable(NetCoreDbgLocator.DEBUGGER_PATH_ENV, null);
-    Environment.SetEnvironmentVariable(DebuggerLocator.DEBUGGER_ENGINE_ENV, null);
+    Environment.SetEnvironmentVariable(WellKnownEnvironment.DebuggerBinPath.Name, null);
+    Environment.SetEnvironmentVariable(WellKnownEnvironment.DebuggerEngine.Name, null);
 
     var engine = DebuggerLocator.GetConfiguredEngine(engineName: null, debuggerBinPath: "/path/to/vsdbg");
 
@@ -213,8 +213,8 @@ public class DebuggerLocatorTests
     var customDebuggerPath = Path.GetTempFileName();
     try
     {
-      Environment.SetEnvironmentVariable(NetCoreDbgLocator.DEBUGGER_PATH_ENV, null);
-      Environment.SetEnvironmentVariable(DebuggerLocator.DEBUGGER_ENGINE_ENV, null);
+      Environment.SetEnvironmentVariable(WellKnownEnvironment.DebuggerBinPath.Name, null);
+      Environment.SetEnvironmentVariable(WellKnownEnvironment.DebuggerEngine.Name, null);
 
       var debugger = DebuggerLocator.ResolveDebugger(engineName: null, debuggerBinPath: customDebuggerPath);
 
@@ -228,7 +228,7 @@ public class DebuggerLocatorTests
     finally
     {
       File.Delete(customDebuggerPath);
-      Environment.SetEnvironmentVariable(NetCoreDbgLocator.DEBUGGER_PATH_ENV, null);
+      Environment.SetEnvironmentVariable(WellKnownEnvironment.DebuggerBinPath.Name, null);
     }
   }
 
@@ -244,7 +244,7 @@ public class DebuggerLocatorTests
   [Test]
   public void ResolveDebugger_ThrowsForInvalidEngine()
   {
-    Environment.SetEnvironmentVariable(DebuggerLocator.DEBUGGER_ENGINE_ENV, "invalid");
+    Environment.SetEnvironmentVariable(WellKnownEnvironment.DebuggerEngine.Name, "invalid");
 
     Assert.Throws<ArgumentException>(() => DebuggerLocator.GetConfiguredEngine());
   }
@@ -252,7 +252,7 @@ public class DebuggerLocatorTests
   [After(Test)]
   public void Cleanup()
   {
-    Environment.SetEnvironmentVariable(NetCoreDbgLocator.DEBUGGER_PATH_ENV, null);
-    Environment.SetEnvironmentVariable(DebuggerLocator.DEBUGGER_ENGINE_ENV, null);
+    Environment.SetEnvironmentVariable(WellKnownEnvironment.DebuggerBinPath.Name, null);
+    Environment.SetEnvironmentVariable(WellKnownEnvironment.DebuggerEngine.Name, null);
   }
 }

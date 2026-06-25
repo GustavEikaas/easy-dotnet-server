@@ -71,6 +71,7 @@ public static class DapMessageDeserializer
       return cmd switch
       {
         "variables" => JsonSerializer.Deserialize<VariablesResponse>(root.GetRawText(), options)!,
+        "runinterminal" => JsonSerializer.Deserialize<RunInTerminalResponse>(root.GetRawText(), options)!,
         _ => JsonSerializer.Deserialize<Response>(root.GetRawText(), options)!,
       };
     }
