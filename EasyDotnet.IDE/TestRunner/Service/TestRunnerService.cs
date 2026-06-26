@@ -723,6 +723,11 @@ public class TestRunnerService(
               x => new NeotestBatchResultDto(
                   Outcome: x.detail!.Outcome,
                   ErrorMessage: x.detail.ErrorMessage.Length > 0 ? x.detail.ErrorMessage : null,
+                  Frames: [.. x.detail.Frames.Select(f => new StackFrameDto(
+                      OriginalText: f.OriginalText,
+                      File: f.File,
+                      Line: f.Line,
+                      IsUserCode: f.IsUserCode))],
                   FailingFrame: x.detail.FailingFrame is { } ff ? StackFrameDto.Create(ff, x.node!) : null,
                   Stdout: x.detail.Stdout.Length > 0 ? x.detail.Stdout : null
                 )
@@ -1333,4 +1338,4 @@ public record LineNumberUpdateDto(string Id, int SignatureLine, int BodyStartLin
 public record NeotestPositionsRequest(string FilePath);
 public record NeotestPositionDto(string Id, string Name, string Type, string? ParentId, int? StartLine, int? EndLine);
 public record NeotestBatchResultsRequest(string[] Ids);
-public record NeotestBatchResultDto(string Outcome, string[]? ErrorMessage, StackFrameDto? FailingFrame, string[]? Stdout);
+public record NeotestBatchResultDto(string Outcome, string[]? ErrorMessage, StackFrameDto[]? Frames, StackFrameDto? FailingFrame, string[]? Stdout);
