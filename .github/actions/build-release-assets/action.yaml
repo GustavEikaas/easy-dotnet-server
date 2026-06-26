@@ -5,7 +5,7 @@ inputs:
   roslynatorVersion:
     description: 'Roslynator analyzer package version'
     required: true
-    default: '4.14.0'
+    default: '4.15.0'
   toolsOutputPath:
     description: 'Where to copy tool assets inside project output'
     required: true
