@@ -36,10 +36,10 @@ public class ProjectReferenceCliService(
         .Select(relativePath => Path.GetFullPath(Path.Combine(projectDir, relativePath)))];
   }
 
-  public async Task<bool> AddProjectReferenceAsync(string projectPath, string targetPath, CancellationToken cancellationToken = default)
+  public async Task<(bool Success, string Error)> AddProjectReferenceAsync(string projectPath, string targetPath, CancellationToken cancellationToken = default)
   {
     var fullProjectPath = Path.GetFullPath(projectPath);
-    var (success, _, _) = await processQueue.RunProcessAsync(
+    var (success, stdout, stderr) = await processQueue.RunProcessAsync(
         "dotnet",
         $"add \"{fullProjectPath}\" reference \"{Path.GetFullPath(targetPath)}\"",
         new ProcessOptions(true),
@@ -50,13 +50,13 @@ public class ProjectReferenceCliService(
       buildHostManager.InvalidateCache(fullProjectPath);
     }
 
-    return success;
+    return (success, string.IsNullOrWhiteSpace(stderr) ? stdout : stderr);
   }
 
-  public async Task<bool> RemoveProjectReferenceAsync(string projectPath, string targetPath, CancellationToken cancellationToken = default)
+  public async Task<(bool Success, string Error)> RemoveProjectReferenceAsync(string projectPath, string targetPath, CancellationToken cancellationToken = default)
   {
     var fullProjectPath = Path.GetFullPath(projectPath);
-    var (success, _, _) = await processQueue.RunProcessAsync(
+    var (success, stdout, stderr) = await processQueue.RunProcessAsync(
         "dotnet",
         $"remove \"{fullProjectPath}\" reference \"{Path.GetFullPath(targetPath)}\"",
         new ProcessOptions(true),
@@ -67,6 +67,6 @@ public class ProjectReferenceCliService(
       buildHostManager.InvalidateCache(fullProjectPath);
     }
 
-    return success;
+    return (success, string.IsNullOrWhiteSpace(stderr) ? stdout : stderr);
   }
 }
