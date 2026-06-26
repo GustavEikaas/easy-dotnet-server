@@ -1,9 +1,11 @@
 using EasyDotnet.Controllers;
+using EasyDotnet.IDE.BuildHost;
 using EasyDotnet.IDE.Editor;
 using EasyDotnet.IDE.EntityFramework;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Models.Client;
 using EasyDotnet.IDE.Models.Client.Prompt;
+using EasyDotnet.IDE.Models.Solution;
 using EasyDotnet.IDE.Picker.Models;
 using EasyDotnet.IDE.Services;
 using StreamJsonRpc;
@@ -16,6 +18,7 @@ public class EntityFrameworkController(
   EntityFrameworkService entityFrameworkService,
   DbContextCache dbContextCache,
   IEditorService editorService,
+  WorkspaceBuildHostManager workspaceBuildHostManager,
   IProgressScopeFactory progressScopeFactory) : BaseController
 {
   [JsonRpcMethod("ef/migrations-add")]
@@ -165,11 +168,9 @@ public class EntityFrameworkController(
       "Pick project",
       [.. projects.Select(x => new SelectionOption(x.AbsolutePath, x.ProjectName))]) ?? throw new InvalidOperationException("No EF project selected");
 
-    var startupProject = await editorService.RequestSelection(
-      "Pick startup project",
-      [.. projects.Select(x => new SelectionOption(x.AbsolutePath, x.ProjectName))]) ?? throw new InvalidOperationException("No startup project selected");
+    var startupProjectPath = await PickStartupProjectPathAsync(solutionFile, projects, cancellationToken);
 
-    var cached = await dbContextCache.TryGetAsync(efProj: efProject.Id, startupProj: startupProject.Id);
+    var cached = await dbContextCache.TryGetAsync(efProj: efProject.Id, startupProj: startupProjectPath);
 
     if (cached is not null && cached.Count != 0)
     {
@@ -178,11 +179,11 @@ public class EntityFrameworkController(
       var selection = await editorService.RequestSelection("Select db context", [.. options]) ?? throw new InvalidOperationException("No db context selected");
       if (selection.Id != scanOption.Id)
       {
-        return (efProject.Id, startupProject.Id, selection.Id);
+        return (efProject.Id, startupProjectPath, selection.Id);
       }
     }
 
-    var dbContexts = await ScanForContextsAsync(efProject: efProject.Id, startupProject: startupProject.Id, cancellationToken);
+    var dbContexts = await ScanForContextsAsync(efProject: efProject.Id, startupProject: startupProjectPath, cancellationToken);
 
     if (dbContexts.Count == 0)
     {
@@ -191,7 +192,7 @@ public class EntityFrameworkController(
 
     if (dbContexts.Count == 1)
     {
-      return (efProject.Id, startupProject.Id, dbContexts[0].FullName);
+      return (efProject.Id, startupProjectPath, dbContexts[0].FullName);
     }
 
     var selectedContext = await editorService.RequestSelection(
@@ -199,7 +200,30 @@ public class EntityFrameworkController(
       [.. dbContexts.Select(x => new SelectionOption(x.FullName, x.Name))])
       ?? throw new InvalidOperationException("No db context selected");
 
-    return (efProject.Id, startupProject.Id, selectedContext.Id);
+    return (efProject.Id, startupProjectPath, selectedContext.Id);
+  }
+
+  private async Task<string> PickStartupProjectPathAsync(
+    string solutionFile,
+    IReadOnlyList<SolutionFileProject> projects,
+    CancellationToken cancellationToken)
+  {
+    var runnable = await workspaceBuildHostManager.GetProjectsFromSolutionAsync(
+      solutionFile, p => p.IsRunnable, ct: cancellationToken);
+
+    if (runnable.Count == 1)
+    {
+      return runnable[0].ProjectFullPath;
+    }
+
+    var options = runnable.Count == 0
+      ? projects.Select(x => new SelectionOption(x.AbsolutePath, x.ProjectName))
+      : runnable.Select(p => new SelectionOption(p.ProjectFullPath, p.ProjectName));
+
+    var selection = await editorService.RequestSelection("Pick startup project", [.. options])
+      ?? throw new InvalidOperationException("No startup project selected");
+
+    return selection.Id;
   }
 
   private async Task<List<DbContextInfo>> ScanForContextsAsync(string efProject, string startupProject, CancellationToken cancellationToken)
