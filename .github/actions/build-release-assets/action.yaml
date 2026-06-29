@@ -55,6 +55,7 @@ runs:
           echo "Downloading ${pkg} ${ROSLYNATOR_VERSION}..."
           curl -L -o "artifacts/roslynator/${pkg}.nupkg" \
             "https://www.nuget.org/api/v2/package/${pkg}/${ROSLYNATOR_VERSION}"
+          mkdir -p "artifacts/roslynator/extracted/${pkg}"
           unzip -o "artifacts/roslynator/${pkg}.nupkg" -d "artifacts/roslynator/extracted/${pkg}"
           cp "artifacts/roslynator/extracted/${pkg}/analyzers/dotnet/roslyn4.7/cs/"*.dll "$OUTPUT_PATH/"
         done
