@@ -57,6 +57,13 @@ public class WorkspaceSessionRegistry
   /// <summary>Returns <c>true</c> if a slot exists for the given key.</summary>
   public bool IsActive(string key) => _sessions.ContainsKey(key);
 
+  /// <summary>
+  /// Returns the live process entry for the given key, or null if the key is not
+  /// claimed or has not yet received a PID.
+  /// </summary>
+  public RunningProcessEntry? GetProcess(string key) =>
+    _sessions.TryGetValue(key, out var entry) ? entry : null;
+
   /// <summary>Fills in the PID once the startup hook fires. No-op if the key is not claimed.</summary>
   public void SetProcessInfo(string key, RunningProcessEntry entry)
   {
