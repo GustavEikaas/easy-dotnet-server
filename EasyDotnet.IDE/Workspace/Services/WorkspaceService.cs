@@ -424,7 +424,17 @@ public class WorkspaceService(
       return true;
 
     if (!slot.HasValue)
+    {
+      var existing = sessionRegistry.GetProcess(key);
+      if (existing is not null && !IsProcessAlive(existing.Pid))
+      {
+        logger.LogWarning("Session {Key} was stale (PID {Pid} gone). Reclaiming.", key, existing.Pid);
+        sessionRegistry.Release(key);
+        return sessionRegistry.TryClaim(key, projectName);
+      }
+
       return false;
+    }
 
     if (editorProcessManagerService.IsSlotBusy(slot.Value))
       return false;
@@ -432,5 +442,18 @@ public class WorkspaceService(
     logger.LogWarning("Session {Key} was stale (slot {Slot} is free). Reclaiming.", key, slot.Value);
     sessionRegistry.Release(key);
     return sessionRegistry.TryClaim(key, projectName);
+  }
+
+  private static bool IsProcessAlive(int pid)
+  {
+    try
+    {
+      using var process = System.Diagnostics.Process.GetProcessById(pid);
+      return !process.HasExited;
+    }
+    catch (ArgumentException)
+    {
+      return false;
+    }
   }
 }
