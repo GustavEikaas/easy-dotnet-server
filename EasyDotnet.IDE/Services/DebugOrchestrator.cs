@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text.Json;
 using EasyDotnet.Debugger;
 using EasyDotnet.Debugger.Interfaces;
 using EasyDotnet.Debugger.Messages;
@@ -168,6 +169,10 @@ public class DebugOrchestrator(
         {
           var proxy = await session.WaitForDebugSessionStartedAsync().WaitAsync(cancellationToken);
           await ProbeDebuggerProcessAsync(proxy, cancellationToken);
+          if (debuggerEngine == DebuggerEngine.SharpDbg)
+          {
+            await WaitForSharpDbgAttachAsync(proxy, cancellationToken);
+          }
           strategy.OnDebugSessionReady(session, proxy);
         }
         catch (OperationCanceledException) { }
@@ -248,6 +253,47 @@ public class DebugOrchestrator(
     if (!response.Success)
     {
       throw new InvalidOperationException($"Debugger process probe failed: {response.Message ?? "threads request failed"}");
+    }
+  }
+
+  /// <summary>
+  /// SharpDbg acks configurationDone before its deferred attach has completed, so the resume
+  /// gate can be satisfied while nothing is attached and breakpoints are still pending.
+  /// It reports an empty (but successful) threads list until the attach finishes, so poll
+  /// until at least one thread is visible before declaring the session ready.
+  /// </summary>
+  private async Task WaitForSharpDbgAttachAsync(IDebuggerProxy proxy, CancellationToken cancellationToken)
+  {
+    using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+    timeout.CancelAfter(TimeSpan.FromSeconds(10));
+
+    try
+    {
+      while (true)
+      {
+        var response = await proxy.RunInternalRequestAsync(new Request
+        {
+          Seq = 0,
+          Type = "request",
+          Command = "threads"
+        }, timeout.Token);
+
+        if (response.Success
+            && response.Body is { ValueKind: JsonValueKind.Object } body
+            && body.TryGetProperty("threads", out var threads)
+            && threads.ValueKind == JsonValueKind.Array
+            && threads.GetArrayLength() > 0)
+        {
+          logger.LogInformation("SharpDbg attach confirmed ({count} threads visible)", threads.GetArrayLength());
+          return;
+        }
+
+        await Task.Delay(100, timeout.Token);
+      }
+    }
+    catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+    {
+      throw new InvalidOperationException("SharpDbg did not complete its attach within 10 seconds; not resuming the debuggee");
     }
   }
 }

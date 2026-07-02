@@ -58,6 +58,7 @@ public class DebugSessionCoordinator(
   {
     _onDispose = onDispose;
     _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+    var token = _cts.Token;
 
     _ = Task.Run(async () =>
     {
@@ -66,7 +67,7 @@ public class DebugSessionCoordinator(
         Stream stream;
         try
         {
-          stream = await tcpServer.AcceptClientAsync(TimeSpan.FromSeconds(30), _cts.Token);
+          stream = await tcpServer.AcceptClientAsync(TimeSpan.FromSeconds(30), token);
         }
         catch (TimeoutException)
         {
@@ -99,7 +100,7 @@ public class DebugSessionCoordinator(
           async (msg, proxy) => await debuggerInterceptor.InterceptAsync(msg, proxy, CancellationToken.None));
 
         Proxy = new DebuggerProxy(clientDap, debuggerDap, proxyLogger);
-        Proxy.Start(_cts.Token, async () => await TriggerCleanupAsync());
+        Proxy.Start(token, async () => await TriggerCleanupAsync());
 
         logger.LogInformation("Debug session ready");
 
@@ -205,7 +206,16 @@ public class DebugSessionCoordinator(
     {
       return;
     }
-    var token = _cts.Token;
+
+    CancellationToken token;
+    try
+    {
+      token = _cts.Token;
+    }
+    catch (ObjectDisposedException)
+    {
+      return;
+    }
 
     _ = Task.Run(async () =>
     {
