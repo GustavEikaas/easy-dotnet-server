@@ -12,7 +12,8 @@ public class DebugSessionCoordinator(
   IDebuggerProcessHost processHost,
   IDapMessageInterceptor clientInterceptor,
   IDapMessageInterceptor debuggerInterceptor,
-  ILogger<DebuggerProxy> proxyLogger) : IAsyncDisposable
+  ILogger<DebuggerProxy> proxyLogger,
+  bool memCpuUsage) : IAsyncDisposable
 {
   public DebuggerProxy? Proxy;
   private CancellationTokenSource? _cts;
@@ -131,7 +132,10 @@ public class DebugSessionCoordinator(
     DebugeeProcessId = processId;
     _debugeeProcessStartedSource.SetResult(processId);
 
-    StartTelemetryMonitoring(processId);
+    if (memCpuUsage)
+    {
+      StartTelemetryMonitoring(processId);
+    }
   }
 
   public void NotifyConfigurationDone()
