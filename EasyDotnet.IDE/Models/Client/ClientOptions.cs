@@ -1,6 +1,6 @@
 namespace EasyDotnet.IDE.Models.Client;
 
-public sealed record DebuggerOptions(string? BinaryPath = null, string? Engine = null, bool ApplyValueConverters = false);
+public sealed record DebuggerOptions(string? BinaryPath = null, string? Engine = null, bool ApplyValueConverters = false, bool MemCpuUsage = false);
 public sealed record ClientOptions(
   DebuggerOptions? DebuggerOptions = null,
   bool UseVisualStudio = false,

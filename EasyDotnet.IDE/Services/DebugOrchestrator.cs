@@ -148,6 +148,7 @@ public class DebugOrchestrator(
       var debuggerEngine = DebuggerLocator.GetConfiguredEngine(clientService.ClientOptions?.DebuggerOptions?.Engine);
       var (debuggerFileName, debuggerArguments) = DebuggerLocator.GetLaunchCommand(debuggerEngine, binaryPath);
       var applyValueConverters = debuggerEngine != DebuggerEngine.SharpDbg && (clientService?.ClientOptions?.DebuggerOptions?.ApplyValueConverters ?? false);
+      var memCpuUsage = clientService?.ClientOptions?.DebuggerOptions?.MemCpuUsage ?? false;
 
       var session = debugSessionFactory.Create(
           async (dapRequest, proxy) =>
@@ -156,6 +157,7 @@ public class DebugOrchestrator(
             return dapRequest;
           },
           applyValueConverters,
+          memCpuUsage,
           variableLocationResolver);
 
       _sessionServices[sessionKey] = session;
