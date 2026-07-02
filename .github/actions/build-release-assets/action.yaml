@@ -13,9 +13,9 @@ inputs:
   netcoredbgVersion:
     description: 'netcoredbg release version'
     required: true
-    default: '3.2.0-1092'
-  netcoredbgOsxAmd64Version:
-    description: 'netcoredbg release version used only for osx-amd64 (dropped in 3.2.0)'
+    default: '3.1.2-1054'
+  netcoredbgArmVersion:
+    description: '(Cliffback) netcoredbg ARM release version'
     required: true
     default: '3.1.2-1054'
   sharpdbgVersion:
@@ -61,19 +61,18 @@ runs:
       shell: bash
       run: |
         NETCOREDBG_VERSION="${{ inputs.netcoredbgVersion }}"
+        NETCOREDBG_MACOS_ARM_VERSION="${{ inputs.netcoredbgArmVersion }}"
 
         OUTPUT_PATH="${{ inputs.toolsOutputPath }}/netcoredbg"
         ARTIFACTS_DIR="artifacts/netcoredbg"
-
+        
         mkdir -p "$ARTIFACTS_DIR"
         mkdir -p "$OUTPUT_PATH"
-
-        # osx-amd64 is not part of netcoredbg 3.2.0+, so it is pulled separately
-        # from an older release below.
+        
         declare -A platforms=(
           ["linux-amd64"]="linux-x64"
           ["linux-arm64"]="linux-arm64"
-          ["osx-arm64"]="osx-arm64"
+          ["osx-amd64"]="osx-x64"
           ["win64"]="win-x64"
         )
 
@@ -81,8 +80,8 @@ runs:
         for platform in "${!platforms[@]}"; do
           target_dir="${platforms[$platform]}"
           echo "Downloading netcoredbg for $platform..."
-
-          if [[ "$platform" == "win64" || "$platform" == "osx-arm64" ]]; then
+          
+          if [[ "$platform" == "win64" ]]; then
             curl -L -o "$ARTIFACTS_DIR/netcoredbg-${platform}.zip" \
               "https://github.com/Samsung/netcoredbg/releases/download/${NETCOREDBG_VERSION}/netcoredbg-${platform}.zip"
             unzip -q "$ARTIFACTS_DIR/netcoredbg-${platform}.zip" -d "$ARTIFACTS_DIR/${platform}"
@@ -98,17 +97,25 @@ runs:
           echo "✓ Extracted netcoredbg to $OUTPUT_PATH/${target_dir}"
         done
 
-        # osx-amd64 was dropped in netcoredbg 3.2.0, so pull it from the legacy release
-        OSX_AMD64_VERSION="${{ inputs.netcoredbgOsxAmd64Version }}"
-        echo "Downloading netcoredbg (macOS amd64) from legacy release ${OSX_AMD64_VERSION}..."
+        ARM_PLATFORM="osx-arm64"
+        ARM_TARGET_DIR="osx-arm64"
+        echo "Downloading netcoredbg (macOS ARM64) from Cliffback..."
 
-        curl -L -o "$ARTIFACTS_DIR/netcoredbg-osx-amd64.tar.gz" \
-          "https://github.com/Samsung/netcoredbg/releases/download/${OSX_AMD64_VERSION}/netcoredbg-osx-amd64.tar.gz"
-        mkdir -p "$ARTIFACTS_DIR/osx-amd64"
-        tar -xzf "$ARTIFACTS_DIR/netcoredbg-osx-amd64.tar.gz" -C "$ARTIFACTS_DIR/osx-amd64"
-        mkdir -p "$OUTPUT_PATH/osx-x64"
-        cp -r "$ARTIFACTS_DIR/osx-amd64/netcoredbg/"* "$OUTPUT_PATH/osx-x64/"
-        echo "✓ Extracted netcoredbg (macOS amd64) to $OUTPUT_PATH/osx-x64"
+        DOWNLOAD_URL="https://github.com/Cliffback/netcoredbg-macOS-arm64.nvim/releases/download/${NETCOREDBG_MACOS_ARM_VERSION}/netcoredbg-osx-arm64.tar.gz"
+        DOWNLOAD_PATH="$ARTIFACTS_DIR/netcoredbg-${ARM_PLATFORM}.tar.gz"
+
+        curl -sSL -o "$DOWNLOAD_PATH" "$DOWNLOAD_URL"
+        mkdir -p "$ARTIFACTS_DIR/${ARM_PLATFORM}"
+
+        if file "$DOWNLOAD_PATH" | grep -qi 'gzip compressed'; then
+          tar -xzf "$DOWNLOAD_PATH" -C "$ARTIFACTS_DIR/${ARM_PLATFORM}"
+          mkdir -p "$OUTPUT_PATH/${ARM_TARGET_DIR}"
+          cp -r "$ARTIFACTS_DIR/${ARM_PLATFORM}/netcoredbg/"* "$OUTPUT_PATH/${ARM_TARGET_DIR}/"
+          echo "✓ Extracted netcoredbg (macOS ARM64) to $OUTPUT_PATH/${ARM_TARGET_DIR}"
+        else
+          echo "::error::Downloaded netcoredbg-osx-arm64.tar.gz is not a valid gzipped tarball!"
+          exit 1
+        fi
 
         echo "All netcoredbg platforms bundled successfully!"
 
