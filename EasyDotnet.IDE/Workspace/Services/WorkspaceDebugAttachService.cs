@@ -188,9 +188,7 @@ public class WorkspaceDebugAttachService(
     var strategy = debugStrategyFactory.CreateStandardAttachStrategy(pid, cwd);
     var session = await debugOrchestrator.StartClientDebugSessionAsync(sessionKey, strategy, ct);
 
-    var sessionId = await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
-    if (registryKey is not null)
-      sessionRegistry.SetDebugSessionId(registryKey, sessionId);
+    await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
     await session.ProcessStarted;
 
     if (registryKey is not null)

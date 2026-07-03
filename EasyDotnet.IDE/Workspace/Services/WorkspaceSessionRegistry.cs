@@ -11,9 +11,9 @@ public record RunningProcessEntry(
     string? ParentKey = null
 );
 
-public record RunningSessionEntry(string ProjectName, bool IsDebugging, string? ParentKey = null, int? DebugSessionId = null);
+public record RunningSessionEntry(string ProjectName, bool IsDebugging, string? ParentKey = null, string? DebugSessionKey = null);
 
-public record RunningDebugSession(string SessionKey, string ProjectName, int DebugSessionId);
+public record RunningDebugSession(string SessionKey, string ProjectName, string DebugSessionKey);
 
 /// <summary>
 /// Combined session mutex and process data store, keyed by session key
@@ -85,15 +85,15 @@ public class WorkspaceSessionRegistry
   }
 
   /// <summary>
-  /// Stores the client DAP session id on an existing claimed debug session, so the stop
-  /// service can later terminate it via <c>terminateDebugSession</c>.
+  /// Stores the orchestrator session key on an existing claimed debug session, so the stop
+  /// service can dispose the server-side session through the debug orchestrator.
   /// </summary>
-  public void SetDebugSessionId(string key, int sessionId)
+  public void SetDebugSessionKey(string key, string debugSessionKey)
   {
     _claimedEntries.AddOrUpdate(
         key,
-        _ => new RunningSessionEntry("", true, DebugSessionId: sessionId),
-        (_, existing) => existing with { DebugSessionId = sessionId });
+        _ => new RunningSessionEntry("", true, DebugSessionKey: debugSessionKey),
+        (_, existing) => existing with { DebugSessionKey = debugSessionKey });
   }
 
   /// <summary>Removes the session slot.</summary>
@@ -118,11 +118,11 @@ public class WorkspaceSessionRegistry
     [.. _sessions.Values.OfType<RunningProcessEntry>()];
 
   /// <summary>
-  /// Returns top-level debug sessions that carry a client DAP session id — i.e. debug
-  /// sessions the stop service can terminate via <c>terminateDebugSession</c>.
+  /// Returns top-level debug sessions that carry an orchestrator session key — i.e. debug
+  /// sessions the stop service can dispose through the debug orchestrator.
   /// </summary>
   public IReadOnlyList<RunningDebugSession> GetRunningDebugSessions() =>
     [.. _claimedEntries
-        .Where(kvp => kvp.Value is { IsDebugging: true, ParentKey: null, DebugSessionId: not null })
-        .Select(kvp => new RunningDebugSession(kvp.Key, kvp.Value.ProjectName, kvp.Value.DebugSessionId!.Value))];
+        .Where(kvp => kvp.Value is { IsDebugging: true, ParentKey: null, DebugSessionKey: not null })
+        .Select(kvp => new RunningDebugSession(kvp.Key, kvp.Value.ProjectName, kvp.Value.DebugSessionKey!))];
 }

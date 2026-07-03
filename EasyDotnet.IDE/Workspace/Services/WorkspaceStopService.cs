@@ -1,5 +1,6 @@
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Picker.Models;
+using EasyDotnet.IDE.Services;
 using Microsoft.Extensions.Logging;
 
 namespace EasyDotnet.IDE.Workspace.Services;
@@ -7,6 +8,7 @@ namespace EasyDotnet.IDE.Workspace.Services;
 public class WorkspaceStopService(
     WorkspaceSessionRegistry sessionRegistry,
     IEditorService editorService,
+    IDebugOrchestrator debugOrchestrator,
     ILogger<WorkspaceStopService> logger)
 {
   public async Task StopAsync(CancellationToken ct)
@@ -28,7 +30,7 @@ public class WorkspaceStopService(
 
     var targets = processes
         .Select(p => (StopTarget)new ProcessStopTarget(p))
-        .Concat(debugSessions.Select(d => (StopTarget)new DebugStopTarget(d.SessionKey, d.ProjectName, d.DebugSessionId)))
+        .Concat(debugSessions.Select(d => (StopTarget)new DebugStopTarget(d.SessionKey, d.ProjectName, d.DebugSessionKey)))
         .ToList();
 
     if (targets.Count == 0)
@@ -56,14 +58,14 @@ public class WorkspaceStopService(
         break;
 
       case DebugStopTarget d:
-        await editorService.RequestTerminateDebugSession(d.DebugSessionId);
+        await debugOrchestrator.StopDebugSessionAsync(d.DebugSessionKey);
         break;
     }
   }
 
   private abstract record StopTarget(string SessionKey, string ProjectName);
   private sealed record ProcessStopTarget(RunningProcessEntry Entry) : StopTarget(Entry.SessionKey, Entry.ProjectName);
-  private sealed record DebugStopTarget(string SessionKey, string ProjectName, int DebugSessionId) : StopTarget(SessionKey, ProjectName);
+  private sealed record DebugStopTarget(string SessionKey, string ProjectName, string DebugSessionKey) : StopTarget(SessionKey, ProjectName);
 
   private async Task<StopTarget?> PickTargetAsync(
       IReadOnlyList<StopTarget> targets,
