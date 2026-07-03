@@ -30,7 +30,7 @@ public class WorkspaceStopService(
 
     var targets = processes
         .Select(p => (StopTarget)new ProcessStopTarget(p))
-        .Concat(debugSessions.Select(d => (StopTarget)new DebugStopTarget(d.SessionKey, d.ProjectName, d.DebugSessionKey)))
+        .Concat(debugSessions.Select(d => (StopTarget)new DebugStopTarget(d.SessionKey, d.ProjectName, d.DebugSessionKey, d.ClientDebugSessionId)))
         .ToList();
 
     if (targets.Count == 0)
@@ -58,14 +58,34 @@ public class WorkspaceStopService(
         break;
 
       case DebugStopTarget d:
-        await debugOrchestrator.StopDebugSessionAsync(d.DebugSessionKey);
+        // Ask the client to close its own dap session; the resulting disconnect tears down the
+        // server-side session, and the start path's DisposalStarted watcher releases + notifies.
+        var terminated = d.ClientDebugSessionId is { } clientSessionId
+            && await TryRequestClientTerminateAsync(clientSessionId);
+
+        // Fallback: dispose server-side, which drops the client connection instead.
+        if (!terminated)
+          await debugOrchestrator.StopDebugSessionAsync(d.DebugSessionKey);
         break;
+    }
+  }
+
+  private async Task<bool> TryRequestClientTerminateAsync(int clientSessionId)
+  {
+    try
+    {
+      return await editorService.RequestTerminateDebugSession(clientSessionId);
+    }
+    catch (Exception ex)
+    {
+      logger.LogWarning(ex, "Client terminateDebugSession request failed, falling back to server-side stop");
+      return false;
     }
   }
 
   private abstract record StopTarget(string SessionKey, string ProjectName);
   private sealed record ProcessStopTarget(RunningProcessEntry Entry) : StopTarget(Entry.SessionKey, Entry.ProjectName);
-  private sealed record DebugStopTarget(string SessionKey, string ProjectName, string DebugSessionKey) : StopTarget(SessionKey, ProjectName);
+  private sealed record DebugStopTarget(string SessionKey, string ProjectName, string DebugSessionKey, int? ClientDebugSessionId) : StopTarget(SessionKey, ProjectName);
 
   private async Task<StopTarget?> PickTargetAsync(
       IReadOnlyList<StopTarget> targets,

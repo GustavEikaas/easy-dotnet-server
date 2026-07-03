@@ -11,9 +11,9 @@ public record RunningProcessEntry(
     string? ParentKey = null
 );
 
-public record RunningSessionEntry(string ProjectName, bool IsDebugging, string? ParentKey = null, string? DebugSessionKey = null);
+public record RunningSessionEntry(string ProjectName, bool IsDebugging, string? ParentKey = null, string? DebugSessionKey = null, int? ClientDebugSessionId = null);
 
-public record RunningDebugSession(string SessionKey, string ProjectName, string DebugSessionKey);
+public record RunningDebugSession(string SessionKey, string ProjectName, string DebugSessionKey, int? ClientDebugSessionId);
 
 /// <summary>
 /// Combined session mutex and process data store, keyed by session key
@@ -96,6 +96,19 @@ public class WorkspaceSessionRegistry
         (_, existing) => existing with { DebugSessionKey = debugSessionKey });
   }
 
+  /// <summary>
+  /// Stores the editor-side (nvim-dap) session id on an existing claimed debug session, so the
+  /// stop service can ask the client to terminate its own session via the
+  /// <c>terminateDebugSession</c> reverse request.
+  /// </summary>
+  public void SetClientDebugSessionId(string key, int clientDebugSessionId)
+  {
+    _claimedEntries.AddOrUpdate(
+        key,
+        _ => new RunningSessionEntry("", true, ClientDebugSessionId: clientDebugSessionId),
+        (_, existing) => existing with { ClientDebugSessionId = clientDebugSessionId });
+  }
+
   /// <summary>Removes the session slot.</summary>
   public void Release(string key)
   {
@@ -124,5 +137,5 @@ public class WorkspaceSessionRegistry
   public IReadOnlyList<RunningDebugSession> GetRunningDebugSessions() =>
     [.. _claimedEntries
         .Where(kvp => kvp.Value is { IsDebugging: true, ParentKey: null, DebugSessionKey: not null })
-        .Select(kvp => new RunningDebugSession(kvp.Key, kvp.Value.ProjectName, kvp.Value.DebugSessionKey!))];
+        .Select(kvp => new RunningDebugSession(kvp.Key, kvp.Value.ProjectName, kvp.Value.DebugSessionKey!, kvp.Value.ClientDebugSessionId))];
 }
