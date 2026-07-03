@@ -11,6 +11,7 @@ public class DebugSessionFactory(ILoggerFactory loggerFactory) : IDebugSessionFa
   public DebugSession Create(
     Func<InterceptableAttachRequest, IDebuggerProxy, Task<InterceptableAttachRequest>> attachRequestRewriter,
     bool applyValueConverters,
+    bool memCpuUsage,
     IVariableLocationResolver? variableLocationResolver = null)
   {
     var valueConverterService = new ValueConverterService(
@@ -53,7 +54,8 @@ public class DebugSessionFactory(ILoggerFactory loggerFactory) : IDebugSessionFa
      processHost,
      clientInterceptor,
      debuggerInterceptor,
-     loggerFactory.CreateLogger<DebuggerProxy>());
+     loggerFactory.CreateLogger<DebuggerProxy>(),
+     memCpuUsage);
 
     return new DebugSession(coordinator);
   }
