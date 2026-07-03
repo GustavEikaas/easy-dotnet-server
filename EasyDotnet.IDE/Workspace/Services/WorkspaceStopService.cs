@@ -58,12 +58,9 @@ public class WorkspaceStopService(
         break;
 
       case DebugStopTarget d:
-        // Ask the client to close its own dap session; the resulting disconnect tears down the
-        // server-side session, and the start path's DisposalStarted watcher releases + notifies.
         var terminated = d.ClientDebugSessionId is { } clientSessionId
             && await TryRequestClientTerminateAsync(clientSessionId);
 
-        // Fallback: dispose server-side, which drops the client connection instead.
         if (!terminated)
           await debugOrchestrator.StopDebugSessionAsync(d.DebugSessionKey);
         break;

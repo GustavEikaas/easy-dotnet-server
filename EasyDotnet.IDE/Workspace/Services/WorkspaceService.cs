@@ -378,8 +378,6 @@ public class WorkspaceService(
           project.ProjectFullPath, strategy, ct);
       sessionRegistry.SetDebugSessionKey(sessionKey, project.ProjectFullPath);
 
-      // Register the disposal watcher before waiting for the DAP handshake — the handshake wait
-      // can outlive the session (e.g. the client detaches first), and release/notify must still fire.
       _ = Task.Run(async () =>
       {
         try { await session.DisposalStarted; }
@@ -392,8 +390,6 @@ public class WorkspaceService(
 
       var clientDebugSessionId = await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
       sessionRegistry.SetClientDebugSessionId(sessionKey, clientDebugSessionId);
-      // Also complete on disposal so this request doesn't hang if the handshake never finishes
-      // (e.g. the debugger never acks configurationDone) or the client detaches mid-start.
       await Task.WhenAny(session.WaitForDebugSessionStartedAsync(), session.DisposalStarted).WaitAsync(ct);
     }
     catch
