@@ -377,7 +377,8 @@ public class WorkspaceService(
       session = await debugOrchestrator.StartClientDebugSessionAsync(
           project.ProjectFullPath, strategy, ct);
 
-      await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
+      var sessionId = await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
+      sessionRegistry.SetDebugSessionId(sessionKey, sessionId);
       await session.WaitForDebugSessionStartedAsync().WaitAsync(ct);
     }
     catch
