@@ -40,7 +40,9 @@ public static class RoslynLocator
     var analyzerDlls = new[]
     {
       "Roslynator.CSharp.Analyzers.dll",
-      "Roslynator.CSharp.Analyzers.CodeFixes.dll"
+      "Roslynator.CSharp.Analyzers.CodeFixes.dll",
+      "Roslynator.CSharp.CodeFixes.dll",
+      "Roslynator.CSharp.Refactorings.dll"
     };
 
     return [.. analyzerDlls

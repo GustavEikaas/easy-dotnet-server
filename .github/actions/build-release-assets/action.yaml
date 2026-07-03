@@ -5,7 +5,7 @@ inputs:
   roslynatorVersion:
     description: 'Roslynator analyzer package version'
     required: true
-    default: '4.14.0'
+    default: '4.15.0'
   toolsOutputPath:
     description: 'Where to copy tool assets inside project output'
     required: true
@@ -50,11 +50,15 @@ runs:
         cp EasyDotnet.RoslynLanguageServices/bin/Release/net8.0/Microsoft.CodeAnalysis.ExternalAccess.Extensions.dll "$DEVKIT_OUTPUT_PATH/"
 
         mkdir -p artifacts/roslynator
-        curl -L -o artifacts/roslynator/roslynator.nupkg \
-          "https://www.nuget.org/api/v2/package/Roslynator.Analyzers/${ROSLYNATOR_VERSION}"
 
-        unzip -o artifacts/roslynator/roslynator.nupkg -d artifacts/roslynator/extracted
-        cp artifacts/roslynator/extracted/analyzers/dotnet/roslyn4.7/cs/*.dll "$OUTPUT_PATH/"
+        for pkg in Roslynator.Analyzers Roslynator.CodeFixes Roslynator.Refactorings; do
+          echo "Downloading ${pkg} ${ROSLYNATOR_VERSION}..."
+          curl -L -o "artifacts/roslynator/${pkg}.nupkg" \
+            "https://www.nuget.org/api/v2/package/${pkg}/${ROSLYNATOR_VERSION}"
+          mkdir -p "artifacts/roslynator/extracted/${pkg}"
+          unzip -o "artifacts/roslynator/${pkg}.nupkg" -d "artifacts/roslynator/extracted/${pkg}"
+          cp "artifacts/roslynator/extracted/${pkg}/analyzers/dotnet/roslyn4.7/cs/"*.dll "$OUTPUT_PATH/"
+        done
         echo "✓ Analyzer assets copied to $OUTPUT_PATH"
 
     - name: Download and Extract netcoredbg
