@@ -21,7 +21,7 @@ inputs:
   sharpdbgVersion:
     description: 'SharpDbg.Cli dotnet tool version'
     required: true
-    default: '0.1.2'
+    default: '0.1.4'
   dncdbgArtifactsPath:
     description: 'Path containing downloaded dncdbg platform artifacts'
     required: false
