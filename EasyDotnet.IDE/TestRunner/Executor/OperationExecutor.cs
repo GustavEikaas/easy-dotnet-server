@@ -65,7 +65,12 @@ public class OperationExecutor(
             var classNodeId = NodeIdBuilder.Class(namespaceNodeId, discovered.ClassName);
             if (emittedClasses.Add(classNodeId))
             {
-              var classLocation = locator.LocateClass(discovered.FilePath, discovered.ClassName);
+              // Ignore potential primary constructor arguments
+              var shortClassName = discovered.ClassName.Contains('(')
+                ? discovered.ClassName[..(discovered.ClassName.IndexOf('('))]
+                : discovered.ClassName;
+
+              var classLocation = locator.LocateClass(discovered.FilePath, shortClassName);
               var classNode = new TestNode(
                       Id: classNodeId,
                       DisplayName: discovered.ClassName,
