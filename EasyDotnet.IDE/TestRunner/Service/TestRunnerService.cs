@@ -689,11 +689,11 @@ public class TestRunnerService(
         {
           var type = n.Type switch
           {
-            NodeType.Namespace => "namespace",
-            NodeType.TestClass => "namespace",
+            NodeType.Namespace or
+            NodeType.TestClass or
             NodeType.TheoryGroup => "namespace",
-            NodeType.TestMethod => "test",
-            NodeType.Subcase => "test",
+            NodeType.TestMethod or
+            NodeType.Subcase or
             NodeType.ProbableTest => "test",
             _ => null
           };
