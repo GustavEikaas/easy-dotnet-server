@@ -90,7 +90,8 @@ public class OperationExecutor(
 
           var location = locator.Locate(discovered.FilePath, shortMethodName);
 
-          if (discovered.Arguments is not null)
+          var isTheoryGroup = discovered.Arguments is not null && !(location?.HasNonTheoryAttribute ?? false);
+          if (isTheoryGroup)
           {
             var groupId = NodeIdBuilder.TheoryGroup(parentId, shortMethodName);
             if (emittedTheoryGroups.Add(groupId))
@@ -118,7 +119,7 @@ public class OperationExecutor(
           var shortName = discovered.Arguments ?? shortMethodName;
 
           string methodNodeId;
-          if (discovered.Arguments is not null)
+          if (isTheoryGroup)
           {
             var baseId = NodeIdBuilder.Method(parentId, shortMethodName + discovered.Arguments);
             subcaseCounters.TryGetValue(baseId, out var seenCount);
@@ -160,7 +161,7 @@ public class OperationExecutor(
                   SignatureLine: location?.SignatureLine,
                   BodyStartLine: location?.BodyStartLine,
                   EndLine: location?.EndLine,
-                  Type: discovered.Arguments is not null
+                  Type: isTheoryGroup
                       ? new NodeType.Subcase()
                       : new NodeType.TestMethod(),
                   ProjectId: projectNodeId,
