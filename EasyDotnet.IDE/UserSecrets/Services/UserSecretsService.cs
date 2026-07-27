@@ -28,7 +28,14 @@ public class UserSecretsService(IProcessQueue processQueue)
       throw new FileNotFoundException("Project file not found", projectPath);
 
     if (!string.IsNullOrEmpty(knownSecretsId))
-      return GetSecretsPath(knownSecretsId);
+    {
+      EnsureSecretsDirectory(knownSecretsId);
+      var existingSecretsPath = GetSecretsPath(knownSecretsId);
+      if (!File.Exists(existingSecretsPath))
+        File.WriteAllText(existingSecretsPath, "{ }");
+
+      return existingSecretsPath;
+    }
 
     var newId = Guid.NewGuid().ToString();
     var (success, _, _) = await processQueue.RunProcessAsync(
