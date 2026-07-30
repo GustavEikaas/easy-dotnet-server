@@ -17,11 +17,11 @@ public class UserSecretsFlowService(
   {
     try
     {
-      var projects = await ResolveRunnableProjectsAsync(ct);
+      var projects = await ResolveProjectsAsync(ct);
 
       if (projects.Count == 0)
       {
-        await editorService.DisplayError("No runnable projects found");
+        await editorService.DisplayError("No projects found");
         return;
       }
 
@@ -59,19 +59,18 @@ public class UserSecretsFlowService(
     }
   }
 
-  private async Task<List<ValidatedDotnetProject>> ResolveRunnableProjectsAsync(CancellationToken ct)
+  private async Task<List<ValidatedDotnetProject>> ResolveProjectsAsync(CancellationToken ct)
   {
     var solutionFile = clientService.ProjectInfo?.SolutionFile;
 
     if (solutionFile is not null)
     {
-      var projects = await buildHostManager.GetProjectsFromSolutionAsync(solutionFile, p => p.IsRunnable, ct: ct);
+      var projects = await buildHostManager.GetProjectsFromSolutionAsync(solutionFile, ct: ct);
       return [.. projects.DistinctBy(p => p.ProjectFullPath)];
     }
 
     return await buildHostManager.GetProjectsFromDirectoryAsync(
         clientService.RequireRootDir(),
-        filter: p => p.IsRunnable,
         ct: ct);
   }
 

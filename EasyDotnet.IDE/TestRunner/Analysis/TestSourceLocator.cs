@@ -11,7 +11,8 @@ namespace EasyDotnet.IDE.TestRunner.Analysis;
 public record TestMethodLocation(
     int SignatureLine,   // [Fact] / [Test] attribute line (or class keyword line) — where the gutter sign goes
     int BodyStartLine,   // first line inside the opening brace — where go-to-definition lands
-    int EndLine          // closing brace line
+    int EndLine,         // closing brace line
+    bool HasNonTheoryAttribute = false   // If test has argument that doesn't mean it's of theory type (example for TUnit [ClassDataSource] attribute)
 );
 
 /// <summary>
@@ -122,6 +123,12 @@ public class TestSourceLocator
     "InlineData", "DataRow", "Arguments",
   };
 
+  // Not all tests with arguments are of Theory type
+  private static readonly HashSet<string> NonTheoryAttributes = new(StringComparer.Ordinal)
+  {
+    "ClassDataSource"
+  };
+
   private static bool HasTestAttribute(MethodDeclarationSyntax method) =>
       method.AttributeLists
           .SelectMany(al => al.Attributes)
@@ -135,6 +142,20 @@ public class TestSourceLocator
             };
             return TestAttributeNames.Contains(name);
           });
+
+  private static bool HasNonTheoryAttribute(MethodDeclarationSyntax method) =>
+    method.AttributeLists
+      .SelectMany(al => al.Attributes)
+      .Any(a =>
+      {
+        var name = a.Name switch
+        {
+          GenericNameSyntax q => q.Identifier.Text,
+          _ => a.Name.ToString(),
+        };
+        return NonTheoryAttributes.Contains(name);
+      });
+
 
   private static string? EnclosingClassName(MethodDeclarationSyntax method) =>
       (method.Parent as ClassDeclarationSyntax)?.Identifier.Text;
@@ -176,7 +197,8 @@ public class TestSourceLocator
       }
 
       var endLine = method.GetLocation().GetLineSpan().EndLinePosition.Line;
-      var loc = new TestMethodLocation(signatureLine, bodyStartLine, endLine);
+      var hasNonTheoryAttribute = HasNonTheoryAttribute(method);
+      var loc = new TestMethodLocation(signatureLine, bodyStartLine, endLine, hasNonTheoryAttribute);
 
       methods[name] = loc;
 

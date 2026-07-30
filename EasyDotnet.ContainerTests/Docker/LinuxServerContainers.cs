@@ -64,7 +64,7 @@ public sealed class Sdk9LinuxContainer() : LinuxServerContainer("mcr.microsoft.c
   public override int SdkMajorVersion => 9;
 }
 
-public sealed class Sdk10LinuxContainer() : LinuxServerContainer("mcr.microsoft.com/dotnet/sdk:10.0")
+public sealed class Sdk10LinuxContainer() : LinuxServerContainer("mcr.microsoft.com/dotnet/sdk:10.0.201")
 {
   public override int SdkMajorVersion => 10;
 }
