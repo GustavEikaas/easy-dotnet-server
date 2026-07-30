@@ -18,6 +18,7 @@ public class WorkspaceBuildService(
     IEditorService editorService,
     IProgressScopeFactory progressScopeFactory,
     SettingsService settingsService,
+    IVisualStudioLocator visualStudioLocator,
     IWorkspaceBuildConfigurationService workspaceBuildConfigurationService)
 {
   public async Task BuildProjectAsync(WorkspaceBuildRequest request, CancellationToken ct)
@@ -127,8 +128,21 @@ public class WorkspaceBuildService(
 
   private async Task RunBuildInTerminalAsync(string targetPath, string name, string? buildArgs, CancellationToken ct)
   {
-    var args = new List<string> { "build", targetPath };
     var resolvedConfiguration = await workspaceBuildConfigurationService.ResolveTargetAsync(targetPath, ct);
+    var msbuildExe = await TryResolveFrameworkMsBuildAsync(targetPath, resolvedConfiguration, ct);
+
+    var command = msbuildExe is null
+        ? BuildDotnetBuildCommand(targetPath, resolvedConfiguration, buildArgs)
+        : BuildMsBuildCommand(msbuildExe, targetPath, resolvedConfiguration, buildArgs);
+
+    var exitCode = await editorService.RequestRunCommandAsync(command, ct);
+    if (exitCode != 0)
+      await editorService.DisplayError($"Build failed for {name} (exit code {exitCode})");
+  }
+
+  private static RunCommand BuildDotnetBuildCommand(string targetPath, ResolvedBuildConfiguration resolvedConfiguration, string? buildArgs)
+  {
+    var args = new List<string> { "build", targetPath };
     if (!string.IsNullOrWhiteSpace(resolvedConfiguration.Configuration))
     {
       args.Add("-c");
@@ -141,15 +155,64 @@ public class WorkspaceBuildService(
     if (!string.IsNullOrWhiteSpace(buildArgs))
       args.Add(buildArgs);
 
-    var command = new RunCommand(
-        "dotnet",
-        args,
-        Path.GetDirectoryName(targetPath) ?? ".",
-        []);
+    return new RunCommand("dotnet", args, Path.GetDirectoryName(targetPath) ?? ".", []);
+  }
 
-    var exitCode = await editorService.RequestRunCommandAsync(command, ct);
-    if (exitCode != 0)
-      await editorService.DisplayError($"Build failed for {name} (exit code {exitCode})");
+  private static RunCommand BuildMsBuildCommand(string msbuildExe, string targetPath, ResolvedBuildConfiguration resolvedConfiguration, string? buildArgs)
+  {
+    var args = new List<string> { targetPath, "-restore", "-t:Build" };
+    if (!string.IsNullOrWhiteSpace(resolvedConfiguration.Configuration))
+    {
+      args.Add($"-p:Configuration={resolvedConfiguration.Configuration}");
+    }
+    if (!string.IsNullOrWhiteSpace(resolvedConfiguration.Platform))
+    {
+      args.Add($"-p:Platform={resolvedConfiguration.Platform}");
+    }
+    if (!string.IsNullOrWhiteSpace(buildArgs))
+      args.Add(buildArgs);
+
+    return new RunCommand(msbuildExe, args, Path.GetDirectoryName(targetPath) ?? ".", []);
+  }
+
+  private async Task<string?> TryResolveFrameworkMsBuildAsync(string targetPath, ResolvedBuildConfiguration resolvedConfiguration, CancellationToken ct)
+  {
+    if (!DotnetFileTypes.IsAnyProjectFile(targetPath))
+      return null;
+
+    var evaluations = await buildHostManager
+        .GetProjectPropertiesBatchAsync(
+            new GetProjectPropertiesBatchRequest([targetPath], resolvedConfiguration.Configuration, resolvedConfiguration.Platform),
+            ct)
+        .ToListAsync(ct);
+
+    var project = evaluations.FirstOrDefault(x => x.Success && x.Project is not null)?.Project?.Raw;
+    if (project?.IsNETCoreOrNETStandard != false)
+      return null;
+
+    return await TryLocateVisualStudioMsBuildAsync() ?? ProbeEvaluatedMsBuild(project);
+  }
+
+  private async Task<string?> TryLocateVisualStudioMsBuildAsync()
+  {
+    try
+    {
+      var msbuildExe = await visualStudioLocator.GetVisualStudioMSBuildPath();
+      return File.Exists(msbuildExe) ? msbuildExe : null;
+    }
+    catch (InvalidOperationException)
+    {
+      return null;
+    }
+  }
+
+  private static string? ProbeEvaluatedMsBuild(DotnetProject project)
+  {
+    if (string.IsNullOrWhiteSpace(project.MSBuildBinPath))
+      return null;
+
+    var msbuildExe = Path.GetFullPath(Path.Combine(project.MSBuildBinPath, "MSBuild.exe"));
+    return File.Exists(msbuildExe) ? msbuildExe : null;
   }
 
   private Task RunBuildQuickfixAsync(string targetPath, string name, CancellationToken ct) =>
