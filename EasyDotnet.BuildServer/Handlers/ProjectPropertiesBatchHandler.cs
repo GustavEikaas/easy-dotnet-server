@@ -164,6 +164,7 @@ public class ProjectPropertiesBatchHandler(PropertyCache cache, MsBuildInstance 
   {
     var singleTfm = project.GetPropertyValue(MsBuildProperties.TargetFramework.Name);
     var multiTfms = project.GetPropertyValue(MsBuildProperties.TargetFrameworks.Name);
+    var frameworkTfm = project.GetPropertyValue(MsBuildProperties.TargetFrameworkVersion.Name);
 
     if (!string.IsNullOrWhiteSpace(multiTfms))
     {
@@ -175,6 +176,11 @@ public class ProjectPropertiesBatchHandler(PropertyCache cache, MsBuildInstance 
     if (!string.IsNullOrWhiteSpace(singleTfm))
     {
       return [singleTfm];
+    }
+
+    if (!string.IsNullOrWhiteSpace(frameworkTfm))
+    {
+      return [frameworkTfm];
     }
 
     throw new Exception($"{project.FullPath} has no {MsBuildProperties.TargetFramework.Name} or {MsBuildProperties.TargetFrameworks.Name} property set");
