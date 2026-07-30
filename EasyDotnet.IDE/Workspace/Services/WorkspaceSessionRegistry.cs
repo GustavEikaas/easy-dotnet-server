@@ -11,7 +11,9 @@ public record RunningProcessEntry(
     string? ParentKey = null
 );
 
-public record RunningSessionEntry(string ProjectName, bool IsDebugging, string? ParentKey = null);
+public record RunningSessionEntry(string ProjectName, bool IsDebugging, string? ParentKey = null, string? DebugSessionKey = null, int? ClientDebugSessionId = null);
+
+public record RunningDebugSession(string SessionKey, string ProjectName, string DebugSessionKey, int? ClientDebugSessionId);
 
 /// <summary>
 /// Combined session mutex and process data store, keyed by session key
@@ -82,6 +84,31 @@ public class WorkspaceSessionRegistry
         (_, existing) => existing with { IsDebugging = isDebugging });
   }
 
+  /// <summary>
+  /// Stores the orchestrator session key on an existing claimed debug session, so the stop
+  /// service can dispose the server-side session through the debug orchestrator.
+  /// </summary>
+  public void SetDebugSessionKey(string key, string debugSessionKey)
+  {
+    _claimedEntries.AddOrUpdate(
+        key,
+        _ => new RunningSessionEntry("", true, DebugSessionKey: debugSessionKey),
+        (_, existing) => existing with { DebugSessionKey = debugSessionKey });
+  }
+
+  /// <summary>
+  /// Stores the editor-side (nvim-dap) session id on an existing claimed debug session, so the
+  /// stop service can ask the client to terminate its own session via the
+  /// <c>terminateDebugSession</c> reverse request.
+  /// </summary>
+  public void SetClientDebugSessionId(string key, int clientDebugSessionId)
+  {
+    _claimedEntries.AddOrUpdate(
+        key,
+        _ => new RunningSessionEntry("", true, ClientDebugSessionId: clientDebugSessionId),
+        (_, existing) => existing with { ClientDebugSessionId = clientDebugSessionId });
+  }
+
   /// <summary>Removes the session slot.</summary>
   public void Release(string key)
   {
@@ -102,4 +129,13 @@ public class WorkspaceSessionRegistry
   /// </summary>
   public IReadOnlyList<RunningProcessEntry> GetRunningProcesses() =>
     [.. _sessions.Values.OfType<RunningProcessEntry>()];
+
+  /// <summary>
+  /// Returns top-level debug sessions that carry an orchestrator session key — i.e. debug
+  /// sessions the stop service can dispose through the debug orchestrator.
+  /// </summary>
+  public IReadOnlyList<RunningDebugSession> GetRunningDebugSessions() =>
+    [.. _claimedEntries
+        .Where(kvp => kvp.Value is { IsDebugging: true, ParentKey: null, DebugSessionKey: not null })
+        .Select(kvp => new RunningDebugSession(kvp.Key, kvp.Value.ProjectName, kvp.Value.DebugSessionKey!, kvp.Value.ClientDebugSessionId))];
 }

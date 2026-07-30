@@ -376,9 +376,21 @@ public class WorkspaceService(
     {
       session = await debugOrchestrator.StartClientDebugSessionAsync(
           project.ProjectFullPath, strategy, ct);
+      sessionRegistry.SetDebugSessionKey(sessionKey, project.ProjectFullPath);
 
-      await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
-      await session.WaitForDebugSessionStartedAsync().WaitAsync(ct);
+      _ = Task.Run(async () =>
+      {
+        try { await session.DisposalStarted; }
+        finally
+        {
+          sessionRegistry.Release(sessionKey);
+          _ = NotifyRunningSessionsAsync();
+        }
+      }, CancellationToken.None);
+
+      var clientDebugSessionId = await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
+      sessionRegistry.SetClientDebugSessionId(sessionKey, clientDebugSessionId);
+      await Task.WhenAny(session.WaitForDebugSessionStartedAsync(), session.DisposalStarted).WaitAsync(ct);
     }
     catch
     {
@@ -386,16 +398,6 @@ public class WorkspaceService(
       _ = NotifyRunningSessionsAsync();
       throw;
     }
-
-    _ = Task.Run(async () =>
-    {
-      try { await session.DisposalStarted; }
-      finally
-      {
-        sessionRegistry.Release(sessionKey);
-        _ = NotifyRunningSessionsAsync();
-      }
-    }, CancellationToken.None);
   }
 
   private bool ValidateFilePath(string? filePath)
