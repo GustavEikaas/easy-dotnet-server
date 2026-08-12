@@ -17,7 +17,12 @@ public static class MtpExtensions
     {
       // Standard MTP (TUnit, NUnit, MSTest v3)
       // TestType = "My.App.Tests.MyClass" → ns=["My","App","Tests"], class="MyClass"
-      var typeParts = node.TestType.Split('.');
+      // Generic constructor argument:
+      // TestType = "TUnit.Basic.SharedTest(TUnit.Basic.LambdaFactory\u00601[TUnit.Basic.SomeValue]).1.1.Calculator_ResultCanBeStoredV2.1.1.0" -> ns=["TUnit", "Basic"], class = "SharedTest"
+      var primaryConstructorStart = node.TestType.IndexOf('(');
+      var typeParts = primaryConstructorStart > 0
+        ? node.TestType[..primaryConstructorStart].Split('.')
+        : node.TestType.Split('.');
       className = typeParts[^1];
       namespaceParts = typeParts.Length > 1 ? typeParts[..^1] : [];
       rawLeaf = node.DisplayName;
