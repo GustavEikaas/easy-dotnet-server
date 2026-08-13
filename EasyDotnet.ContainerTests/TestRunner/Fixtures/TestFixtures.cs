@@ -381,6 +381,24 @@ public static class TestFixtures
     """;
 
   /// <summary>
+  /// TUnit test with injected dependency via primary constructor argument with [ClassDataSource]
+  /// </summary>
+  public const string TUnitPrimaryConstructorClass = """
+      namespace Sample.TUnitPrimaryConstructor
+      {
+          public class SomeValue();
+          public class LambdaFactory<T> where T : class { }
+
+          [ClassDataSource<LambdaFactory<SomeValue>>()]
+          public class SomeValueTests(LambdaFactory<SomeValue> factory)
+          {
+              [Test]
+              public async Task M() => await Task.CompletedTask;
+          }
+      }
+      """;
+
+  /// <summary>
   /// xUnit parameterised test using a dynamic member data source (<c>[MemberData]</c>).
   /// Adapters often route MemberData through a different code path than InlineData —
   /// the shape should still be TheoryGroup + N Subcases. Source shared between v2 and v3.

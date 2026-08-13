@@ -115,6 +115,23 @@ public abstract class TUnitMtpDiscoveryTests<TContainer> : TestRunnerTestBase<TC
     Assert.Equal("custom test name", method.DisplayName);
   }
 
+  [Fact]
+  public async Task Discover_ClassWithPrimaryConstructorArgument_ProducesCorrectDisplayName()
+  {
+    const string expectedClassName = "SomeValueTests";
+
+    using var fixture = new TestProjectFixtureBuilder()
+      .WithName("Sample.TUnitPrimaryConstructor")
+      .WithFramework(TestFrameworkKind.TUnitMtp)
+      .WithFile("TUnitPrimaryConstructor.cs", TestFixtures.TUnitPrimaryConstructorClass)
+      .Build();
+
+    await InitializeTestRunnerAsync(fixture);
+
+    var testClass = Assert.Single(NodesOfType(NodeTypeNames.TestClass));
+    Assert.Equal(expectedClassName, testClass.DisplayName);
+  }
+
   private string DumpNodes() =>
     string.Join("\n", Nodes.Values
       .OrderBy(n => n.Id)
