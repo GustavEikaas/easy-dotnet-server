@@ -203,11 +203,17 @@ public abstract class NewFileCreateItemTests<TContainer> : ContainerTestBase<TCo
     public Task<bool> ApplyWorkspaceEdit(WorkspaceEdit edit)
     {
       test._calls.Enqueue("applyWorkspaceEdit");
-      foreach (var change in edit.DocumentChanges)
+
+      foreach (var change in edit.DocumentChanges.Where(x => x.Kind == "create"))
       {
-        var path = new Uri(change.TextDocument.Uri).LocalPath;
+        var path = new Uri(change.Uri!).LocalPath;
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, change.Edits.Single().NewText);
+      }
+
+      foreach (var change in edit.DocumentChanges.Where(x => x.Edits is { Length: > 0 }))
+      {
+        var path = new Uri(change.TextDocument!.Uri).LocalPath;
+        File.WriteAllText(path, change.Edits!.Single().NewText);
       }
 
       return Task.FromResult(true);

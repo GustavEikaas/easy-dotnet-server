@@ -22,36 +22,7 @@ public class NewFileService(IBuildHostManager buildHostManager, IEditorService e
       return false;
     }
 
-    var (rootNamespace, langVersion, relativeDir) = await ResolveProjectContext(filePath, cancellationToken);
-
-    var supportsFileScopedNamespace =
-        string.IsNullOrEmpty(langVersion) ||
-        string.Compare(langVersion, "10.0", StringComparison.OrdinalIgnoreCase) >= 0 ||
-        langVersion.Equals("latest", StringComparison.OrdinalIgnoreCase);
-
-    var useFileScopedNs = preferFileScopedNamespace && supportsFileScopedNamespace;
-
-    var nsSuffix = relativeDir.Replace(Path.DirectorySeparatorChar, '.');
-    var fullNamespace = string.IsNullOrEmpty(nsSuffix) ? rootNamespace : $"{rootNamespace}.{nsSuffix}";
-
-    var className = Path.GetFileNameWithoutExtension(filePath).Split(".").ElementAt(0);
-    var typeDecl = CreateTypeDeclaration(kind, className);
-
-    BaseNamespaceDeclarationSyntax nsDeclaration = useFileScopedNs
-        ? SyntaxFactory.FileScopedNamespaceDeclaration(SyntaxFactory.ParseName(fullNamespace))
-              .AddMembers(typeDecl)
-        : SyntaxFactory.NamespaceDeclaration(SyntaxFactory.ParseName(fullNamespace))
-              .AddMembers(typeDecl);
-
-    var unit = SyntaxFactory.CompilationUnit()
-        .AddMembers(nsDeclaration)
-        .NormalizeWhitespace(eol: "\n");
-
-    if (preferFileScopedNamespace)
-    {
-      unit = unit.AddNewLinesAfterNamespaceDeclaration();
-    }
-
+    var unit = await GenerateContentAsync(filePath, kind, preferFileScopedNamespace, cancellationToken);
     return await editorService.ApplyWorkspaceEdit(BuildEdit(filePath, unit.ToFullString()));
   }
 
@@ -107,14 +78,15 @@ public class NewFileService(IBuildHostManager buildHostManager, IEditorService e
       return;
     }
 
-    var success = await BootstrapFile(filePath, selection.Kind, preferFileScopedNamespace, cancellationToken);
-    if (success)
+    try
     {
+      var content = await GenerateContentAsync(filePath, selection.Kind, preferFileScopedNamespace, cancellationToken);
+      await editorService.ApplyWorkspaceEdit(BuildEdit(filePath, content.ToFullString(), createFile: true));
       await editorService.RequestOpenBuffer(filePath);
     }
-    else
+    catch (Exception ex)
     {
-      await editorService.DisplayError("Failed to create new file");
+      await editorService.DisplayError($"Failed to create new file: {ex.Message} {ex.StackTrace}");
     }
   }
 
@@ -154,6 +126,41 @@ public class NewFileService(IBuildHostManager buildHostManager, IEditorService e
     return true;
   }
 
+  private async Task<CompilationUnitSyntax> GenerateContentAsync(string filePath, Kind kind, bool preferFileScopedNamespace, CancellationToken cancellationToken)
+  {
+    var (rootNamespace, langVersion, relativeDir) = await ResolveProjectContext(filePath, cancellationToken);
+
+    var supportsFileScopedNamespace =
+        string.IsNullOrEmpty(langVersion) ||
+        string.Compare(langVersion, "10.0", StringComparison.OrdinalIgnoreCase) >= 0 ||
+        langVersion.Equals("latest", StringComparison.OrdinalIgnoreCase);
+
+    var useFileScopedNs = preferFileScopedNamespace && supportsFileScopedNamespace;
+
+    var nsSuffix = relativeDir.Replace(Path.DirectorySeparatorChar, '.');
+    var fullNamespace = string.IsNullOrEmpty(nsSuffix) ? rootNamespace : $"{rootNamespace}.{nsSuffix}";
+
+    var className = Path.GetFileNameWithoutExtension(filePath).Split(".").ElementAt(0);
+    var typeDecl = CreateTypeDeclaration(kind, className);
+
+    BaseNamespaceDeclarationSyntax nsDeclaration = useFileScopedNs
+        ? SyntaxFactory.FileScopedNamespaceDeclaration(SyntaxFactory.ParseName(fullNamespace))
+              .AddMembers(typeDecl)
+        : SyntaxFactory.NamespaceDeclaration(SyntaxFactory.ParseName(fullNamespace))
+              .AddMembers(typeDecl);
+
+    var unit = SyntaxFactory.CompilationUnit()
+        .AddMembers(nsDeclaration)
+        .NormalizeWhitespace(eol: "\n");
+
+    if (preferFileScopedNamespace)
+    {
+      unit = unit.AddNewLinesAfterNamespaceDeclaration();
+    }
+
+    return unit;
+  }
+
   private async Task<(string rootNamespace, string? langVersion, string relativeDir)> ResolveProjectContext(string filePath, CancellationToken cancellationToken)
   {
     var projectPath = FindCsprojFromFile(filePath);
@@ -177,13 +184,19 @@ public class NewFileService(IBuildHostManager buildHostManager, IEditorService e
     return (Path.GetFileNameWithoutExtension(filePath).Split(".").First(), null, string.Empty);
   }
 
-  private static WorkspaceEdit BuildEdit(string filePath, string content) =>
-    new([
-      new WorkspaceDocumentChange(
-        new TextDocumentIdentifier($"file://{filePath}"),
-        [new TextEdit(new TextEditRange(new TextEditPosition(0, 0), new TextEditPosition(0, 0)), content)]
-      )
-    ]);
+  private static WorkspaceEdit BuildEdit(string filePath, string content, bool createFile = false)
+  {
+    var uri = $"file://{filePath}";
+    var textDocumentChange = DocumentChange.TextDocumentEdit(uri, [new TextEdit(new TextEditRange(new TextEditPosition(0, 0), new TextEditPosition(0, 0)), content)]);
+
+    if (!createFile)
+    {
+      return new([textDocumentChange]);
+    }
+
+    var createFileChange = DocumentChange.CreateFile(uri);
+    return new([createFileChange, textDocumentChange]);
+  }
 
   private static string? FindCsprojFromFile(string filePath)
   {
