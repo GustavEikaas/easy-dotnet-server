@@ -43,6 +43,14 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
     [Description("Client process id Roslyn should monitor for shutdown.")]
     [CommandOption("--clientProcessId <PID>")]
     public int? ClientProcessId { get; init; }
+
+    [Description("Automatically discover and load projects based on workspace folders (default: false)")]
+    [CommandOption("--autoLoadProjects")]
+    public bool AutoLoadProjects { get; init; }
+
+    [Description("Allow connecting to (or starting) a shared, multi-client language server daemon instead of launching a dedicated language-server child process for that client.")]
+    [CommandOption("--daemon-mode")]
+    public bool UseDaemonMode { get; init; }
   }
 
   public override async Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
@@ -155,6 +163,16 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
   public static List<string> BuildRoslynArguments(Settings settings, string roslynLogDir)
   {
     List<string> arguments = ["--stdio", "--logLevel=Information", "--extensionLogDirectory", roslynLogDir];
+
+    if (settings.UseDaemonMode)
+    {
+      arguments.Add("--daemon-mode");
+    }
+
+    if (settings.AutoLoadProjects)
+    {
+      arguments.Add("--autoLoadProjects");
+    }
 
     if (settings.UseRoslynator)
     {
