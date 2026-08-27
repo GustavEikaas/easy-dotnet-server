@@ -260,6 +260,22 @@ public static class DotnetProjectTfmExtensions
   }
 }
 
+public static class DotnetPlatformDebuggerExtensions
+{
+  // All bundled debugger engines (netcoredbg, dncdbg, sharpdbg) speak CoreCLR/ICorDebug, so we
+  // whitelist the platforms whose apps run on CoreCLR instead of blacklisting the ones that don't.
+  // net{X}.0-macos apps run on CoreCLR, while ios/tvos/android/maccatalyst/tizen use Mono and
+  // browser-wasm has no ICorDebug surface at all.
+  private static readonly HashSet<DotnetPlatform> CoreClrPlatforms =
+  [
+    DotnetPlatform.None,
+    DotnetPlatform.Windows,
+    DotnetPlatform.MacOS,
+  ];
+
+  public static bool SupportsCoreClrDebugging(this DotnetPlatform platform) => CoreClrPlatforms.Contains(platform);
+}
+
 public static class DotnetProjectPlatformExtensions
 {
   public static DotnetPlatform GetPlatform(this DotnetProject project)
