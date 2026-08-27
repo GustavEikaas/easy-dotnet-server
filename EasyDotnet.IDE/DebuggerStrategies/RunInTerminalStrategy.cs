@@ -49,8 +49,9 @@ public class RunInTerminalStrategy(
   public Task PrepareAsync(CancellationToken ct)
   {
     var platform = project.Raw.GetPlatform();
-    if (platform != DotnetPlatform.None && platform != DotnetPlatform.Windows)
-      throw new InvalidOperationException($"Debugging for {platform} is not supported yet");
+    if (!platform.SupportsCoreClrDebugging())
+      throw new InvalidOperationException(
+        $"Cannot debug target framework '{project.TargetFramework}'. The bundled debugger engines (netcoredbg, dncdbg, sharpdbg) are CoreCLR debuggers, and {platform} apps do not run on CoreCLR.");
 
     _activeProfile = launchProfileService.GetLaunchProfile(project.ProjectFullPath, launchProfileName);
     return Task.CompletedTask;
