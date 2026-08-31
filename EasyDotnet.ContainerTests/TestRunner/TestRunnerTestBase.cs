@@ -68,6 +68,27 @@ public abstract class TestRunnerTestBase<TContainer> : ContainerTestBase<TContai
       new List<object> { new { clientInfo = new { name = "test", version = "3.0.0" }, projectInfo = new { rootDir = fixture.RootDir, solutionFile = solutionPath } } });
 
     await BeginCall(Container.Rpc.TestRunnerInitializeAsync(solutionPath), InitializeTimeout);
+
+    AssertInitializeProducedATree();
+  }
+
+  private void AssertInitializeProducedATree()
+  {
+    var buildFailed = _lastStatusKind
+      .Where(kv => kv.Value == "BuildFailed")
+      .Select(kv => kv.Key)
+      .ToList();
+
+    if (buildFailed.Count > 0)
+    {
+      throw new Xunit.Sdk.XunitException(
+        "testrunner/initialize reported BuildFailed for: " + string.Join(", ", buildFailed) + ". (This is usually transient container/NuGet flakiness, not a discovery bug)");
+    }
+
+    if (!_nodes.Values.Any(n => n.Type.Type == NodeTypeNames.Project))
+    {
+      throw new Xunit.Sdk.XunitException("testrunner/initialize registered no Project node)");
+    }
   }
 
   /// <summary>Returns every node with <see cref="TestNodeDto.Type"/>.<c>Type</c> equal to <paramref name="typeName"/>.</summary>
