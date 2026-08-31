@@ -102,6 +102,65 @@ public sealed class PropertyCacheTests
 
   [Theory]
   [MemberData(nameof(Targets))]
+  public async Task Restore_After_Cold_Evaluation_Invalidates(string tfm, string exe, string[] leadingArgs)
+  {
+    _ = tfm;
+    await using var h = await PropertyCacheHarness.StartAsync(exe, leadingArgs);
+    var csproj = h.CreateUnrestoredTestSdkProject();
+
+    var cold = await h.EvaluateAsync(csproj);
+    Assert.False(cold[0].Project!.Raw.IsTestProject);
+
+    await PropertyCacheHarness.RestoreAsync(csproj);
+
+    var warm = await h.EvaluateAsync(csproj);
+    Assert.True(
+        warm[0].Project!.Raw.IsTestProject,
+        "restore generated obj/*.nuget.g.props, so IsTestProject must be re-evaluated instead of served from cache");
+
+    var stats = await h.GetStatsAsync();
+    Assert.Equal(2, stats.Evaluations);
+  }
+
+  [Theory]
+  [MemberData(nameof(Targets))]
+  public async Task Restore_After_Cold_Evaluation_Invalidates_Disk_Cache(string tfm, string exe, string[] leadingArgs)
+  {
+    _ = tfm;
+    await using var h = await PropertyCacheHarness.StartAsync(exe, leadingArgs);
+    var csproj = h.CreateUnrestoredTestSdkProject();
+
+    await h.EvaluateAsync(csproj);
+    await PropertyCacheHarness.RestoreAsync(csproj);
+    await h.RestartServerAsync();
+
+    var warm = await h.EvaluateAsync(csproj);
+    Assert.True(warm[0].Project!.Raw.IsTestProject);
+
+    var stats = await h.GetStatsAsync();
+    Assert.Equal(1, stats.Evaluations);
+    Assert.Equal(0, stats.DiskHits);
+  }
+
+  [Theory]
+  [MemberData(nameof(Targets))]
+  public async Task No_Op_Restore_Does_Not_Invalidate(string tfm, string exe, string[] leadingArgs)
+  {
+    _ = tfm;
+    await using var h = await PropertyCacheHarness.StartAsync(exe, leadingArgs);
+    var csproj = h.CreateUnrestoredTestSdkProject();
+
+    await PropertyCacheHarness.RestoreAsync(csproj);
+    await h.EvaluateAsync(csproj);
+    await PropertyCacheHarness.RestoreAsync(csproj);
+    await h.EvaluateAsync(csproj);
+
+    var stats = await h.GetStatsAsync();
+    Assert.Equal(1, stats.Evaluations);
+  }
+
+  [Theory]
+  [MemberData(nameof(Targets))]
   public async Task Configuration_Produces_Separate_Entry(string tfm, string exe, string[] leadingArgs)
   {
     _ = tfm;

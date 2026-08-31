@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using EasyDotnet.BuildServer.Contracts;
 
@@ -85,6 +86,45 @@ internal sealed class PropertyCacheHarness : IAsyncDisposable
 """);
     File.WriteAllText(Path.Combine(dir, "Class1.cs"), "namespace App; public class Class1 { }");
     return csproj;
+  }
+
+  public string CreateUnrestoredTestSdkProject(string name = "TestSdkApp", string tfm = "net8.0")
+  {
+    var dir = Path.Combine(WorkspaceDir, name);
+    Directory.CreateDirectory(dir);
+    var csproj = Path.Combine(dir, name + ".csproj");
+    File.WriteAllText(csproj, $"""
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>{tfm}</TargetFramework>
+    <OutputType>Library</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+  </ItemGroup>
+</Project>
+""");
+    File.WriteAllText(Path.Combine(dir, "Class1.cs"), "namespace App; public class Class1 { }");
+    return csproj;
+  }
+
+  public static async Task RestoreAsync(string csproj)
+  {
+    var psi = new ProcessStartInfo("dotnet", $"restore \"{csproj}\"")
+    {
+      RedirectStandardOutput = true,
+      RedirectStandardError = true,
+      WorkingDirectory = Path.GetDirectoryName(csproj)!,
+    };
+    using var proc = Process.Start(psi) ?? throw new InvalidOperationException("could not start dotnet restore");
+    var stdout = await proc.StandardOutput.ReadToEndAsync();
+    var stderr = await proc.StandardError.ReadToEndAsync();
+    await proc.WaitForExitAsync();
+    if (proc.ExitCode != 0)
+    {
+      throw new InvalidOperationException($"dotnet restore failed ({proc.ExitCode}):\n{stdout}\n{stderr}");
+    }
   }
 
   public string CreateMultiTfmProject(string name = "Multi", string tfms = "net8.0;net9.0")

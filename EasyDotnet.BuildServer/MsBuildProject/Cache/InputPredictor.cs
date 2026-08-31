@@ -60,6 +60,8 @@ public sealed class InputPredictor
       dirs.Add(Path.GetFullPath(baseDir));
     }
 
+    var globs = CollectWildcardImportGlobs(instance);
+
     var outFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     foreach (var item in predictions.OutputFiles)
     {
@@ -71,8 +73,38 @@ public sealed class InputPredictor
       outDirs.Add(Normalize(item.Path, baseDir));
     }
 
-    return new PredictionResult([.. files], [.. dirs], [.. outFiles], [.. outDirs]);
+    return new PredictionResult([.. files], [.. dirs], globs, [.. outFiles], [.. outDirs]);
   }
+
+  private static List<GlobPrediction> CollectWildcardImportGlobs(ProjectInstance instance)
+  {
+    var globs = new List<GlobPrediction>(2);
+
+    var extensionsPath = instance.GetPropertyValue("MSBuildProjectExtensionsPath");
+    var projectFile = instance.GetPropertyValue("MSBuildProjectFile");
+    if (string.IsNullOrEmpty(extensionsPath) || string.IsNullOrEmpty(projectFile))
+    {
+      return globs;
+    }
+
+    var dir = Normalize(extensionsPath, instance.Directory)
+        .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+    if (!IsDisabled(instance, "ImportProjectExtensionProps"))
+    {
+      globs.Add(new GlobPrediction(dir, projectFile + ".*.props"));
+    }
+
+    if (!IsDisabled(instance, "ImportProjectExtensionTargets"))
+    {
+      globs.Add(new GlobPrediction(dir, projectFile + ".*.targets"));
+    }
+
+    return globs;
+  }
+
+  private static bool IsDisabled(ProjectInstance instance, string propertyName) =>
+      string.Equals(instance.GetPropertyValue(propertyName), "false", StringComparison.OrdinalIgnoreCase);
 
   private static string Normalize(string path, string baseDir)
   {
@@ -81,9 +113,12 @@ public sealed class InputPredictor
     return Path.GetFullPath(full);
   }
 
+  public sealed record GlobPrediction(string Directory, string Pattern);
+
   public sealed record PredictionResult(
       List<string> InputFiles,
       List<string> InputDirectories,
+      List<GlobPrediction> InputGlobs,
       List<string> OutputFiles,
       List<string> OutputDirectories);
 }

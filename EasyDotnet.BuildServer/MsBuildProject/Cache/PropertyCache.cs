@@ -112,12 +112,19 @@ public sealed class PropertyCache
           propertiesCopy[kv.Key] = kv.Value;
         }
 
+        var globs = new List<InvalidationGlobEntry>(prediction.InputGlobs.Count);
+        foreach (var g in prediction.InputGlobs)
+        {
+          globs.Add(new InvalidationGlobEntry(g.Directory, g.Pattern, SnapshotGlob(g.Directory, g.Pattern)));
+        }
+
         var newEntry = new PropertyCacheEntry(
             PropertyCacheEntry.CurrentSchemaVersion,
             key,
             propertiesCopy,
             manifest,
             [.. dirSet],
+            globs,
             DateTime.UtcNow.Ticks);
 
         _memory[key] = newEntry;
@@ -164,7 +171,49 @@ public sealed class PropertyCache
       if (!current.SetEquals(cached)) return false;
     }
 
+    foreach (var glob in entry.InvalidationGlobs ?? [])
+    {
+      var current = SnapshotGlob(glob.Directory, glob.Pattern);
+      if (current.Count != glob.Matches.Count) return false;
+      for (var i = 0; i < current.Count; i++)
+      {
+        if (current[i] != glob.Matches[i]) return false;
+      }
+    }
+
     return true;
+  }
+
+  private static List<InvalidationFileEntry> SnapshotGlob(string directory, string pattern)
+  {
+    var matches = new List<InvalidationFileEntry>();
+    if (!Directory.Exists(directory)) return matches;
+
+    IEnumerable<string> files;
+    try
+    {
+      files = Directory.EnumerateFiles(directory, pattern);
+    }
+    catch (IOException)
+    {
+      return matches;
+    }
+    catch (UnauthorizedAccessException)
+    {
+      return matches;
+    }
+
+    foreach (var f in files)
+    {
+      var fi = new FileInfo(f);
+      if (fi.Exists)
+      {
+        matches.Add(new InvalidationFileEntry(f, fi.LastWriteTimeUtc.Ticks, fi.Length));
+      }
+    }
+
+    matches.Sort(static (a, b) => string.Compare(a.Path, b.Path, StringComparison.OrdinalIgnoreCase));
+    return matches;
   }
 
   private string DiskPath(PropertyCacheKey key) => Path.Combine(DiskRoot, key.ToDiskFileName());
