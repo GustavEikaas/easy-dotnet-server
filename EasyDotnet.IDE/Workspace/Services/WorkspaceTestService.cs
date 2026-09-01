@@ -140,7 +140,7 @@ public class WorkspaceTestService(
 
   private async Task ExecuteTestAsync(ValidatedDotnetProject project, WorkspaceTestRequest request, CancellationToken ct)
   {
-    if (!await preBuildService.BuildBeforeRunAsync(project.ProjectFullPath, project.ProjectName, ct))
+    if (!await preBuildService.BuildBeforeRunAsync(project.ProjectFullPath, project.ProjectName, request.Configuration, ct))
       return;
 
     var projectDir = Path.GetDirectoryName(project.ProjectFullPath) ?? ".";
@@ -159,12 +159,11 @@ public class WorkspaceTestService(
       args.Add(project.TargetFramework);
     }
 
-    AppendBuildConfigurationArguments(args, project.Raw.Configuration, MsBuildPlatform.ToProjectPlatform(project.Raw.Platform));
+    var testArgs = PassthroughArgs.Split(request.TestArgs);
+    AppendBuildConfigurationArguments(args, request.Configuration ?? project.Raw.Configuration, MsBuildPlatform.ToProjectPlatform(project.Raw.Platform), testArgs);
     args.Add("--no-restore");
     args.Add("--no-build");
-
-    if (!string.IsNullOrWhiteSpace(request.TestArgs))
-      args.Add(request.TestArgs);
+    args.AddRange(testArgs);
 
     var command = new RunCommand("dotnet", [.. args], projectDir, []);
     await editorService.RequestRunCommandAsync(command, ct);
@@ -173,7 +172,7 @@ public class WorkspaceTestService(
   private async Task ExecuteTestSolutionAsync(string solutionFile, WorkspaceTestRequest request, CancellationToken ct)
   {
     var name = Path.GetFileName(solutionFile);
-    if (!await preBuildService.BuildBeforeRunAsync(solutionFile, name, ct))
+    if (!await preBuildService.BuildBeforeRunAsync(solutionFile, name, request.Configuration, ct))
       return;
 
     var solutionDir = Path.GetDirectoryName(solutionFile) ?? ".";
@@ -191,12 +190,11 @@ public class WorkspaceTestService(
     }
 
     var workspaceConfiguration = await workspaceBuildConfigurationService.GetActiveConfigurationAsync(ct);
-    AppendBuildConfigurationArguments(args, workspaceConfiguration.BuildType, workspaceConfiguration.Platform);
+    var testArgs = PassthroughArgs.Split(request.TestArgs);
+    AppendBuildConfigurationArguments(args, request.Configuration ?? workspaceConfiguration.BuildType, workspaceConfiguration.Platform, testArgs);
     args.Add("--no-restore");
     args.Add("--no-build");
-
-    if (!string.IsNullOrWhiteSpace(request.TestArgs))
-      args.Add(request.TestArgs);
+    args.AddRange(testArgs);
 
     var command = new RunCommand("dotnet", [.. args], solutionDir, []);
     await editorService.RequestRunCommandAsync(command, ct);
@@ -219,15 +217,15 @@ public class WorkspaceTestService(
     return null;
   }
 
-  private static void AppendBuildConfigurationArguments(List<string> args, string? configuration, string? platform)
+  private static void AppendBuildConfigurationArguments(List<string> args, string? configuration, string? platform, List<string> passthrough)
   {
-    if (!string.IsNullOrWhiteSpace(configuration))
+    if (!string.IsNullOrWhiteSpace(configuration) && !PassthroughArgs.SpecifiesConfiguration(passthrough))
     {
       args.Add("-c");
       args.Add(configuration);
     }
 
-    if (!string.IsNullOrWhiteSpace(platform))
+    if (!string.IsNullOrWhiteSpace(platform) && !PassthroughArgs.SpecifiesPlatform(passthrough))
     {
       args.Add($"-p:Platform={platform}");
     }

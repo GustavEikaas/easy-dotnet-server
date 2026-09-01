@@ -5,5 +5,6 @@ public sealed record WorkspaceWatchRequest(
     bool UseLaunchProfile,
     bool UseDebugger,
     string? FilePath,
-    string? CliArgs
+    string? CliArgs,
+    string? Configuration
 );

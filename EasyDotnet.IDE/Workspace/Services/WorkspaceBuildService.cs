@@ -6,6 +6,7 @@ using EasyDotnet.IDE.Models.Client;
 using EasyDotnet.IDE.Models.Client.Prompt;
 using EasyDotnet.IDE.Models.Client.Quickfix;
 using EasyDotnet.IDE.Settings;
+using EasyDotnet.IDE.Utils;
 using EasyDotnet.IDE.Workspace.BuildConfiguration;
 using EasyDotnet.IDE.Workspace.Controllers;
 
@@ -119,58 +120,71 @@ public class WorkspaceBuildService(
 
     if (request.UseTerminal)
     {
-      await RunBuildInTerminalAsync(targetPath, name, request.BuildArgs, ct);
+      await RunBuildInTerminalAsync(targetPath, name, request, ct);
       return;
     }
 
-    await RunBuildQuickfixAsync(targetPath, name, ct);
+    await RunBuildQuickfixAsync(targetPath, name, request.Configuration, ct);
   }
 
-  private async Task RunBuildInTerminalAsync(string targetPath, string name, string? buildArgs, CancellationToken ct)
+  private async Task RunBuildInTerminalAsync(string targetPath, string name, WorkspaceBuildRequest request, CancellationToken ct)
   {
     var resolvedConfiguration = await workspaceBuildConfigurationService.ResolveTargetAsync(targetPath, ct);
     var msbuildExe = await TryResolveVisualStudioMsBuildAsync();
+    var buildArgs = PassthroughArgs.Split(request.BuildArgs);
 
     var command = msbuildExe is null
-        ? BuildDotnetBuildCommand(targetPath, resolvedConfiguration, buildArgs)
-        : BuildMsBuildCommand(msbuildExe, targetPath, resolvedConfiguration, buildArgs);
+        ? BuildDotnetBuildCommand(targetPath, resolvedConfiguration, request.Configuration, buildArgs)
+        : BuildMsBuildCommand(msbuildExe, targetPath, resolvedConfiguration, request.Configuration, buildArgs);
 
     var exitCode = await editorService.RequestRunCommandAsync(command, ct);
     if (exitCode != 0)
       await editorService.DisplayError($"Build failed for {name} (exit code {exitCode})");
   }
 
-  private static RunCommand BuildDotnetBuildCommand(string targetPath, ResolvedBuildConfiguration resolvedConfiguration, string? buildArgs)
+  private static RunCommand BuildDotnetBuildCommand(
+      string targetPath,
+      ResolvedBuildConfiguration resolvedConfiguration,
+      string? requestedConfiguration,
+      List<string> buildArgs)
   {
     var args = new List<string> { "build", targetPath };
-    if (!string.IsNullOrWhiteSpace(resolvedConfiguration.Configuration))
+    var configuration = requestedConfiguration ?? resolvedConfiguration.Configuration;
+
+    // A configuration in the passthrough args wins, adding ours on top would pass -c twice
+    if (!string.IsNullOrWhiteSpace(configuration) && !PassthroughArgs.SpecifiesConfiguration(buildArgs))
     {
       args.Add("-c");
-      args.Add(resolvedConfiguration.Configuration);
+      args.Add(configuration);
     }
-    if (!string.IsNullOrWhiteSpace(resolvedConfiguration.Platform))
+    if (!string.IsNullOrWhiteSpace(resolvedConfiguration.Platform) && !PassthroughArgs.SpecifiesPlatform(buildArgs))
     {
       args.Add($"-p:Platform={resolvedConfiguration.Platform}");
     }
-    if (!string.IsNullOrWhiteSpace(buildArgs))
-      args.Add(buildArgs);
+    args.AddRange(buildArgs);
 
     return new RunCommand("dotnet", args, Path.GetDirectoryName(targetPath) ?? ".", []);
   }
 
-  private static RunCommand BuildMsBuildCommand(string msbuildExe, string targetPath, ResolvedBuildConfiguration resolvedConfiguration, string? buildArgs)
+  private static RunCommand BuildMsBuildCommand(
+      string msbuildExe,
+      string targetPath,
+      ResolvedBuildConfiguration resolvedConfiguration,
+      string? requestedConfiguration,
+      List<string> buildArgs)
   {
     var args = new List<string> { targetPath, "-restore", "-t:Build" };
-    if (!string.IsNullOrWhiteSpace(resolvedConfiguration.Configuration))
+    var configuration = requestedConfiguration ?? resolvedConfiguration.Configuration;
+
+    if (!string.IsNullOrWhiteSpace(configuration) && !PassthroughArgs.SpecifiesConfiguration(buildArgs))
     {
-      args.Add($"-p:Configuration={resolvedConfiguration.Configuration}");
+      args.Add($"-p:Configuration={configuration}");
     }
-    if (!string.IsNullOrWhiteSpace(resolvedConfiguration.Platform))
+    if (!string.IsNullOrWhiteSpace(resolvedConfiguration.Platform) && !PassthroughArgs.SpecifiesPlatform(buildArgs))
     {
       args.Add($"-p:Platform={resolvedConfiguration.Platform}");
     }
-    if (!string.IsNullOrWhiteSpace(buildArgs))
-      args.Add(buildArgs);
+    args.AddRange(buildArgs);
 
     return new RunCommand(msbuildExe, args, Path.GetDirectoryName(targetPath) ?? ".", []);
   }
@@ -191,8 +205,8 @@ public class WorkspaceBuildService(
     }
   }
 
-  private Task RunBuildQuickfixAsync(string targetPath, string name, CancellationToken ct) =>
-      BuildQuickfixAsync(targetPath, name, configuration: null, buildTarget: "Build", operationName: "Build", platform: null, ct);
+  private Task RunBuildQuickfixAsync(string targetPath, string name, string? configuration, CancellationToken ct) =>
+      BuildQuickfixAsync(targetPath, name, configuration, buildTarget: "Build", operationName: "Build", platform: null, ct);
 
   public async Task<bool> BuildQuickfixAsync(
       string targetPath,

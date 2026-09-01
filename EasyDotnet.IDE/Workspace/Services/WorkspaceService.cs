@@ -46,22 +46,22 @@ public class WorkspaceService(
         await editorService.DisplayError("Failed to convert single file app to project");
         return;
       }
-      await DispatchRunAsync(converted, null, request.CliArgs, ct);
+      await DispatchRunAsync(converted, null, request.CliArgs, request.Configuration, ct);
       return;
     }
 
     var project = target.Project!;
     if (project.Raw.IsAspireHost)
     {
-      await DispatchAspireStartAsync(project, target.LaunchProfile, false, ct);
+      await DispatchAspireStartAsync(project, target.LaunchProfile, false, request.Configuration, ct);
       return;
     }
-    await DispatchRunAsync(project, target.LaunchProfile, request.CliArgs, ct);
+    await DispatchRunAsync(project, target.LaunchProfile, request.CliArgs, request.Configuration, ct);
   }
 
-  private async Task DispatchAspireStartAsync(ValidatedDotnetProject project, LaunchProfile? launchProfile, bool debug, CancellationToken ct)
+  private async Task DispatchAspireStartAsync(ValidatedDotnetProject project, LaunchProfile? launchProfile, bool debug, string? configuration, CancellationToken ct)
   {
-    if (!await preBuildService.BuildBeforeRunAsync(project.ProjectFullPath, project.ProjectName, ct))
+    if (!await preBuildService.BuildBeforeRunAsync(project.ProjectFullPath, project.ProjectName, configuration, ct))
     {
       return;
     }
@@ -94,23 +94,23 @@ public class WorkspaceService(
 
       if (target.Kind == ExecutionTargetKind.SingleFile)
       {
-        await DebugSingleFileAsync(target.SingleFilePath!, request.CliArgs, ct);
+        await DebugSingleFileAsync(target.SingleFilePath!, request.CliArgs, request.Configuration, ct);
         return;
       }
 
       var project = target.Project!;
       if (project.Raw.IsAspireHost)
       {
-        await DispatchAspireStartAsync(project, target.LaunchProfile, true, ct);
+        await DispatchAspireStartAsync(project, target.LaunchProfile, true, request.Configuration, ct);
         return;
       }
 
-      if (!await preBuildService.BuildBeforeRunAsync(project.ProjectFullPath, project.ProjectName, ct))
+      if (!await preBuildService.BuildBeforeRunAsync(project.ProjectFullPath, project.ProjectName, request.Configuration, ct))
       {
         return;
       }
 
-      var runnableProject = await ResolveProjectForRunAsync(project, ct);
+      var runnableProject = await ResolveProjectForRunAsync(project, request.Configuration, ct);
       if (runnableProject is null)
       {
         return;
@@ -176,10 +176,11 @@ public class WorkspaceService(
       args.AddRange(["--launch-profile", target.LaunchProfileName]);
     }
 
-    if (!string.IsNullOrWhiteSpace(project.Raw.Configuration))
+    var configuration = request.Configuration ?? project.Raw.Configuration;
+    if (!string.IsNullOrWhiteSpace(configuration))
     {
       args.Add("-c");
-      args.Add(project.Raw.Configuration);
+      args.Add(configuration);
     }
 
     var projectPlatform = BuildConfiguration.MsBuildPlatform.ToProjectPlatform(project.Raw.Platform);
@@ -215,6 +216,7 @@ public class WorkspaceService(
       ValidatedDotnetProject project,
       LaunchProfile? launchProfile,
       string? cliArgs,
+      string? configuration,
       CancellationToken ct)
   {
     var sessionKey = $"{project.ProjectFullPath}:{project.TargetFramework}";
@@ -230,14 +232,14 @@ public class WorkspaceService(
         ? null
         : CommandLineParser.SplitCommandLine(cliArgs).ToArray();
 
-    if (!await preBuildService.BuildBeforeRunAsync(project.ProjectFullPath, project.ProjectName, ct))
+    if (!await preBuildService.BuildBeforeRunAsync(project.ProjectFullPath, project.ProjectName, configuration, ct))
     {
       sessionRegistry.Release(sessionKey);
       _ = NotifyRunningSessionsAsync();
       return;
     }
 
-    var runnableProject = await ResolveProjectForRunAsync(project, ct);
+    var runnableProject = await ResolveProjectForRunAsync(project, configuration, ct);
     if (runnableProject is null)
     {
       sessionRegistry.Release(sessionKey);
@@ -298,7 +300,7 @@ public class WorkspaceService(
     }, CancellationToken.None);
   }
 
-  private async Task DebugSingleFileAsync(string filePath, string? cliArgs, CancellationToken ct)
+  private async Task DebugSingleFileAsync(string filePath, string? cliArgs, string? configuration, CancellationToken ct)
   {
     var project = await ConvertSingleFileToProjectAsync(filePath, ct);
     if (project is null)
@@ -306,12 +308,12 @@ public class WorkspaceService(
       return;
     }
 
-    if (!await preBuildService.BuildBeforeRunAsync(project.ProjectFullPath, project.ProjectName, ct))
+    if (!await preBuildService.BuildBeforeRunAsync(project.ProjectFullPath, project.ProjectName, configuration, ct))
     {
       return;
     }
 
-    var runnableProject = await ResolveProjectForRunAsync(project, ct);
+    var runnableProject = await ResolveProjectForRunAsync(project, configuration, ct);
     if (runnableProject is null)
     {
       return;
@@ -322,12 +324,14 @@ public class WorkspaceService(
 
   private async Task<ValidatedDotnetProject?> ResolveProjectForRunAsync(
       ValidatedDotnetProject project,
+      string? configuration,
       CancellationToken ct)
   {
     buildHostManager.InvalidateCache(project.ProjectFullPath);
     var resolved = await buildHostManager.GetProjectAsync(
         project.ProjectFullPath,
         project.TargetFramework,
+        configuration,
         computeRunArguments: true,
         ct: ct);
 

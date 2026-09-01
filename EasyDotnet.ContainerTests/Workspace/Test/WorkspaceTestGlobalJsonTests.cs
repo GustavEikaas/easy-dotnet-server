@@ -131,9 +131,8 @@ public abstract class WorkspaceTestGlobalJsonTests<TContainer> : WorkspaceTestTe
     var job = await ReceiveRunCommandAsync();
     await testTask;
 
-    Assert.Contains("--filter Category=Integration", job.Command.Arguments);
     var noBuildIndex = job.Command.Arguments.IndexOf("--no-build");
-    var filterIndex = job.Command.Arguments.IndexOf("--filter Category=Integration");
+    var filterIndex = CommandArguments.IndexOfSequence(job.Command.Arguments, "--filter", "Category=Integration");
     Assert.True(filterIndex > noBuildIndex, "testArgs must follow --no-build");
   }
 }
