@@ -60,8 +60,9 @@ public abstract class WorkspaceBuildTestBase<TContainer> : ContainerTestBase<TCo
   protected Task BeginBuild(
     bool useDefault = false,
     bool useTerminal = false,
-    string? buildArgs = null)
-    => BeginCall(Container.Rpc.WorkspaceBuildAsync(useDefault, useTerminal, buildArgs));
+    string? buildArgs = null,
+    string? configuration = null)
+    => BeginCall(Container.Rpc.WorkspaceBuildAsync(useDefault, useTerminal, buildArgs, configuration));
 
   /// <summary>
   /// Starts a <c>workspace/build-solution</c> call, registers it as the active RPC scope, and returns the task.
@@ -69,8 +70,9 @@ public abstract class WorkspaceBuildTestBase<TContainer> : ContainerTestBase<TCo
   protected Task BeginBuildSolution(
     bool useDefault = false,
     bool useTerminal = false,
-    string? buildArgs = null)
-    => BeginCall(Container.Rpc.WorkspaceBuildSolutionAsync(useDefault, useTerminal, buildArgs));
+    string? buildArgs = null,
+    string? configuration = null)
+    => BeginCall(Container.Rpc.WorkspaceBuildSolutionAsync(useDefault, useTerminal, buildArgs, configuration));
 
   /// <summary>
   /// Waits for the next <c>promptSelection</c> call, invokes <paramref name="respond"/> with

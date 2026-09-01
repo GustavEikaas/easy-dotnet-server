@@ -1,4 +1,5 @@
 using EasyDotnet.IDE.Interfaces;
+using EasyDotnet.IDE.Utils;
 using EasyDotnet.IDE.Workspace.Controllers;
 
 namespace EasyDotnet.IDE.Workspace.Services;
@@ -14,7 +15,16 @@ public class WorkspaceRestoreService(IClientService clientService, IEditorServic
       await editorService.DisplayError("No sln or csproj target found");
       return;
     }
-    await editorService.RequestRunCommandAsync(new("dotnet", ["restore", target, request.RestoreArgs ?? string.Empty], clientService.RequireRootDir(), []));
+    var args = new List<string> { "restore", target };
+    var restoreArgs = PassthroughArgs.Split(request.RestoreArgs);
+
+    if (!string.IsNullOrWhiteSpace(request.Configuration) && !PassthroughArgs.SpecifiesConfiguration(restoreArgs))
+    {
+      args.Add($"-p:Configuration={request.Configuration}");
+    }
+    args.AddRange(restoreArgs);
+
+    await editorService.RequestRunCommandAsync(new("dotnet", args, clientService.RequireRootDir(), []));
   }
 
   private string? ResolveTarget()
