@@ -25,23 +25,23 @@ public class Event : ProtocolMessage
   public JsonElement? Body { get; set; }
 }
 
-public class ErrorResponse : ProtocolMessage
+public class Response : ProtocolMessage
 {
   [JsonPropertyName("request_seq")]
   public int RequestSeq { get; set; }
   public bool Success { get; set; }
+  public string Command { get; set; } = "";
   public string? Message { get; set; }
   public JsonElement? Body { get; set; }
 }
 
-public class Response : ProtocolMessage
+/// <summary>
+/// A response the other side reported as failed. Derives from <see cref="Response"/> so every
+/// <c>case Response</c> in the proxy pipeline matches it: a failure that matches nothing is a failure
+/// that gets dropped, and whoever sent the request then waits forever.
+/// </summary>
+public class ErrorResponse : Response
 {
-  [JsonPropertyName("request_seq")]
-  public required int RequestSeq { get; set; }
-  public required bool Success { get; set; }
-  public required string Command { get; set; }
-  public string? Message { get; set; }
-  public JsonElement? Body { get; set; }
 }
 
 public class InterceptableAttachRequest : Request

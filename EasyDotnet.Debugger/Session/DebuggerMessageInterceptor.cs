@@ -19,6 +19,10 @@ public class DebuggerMessageInterceptor(
   IVariableLocationResolver? variableLocationResolver = null) : IDapMessageInterceptor
 
 {
+  private readonly object _initializeGate = new();
+  private Event? _heldInitializedEvent;
+  private bool _initializeResponseForwarded;
+
   public async Task<ProtocolMessage?> InterceptAsync(
     ProtocolMessage message,
     IDebuggerProxy proxy,
@@ -29,7 +33,7 @@ public class DebuggerMessageInterceptor(
       return await (message switch
       {
         VariablesResponse varRes => HandleVariablesResponse(varRes),
-        Response res => HandleResponse(res),
+        Response res => HandleResponse(res, proxy, cancellationToken),
         Event evt => HandleEvent(evt),
         _ => throw new Exception($"Unsupported DAP message from debugger: {message}")
       });
@@ -57,7 +61,7 @@ public class DebuggerMessageInterceptor(
     return Task.FromResult<ProtocolMessage?>(response);
   }
 
-  private Task<ProtocolMessage?> HandleResponse(Response response)
+  private async Task<ProtocolMessage?> HandleResponse(Response response, IDebuggerProxy proxy, CancellationToken cancellationToken)
   {
     logger.LogDebug("[DEBUGGER] Response: {command}", response.Command);
 
@@ -74,7 +78,66 @@ public class DebuggerMessageInterceptor(
 
     valueConverterService.FormatEvaluateResponse(response);
     AdvertiseCompletionsCapability(response);
-    return Task.FromResult<ProtocolMessage?>(response);
+
+    if (response.Command.Equals("initialize", StringComparison.OrdinalIgnoreCase))
+    {
+      return await ForwardInitializeResponseAsync(response, proxy, cancellationToken);
+    }
+
+    return response;
+  }
+
+  /// <summary>
+  /// Writes the initialize response and then any <c>initialized</c> event we held back, in that order.
+  /// </summary>
+  /// <remarks>
+  /// The proxy dispatches each debugger message on its own task, so the near-simultaneous
+  /// <c>initialized</c> event can reach the client before this response — the response path does
+  /// strictly more work. Clients read capabilities from this response: nvim-dap that sees
+  /// <c>initialized</c> first finds <c>supportsConfigurationDoneRequest</c> unset and skips
+  /// <c>configurationDone</c> altogether, which leaves the debuggee suspended in the startup hook for
+  /// the whole session. Writing both from here puts them on the same channel in a fixed order.
+  /// </remarks>
+  private async Task<ProtocolMessage?> ForwardInitializeResponseAsync(
+    Response response,
+    IDebuggerProxy proxy,
+    CancellationToken cancellationToken)
+  {
+    Event? held;
+    lock (_initializeGate)
+    {
+      _initializeResponseForwarded = true;
+      held = _heldInitializedEvent;
+      _heldInitializedEvent = null;
+    }
+
+    await proxy.WriteProxyToClientAsync(response, cancellationToken);
+
+    if (held is not null)
+    {
+      logger.LogDebug("[DEBUGGER] Released held initialized event after the initialize response");
+      await proxy.WriteProxyToClientAsync(held, cancellationToken);
+    }
+
+    return null;
+  }
+
+  /// <summary>
+  /// Holds an <c>initialized</c> event that arrived before the initialize response was forwarded.
+  /// Returns false once the response is out, so later events pass straight through.
+  /// </summary>
+  private bool TryHoldInitializedEvent(Event evt)
+  {
+    lock (_initializeGate)
+    {
+      if (_initializeResponseForwarded)
+      {
+        return false;
+      }
+
+      _heldInitializedEvent = evt;
+      return true;
+    }
   }
 
   private void TryReportDebugSessionStartState(Response response)
@@ -266,6 +329,11 @@ public class DebuggerMessageInterceptor(
 
   private Task<ProtocolMessage?> HandleEvent(Event evt)
   {
+    if (evt.EventName == "initialized" && TryHoldInitializedEvent(evt))
+    {
+      logger.LogDebug("[DEBUGGER] Holding initialized event until the initialize response is forwarded");
+      return Task.FromResult<ProtocolMessage?>(null);
+    }
 
     if (evt.EventName == "stopped")
     {

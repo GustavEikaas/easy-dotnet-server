@@ -85,7 +85,7 @@ public class MessageProcessor(
   {
     if (message is not Request request)
     {
-      logger?.LogWarning("Unexpected non-request message from client: {type}", message.Type);
+      logger?.LogError("Unexpected non-request message from client: {type}. Dropping it.", message.Type);
       return;
     }
 
@@ -121,7 +121,7 @@ public class MessageProcessor(
         break;
 
       default:
-        logger?.LogWarning("Unexpected message type from debugger: {type}", message.Type);
+        logger?.LogError("Unexpected message type from debugger: {type}. Dropping it.", message.Type);
         break;
     }
   }
@@ -134,7 +134,7 @@ public class MessageProcessor(
 
     if (context == null)
     {
-      logger?.LogWarning("Received response for unknown request seq: {seq}", response.RequestSeq);
+      logger?.LogError("Received response for unknown request seq: {seq} (command: {command}). Dropping it, whoever sent that request will not be answered.", response.RequestSeq, response.Command);
       return;
     }
 

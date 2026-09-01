@@ -146,6 +146,39 @@ public class RunInTerminalStrategy(
 
   public Task<int>? GetProcessIdAsync() => Task.FromResult(_pid);
 
+  /// <summary>
+  /// True while a startup hook is holding the debuggee suspended before <c>Main</c> and we have not
+  /// resumed it. Godot projects get no hook, so this is always false for them.
+  /// </summary>
+  public bool RuntimeSuspended => _hookSession is not null && !IsSet(ref _resumeInvoked);
+
+  private void KillSuspendedProcess()
+  {
+    if (_pid <= 0)
+    {
+      return;
+    }
+
+    try
+    {
+      using var process = Process.GetProcessById(_pid);
+      process.Kill(entireProcessTree: true);
+      logger.LogWarning("Killed suspended process {Pid}: the runtime was never resumed.", _pid);
+    }
+    catch (ArgumentException)
+    {
+      // Already exited and reaped.
+    }
+    catch (InvalidOperationException)
+    {
+      // Exited between lookup and kill.
+    }
+    catch (Exception ex)
+    {
+      logger.LogWarning(ex, "Failed to kill suspended process {Pid}.", _pid);
+    }
+  }
+
   public async ValueTask DisposeAsync()
   {
     _rpc?.Dispose();
@@ -159,6 +192,14 @@ public class RunInTerminalStrategy(
 
     if (_hookSession != null)
     {
+      // Disposing the pipe closes it, which makes the hook's blocking read return and releases the
+      // runtime. If we never resumed it, this teardown is happening without a working debug session,
+      // so kill the process first instead of letting it run to completion unattached.
+      if (!IsSet(ref _resumeInvoked))
+      {
+        KillSuspendedProcess();
+      }
+
       await _hookSession.DisposeAsync();
       _hookSession = null;
     }
