@@ -301,6 +301,14 @@ public sealed class SourcePathMapper
     public bool AreEquivalentPrefixes(string first, string second) =>
       _prefixComparer.Equals(NormalizePrefix(first), NormalizePrefix(second));
 
+    public bool AreOverlappingPrefixes(string first, string second)
+    {
+      var normalizedFirst = NormalizePrefix(first);
+      var normalizedSecond = NormalizePrefix(second);
+      return IsPrefixMatch(normalizedFirst, normalizedSecond, _prefixComparison)
+        || IsPrefixMatch(normalizedSecond, normalizedFirst, _prefixComparison);
+    }
+
     internal void ApplyTo(SourcePathMapper mapper)
     {
       mapper._debuggerMappings = [.. _mappings.OrderByDescending(mapping => mapping.DebuggerPrefix.Length)];

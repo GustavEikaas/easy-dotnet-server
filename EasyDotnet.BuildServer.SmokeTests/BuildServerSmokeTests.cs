@@ -65,9 +65,11 @@ public sealed class BuildServerSmokeTests
     await using var srv = await BuildServerProcess.StartAsync(exe, leadingArgs, TimeSpan.FromSeconds(30));
 
     var fixture = Path.Combine(AppContext.BaseDirectory, "Fixtures", "Minimal", "Minimal.csproj");
+    var inheritedFixture = Path.Combine(AppContext.BaseDirectory, "Fixtures", "Minimal", "Inherited.csproj");
     Assert.True(File.Exists(fixture), $"fixture not found: {fixture}");
+    Assert.True(File.Exists(inheritedFixture), $"fixture not found: {inheritedFixture}");
 
-    var request = new GetProjectPropertiesBatchRequest([fixture], "Debug");
+    var request = new GetProjectPropertiesBatchRequest([fixture, inheritedFixture], Configuration: null);
 
     var stream = await srv.Rpc.InvokeWithParameterObjectAsync<IAsyncEnumerable<ProjectEvaluationResult>>(
         "project/get-properties-batch",
@@ -81,5 +83,9 @@ public sealed class BuildServerSmokeTests
 
     Assert.NotEmpty(results);
     Assert.All(results, r => Assert.Null(r.Error));
+    Assert.Contains(results, result => result.Project?.ProjectName == "Minimal"
+        && result.Project.Raw.PathMap == $"{Path.GetDirectoryName(fixture)}=overridden/Minimal");
+    Assert.Contains(results, result => result.Project?.ProjectName == "Inherited"
+        && result.Project.Raw.PathMap == $"{Path.GetDirectoryName(inheritedFixture)}=imported/Inherited");
   }
 }

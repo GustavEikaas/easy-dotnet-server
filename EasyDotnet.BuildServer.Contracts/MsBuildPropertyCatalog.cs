@@ -19,7 +19,8 @@ public static class MsBuildPropertyCatalog
     ["IsPackable"] = "Indicates whether the project can be packed into a NuGet package.",
     ["PackageId"] = "Specifies the NuGet package identifier.",
     ["Version"] = "Specifies the project or package version.",
-    ["UserSecretsId"] = "Specifies the user secrets identifier for the project."
+    ["UserSecretsId"] = "Specifies the user secrets identifier for the project.",
+    ["PathMap"] = "Maps physical source paths to source paths written to compiler output and debug information."
   };
 
   public static IEnumerable<string> GetAllPropertyNames() => GetAllPropertiesWithDocs().Select(p => p.Name);

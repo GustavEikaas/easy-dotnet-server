@@ -15,6 +15,18 @@ There are **two debugging flows**:
 
 Both flows ultimately result in the debugger listening on a TCP socket which the client connects to (typically via nvim-dap).
 
+## DAP source path mapping
+
+For solution-backed local sessions, the server automatically evaluates each project's MSBuild `PathMap` property while loading the project graph. A C# `PathMap` contains comma-separated `physicalPath=sourcePath` entries, with literal commas and equals signs escaped by doubling them. The server reverses each valid entry into a debugger/PDB prefix to local physical prefix mapping and configures the debugger proxy before DAP traffic starts.
+
+Only successfully evaluated projects contribute mappings. Duplicate mappings are collapsed, identity mappings are omitted, and malformed or conflicting entries are logged and skipped. A debugger prefix mapped to different physical roots is omitted entirely because it is ambiguous. Project evaluation and automatic mapping are best-effort: a missing solution, a project graph still loading after the bounded mapping wait, failed project evaluation, or invalid `PathMap` does not prevent debugging, while successful projects still provide a partial map.
+
+The evaluated MSBuild value is authoritative, including values expanded from imported props and project-level overrides. Because the easy-dotnet server runs locally, the physical side of `PathMap` is already a valid Neovim path; no client option is required.
+
+Automatic mappings reflect the current project-graph snapshot. Reload or reinitialize the solution after changing build properties such as `PathMap` to refresh the mapping baseline.
+
+The proxy uses these automatic mappings in both directions. It maps client paths back to debugger/PDB paths in source-bearing requests and maps debugger paths to local paths in responses and events, so the selected debugger does not need native path-mapping support.
+
 # 1. Client-Initiated Debugging Session
 
 In this flow, the client directly calls the server’s debugger/start endpoint.
