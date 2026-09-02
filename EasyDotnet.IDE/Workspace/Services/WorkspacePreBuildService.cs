@@ -11,7 +11,7 @@ public class WorkspacePreBuildService(
     IEditorService editorService,
     WorkspaceBuildHostManager buildHostManager)
 {
-  public async Task<bool> BuildBeforeRunAsync(string path, string name, CancellationToken ct)
+  public async Task<bool> BuildBeforeRunAsync(string path, string name, string? configuration, CancellationToken ct)
   {
     var token = Guid.NewGuid().ToString();
 
@@ -36,12 +36,12 @@ public class WorkspacePreBuildService(
     }
 
     await editorService.SendProgressStart(token, "Building...", $"Building {name}");
-    var tfm = await buildHostManager.ResolveSingleTfmAsync(path, configuration: null, platform: null, ct: ct);
+    var tfm = await buildHostManager.ResolveSingleTfmAsync(path, configuration, platform: null, ct: ct);
     List<BatchBuildResult> buildResults;
     try
     {
       buildResults = await buildHostManager.BatchBuildAsync(
-        new BatchBuildRequest([path], Configuration: null, Platform: null, TargetFramework: tfm), ct).ToListAsync(ct);
+        new BatchBuildRequest([path], configuration, Platform: null, TargetFramework: tfm), ct).ToListAsync(ct);
     }
     finally
     {

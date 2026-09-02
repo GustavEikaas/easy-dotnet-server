@@ -147,11 +147,10 @@ public abstract class WorkspaceTestProjectTests<TContainer> : WorkspaceTestTestB
     var job = await ReceiveRunCommandAsync();
     await testTask;
 
-    Assert.Contains("--filter Category=Unit", job.Command.Arguments);
-    // testArgs must come after the standard flags
+    // testArgs must come after the standard flags, split into separate argv entries
     var noRestoreIndex = job.Command.Arguments.IndexOf("--no-restore");
     var noBuildIndex = job.Command.Arguments.IndexOf("--no-build");
-    var filterIndex = job.Command.Arguments.IndexOf("--filter Category=Unit");
+    var filterIndex = CommandArguments.IndexOfSequence(job.Command.Arguments, "--filter", "Category=Unit");
     Assert.True(filterIndex > noRestoreIndex, "testArgs must follow --no-restore");
     Assert.True(filterIndex > noBuildIndex, "testArgs must follow --no-build");
   }

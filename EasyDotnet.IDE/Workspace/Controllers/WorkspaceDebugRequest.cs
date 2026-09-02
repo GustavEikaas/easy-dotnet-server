@@ -4,5 +4,6 @@ public sealed record WorkspaceDebugRequest(
     bool UseDefault,
     bool UseLaunchProfile,
     string? FilePath,
-    string? CliArgs
+    string? CliArgs,
+    string? Configuration
 );

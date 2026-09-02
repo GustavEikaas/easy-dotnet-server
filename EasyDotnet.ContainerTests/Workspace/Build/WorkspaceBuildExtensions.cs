@@ -12,15 +12,17 @@ public static class WorkspaceBuildExtensions
     this JsonRpc rpc,
     bool useDefault = false,
     bool useTerminal = false,
-    string? buildArgs = null)
+    string? buildArgs = null,
+    string? configuration = null)
     => rpc.InvokeWithParameterObjectAsync("workspace/build",
-      new { useDefault, useTerminal, buildArgs });
+      new { useDefault, useTerminal, buildArgs, configuration });
 
   public static Task WorkspaceBuildSolutionAsync(
     this JsonRpc rpc,
     bool useDefault = false,
     bool useTerminal = false,
-    string? buildArgs = null)
+    string? buildArgs = null,
+    string? configuration = null)
     => rpc.InvokeWithParameterObjectAsync("workspace/build-solution",
-      new { useDefault, useTerminal, buildArgs });
+      new { useDefault, useTerminal, buildArgs, configuration });
 }
