@@ -10,4 +10,5 @@ public interface INotificationService
   Task NotifyRoslynUpdateAvailable(string? currentVersion, string availableVersion, string minimumRecommendedVersion, bool isBelowRecommended);
   Task NotifyActiveProjectChanged(string? projectPath, string? projectName, string? launchProfile);
   Task NotifyRunningProcessesChangedAsync(RunningSessionInfo[] projects);
+  Task NotifyBuildConfigurationChanged(string buildType, string displayName);
 }

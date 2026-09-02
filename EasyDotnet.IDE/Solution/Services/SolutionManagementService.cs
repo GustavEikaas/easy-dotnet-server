@@ -1,6 +1,7 @@
 using System.IO.Abstractions;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Models.Client.Prompt;
+using EasyDotnet.IDE.Workspace.BuildConfiguration;
 
 namespace EasyDotnet.IDE.Solution.Services;
 
@@ -8,8 +9,76 @@ public class SolutionManagementService(
     IClientService clientService,
     ISolutionService solutionService,
     IEditorService editorService,
+    IWorkspaceBuildConfigurationService buildConfigurationService,
     IFileSystem fileSystem)
 {
+  public async Task SetBuildConfigurationInteractiveAsync(string? buildType, string? platform, CancellationToken ct)
+  {
+    clientService.RequireSolutionFile();
+
+    var available = await buildConfigurationService.GetAvailableConfigurationsAsync(ct);
+    if (available.Count == 0)
+    {
+      await editorService.DisplayWarning("No build configurations found in solution");
+      return;
+    }
+
+    var selected = buildType is null
+        ? await PromptForConfigurationAsync(available, ct)
+        : Resolve(available, buildType, platform);
+
+    if (selected is null)
+    {
+      if (buildType is not null)
+      {
+        await editorService.DisplayWarning($"Unknown build configuration '{buildType}'");
+      }
+      return;
+    }
+
+    await buildConfigurationService.SetActiveConfigurationAsync(selected, ct);
+    await editorService.DisplayMessage($"Build configuration: {WorkspaceBuildConfigurationDisplay.ToDisplayName(selected, available)}");
+  }
+
+  private async Task<WorkspaceBuildConfiguration?> PromptForConfigurationAsync(
+      IReadOnlyList<WorkspaceBuildConfiguration> available,
+      CancellationToken ct)
+  {
+    var active = await buildConfigurationService.GetActiveConfigurationAsync(ct);
+
+    var options = available
+        .Select(x => new SelectionOption(
+            Id: x.DisplayName,
+            Display: WorkspaceBuildConfigurationDisplay.ToDisplayName(x, available)))
+        .ToArray();
+
+    var selection = await editorService.RequestSelection(
+        "Select build configuration",
+        options,
+        defaultSelectionId: active.DisplayName);
+
+    return selection is null
+        ? null
+        : available.FirstOrDefault(x => string.Equals(x.DisplayName, selection.Id, StringComparison.Ordinal));
+  }
+
+  private static WorkspaceBuildConfiguration? Resolve(
+      IReadOnlyList<WorkspaceBuildConfiguration> available,
+      string buildType,
+      string? platform)
+  {
+    var match = available.FirstOrDefault(x => string.Equals(x.DisplayName, buildType, StringComparison.OrdinalIgnoreCase));
+    if (match is not null && platform is null)
+    {
+      return match;
+    }
+
+    return available.FirstOrDefault(x =>
+        string.Equals(x.BuildType, buildType, StringComparison.OrdinalIgnoreCase)
+        && (platform is null || string.Equals(x.Platform, platform, StringComparison.OrdinalIgnoreCase)))
+        ?? available.FirstOrDefault(x => string.Equals(x.BuildType, buildType, StringComparison.OrdinalIgnoreCase));
+  }
+
   public async Task AddProjectInteractiveAsync(CancellationToken ct)
   {
     var solutionFilePath = clientService.RequireSolutionFile();

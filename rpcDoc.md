@@ -197,6 +197,13 @@
 
 **Returns:** `Task`
 
+### `solution/set-build-configuration`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | SolutionSetBuildConfigurationRequest |   |
+
+**Returns:** `Task`
+
 ---
 
 ## ProjectReferenceController

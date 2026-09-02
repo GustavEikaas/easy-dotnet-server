@@ -12,6 +12,7 @@ public sealed record ActiveProjectChangedNotification(string? ProjectPath, strin
 public sealed record RunningProcessesChangedNotification(RunningSessionInfo[] Projects);
 public sealed record SolutionProjectsLoadedNotification();
 public sealed record RunningSessionInfo(string Name, bool IsDebugging);
+public sealed record BuildConfigurationChangedNotification(string BuildType, string DisplayName);
 
 public class NotificationService(JsonRpc jsonRpc) : INotificationService
 {
@@ -33,4 +34,8 @@ public class NotificationService(JsonRpc jsonRpc) : INotificationService
 
   [RpcNotification("runningProcesses/changed")]
   public async Task NotifyRunningProcessesChangedAsync(RunningSessionInfo[] projects) => await jsonRpc.NotifyWithParameterObjectAsync("runningProcesses/changed", new RunningProcessesChangedNotification(projects));
+
+  [RpcNotification("buildConfiguration/changed")]
+  public async Task NotifyBuildConfigurationChanged(string buildType, string displayName) =>
+      await jsonRpc.NotifyWithParameterObjectAsync("buildConfiguration/changed", new BuildConfigurationChangedNotification(buildType, displayName));
 }

@@ -13,4 +13,8 @@ public class SolutionManagementController(SolutionManagementService service) : B
   [JsonRpcMethod("solution/remove-project")]
   public async Task RemoveProjectAsync(CancellationToken ct) =>
       await service.RemoveProjectInteractiveAsync(ct);
+
+  [JsonRpcMethod("solution/set-build-configuration", UseSingleObjectParameterDeserialization = true)]
+  public async Task SetBuildConfigurationAsync(SolutionSetBuildConfigurationRequest request, CancellationToken ct) =>
+      await service.SetBuildConfigurationInteractiveAsync(request.BuildType, request.Platform, ct);
 }
