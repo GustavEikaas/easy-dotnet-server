@@ -13,9 +13,12 @@ public class ClientMessageInterceptor(
   Func<InterceptableAttachRequest, Task<InterceptableAttachRequest>> attachRequestRewriter,
   Action<int> onDebugeeProcessStarted,
   Action onConfigurationDone,
-  FrameSourceTracker? frameSourceTracker = null
+  FrameSourceTracker? frameSourceTracker = null,
+  SourcePathMapper? sourcePathMapper = null
   ) : IDapMessageInterceptor
 {
+  private readonly SourcePathMapper _sourcePathMapper = sourcePathMapper ?? new SourcePathMapper();
+
   private static readonly JsonSerializerOptions LoggingOptions = new()
   {
     PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -36,8 +39,8 @@ public class ClientMessageInterceptor(
         InterceptableCompletionsRequest complReq => await HandleCompletionsRequestAsync(complReq, proxy, cancellationToken),
         ScopesRequest scopesReq => HandleScopesRequest(scopesReq, proxy),
         SetBreakpointsRequest bpReq => HandleBreakpointsRequest(bpReq),
-        Request req when req.Command == "evaluate" => await HandleEvaluateRequestAsync(req, proxy, cancellationToken),
-        Request req => LogAndPassthrough(req),
+        Request req when req.Command == "evaluate" => await HandleEvaluateRequestAsync(RewriteRequestSources(req), proxy, cancellationToken),
+        Request req => HandleRequest(req),
         _ => throw new Exception($"Unsupported DAP message from client: {message}")
       };
     }
@@ -605,15 +608,30 @@ public class ClientMessageInterceptor(
 
   private SetBreakpointsRequest HandleBreakpointsRequest(SetBreakpointsRequest request)
   {
-    if (OperatingSystem.IsWindows())
-    {
-      request.Arguments.Source.Path = request.Arguments.Source.Path.Replace('/', '\\');
-      logger.LogDebug("[CLIENT] Normalized breakpoint path separators");
-    }
+    MapSourceToDebugger(request.Arguments.Source);
 
     logger.LogDebug("[CLIENT] Set breakpoints: {request}",
       JsonSerializer.Serialize(request, LoggingOptions));
     return request;
+  }
+
+  private void MapSourceToDebugger(Source source)
+  {
+    if (source.Path is { } path)
+    {
+      source.Path = _sourcePathMapper.MapClientToDebugger(path);
+
+      if (OperatingSystem.IsWindows())
+      {
+        source.Path = source.Path.Replace('/', '\\');
+        logger.LogDebug("[CLIENT] Normalized breakpoint path separators");
+      }
+    }
+
+    foreach (var nestedSource in source.Sources ?? [])
+    {
+      MapSourceToDebugger(nestedSource);
+    }
   }
 
   private ScopesRequest HandleScopesRequest(ScopesRequest request, IDebuggerProxy proxy)
@@ -666,6 +684,19 @@ public class ClientMessageInterceptor(
       onConfigurationDone();
     }
     logger.LogDebug("[CLIENT] Request: {command}", request.Command);
+    return request;
+  }
+
+  private Request HandleRequest(Request request)
+    => LogAndPassthrough(RewriteRequestSources(request));
+
+  private Request RewriteRequestSources(Request request)
+  {
+    if (request.Arguments is { } arguments)
+    {
+      request.Arguments = _sourcePathMapper.RewriteClientSources(arguments);
+    }
+
     return request;
   }
 }

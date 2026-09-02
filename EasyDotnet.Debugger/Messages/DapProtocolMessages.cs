@@ -70,21 +70,32 @@ public class SetBreakpointsRequest : Request
 
 public class SetBreakpointsArguments
 {
-  public required List<Breakpoint> Breakpoints { get; set; }
-  public required List<int> Lines { get; set; }
+  public List<Breakpoint>? Breakpoints { get; set; }
+  public List<int>? Lines { get; set; }
   public required Source Source { get; set; }
-  public required bool SourceModified { get; set; }
+  public bool? SourceModified { get; set; }
+
+  [JsonExtensionData]
+  public Dictionary<string, JsonElement>? ExtraProperties { get; set; }
 }
 
 public class Breakpoint
 {
   public required int Line { get; set; }
+
+  [JsonExtensionData]
+  public Dictionary<string, JsonElement>? ExtraProperties { get; set; }
 }
 
 public class Source
 {
-  public required string Name { get; set; }
-  public required string Path { get; set; }
+  public string? Name { get; set; }
+  public string? Path { get; set; }
+  public List<Source>? Sources { get; set; }
+  public JsonElement? AdapterData { get; set; }
+
+  [JsonExtensionData]
+  public Dictionary<string, JsonElement>? ExtraProperties { get; set; }
 }
 
 public class VariablesResponse : Response
