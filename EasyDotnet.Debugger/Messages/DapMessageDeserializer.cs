@@ -59,14 +59,13 @@ public static class DapMessageDeserializer
         return JsonSerializer.Deserialize<ErrorResponse>(root.GetRawText(), options)!;
       }
 
-      if (!root.TryGetProperty("command", out var cmdProp))
-      {
-        throw new JsonException(
-            $"Successful DAP response missing required property 'command': {root.GetRawText()}"
-        );
-      }
-
-      var cmd = cmdProp.GetString()?.ToLowerInvariant();
+      // A missing `command` is a protocol violation, but throwing here kills the read loop and takes
+      // the whole session with it. Debug engines do emit malformed responses (netcoredbg answers an
+      // unparseable request with neither `command` nor `request_seq`), so parse what we can and let
+      // the pipeline log and report it instead.
+      var cmd = root.TryGetProperty("command", out var cmdProp)
+        ? cmdProp.GetString()?.ToLowerInvariant()
+        : null;
 
       return cmd switch
       {

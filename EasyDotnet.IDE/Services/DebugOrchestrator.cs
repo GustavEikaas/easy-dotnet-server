@@ -3,6 +3,7 @@ using EasyDotnet.Debugger;
 using EasyDotnet.Debugger.Interfaces;
 using EasyDotnet.Debugger.Messages;
 using EasyDotnet.Debugger.Services;
+using EasyDotnet.IDE.DebuggerStrategies;
 using EasyDotnet.IDE.Interfaces;
 using EasyDotnet.IDE.Types;
 using Microsoft.Extensions.Logging;
@@ -40,6 +41,14 @@ public class DebugOrchestrator(
     ILogger<DebugOrchestrator> logger) : IDebugOrchestrator
 {
   private readonly ConcurrentDictionary<string, Debugger.DebugSession> _sessionServices = new();
+
+  /// <summary>
+  /// Budget for the whole DAP start handshake, from session start to the point we can resume the
+  /// debuggee. The engines bound themselves well below this (netcoredbg waits 5s for the runtime's
+  /// CreateProcess callback), so anything past it is a jam, not a slow machine. Without a bound, a
+  /// debuggee suspended by the startup hook stays suspended for as long as the session is open.
+  /// </summary>
+  private static readonly TimeSpan DebugSessionStartTimeout = TimeSpan.FromSeconds(20);
 
   public async Task<Debugger.DebugSession> StartClientDebugSessionAsync(
       string sessionKey,
@@ -166,13 +175,22 @@ public class DebugOrchestrator(
 
       _ = Task.Run(async () =>
       {
+        using var startBudget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        startBudget.CancelAfter(DebugSessionStartTimeout);
+
         try
         {
-          var proxy = await session.WaitForDebugSessionStartedAsync().WaitAsync(cancellationToken);
-          await ProbeDebuggerProcessAsync(proxy, cancellationToken);
+          var proxy = await session.WaitForDebugSessionStartedAsync().WaitAsync(startBudget.Token);
+          await ProbeDebuggerProcessAsync(proxy, startBudget.Token);
           strategy.OnDebugSessionReady(session, proxy);
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (OperationCanceledException)
+        {
+          await HandleStartTimeoutAsync(sessionKey, strategy);
+        }
         catch (Exception ex)
         {
           logger.LogError(ex, "Failed to wait for DAP debug session start");
@@ -235,6 +253,42 @@ public class DebugOrchestrator(
       logger.LogError(ex, "Error initializing debug session for {Label}.", label);
       await strategy.DisposeAsync();
       throw;
+    }
+  }
+
+  /// <summary>
+  /// The handshake never finished. Report it and tear the session down the same way a user-initiated
+  /// stop does; <see cref="RunInTerminalStrategy"/> kills a still-suspended debuggee on disposal.
+  /// </summary>
+  private async Task HandleStartTimeoutAsync(string sessionKey, IDebugSessionStrategy strategy)
+  {
+    var seconds = (int)DebugSessionStartTimeout.TotalSeconds;
+
+    logger.LogError(
+      "Debug session for {SessionKey} did not finish starting within {Seconds}s. Tearing it down.",
+      sessionKey,
+      seconds);
+
+    var message = strategy is RunInTerminalStrategy { RuntimeSuspended: true }
+      ? "Failed to resume app, debugger failed to attach"
+      : $"Debugger failed to start within {seconds}s";
+
+    try
+    {
+      await editorService.DisplayError(message);
+    }
+    catch (Exception ex)
+    {
+      logger.LogWarning(ex, "Failed to report debug session start timeout to the editor.");
+    }
+
+    try
+    {
+      await StopDebugSessionAsync(sessionKey);
+    }
+    catch (Exception ex)
+    {
+      logger.LogError(ex, "Failed to stop debug session {SessionKey} after start timeout.", sessionKey);
     }
   }
 
