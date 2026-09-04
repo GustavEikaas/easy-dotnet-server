@@ -22,10 +22,10 @@ inputs:
     description: 'SharpDbg.Cli dotnet tool version'
     required: true
     default: '0.1.17'
-  dncdbgArtifactsPath:
-    description: 'Path containing downloaded dncdbg platform artifacts'
-    required: false
-    default: ''
+  dncdbgVersion:
+    description: 'dncdbg release version'
+    required: true
+    default: '1.2.0'
 
 runs:
   using: "composite"
@@ -139,31 +139,41 @@ runs:
         test -f "$OUTPUT_PATH/SharpDbg.Cli.dll"
         echo "✓ Extracted SharpDbg to $OUTPUT_PATH"
 
-    - name: Copy dncdbg Assets
-      if: ${{ inputs.dncdbgArtifactsPath != '' }}
+    - name: Download and Extract dncdbg
       shell: bash
       run: |
-        DNCDBG_ARTIFACTS_PATH="${{ inputs.dncdbgArtifactsPath }}"
+        DNCDBG_VERSION="${{ inputs.dncdbgVersion }}"
         OUTPUT_PATH="${{ inputs.toolsOutputPath }}/dncdbg"
+        ARTIFACTS_DIR="artifacts/dncdbg"
+        BASE_URL="https://github.com/viewizard/dncdbg/releases/download/v${DNCDBG_VERSION}"
 
-        if [[ ! -d "$DNCDBG_ARTIFACTS_PATH" ]]; then
-          echo "::error::dncdbg artifacts path does not exist: $DNCDBG_ARTIFACTS_PATH"
-          exit 1
-        fi
-
+        mkdir -p "$ARTIFACTS_DIR"
         mkdir -p "$OUTPUT_PATH"
 
-        found=0
-        for artifact_dir in "$DNCDBG_ARTIFACTS_PATH"/easy-dotnet-dncdbg-*; do
-          if [[ ! -d "$artifact_dir" ]]; then
-            continue
+        declare -A assets=(
+          ["linux-x64"]="dncdbg-${DNCDBG_VERSION}-linux-x64.tar.gz"
+          ["linux-arm64"]="dncdbg-${DNCDBG_VERSION}-linux-arm64.tar.gz"
+          ["osx-x64"]="dncdbg-${DNCDBG_VERSION}-macos-x64.zip"
+          ["osx-arm64"]="dncdbg-${DNCDBG_VERSION}-macos-arm64.zip"
+          ["win-x64"]="dncdbg-${DNCDBG_VERSION}-windows-x64.zip"
+        )
+
+        for rid in "${!assets[@]}"; do
+          asset="${assets[$rid]}"
+          target_dir="$OUTPUT_PATH/$rid"
+          echo "Downloading dncdbg for $rid..."
+
+          curl -fL -o "$ARTIFACTS_DIR/$asset" "$BASE_URL/$asset"
+
+          mkdir -p "$ARTIFACTS_DIR/$rid" "$target_dir"
+          if [[ "$asset" == *.zip ]]; then
+            unzip -q "$ARTIFACTS_DIR/$asset" -d "$ARTIFACTS_DIR/$rid"
+          else
+            tar -xzf "$ARTIFACTS_DIR/$asset" -C "$ARTIFACTS_DIR/$rid"
           fi
 
-          rid="${artifact_dir##*/easy-dotnet-dncdbg-}"
-          target_dir="$OUTPUT_PATH/$rid"
-
-          mkdir -p "$target_dir"
-          cp -R "$artifact_dir"/. "$target_dir/"
+          cp -R "$ARTIFACTS_DIR/$rid/dncdbg/." "$target_dir/"
+          find "$target_dir" -name '._*' -delete
 
           if [[ "$rid" == win-* ]]; then
             test -f "$target_dir/dncdbg.exe"
@@ -172,12 +182,16 @@ runs:
             chmod +x "$target_dir/dncdbg"
           fi
 
-          test -f "$target_dir/ManagedPart.dll"
-          echo "✓ Copied dncdbg to $target_dir"
-          found=$((found + 1))
+          echo "✓ Extracted dncdbg to $target_dir"
         done
 
-        if [[ "$found" -eq 0 ]]; then
-          echo "::error::No dncdbg artifacts found under $DNCDBG_ARTIFACTS_PATH"
-          exit 1
-        fi
+        echo "Downloading dncdbg licenses..."
+        LICENSE_OUTPUT="$OUTPUT_PATH/licenses"
+        mkdir -p "$LICENSE_OUTPUT"
+        RAW_BASE="https://raw.githubusercontent.com/viewizard/dncdbg/v${DNCDBG_VERSION}"
+        curl -fL -o "$LICENSE_OUTPUT/dncdbg-LICENSE" "$RAW_BASE/LICENSE"
+        curl -fL -o "$LICENSE_OUTPUT/dotnet-diagnostics-LICENSE" "$RAW_BASE/third_party/diagnostics/LICENSE.TXT"
+        curl -fL -o "$LICENSE_OUTPUT/json-LICENSE" "$RAW_BASE/third_party/json/LICENSE.MIT"
+        curl -fL -o "$LICENSE_OUTPUT/tree-sitter-LICENSE" "$RAW_BASE/third_party/tree-sitter/LICENSE"
+        curl -fL -o "$LICENSE_OUTPUT/tree-sitter-c-sharp-LICENSE" "$RAW_BASE/third_party/tree-sitter-c-sharp/LICENSE"
+        echo "✓ Downloaded dncdbg licenses to $LICENSE_OUTPUT"
