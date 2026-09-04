@@ -8,7 +8,8 @@ namespace EasyDotnet.IDE.Workspace.BuildConfiguration;
 public sealed class WorkspaceBuildConfigurationService(
     IClientService clientService,
     ISolutionService solutionService,
-    SettingsService settingsService) : IWorkspaceBuildConfigurationService
+    SettingsService settingsService,
+    INotificationService notificationService) : IWorkspaceBuildConfigurationService
 {
   private const string DebugBuildType = "Debug";
   private const string ReleaseBuildType = "Release";
@@ -101,6 +102,10 @@ public sealed class WorkspaceBuildConfigurationService(
         solutionFile,
         previous,
         context.Active));
+
+    await notificationService.NotifyBuildConfigurationChanged(
+        context.Active.BuildType,
+        WorkspaceBuildConfigurationDisplay.ToDisplayName(context.Active, context.Available));
   }
 
   private ResolvedBuildConfiguration ResolveTarget(

@@ -244,7 +244,7 @@ public sealed class WorkspaceBuildConfigurationServiceTests : IDisposable
         NullLogger<SettingsService>.Instance);
 
     var solutionService = new SolutionService();
-    var service = new WorkspaceBuildConfigurationService(clientService, solutionService, settings);
+    var service = new WorkspaceBuildConfigurationService(clientService, solutionService, settings, new NoOpNotificationService());
     return new Harness(service, settings);
   }
 
@@ -344,6 +344,8 @@ EndGlobal
     public Task NotifyRunningProcessesChangedAsync(RunningSessionInfo[] projects) => Task.CompletedTask;
 
     public Task NotifyRoslynUpdateAvailable(string? currentVersion, string availableVersion, string minimumRecommendedVersion, bool isBelowRecommended) => Task.CompletedTask;
+
+    public Task NotifyBuildConfigurationChanged(string buildType, string displayName) => Task.CompletedTask;
 
   }
 

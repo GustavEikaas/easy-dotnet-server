@@ -10,6 +10,7 @@ using EasyDotnet.IDE.Sdk;
 using EasyDotnet.IDE.Services;
 using EasyDotnet.IDE.Settings;
 using EasyDotnet.IDE.Utils;
+using EasyDotnet.IDE.Workspace.BuildConfiguration;
 using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
 
@@ -24,6 +25,7 @@ public class InitializeController(
   UpdateCheckerService updateCheckerService,
   IProgressScopeFactory progressScopeFactory,
   SettingsService settingsService,
+  IWorkspaceBuildConfigurationService buildConfigurationService,
   ILogger<InitializeController> logger) : BaseController
 {
   [JsonRpcMethod("initialize")]
@@ -75,8 +77,32 @@ public class InitializeController(
     return new InitializeResponse(
         new ServerInfo("EasyDotnet", serverVersion.ToString()),
         new ServerCapabilities(GetRpcPaths(), GetRpcNotifications(), supportsSingleFileExecution),
-        new ToolPaths(await TryGetMsBuildPath(locator))
+        new ToolPaths(await TryGetMsBuildPath(locator)),
+        await TryGetBuildConfigurationAsync()
         );
+  }
+
+  private async Task<BuildConfigurationInfo?> TryGetBuildConfigurationAsync()
+  {
+    var solutionFile = clientService.ProjectInfo?.SolutionFile;
+    if (solutionFile is null)
+    {
+      return null;
+    }
+
+    try
+    {
+      var active = await buildConfigurationService.GetActiveConfigurationAsync();
+      var available = await buildConfigurationService.GetAvailableConfigurationsAsync();
+      return new BuildConfigurationInfo(
+          active.BuildType,
+          WorkspaceBuildConfigurationDisplay.ToDisplayName(active, available));
+    }
+    catch (Exception e)
+    {
+      logger.LogError(e, "Failed to resolve active build configuration");
+      return null;
+    }
   }
 
   private void LoadSolutionProjects(string solutionFile)

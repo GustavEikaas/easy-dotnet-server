@@ -14,6 +14,22 @@ public sealed record ResolvedBuildConfiguration(
     bool Deploy,
     bool UsedProjectMapping);
 
+public static class WorkspaceBuildConfigurationDisplay
+{
+  public static string ToDisplayName(
+      WorkspaceBuildConfiguration configuration,
+      IReadOnlyList<WorkspaceBuildConfiguration> available)
+  {
+    var platforms = available
+        .Select(x => x.Platform)
+        .Where(x => !string.IsNullOrWhiteSpace(x))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .Count();
+
+    return platforms > 1 ? configuration.DisplayName : configuration.BuildType;
+  }
+}
+
 public sealed record WorkspaceBuildConfigurationChangedEventArgs(
     string SolutionPath,
     WorkspaceBuildConfiguration Previous,
