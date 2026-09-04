@@ -12,7 +12,8 @@ public class DebugSessionFactory(ILoggerFactory loggerFactory) : IDebugSessionFa
     Func<InterceptableAttachRequest, IDebuggerProxy, Task<InterceptableAttachRequest>> attachRequestRewriter,
     bool applyValueConverters,
     bool memCpuUsage,
-    IVariableLocationResolver? variableLocationResolver = null)
+    IVariableLocationResolver? variableLocationResolver = null,
+    IReadOnlyDictionary<string, string>? automaticSourceFileMap = null)
   {
     var valueConverterService = new ValueConverterService(
       loggerFactory.CreateLogger<ValueConverterService>(),
@@ -27,6 +28,8 @@ public class DebugSessionFactory(ILoggerFactory loggerFactory) : IDebugSessionFa
     DebugSessionCoordinator? coordinator = null;
 
     var frameSourceTracker = variableLocationResolver is not null ? new FrameSourceTracker() : null;
+    var sourcePathMapper = new SourcePathMapper();
+    sourcePathMapper.Configure(automaticSourceFileMap ?? new Dictionary<string, string>());
 
     var clientInterceptor = new ClientMessageInterceptor(
       loggerFactory.CreateLogger<ClientMessageInterceptor>(),
@@ -34,7 +37,8 @@ public class DebugSessionFactory(ILoggerFactory loggerFactory) : IDebugSessionFa
       (a) => attachRequestRewriter(a, coordinator!.Proxy!),
       processId => coordinator?.NotifyDebugeeProcessStarted(processId),
       () => coordinator?.NotifyConfigurationDone(),
-      frameSourceTracker);
+      frameSourceTracker,
+      sourcePathMapper);
 
     var debuggerInterceptor = new DebuggerMessageInterceptor(
       loggerFactory.CreateLogger<DebuggerMessageInterceptor>(),
@@ -46,7 +50,8 @@ public class DebugSessionFactory(ILoggerFactory loggerFactory) : IDebugSessionFa
       (command, message) => coordinator?.NotifyDebugSessionStartFailed(command, message),
       exitCode => coordinator?.NotifyExited(exitCode),
       frameSourceTracker,
-      variableLocationResolver);
+      variableLocationResolver,
+      sourcePathMapper);
 
     coordinator = new DebugSessionCoordinator(
      loggerFactory.CreateLogger<DebugSessionCoordinator>(),

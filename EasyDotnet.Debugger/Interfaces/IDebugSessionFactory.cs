@@ -9,5 +9,6 @@ public interface IDebugSessionFactory
     Func<InterceptableAttachRequest, IDebuggerProxy, Task<InterceptableAttachRequest>> attachRequestRewriter,
     bool applyValueConverters,
     bool memCpuUsage,
-    IVariableLocationResolver? variableLocationResolver = null);
+    IVariableLocationResolver? variableLocationResolver = null,
+    IReadOnlyDictionary<string, string>? automaticSourceFileMap = null);
 }

@@ -16,5 +16,5 @@ public sealed record PropertyCacheEntry(
     List<InvalidationGlobEntry> InvalidationGlobs,
     long CreatedAtTicks)
 {
-  public const int CurrentSchemaVersion = 2;
+  public const int CurrentSchemaVersion = 3;
 }

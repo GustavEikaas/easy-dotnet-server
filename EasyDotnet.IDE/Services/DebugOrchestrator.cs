@@ -5,6 +5,7 @@ using EasyDotnet.Debugger.Messages;
 using EasyDotnet.Debugger.Services;
 using EasyDotnet.IDE.DebuggerStrategies;
 using EasyDotnet.IDE.Interfaces;
+using EasyDotnet.IDE.Project.Services;
 using EasyDotnet.IDE.Types;
 using Microsoft.Extensions.Logging;
 
@@ -38,9 +39,14 @@ public class DebugOrchestrator(
     IEditorService editorService,
     IClientService clientService,
     IVariableLocationResolver variableLocationResolver,
-    ILogger<DebugOrchestrator> logger) : IDebugOrchestrator
+    IProjectGraphService projectGraphService,
+    MsBuildSourcePathMapProvider sourcePathMapProvider,
+    ILogger<DebugOrchestrator> logger,
+    TimeSpan? automaticSourceFileMapWaitTimeout = null) : IDebugOrchestrator
 {
   private readonly ConcurrentDictionary<string, Debugger.DebugSession> _sessionServices = new();
+  private readonly TimeSpan _automaticSourceFileMapWaitTimeout =
+    automaticSourceFileMapWaitTimeout ?? TimeSpan.FromSeconds(5);
 
   /// <summary>
   /// Budget for the whole DAP start handshake, from session start to the point we can resume the
@@ -158,6 +164,7 @@ public class DebugOrchestrator(
       var (debuggerFileName, debuggerArguments) = DebuggerLocator.GetLaunchCommand(debuggerEngine, binaryPath);
       var applyValueConverters = debuggerEngine != DebuggerEngine.SharpDbg && (clientService?.ClientOptions?.DebuggerOptions?.ApplyValueConverters ?? false);
       var memCpuUsage = clientService?.ClientOptions?.DebuggerOptions?.MemCpuUsage ?? false;
+      var automaticSourceFileMap = await GetAutomaticSourceFileMapAsync(cancellationToken);
 
       var session = debugSessionFactory.Create(
           async (dapRequest, proxy) =>
@@ -167,7 +174,8 @@ public class DebugOrchestrator(
           },
           applyValueConverters,
           memCpuUsage,
-          variableLocationResolver);
+          variableLocationResolver,
+          automaticSourceFileMap);
 
       _sessionServices[sessionKey] = session;
 
@@ -289,6 +297,36 @@ public class DebugOrchestrator(
     catch (Exception ex)
     {
       logger.LogError(ex, "Failed to stop debug session {SessionKey} after start timeout.", sessionKey);
+    }
+  }
+
+  private async Task<IReadOnlyDictionary<string, string>> GetAutomaticSourceFileMapAsync(
+      CancellationToken cancellationToken)
+  {
+    using var mappingWaitCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+    mappingWaitCancellation.CancelAfter(_automaticSourceFileMapWaitTimeout);
+
+    try
+    {
+      var snapshot = await projectGraphService.WaitForCurrentLoadAsync(mappingWaitCancellation.Token);
+      return sourcePathMapProvider.GetMappings(snapshot);
+    }
+    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+    {
+      throw;
+    }
+    catch (OperationCanceledException exception)
+    {
+      logger.LogWarning(
+          exception,
+          "Project graph did not become available for automatic source path mapping within {Timeout}; continuing without it",
+          _automaticSourceFileMapWaitTimeout);
+      return new Dictionary<string, string>();
+    }
+    catch (Exception exception)
+    {
+      logger.LogWarning(exception, "Automatic source path mapping is unavailable; continuing without it");
+      return new Dictionary<string, string>();
     }
   }
 

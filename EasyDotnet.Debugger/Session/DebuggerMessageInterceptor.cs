@@ -16,12 +16,14 @@ public class DebuggerMessageInterceptor(
   Action<string, string?> onDebugSessionStartFailed,
   Action<int?>? onExited = null,
   FrameSourceTracker? frameSourceTracker = null,
-  IVariableLocationResolver? variableLocationResolver = null) : IDapMessageInterceptor
+  IVariableLocationResolver? variableLocationResolver = null,
+  SourcePathMapper? sourcePathMapper = null) : IDapMessageInterceptor
 
 {
   private readonly object _initializeGate = new();
   private Event? _heldInitializedEvent;
   private bool _initializeResponseForwarded;
+  private readonly SourcePathMapper _sourcePathMapper = sourcePathMapper ?? new SourcePathMapper();
 
   public async Task<ProtocolMessage?> InterceptAsync(
     ProtocolMessage message,
@@ -64,6 +66,11 @@ public class DebuggerMessageInterceptor(
   private async Task<ProtocolMessage?> HandleResponse(Response response, IDebuggerProxy proxy, CancellationToken cancellationToken)
   {
     logger.LogDebug("[DEBUGGER] Response: {command}", response.Command);
+
+    if (response.Body is { } body)
+    {
+      response.Body = _sourcePathMapper.RewriteDebuggerSources(body);
+    }
 
     TryReportDebugSessionStartState(response);
 
@@ -329,6 +336,11 @@ public class DebuggerMessageInterceptor(
 
   private Task<ProtocolMessage?> HandleEvent(Event evt)
   {
+    if (evt.Body is { } body)
+    {
+      evt.Body = _sourcePathMapper.RewriteDebuggerSources(body);
+    }
+
     if (evt.EventName == "initialized" && TryHoldInitializedEvent(evt))
     {
       logger.LogDebug("[DEBUGGER] Holding initialized event until the initialize response is forwarded");

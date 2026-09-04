@@ -1,0 +1,5 @@
+<Project>
+  <PropertyGroup>
+    <PathMap>$(MSBuildProjectDirectory)=imported/$(MSBuildProjectName)</PathMap>
+  </PropertyGroup>
+</Project>
