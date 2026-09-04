@@ -92,3 +92,5 @@ export EASY_DOTNET_DEBUGGER_BIN_PATH="/path/to/custom/netcoredbg"
 ```
 
 > **Note:** `dncdbg` support is experimental. Report bugs that are clearly specific to `dncdbg` in the `dncdbg` repository; report issues that affect `netcoredbg` or both projects upstream to `netcoredbg`.
+
+> **Note:** The bundled `dncdbg` binaries are prebuilt upstream releases and require Ubuntu 24.04+ (glibc 2.39+), macOS 13.3+, or Windows 10+. They will not run on older Linux distributions with older glibc versions.
