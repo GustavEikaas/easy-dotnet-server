@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json.Nodes;
 using EasyDotnet.BuildServer.Contracts;
 
 namespace EasyDotnet.BuildServer.SmokeTests.PropertyCache;
@@ -276,6 +277,39 @@ public sealed class PropertyCacheTests
 
     var stats = await h.GetStatsAsync();
     Assert.Equal(1, stats.Evaluations);
+  }
+
+  [Theory]
+  [MemberData(nameof(Targets))]
+  public async Task Cache_From_Previous_Property_Catalog_Is_Ignored_For_Null_Configuration(
+      string tfm,
+      string exe,
+      string[] leadingArgs)
+  {
+    _ = tfm;
+    await using var h = await PropertyCacheHarness.StartAsync(exe, leadingArgs);
+    var csproj = h.CreateSingleTfmProject();
+    var projectDir = Path.GetDirectoryName(csproj)!;
+    File.WriteAllText(
+        Path.Combine(projectDir, "Directory.Build.props"),
+        "<Project><PropertyGroup><PathMap>$(MSBuildProjectDirectory)=imported/$(MSBuildProjectName)</PathMap></PropertyGroup></Project>");
+
+    var initial = await h.EvaluateAsync(csproj, configuration: null);
+    Assert.Equal($"{projectDir}=imported/App", initial[0].Project!.Raw.PathMap);
+
+    var cacheFile = Assert.Single(Directory.GetFiles(h.CacheDir));
+    var cached = JsonNode.Parse(File.ReadAllText(cacheFile))!.AsObject();
+    cached["SchemaVersion"] = 2;
+    cached["Properties"]!.AsObject().Remove("PathMap");
+    File.WriteAllText(cacheFile, cached.ToJsonString());
+
+    await h.RestartServerAsync();
+    var result = await h.EvaluateAsync(csproj, configuration: null);
+
+    Assert.Equal($"{projectDir}=imported/App", result[0].Project!.Raw.PathMap);
+    var stats = await h.GetStatsAsync();
+    Assert.Equal(1, stats.Evaluations);
+    Assert.Equal(0, stats.DiskHits);
   }
 
   private static string ComputeDiskFileName(string projectFullPath, string configuration, string? platform, string targetFramework, string msBuildVersion)

@@ -523,6 +523,13 @@ public static class MsBuildProperties
           Deserialize: MsBuildValueParsers.AsString
       );
 
+  public static readonly MsBuildProperty<string?> PathMap =
+      new(
+          Name: "PathMap",
+          Description: "Maps physical source paths to source paths written to compiler output and debug information.",
+          Deserialize: MsBuildValueParsers.AsString
+      );
+
   public static readonly MsBuildProperty<string?> RestoreProjectStyle =
       new(
           Name: "RestoreProjectStyle",

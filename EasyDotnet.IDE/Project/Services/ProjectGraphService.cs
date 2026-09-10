@@ -12,13 +12,21 @@ public sealed record ProjectGraphSnapshot(
   IReadOnlyList<ValidatedDotnetProject> EvaluatedProjects,
   IReadOnlyList<ProjectEvaluationResult> FailedEvaluations);
 
+public interface IProjectGraphService
+{
+  Task<ProjectGraphSnapshot?> LoadSolutionAsync(string solutionFile, CancellationToken ct = default);
+  Task<ProjectGraphSnapshot?> WaitForCurrentLoadAsync(CancellationToken ct = default);
+}
+
 public class ProjectGraphService(
   ISolutionService solutionService,
   WorkspaceBuildHostManager workspaceBuildHostManager,
-  ILogger<ProjectGraphService> logger)
+  ILogger<ProjectGraphService> logger) : IProjectGraphService
 {
   private readonly object _sync = new();
   private ProjectGraphSnapshot? _snapshot;
+  private Task<ProjectGraphSnapshot?> _currentLoad = Task.FromResult<ProjectGraphSnapshot?>(null);
+  private long _loadGeneration;
 
   public ProjectGraphSnapshot? Snapshot
   {
@@ -31,7 +39,32 @@ public class ProjectGraphService(
     }
   }
 
-  public async Task LoadSolutionAsync(string solutionFile, CancellationToken ct = default)
+  public Task<ProjectGraphSnapshot?> LoadSolutionAsync(string solutionFile, CancellationToken ct = default)
+  {
+    lock (_sync)
+    {
+      _snapshot = null;
+      var generation = ++_loadGeneration;
+      _currentLoad = LoadSolutionCoreAsync(solutionFile, generation, ct);
+      return _currentLoad;
+    }
+  }
+
+  public async Task<ProjectGraphSnapshot?> WaitForCurrentLoadAsync(CancellationToken ct = default)
+  {
+    Task<ProjectGraphSnapshot?> currentLoad;
+    lock (_sync)
+    {
+      currentLoad = _currentLoad;
+    }
+
+    return await currentLoad.WaitAsync(ct);
+  }
+
+  private async Task<ProjectGraphSnapshot?> LoadSolutionCoreAsync(
+      string solutionFile,
+      long generation,
+      CancellationToken ct)
   {
     var solutionProjects = await solutionService.GetProjectsFromSolutionFile(solutionFile, ct);
     var projectPaths = solutionProjects.ConvertAll(x => x.AbsolutePath);
@@ -74,7 +107,10 @@ public class ProjectGraphService(
 
     lock (_sync)
     {
-      _snapshot = snapshot;
+      if (generation == _loadGeneration)
+      {
+        _snapshot = snapshot;
+      }
     }
 
     logger.LogInformation(
@@ -82,5 +118,7 @@ public class ProjectGraphService(
         solutionFile,
         evaluatedProjects.Count,
         failedEvaluations.Count);
+
+    return snapshot;
   }
 }

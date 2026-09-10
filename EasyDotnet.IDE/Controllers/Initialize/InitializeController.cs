@@ -18,7 +18,7 @@ namespace EasyDotnet.IDE.Controllers.Initialize;
 public class InitializeController(
   IClientService clientService,
   IVisualStudioLocator locator,
-  ProjectGraphService projectGraphService,
+  IProjectGraphService projectGraphService,
   SdkService sdkService,
   INotificationService notificationService,
   UpdateCheckerService updateCheckerService,
@@ -81,19 +81,21 @@ public class InitializeController(
 
   private void LoadSolutionProjects(string solutionFile)
   {
-    _ = Task.Run(async () =>
-        {
-          try
-          {
-            await projectGraphService.LoadSolutionAsync(solutionFile, CancellationToken.None);
-            await notificationService.NotifySolutionProjectsLoaded();
-          }
-          catch (Exception e)
-          {
-            logger.LogError(e, "Failed to load solution projects");
-          }
+    var load = projectGraphService.LoadSolutionAsync(solutionFile, CancellationToken.None);
+    _ = ObserveSolutionLoadAsync(load);
+  }
 
-        });
+  private async Task ObserveSolutionLoadAsync(Task<ProjectGraphSnapshot?> load)
+  {
+    try
+    {
+      await load;
+      await notificationService.NotifySolutionProjectsLoaded();
+    }
+    catch (Exception e)
+    {
+      logger.LogError(e, "Failed to load solution projects");
+    }
   }
 
   private static async Task<string?> TryGetMsBuildPath(IVisualStudioLocator locator)
