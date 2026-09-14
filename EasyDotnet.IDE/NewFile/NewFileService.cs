@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.IDE.Extensions;
 using EasyDotnet.IDE.Interfaces;
@@ -15,8 +16,21 @@ namespace EasyDotnet.IDE.NewFile;
 
 public class NewFileService(IBuildHostManager buildHostManager, IEditorService editorService)
 {
+  private static readonly ConcurrentDictionary<string, byte> _selfAuthoredFiles = new(StringComparer.Ordinal);
+
+  private static string NormalizePath(string filePath) => Path.GetFullPath(filePath);
+
+  private static void MarkSelfAuthored(string filePath) => _selfAuthoredFiles.TryAdd(NormalizePath(filePath), 0);
+
+  private static bool ClaimSelfAuthored(string filePath) => _selfAuthoredFiles.TryRemove(NormalizePath(filePath), out _);
+
   public async Task<bool> BootstrapFile(string filePath, Kind kind, bool preferFileScopedNamespace, CancellationToken cancellationToken)
   {
+    if (ClaimSelfAuthored(filePath))
+    {
+      return false;
+    }
+
     if (File.Exists(filePath) && new FileInfo(filePath).Length > 0)
     {
       return false;
@@ -81,7 +95,14 @@ public class NewFileService(IBuildHostManager buildHostManager, IEditorService e
     try
     {
       var content = await GenerateContentAsync(filePath, selection.Kind, preferFileScopedNamespace, cancellationToken);
-      await editorService.ApplyWorkspaceEdit(BuildEdit(filePath, content.ToFullString(), createFile: true));
+      var text = content.ToFullString();
+      if (!text.EndsWith('\n'))
+      {
+        text += "\n";
+      }
+
+      MarkSelfAuthored(filePath);
+      await File.WriteAllTextAsync(filePath, text, cancellationToken);
       await editorService.RequestOpenBuffer(filePath);
     }
     catch (Exception ex)
@@ -184,18 +205,12 @@ public class NewFileService(IBuildHostManager buildHostManager, IEditorService e
     return (Path.GetFileNameWithoutExtension(filePath).Split(".").First(), null, string.Empty);
   }
 
-  private static WorkspaceEdit BuildEdit(string filePath, string content, bool createFile = false)
+  private static WorkspaceEdit BuildEdit(string filePath, string content)
   {
     var uri = $"file://{filePath}";
     var textDocumentChange = DocumentChange.TextDocumentEdit(uri, [new TextEdit(new TextEditRange(new TextEditPosition(0, 0), new TextEditPosition(0, 0)), content)]);
 
-    if (!createFile)
-    {
-      return new([textDocumentChange]);
-    }
-
-    var createFileChange = DocumentChange.CreateFile(uri);
-    return new([createFileChange, textDocumentChange]);
+    return new([textDocumentChange]);
   }
 
   private static string? FindCsprojFromFile(string filePath)
