@@ -34,7 +34,7 @@ public abstract class NewFileCreateItemTests<TContainer> : ContainerTestBase<TCo
     rpc.AddLocalRpcTarget(new RpcHandlers(this), new JsonRpcTargetOptions { DisposeOnDisconnect = false });
 
   [Fact]
-  public async Task CreateItem_Record_CreatesMissingDirectoryAndOpensFileAfterWorkspaceEdit()
+  public async Task CreateItem_Record_CreatesMissingDirectoryAndWritesFileBeforeOpening()
   {
     using var ws = new TempWorkspaceBuilder()
       .WithSolutionX()
@@ -59,7 +59,10 @@ public abstract class NewFileCreateItemTests<TContainer> : ContainerTestBase<TCo
     Assert.Contains("public record Customer();", generatedCode);
     Assert.Empty(CSharpSyntaxTree.ParseText(generatedCode).GetDiagnostics());
     Assert.Equal(filePath, opened.Path);
-    Assert.Equal(["applyWorkspaceEdit", "openBuffer"], _calls.ToArray());
+    // The file must be written on disk before the editor opens it. Sending it as a create +
+    // text edit makes the client mutate a freshly loaded buffer, which can emit
+    // textDocument/didChange ahead of textDocument/didOpen and abort the Roslyn server.
+    Assert.Equal(["openBuffer"], _calls.ToArray());
   }
 
   [Fact]
