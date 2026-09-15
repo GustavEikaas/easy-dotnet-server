@@ -1,6 +1,7 @@
 <Project>
   <PropertyGroup>
     <LowestNetCoreTfm>net8.0</LowestNetCoreTfm>
+    <IdeTfm>net10.0</IdeTfm>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>

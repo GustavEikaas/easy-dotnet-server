@@ -1,7 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>$(LowestNetCoreTfm)</TargetFramework>
+    <TargetFramework>$(IdeTfm)</TargetFramework>
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 

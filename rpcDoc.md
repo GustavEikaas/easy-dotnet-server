@@ -502,5 +502,29 @@ _No parameters_
 
 **Returns:** `Task`
 
+### `terminal/input`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| jobId | Guid |   |
+| data | Byte[] |   |
+
+**Returns:** `Task`
+
+### `terminal/kill`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| jobId | Guid |   |
+
+**Returns:** `Task`
+
+### `terminal/resize`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| jobId | Guid |   |
+| cols | int |   |
+| rows | int |   |
+
+**Returns:** `Task`
+
 ---
 

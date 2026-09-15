@@ -31,7 +31,7 @@ public sealed class PtyTerminalService(
 
     pty.ProcessExited += (_, args) =>
     {
-      _sessions.TryRemove(jobId, out IPtyConnection? _);
+      _sessions.TryRemove(jobId, out var _removed);
       _ = jsonRpc.NotifyWithParameterObjectAsync("terminal/exit", new TerminalExitNotification(jobId, args.ExitCode));
       editorProcessManagerService.CompleteJob(jobId, args.ExitCode);
     };
