@@ -68,7 +68,7 @@ public class EditorService(
   private async Task<int> StartPtyJobAsync(Guid guid, RunCommand command, string? slotId, CancellationToken ct)
   {
     var terminal = await jsonRpc.InvokeWithParameterObjectAsync<TerminalOpenResponse>(
-        "terminal/open", new TerminalOpenRequest(guid, slotId, Path.GetFileName(command.Executable)), ct);
+        "terminal/open", new TerminalOpenRequest(guid, slotId, Path.GetFileName(command.Executable), command.Arguments), ct);
 
     return await ptyTerminalService.StartAsync(guid, command, terminal.Rows, terminal.Cols, ct);
   }

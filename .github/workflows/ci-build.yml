@@ -46,4 +46,4 @@ jobs:
           fi
 
       - name: ContainerTests
-        run: dotnet run --project ./EasyDotnet.ContainerTests/EasyDotnet.ContainerTests.csproj 
+        run: dotnet test EasyDotnet.ContainerTests

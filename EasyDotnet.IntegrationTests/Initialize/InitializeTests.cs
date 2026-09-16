@@ -17,14 +17,17 @@ public sealed record TestClientInfo(string Name, string? Version);
 
 public class InitializeTests
 {
-  public static readonly TestClientInfo DummyTestInfo = new("test", "3.0.0");
+  public static readonly string ClientVersion =
+      typeof(EasyDotnet.IDE.Controllers.Initialize.InitializeController).Assembly.GetName().Version!.ToString();
+
+  public static readonly TestClientInfo DummyTestInfo = new("test", ClientVersion);
 
   [Fact]
   public async Task InitializeShouldPass()
   {
     using var server = RpcTestServerInstantiator.GetUninitializedStreamServer();
 
-    var res = await server.InvokeWithParameterObjectAsync<TestInitializeResponse>("initialize", new List<TestInitializeRequest>() { new(new TestClientInfo("test", "3.0.0"), new TestProjectInfo(Path.GetTempPath())) });
+    var res = await server.InvokeWithParameterObjectAsync<TestInitializeResponse>("initialize", new List<TestInitializeRequest>() { new(DummyTestInfo, new TestProjectInfo(Path.GetTempPath())) });
 
     Assert.NotNull(res);
     Assert.NotNull(res.ServerInfo);

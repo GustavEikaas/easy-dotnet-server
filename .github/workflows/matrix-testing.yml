@@ -28,7 +28,7 @@ jobs:
         run: dotnet build
 
       - name: Test
-        run: dotnet run --no-build --project ./EasyDotnet.IntegrationTests/EasyDotnet.IntegrationTests.csproj
+        run: dotnet test --no-build ./EasyDotnet.IntegrationTests/EasyDotnet.IntegrationTests.csproj
 
       - name: BuildServer Smoke Tests
         run: dotnet test --no-build ./EasyDotnet.BuildServer.SmokeTests/EasyDotnet.BuildServer.SmokeTests.csproj

@@ -2,7 +2,6 @@
 
   <PropertyGroup>
     <TargetFramework>$(IdeTfm)</TargetFramework>
-    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
