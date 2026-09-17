@@ -6,7 +6,7 @@ namespace EasyDotnet.BuildServer.SmokeTests.Futd;
 public sealed class FutdTests
 {
   public static IEnumerable<object[]> Targets() => PropertyCacheHarness.Targets();
-  public static IEnumerable<object[]> FutdTargets() => PropertyCacheHarness.Targets().Where(t => string.Equals((string)t[0], "net8.0", StringComparison.OrdinalIgnoreCase));
+  public static IEnumerable<object[]> FutdTargets() => PropertyCacheHarness.Targets().Where(t => string.Equals((string)t[0], "net10.0", StringComparison.OrdinalIgnoreCase));
 
   private static async Task RestoreAsync(BuildServerProcess srv, string projectPath)
   {
