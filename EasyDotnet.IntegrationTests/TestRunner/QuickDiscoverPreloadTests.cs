@@ -49,7 +49,7 @@ public class GreetingTests
     using var server = RpcTestServerInstantiator.GetUninitializedStreamServer();
     await server.InvokeWithParameterObjectAsync<TestInitializeResponse>(
         "initialize",
-        new List<TestInitializeRequest> { new(new TestClientInfo("test", "3.0.0"), new TestProjectInfo(_root)) });
+        new List<TestInitializeRequest> { new(InitializeTests.DummyTestInfo, new TestProjectInfo(_root)) });
 
     await server.InvokeWithParameterObjectAsync<object>(
         "testrunner/quickDiscover",

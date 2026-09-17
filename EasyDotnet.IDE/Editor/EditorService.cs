@@ -19,6 +19,7 @@ public class EditorService(
   IClientService clientService,
   IAppWrapperManager appWrapperManager,
   IPickerService pickerService,
+  IPtyTerminalService ptyTerminalService,
   JsonRpc jsonRpc) : IEditorService
 {
   public async Task DisplayError(string message) =>
@@ -54,15 +55,22 @@ public class EditorService(
     var guid = editorProcessManagerService.RegisterJob(TerminalSlot.Managed);
     try
     {
-      _ = await jsonRpc.InvokeWithParameterObjectAsync<RunCommandResponse>(
-          "runCommandManaged", new TrackedJob(guid, command), ct);
+      await StartPtyJobAsync(guid, command, null, ct);
     }
-    catch (RemoteInvocationException e)
+    catch (Exception e)
     {
       editorProcessManagerService.SetFailedToStart(guid, TerminalSlot.Managed, e.Message);
       throw;
     }
     return await editorProcessManagerService.WaitForExitAsync(guid, TerminalSlot.Managed);
+  }
+
+  private async Task<int> StartPtyJobAsync(Guid guid, RunCommand command, string? slotId, CancellationToken ct)
+  {
+    var terminal = await jsonRpc.InvokeWithParameterObjectAsync<TerminalOpenResponse>(
+        "terminal/open", new TerminalOpenRequest(guid, slotId, Path.GetFileName(command.Executable), command.Arguments), ct);
+
+    return await ptyTerminalService.StartAsync(guid, command, terminal.Rows, terminal.Cols, ct);
   }
 
   public async Task<Guid> StartRunProjectAsync(RunProjectRequest request, CancellationToken ct = default)
@@ -82,8 +90,8 @@ public class EditorService(
       {
         var projectName = request.Project.ProjectName ?? Path.GetFileNameWithoutExtension(request.Project.MSBuildProjectFullPath);
         var slotId = $"run:{projectName}";
-        var res = await jsonRpc.InvokeWithParameterObjectAsync<RunCommandResponse>("runCommandManaged", new TrackedJob(guid, command, slotId), ct);
-        request.OnPidReceived?.Invoke(res.ProcessId);
+        var pid = await StartPtyJobAsync(guid, command, slotId, ct);
+        request.OnPidReceived?.Invoke(pid);
       }
     }
     catch (Exception e)
@@ -100,10 +108,9 @@ public class EditorService(
     var guid = editorProcessManagerService.RegisterJob(TerminalSlot.Managed);
     try
     {
-      _ = await jsonRpc.InvokeWithParameterObjectAsync<RunCommandResponse>(
-          "runCommandManaged", new TrackedJob(guid, command), ct);
+      await StartPtyJobAsync(guid, command, null, ct);
     }
-    catch (RemoteInvocationException e)
+    catch (Exception e)
     {
       editorProcessManagerService.SetFailedToStart(guid, TerminalSlot.Managed, e.Message);
       throw;

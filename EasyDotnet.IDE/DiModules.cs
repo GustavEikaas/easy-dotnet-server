@@ -83,6 +83,7 @@ public static class DiModules
     services.AddSingleton<SettingsService>();
     services.AddSingleton<SettingsGarbageCollector>();
     services.AddSingleton<IEditorProcessManagerService, EditorProcessManagerService>();
+    services.AddSingleton<IPtyTerminalService, PtyTerminalService>();
     services.AddSingleton<IEditorService, EditorService>();
     services.AddSingleton<IPickerScopeRegistry, PickerScopeRegistry>();
     services.AddSingleton<PickerScopeFactory>();
