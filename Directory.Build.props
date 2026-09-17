@@ -1,9 +1,12 @@
 <Project>
   <PropertyGroup>
-    <LowestNetCoreTfm>net8.0</LowestNetCoreTfm>
+    <LowestNetCoreTfm>net10.0</LowestNetCoreTfm>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <NoWarn>NU1901</NoWarn>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="MessagePack" Version="2.5.302" />
+  </ItemGroup>
 </Project>

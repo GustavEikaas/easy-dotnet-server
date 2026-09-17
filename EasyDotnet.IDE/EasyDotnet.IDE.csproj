@@ -17,7 +17,7 @@
   <ItemGroup>
     <None Include="..\LICENSE" Pack="true" PackagePath="" />
     <None Include="..\README.md" Pack="true" PackagePath="" />
-    <None Include="bin\Release\net8.0\Tools\**\*" Pack="true" PackagePath="tools/" Exclude="bin\Release\net8.0\Tools\BuildServer\**\*;bin\Release\net8.0\Tools\Roslyn\LanguageServer\**\*" />
+    <None Include="bin\Release\$(LowestNetCoreTfm)\Tools\**\*" Pack="true" PackagePath="tools/" Exclude="bin\Release\$(LowestNetCoreTfm)\Tools\BuildServer\**\*;bin\Release\$(LowestNetCoreTfm)\Tools\Roslyn\LanguageServer\**\*" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="DotNetOutdatedTool.Core" Version="4.6.8" />
@@ -66,8 +66,8 @@
     <PropertyGroup>
       <AspireOutputPath>$(OutputPath)Tools\Aspire\</AspireOutputPath>
     </PropertyGroup>
-    <Message Text="Publishing Aspire host for net8.0..." Importance="high" />
-    <MSBuild Projects="..\EasyDotnet.Aspire\EasyDotnet.Aspire.csproj" Targets="Publish" Properties="TargetFramework=net8.0;Configuration=$(Configuration);PublishDir=$(MSBuildProjectDirectory)\$(AspireOutputPath)net8.0\;SelfContained=false" />
+    <Message Text="Publishing Aspire host for $(LowestNetCoreTfm)..." Importance="high" />
+    <MSBuild Projects="..\EasyDotnet.Aspire\EasyDotnet.Aspire.csproj" Targets="Publish" Properties="TargetFramework=$(LowestNetCoreTfm);Configuration=$(Configuration);PublishDir=$(MSBuildProjectDirectory)\$(AspireOutputPath)$(LowestNetCoreTfm)\;SelfContained=false" />
     <Message Text="Aspire host publish complete at $(AspireOutputPath)" Importance="high" />
   </Target>
 
@@ -75,8 +75,8 @@
     <PropertyGroup>
       <AppWrapperOutputPath>$(OutputPath)Tools\AppWrapper\</AppWrapperOutputPath>
     </PropertyGroup>
-    <Message Text="Publishing AppWrapper for net8.0..." Importance="high" />
-    <MSBuild Projects="..\EasyDotnet.AppWrapper\EasyDotnet.AppWrapper.csproj" Targets="Publish" Properties="TargetFramework=net8.0;Configuration=$(Configuration);PublishDir=$(MSBuildProjectDirectory)\$(AppWrapperOutputPath)net8.0\;SelfContained=false" />
+    <Message Text="Publishing AppWrapper for $(LowestNetCoreTfm)..." Importance="high" />
+    <MSBuild Projects="..\EasyDotnet.AppWrapper\EasyDotnet.AppWrapper.csproj" Targets="Publish" Properties="TargetFramework=$(LowestNetCoreTfm);Configuration=$(Configuration);PublishDir=$(MSBuildProjectDirectory)\$(AppWrapperOutputPath)$(LowestNetCoreTfm)\;SelfContained=false" />
     <Message Text="AppWrapper publish complete at $(AppWrapperOutputPath)" Importance="high" />
   </Target>
 
@@ -85,8 +85,8 @@
       <BuildServerOutputPath>$(OutputPath)Tools\BuildServer\</BuildServerOutputPath>
     </PropertyGroup>
 
-    <Message Text="Publishing BuildServer for net8.0..." Importance="high" />
-    <MSBuild Projects="..\EasyDotnet.BuildServer\EasyDotnet.BuildServer.csproj" Targets="Publish" Properties="TargetFramework=net8.0;Configuration=$(Configuration);PublishDir=$(MSBuildProjectDirectory)\$(BuildServerOutputPath)net8.0\;SelfContained=false" />
+    <Message Text="Publishing BuildServer for $(LowestNetCoreTfm)..." Importance="high" />
+    <MSBuild Projects="..\EasyDotnet.BuildServer\EasyDotnet.BuildServer.csproj" Targets="Publish" Properties="TargetFramework=$(LowestNetCoreTfm);Configuration=$(Configuration);PublishDir=$(MSBuildProjectDirectory)\$(BuildServerOutputPath)$(LowestNetCoreTfm)\;SelfContained=false" />
 
     <Message Text="Publishing BuildServer for net472..." Importance="high" />
     <MSBuild Projects="..\EasyDotnet.BuildServer\EasyDotnet.BuildServer.csproj" Targets="Publish" Properties="TargetFramework=net472;Configuration=$(Configuration);PublishDir=$(MSBuildProjectDirectory)\$(BuildServerOutputPath)net472\;SelfContained=false" />

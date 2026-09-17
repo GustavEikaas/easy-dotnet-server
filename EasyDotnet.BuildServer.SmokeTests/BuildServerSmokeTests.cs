@@ -9,10 +9,10 @@ public sealed class BuildServerSmokeTests
   {
     var baseDir = AppContext.BaseDirectory;
 
-    var net8Dll = Path.Combine(baseDir, "BuildServer", "net8.0", "EasyDotnet.BuildServer.dll");
+    var net8Dll = Path.Combine(baseDir, "BuildServer", "net10.0", "EasyDotnet.BuildServer.dll");
     if (File.Exists(net8Dll))
     {
-      yield return new object[] { "net8.0", "dotnet", new[] { net8Dll } };
+      yield return new object[] { "net10.0", "dotnet", new[] { net8Dll } };
     }
 
     if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))

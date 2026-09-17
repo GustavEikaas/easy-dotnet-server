@@ -33,7 +33,7 @@ public static class CertificateFactory
 
     // Re-import via PFX so the key is usable by Kestrel across platforms.
     var pfx = ephemeral.Export(X509ContentType.Pfx);
-    var serverCert = new X509Certificate2(pfx);
+    var serverCert = X509CertificateLoader.LoadPkcs12(pfx, password: null);
 
     var certBase64 = Convert.ToBase64String(ephemeral.Export(X509ContentType.Cert));
     var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));

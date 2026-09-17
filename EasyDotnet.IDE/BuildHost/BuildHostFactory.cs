@@ -225,10 +225,10 @@ public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService c
     public static string GetBuildServerCore()
     {
 #if DEBUG
-      return Path.Join(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!, "../../../../EasyDotnet.BuildServer/bin/Debug/net8.0/EasyDotnet.BuildServer.dll");
+      return Path.Join(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!, "../../../../EasyDotnet.BuildServer/bin/Debug/net10.0/EasyDotnet.BuildServer.dll");
 #else
       var basedir = GetBaseDir();
-      return Path.Combine(basedir, "net8.0", "EasyDotnet.BuildServer.dll");
+      return Path.Combine(basedir, "net10.0", "EasyDotnet.BuildServer.dll");
 #endif
     }
 
