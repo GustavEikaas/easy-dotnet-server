@@ -132,6 +132,13 @@ public abstract class WorkspaceBuildTestBase<TContainer> : ContainerTestBase<TCo
     IsNotReceived(_runCommands.Reader);
 
   /// <summary>
+  /// Takes a queued <c>quickfix/set</c> notification without waiting or draining other channels.
+  /// Call this only after the active RPC scope has completed.
+  /// </summary>
+  protected bool TryReceiveQuickFixSet(out TestQuickFixItem[] items) =>
+    _quickFixSets.Reader.TryRead(out items!);
+
+  /// <summary>
   /// Returns true if no <c>quickfix/set</c> notification is queued in the channel.
   /// Call this only after the active RPC scope has completed.
   /// </summary>
