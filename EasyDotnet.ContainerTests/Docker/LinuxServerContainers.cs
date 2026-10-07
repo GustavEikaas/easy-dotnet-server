@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using DotNet.Testcontainers.Builders;
 
 namespace EasyDotnet.ContainerTests.Docker;
@@ -69,6 +70,32 @@ public sealed class Sdk10LinuxContainer() : LinuxServerContainer("mcr.microsoft.
   public override int SdkMajorVersion => 10;
 }
 
+public abstract class DockerfileLinuxServerContainer(string dockerfile) : LinuxServerContainer("placeholder")
+{
+  private static readonly ConcurrentDictionary<string, Lazy<Task<string>>> _builtImages = new();
+  private string? _builtImageName;
+
+  protected override string Image => _builtImageName ?? throw new InvalidOperationException($"Image for {dockerfile} has not been built yet; OnBeforeStartAsync must run first.");
+
+  protected override async Task OnBeforeStartAsync(CancellationToken ct) =>
+    _builtImageName = await _builtImages.GetOrAdd(dockerfile, f => new Lazy<Task<string>>(() => BuildImageAsync(f))).Value;
+
+  private static async Task<string> BuildImageAsync(string dockerfile)
+  {
+    var dockerfileDir = Path.GetFullPath(Path.Combine(
+      AppContext.BaseDirectory, "..", "..", "..", "..",
+      "EasyDotnet.ContainerTests", "Docker"));
+
+    var image = new ImageFromDockerfileBuilder()
+      .WithDockerfileDirectory(dockerfileDir)
+      .WithDockerfile(dockerfile)
+      .Build();
+
+    await image.CreateAsync();
+    return image.FullName;
+  }
+}
+
 /// <summary>
 /// A container with both .NET 8 and .NET 10 SDKs and runtimes installed.
 /// .NET 10 is the default (highest) SDK; .NET 8 is also present.
@@ -76,43 +103,21 @@ public sealed class Sdk10LinuxContainer() : LinuxServerContainer("mcr.microsoft.
 /// --fx-version picks .NET 10, reproducing the real-world failure where the IDE's
 /// BuildHostFactory ignores the workspace global.json and the process lands on .NET 10.
 /// </summary>
-public sealed class MultiSdkLinuxContainer() : LinuxServerContainer("placeholder")
+public sealed class MultiSdkLinuxContainer() : DockerfileLinuxServerContainer("Dockerfile.multisdk")
 {
-  private static readonly SemaphoreSlim _buildLock = new(1, 1);
-  private static string? _builtImageName;
   public override int SdkMajorVersion => 10;
-  protected override string Image => _builtImageName ?? throw new InvalidOperationException("MultiSdkLinuxContainer image has not been built yet; OnBeforeStartAsync must run first.");
 
   protected override ContainerBuilder ConfigureContainer(ContainerBuilder builder) =>
     base.ConfigureContainer(builder)
       .WithEnvironment("DOTNET_ROLL_FORWARD", "LatestMajor");
+}
 
-  protected override async Task OnBeforeStartAsync(CancellationToken ct)
-  {
-    if (_builtImageName is not null)
-      return;
-
-    await _buildLock.WaitAsync(ct);
-    try
-    {
-      if (_builtImageName is not null)
-        return;
-
-      var dockerfileDir = Path.GetFullPath(Path.Combine(
-        AppContext.BaseDirectory, "..", "..", "..", "..",
-        "EasyDotnet.ContainerTests", "Docker"));
-
-      var image = new ImageFromDockerfileBuilder()
-        .WithDockerfileDirectory(dockerfileDir)
-        .WithDockerfile("Dockerfile.multisdk")
-        .Build();
-
-      await image.CreateAsync(ct);
-      _builtImageName = image.FullName;
-    }
-    finally
-    {
-      _buildLock.Release();
-    }
-  }
+/// <summary>
+/// A container with the stable .NET 10 SDK and the .NET 11 RC SDK installed side by side.
+/// Unlike <see cref="MultiSdkLinuxContainer"/> no roll-forward env vars are set, so it mirrors a
+/// developer machine that has just installed a preview SDK.
+/// </summary>
+public sealed class RcSdkLinuxContainer() : DockerfileLinuxServerContainer("Dockerfile.rcsdk")
+{
+  public override int SdkMajorVersion => 11;
 }

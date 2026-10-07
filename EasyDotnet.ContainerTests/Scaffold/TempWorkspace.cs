@@ -42,6 +42,7 @@ public sealed class TempWorkspaceBuilder
   private string? _singleFileRelativePath;
   private string? _globalJsonSdkVersion;
   private string? _globalJsonRollForward;
+  private bool? _globalJsonAllowPrerelease;
   private bool _mtpRunnerGlobalJson;
   private string? _localNugetFeedDir;
 
@@ -92,6 +93,16 @@ public sealed class TempWorkspaceBuilder
   {
     _globalJsonSdkVersion = sdkVersion;
     _globalJsonRollForward = rollForward;
+    return this;
+  }
+
+  /// <summary>
+  /// Writes a <c>global.json</c> at the workspace root that only sets <c>allowPrerelease</c>,
+  /// leaving SDK selection to the latest installed SDK that satisfies it.
+  /// </summary>
+  public TempWorkspaceBuilder WithGlobalJsonAllowPrerelease(bool allowPrerelease)
+  {
+    _globalJsonAllowPrerelease = allowPrerelease;
     return this;
   }
 
@@ -178,7 +189,7 @@ public sealed class TempWorkspaceBuilder
       if (spec.IsFullTestProject)
         WriteFullTestProject(dir, spec.Name, spec.IsMtp);
       else
-        WriteProject(dir, spec.Name, spec.Builder.OutputType, spec.Builder.ExtraProperties);
+        WriteProject(dir, spec.Name, spec.Builder.OutputType, spec.Builder.ExtraProperties, spec.Builder.TargetFramework);
       if (spec.Builder.LaunchSettingsJson is not null)
         TempProject.WriteLaunchSettingsTo(dir, spec.Builder.LaunchSettingsJson);
       projectMap[spec.Name] = new TempProject(dir, spec.Name);
@@ -212,6 +223,15 @@ public sealed class TempWorkspaceBuilder
         }
         """);
 
+    if (_globalJsonAllowPrerelease is { } allowPrerelease)
+      File.WriteAllText(Path.Combine(root, "global.json"), $$"""
+        {
+          "sdk": {
+            "allowPrerelease": {{(allowPrerelease ? "true" : "false")}}
+          }
+        }
+        """);
+
     if (_mtpRunnerGlobalJson)
       File.WriteAllText(Path.Combine(root, "global.json"), """
         {
@@ -224,14 +244,14 @@ public sealed class TempWorkspaceBuilder
     return new TempWorkspace(root, solutionPaths, projectMap, singleFilePath, localFeedDir);
   }
 
-  private static void WriteProject(string dir, string name, string outputType = "Exe", string? extraProperties = null)
+  private static void WriteProject(string dir, string name, string outputType = "Exe", string? extraProperties = null, string targetFramework = "net8.0")
   {
     var extra = extraProperties is not null ? $"\n          {extraProperties}" : string.Empty;
     File.WriteAllText(Path.Combine(dir, $"{name}.csproj"), $"""
       <Project Sdk="Microsoft.NET.Sdk">
         <PropertyGroup>
           <OutputType>{outputType}</OutputType>
-          <TargetFramework>net8.0</TargetFramework>
+          <TargetFramework>{targetFramework}</TargetFramework>
           <Nullable>enable</Nullable>
           <ImplicitUsings>enable</ImplicitUsings>{extra}
         </PropertyGroup>
@@ -427,6 +447,7 @@ public sealed class TempProjectBuilder
   internal string? LaunchSettingsJson { get; private set; }
   internal string OutputType { get; private set; } = "Exe";
   internal string? ExtraProperties { get; private set; }
+  internal string TargetFramework { get; private set; } = "net8.0";
 
   public TempProjectBuilder WithLaunchSettings(string json)
   {
@@ -441,6 +462,12 @@ public sealed class TempProjectBuilder
   public TempProjectBuilder AsLibrary()
   {
     OutputType = "Library";
+    return this;
+  }
+
+  public TempProjectBuilder WithTargetFramework(string targetFramework)
+  {
+    TargetFramework = targetFramework;
     return this;
   }
 

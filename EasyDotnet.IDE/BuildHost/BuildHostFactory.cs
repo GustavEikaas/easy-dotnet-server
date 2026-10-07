@@ -7,6 +7,7 @@ using EasyDotnet.IDE.Utils;
 using Microsoft.Build.Locator;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Serialization;
+using NuGet.Versioning;
 using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.BuildHost;
@@ -93,6 +94,12 @@ public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService c
     else
     {
       startInfo.FileName = "dotnet";
+      // RollForward=LatestMajor does not roll forward to prerelease runtimes, so without this the BuildServer
+      // stays on the newest stable runtime, registers that SDK's MSBuild and fails preview TFMs with NETSDK1045.
+      // Roslyn does the same for its BuildHost:
+      // https://github.com/dotnet/roslyn/blob/056f6133055700b50e4985335f0d517debbacca5/src/Workspaces/MSBuild/Core/MSBuild/BuildHostProcessManager.cs#L256-L258
+      // GustavEikaas/easy-dotnet.nvim#1070
+      startInfo.Environment["DOTNET_ROLL_FORWARD_TO_PRERELEASE"] = "1";
       var fxVersionArg = ResolveFxVersionArg();
 #if DEBUG
       startInfo.Arguments = $"exec {fxVersionArg}\"{BuildHostLocator.GetBuildServerCore()}\" --pipe \"{pipeName}\" --log-level=Verbose{msBuildWorkingDirectoryArg}";
@@ -144,15 +151,20 @@ public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService c
     {
       var slnDir = ResolveMsBuildWorkingDirectory();
       var globalJson = slnDir != null ? globalJsonService.GetGlobalJson(slnDir) : globalJsonService.GetGlobalJson();
-      var versionStr = globalJson?.Sdk?.Version;
-      if (string.IsNullOrEmpty(versionStr))
-        return "";
-
-      var dotIndex = versionStr.IndexOf('.');
-      if (dotIndex < 0 || !int.TryParse(versionStr[..dotIndex], out var major) || major <= 0)
+      if (globalJson?.Sdk is null)
         return "";
 
       MSBuildLocator.AllowQueryAllRuntimeVersions = true;
+
+      // A global.json without a version (e.g. only allowPrerelease: false) still constrains SDK selection,
+      // so use the SDK the host resolves for the directory instead of letting the BuildServer roll forward past it.
+      var versionStr = globalJson.Sdk.Version;
+      var major = string.IsNullOrEmpty(versionStr)
+          ? ResolveHostSdkVersion(slnDir)?.Major ?? 0
+          : ParseMajor(versionStr);
+      if (major <= 0)
+        return "";
+
       var sdkInstance = MSBuildLocator.QueryVisualStudioInstances()
           .Where(i => i.DiscoveryType == DiscoveryType.DotNetSdk && i.Version.Major == major)
           .OrderByDescending(i => i.Version)
@@ -162,17 +174,19 @@ public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService c
       var dotnetRoot = DeriveDotnetRoot(sdkInstance.MSBuildPath);
       var runtimeDir = Path.Combine(dotnetRoot, "shared", "Microsoft.NETCore.App");
 
+      // Runtime folders may be prerelease (11.0.0-rc.1.25451.107), which System.Version cannot parse.
+      // NuGetVersion orders stable above prerelease of the same version.
       var best = (Directory.Exists(runtimeDir)
           ? Directory.EnumerateDirectories(runtimeDir)
-              .Select(d => Version.TryParse(Path.GetFileName(d), out var v) ? v : null)
-              .OfType<Version>()
+              .Select(d => NuGetVersion.TryParse(Path.GetFileName(d), out var v) ? v : null)
+              .OfType<NuGetVersion>()
               .Where(v => v.Major == major)
-              .MaxBy(v => v)
+              .Max()
           : null)
           ?? throw new InvalidOperationException($"global.json requires .NET {major} but no matching runtime was found under '{runtimeDir}'. Install the .NET {major} runtime and try again.");
 
       logger.LogInformation("global.json requires .NET {Major}; pinning BuildServer to --fx-version {Version}", major, best);
-      return $"--fx-version {best} ";
+      return $"--fx-version {best.OriginalVersion} ";
     }
     catch (InvalidOperationException)
     {
@@ -184,6 +198,24 @@ public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService c
       return "";
     }
   }
+
+  private static int ParseMajor(string version)
+  {
+    var dotIndex = version.IndexOf('.');
+    return dotIndex > 0 && int.TryParse(version[..dotIndex], out var major) ? major : 0;
+  }
+
+  /// <summary>
+  /// Returns the SDK the dotnet host resolves for <paramref name="workingDirectory"/>, honoring global.json.
+  /// MSBuildLocator yields that SDK first when a working directory is given.
+  /// </summary>
+  private static Version? ResolveHostSdkVersion(string? workingDirectory) =>
+      MSBuildLocator.QueryVisualStudioInstances(new VisualStudioInstanceQueryOptions
+      {
+        DiscoveryTypes = DiscoveryType.DotNetSdk,
+        WorkingDirectory = workingDirectory ?? Environment.CurrentDirectory
+      })
+      .FirstOrDefault()?.Version;
 
   /// <summary>
   /// Derives the dotnet install root from an MSBuildPath such as
