@@ -100,6 +100,8 @@ public static class DiModules
     services.AddSingleton<ProjectEvaluationCache>();
     services.AddSingleton<WorkspaceBuildHostManager>();
     services.AddSingleton<ProjectGraphService>();
+    services.AddSingleton<IProjectGraphService>(services => services.GetRequiredService<ProjectGraphService>());
+    services.AddSingleton<MsBuildSourcePathMapProvider>();
     services.AddSingleton<SdkService>();
 
     services.AddSingleton<TestRunnerService>();

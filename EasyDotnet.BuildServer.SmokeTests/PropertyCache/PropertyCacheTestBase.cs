@@ -50,7 +50,7 @@ internal sealed class PropertyCacheHarness : IAsyncDisposable
   public async Task<PropertyCacheDiagnosticsResponse> GetStatsAsync()
       => await Server.Rpc.InvokeAsync<PropertyCacheDiagnosticsResponse>("diagnostics/property-cache");
 
-  public async Task<List<ProjectEvaluationResult>> EvaluateAsync(string projectPath, string configuration = "Debug", string? platform = null)
+  public async Task<List<ProjectEvaluationResult>> EvaluateAsync(string projectPath, string? configuration = "Debug", string? platform = null)
   {
     var request = new GetProjectPropertiesBatchRequest([projectPath], configuration, platform);
     var stream = await Server.Rpc.InvokeWithParameterObjectAsync<IAsyncEnumerable<ProjectEvaluationResult>>(
