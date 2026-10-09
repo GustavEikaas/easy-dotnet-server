@@ -145,6 +145,8 @@ public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService c
     throw new TimeoutException("Timed out waiting for BuildServer pipe.");
   }
 
+  private const int MinimumSupportedSdkMajor = 8;
+
   private string ResolveFxVersionArg()
   {
     try
@@ -164,6 +166,12 @@ public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService c
           : ParseMajor(versionStr);
       if (major <= 0)
         return "";
+
+      if (major < MinimumSupportedSdkMajor)
+      {
+        logger.LogWarning("global.json pins .NET {Major} SDK, which is older than the minimum supported .NET {Minimum}; ignoring the pin for the BuildServer", major, MinimumSupportedSdkMajor);
+        return "";
+      }
 
       var sdkInstance = MSBuildLocator.QueryVisualStudioInstances()
           .Where(i => i.DiscoveryType == DiscoveryType.DotNetSdk && i.Version.Major == major)
