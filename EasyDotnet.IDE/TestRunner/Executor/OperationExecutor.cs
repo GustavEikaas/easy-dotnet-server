@@ -375,8 +375,7 @@ public class OperationExecutor(
 
   private string EnsureProjectNode(ValidatedDotnetProject project, string solutionNodeId, long operationId)
   {
-    var projectNodeId = NodeIdBuilder.Project(
-        solutionNodeId, project.ProjectName, project.TargetFramework ?? "");
+    var projectNodeId = NodeIdBuilder.Project(solutionNodeId, project);
 
     if (!registry.Exists(projectNodeId))
     {
