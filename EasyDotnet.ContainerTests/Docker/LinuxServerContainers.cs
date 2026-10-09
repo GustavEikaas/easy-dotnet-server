@@ -121,3 +121,12 @@ public sealed class RcSdkLinuxContainer() : DockerfileLinuxServerContainer("Dock
 {
   public override int SdkMajorVersion => 11;
 }
+/// <summary>
+/// A container with the .NET 10 SDK and the out of support .NET 6 SDK installed side by side.
+/// No roll-forward env vars are set, so it mirrors a developer machine working in a legacy repo
+/// whose global.json pins .NET 6.
+/// </summary>
+public sealed class Net6SdkLinuxContainer() : DockerfileLinuxServerContainer("Dockerfile.net6sdk")
+{
+  public override int SdkMajorVersion => 10;
+}
