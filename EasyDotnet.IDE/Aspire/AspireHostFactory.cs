@@ -98,10 +98,10 @@ public class AspireHostFactory(ILogger<AspireHostFactory> logger, AspireRunServi
     public static string GetAspireHost()
     {
 #if DEBUG
-      var path = Path.GetFullPath(Path.Join(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "../../../../EasyDotnet.Aspire/bin/Debug/net8.0/EasyDotnet.Aspire.dll"));
+      var path = Path.GetFullPath(Path.Join(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "../../../../EasyDotnet.Aspire/bin/Debug/net10.0/EasyDotnet.Aspire.dll"));
 #else
       var assemblyDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? throw new InvalidOperationException("Unable to determine assembly directory");
-      var path = Path.Combine(assemblyDir, "..", "..", "..", "tools", "Aspire", "net8.0", "EasyDotnet.Aspire.dll");
+      var path = Path.Combine(assemblyDir, "..", "..", "..", "tools", "Aspire", "net10.0", "EasyDotnet.Aspire.dll");
 #endif
       if (!File.Exists(path))
       {
