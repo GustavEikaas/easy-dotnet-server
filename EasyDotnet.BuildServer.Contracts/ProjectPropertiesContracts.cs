@@ -174,6 +174,7 @@ public sealed record ValidatedDotnetProject
   public required string ProjectName { get; init; }
   public required string AssemblyName { get; init; }
   public required string TargetPath { get; init; }
+  public required string ProjectDir { get; init; }
   public required DotnetProject Raw { get; init; }
 
   public bool IsRunnable =>
@@ -214,7 +215,8 @@ public sealed record ValidatedDotnetProject
           MSBuildProjectFullPath: { } fullPath,
           AssemblyName: { } assemblyName,
           TargetPath: { } targetPath,
-          MSBuildProjectName: { } projectName
+          MSBuildProjectName: { } projectName,
+          ProjectDir: { } projectDir
         } => new ValidatedDotnetProject
         {
           TargetFramework = tfm,
@@ -224,6 +226,7 @@ public sealed record ValidatedDotnetProject
           ProjectName = projectName,
           AssemblyName = assemblyName,
           TargetPath = targetPath,
+          ProjectDir = projectDir,
           Raw = project
         },
         _ => null
