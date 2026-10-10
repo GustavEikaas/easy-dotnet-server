@@ -164,28 +164,31 @@ public class EditorService(
 
     var allDiagnostics = results
         .Where(r => r.Kind == BatchBuildResultKind.Finished)
-        .SelectMany(r => r.Output?.Diagnostics ?? [])
-        .ToList();
+        .SelectMany(r => r.Output?.Diagnostics ?? []);
 
-    var errors = allDiagnostics
+    return await ReportDiagnosticsAsync(allDiagnostics);
+  }
+
+  public async Task<bool> ReportDiagnosticsAsync(IEnumerable<BuildDiagnostic> diagnostics)
+  {
+    static QuickFixItem ToItem(BuildDiagnostic d, QuickFixItemType type) => new(
+        FileName: d.File ?? "",
+        LineNumber: d.LineNumber,
+        ColumnNumber: d.ColumnNumber,
+        Text: string.IsNullOrEmpty(d.Code) ? d.Message ?? "" : $"[{d.Code}] {d.Message}",
+        Type: type);
+
+    var all = diagnostics.ToList();
+
+    var errors = all
         .Where(d => d.Severity == BuildDiagnosticSeverity.Error)
-        .Select(d => new QuickFixItem(
-            FileName: d.File ?? "",
-            LineNumber: d.LineNumber,
-            ColumnNumber: d.ColumnNumber,
-            Text: string.IsNullOrEmpty(d.Code) ? d.Message ?? "" : $"[{d.Code}] {d.Message}",
-            Type: QuickFixItemType.Error))
+        .Select(d => ToItem(d, QuickFixItemType.Error))
         .Distinct()
         .ToList();
 
-    var warnings = allDiagnostics
+    var warnings = all
         .Where(d => d.Severity == BuildDiagnosticSeverity.Warning)
-        .Select(d => new QuickFixItem(
-            FileName: d.File ?? "",
-            LineNumber: d.LineNumber,
-            ColumnNumber: d.ColumnNumber,
-            Text: string.IsNullOrEmpty(d.Code) ? d.Message ?? "" : $"[{d.Code}] {d.Message}",
-            Type: QuickFixItemType.Warning))
+        .Select(d => ToItem(d, QuickFixItemType.Warning))
         .Distinct()
         .ToList();
 
