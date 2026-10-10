@@ -1,3 +1,4 @@
+using System.Text.Json;
 using EasyDotnet.ProjXLanguageServer.Services;
 using EasyDotnet.ProjXLanguageServer.Tests.Helpers;
 
@@ -25,6 +26,26 @@ public class CompletionServiceTests
     var clean = text.Replace("@CURSOR", string.Empty);
     var items = (await Sut.GetCompletionsAsync(Docs.Make(clean), line, character, default)).Items;
     await Assert.That(items.Any(i => i.Label == "PackageReference")).IsTrue();
+  }
+
+  [Test]
+  public async Task ItemGroup_OffersPackageReference_ForCentralPackageManagement()
+  {
+    var text = "<Project>\n<ItemGroup>\n@CURSOR\n</ItemGroup>\n</Project>";
+    var (line, character) = Docs.PositionAt(text, "@CURSOR");
+    var clean = text.Replace("@CURSOR", string.Empty);
+    var items = (await Sut.GetCompletionsAsync(Docs.Make(clean), line, character, default)).Items;
+    await Assert.That(items.Any(i => i.Label == "PackageReference (CPM)")).IsTrue();
+  }
+
+  [Test]
+  public async Task ItemGroup_OffersPackageVersion()
+  {
+    var text = "<Project>\n<ItemGroup>\n@CURSOR\n</ItemGroup>\n</Project>";
+    var (line, character) = Docs.PositionAt(text, "@CURSOR");
+    var clean = text.Replace("@CURSOR", string.Empty);
+    var items = (await Sut.GetCompletionsAsync(Docs.Make(clean), line, character, default)).Items;
+    await Assert.That(items.Any(i => i.Label == "PackageVersion")).IsTrue();
   }
 
   [Test]
@@ -130,6 +151,7 @@ public class CompletionServiceTests
     var (line, character) = Docs.PositionAt(text, "@CURSOR");
     var clean = text.Replace("@CURSOR", string.Empty);
     var items = (await Sut.GetCompletionsAsync(Docs.Make(clean), line, character, default)).Items;
+    Console.WriteLine(JsonSerializer.Serialize(items.Select(x => x.Label).ToArray(), new JsonSerializerOptions { WriteIndented = true }));
     await Assert.That(items.Any(i => i.Label == "enable")).IsTrue();
     await Assert.That(items.Any(i => i.Label == "disable")).IsTrue();
   }

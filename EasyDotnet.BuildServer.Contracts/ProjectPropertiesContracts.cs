@@ -162,7 +162,10 @@ public record DotnetProject
     string? MSBuildProjectExtensionsPath,
     bool SelfContained,
     string? UserProfileRuntimeStorePath,
-    string? TargetPlatformIdentifier
+    string? TargetPlatformIdentifier,
+    bool ManagePackageVersionsCentrally,
+    bool Nullable,
+    bool ImplicitUsings
 );
 
 public sealed record ValidatedDotnetProject

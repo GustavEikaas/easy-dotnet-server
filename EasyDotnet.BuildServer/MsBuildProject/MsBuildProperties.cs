@@ -34,6 +34,13 @@ public static class MsBuildProperties
           Deserialize: MsBuildValueParsers.AsBool
       );
 
+  public static readonly MsBuildProperty<bool> ImplicitUsings =
+      new(
+          Name: "ImplicitUsings",
+          Description: "Whether implicit usings are enabled",
+          Deserialize: MsBuildValueParsers.AsBool
+      );
+
   public static readonly MsBuildProperty<string?> OutputPath =
       new(
           Name: "OutputPath",
@@ -1096,5 +1103,12 @@ public static class MsBuildProperties
           Name: "TargetPlatformIdentifier",
           Description: "Specifies the target platform family for the build (e.g., 'Windows', 'android', 'ios', 'maccatalyst', 'tvos', 'browser-wasm'). This is inferred from the TargetFramework and can be used in conditional logic for platform-specific builds.",
           Deserialize: MsBuildValueParsers.AsString
+      );
+
+  public static readonly MsBuildProperty<bool> ManagePackageVersionsCentrally =
+      new(
+          Name: "ManagePackageVersionsCentrally",
+          Description: "Specifies whether to use Central Package Management",
+          Deserialize: MsBuildValueParsers.AsBool
       );
 }
