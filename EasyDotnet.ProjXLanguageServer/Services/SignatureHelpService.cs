@@ -14,6 +14,8 @@ public class SignatureHelpService : ISignatureHelpService
   {
     [("PackageReference", "Include")] = ("Include=\"<package id>\"", "NuGet package id (e.g. `Newtonsoft.Json`)."),
     [("PackageReference", "Version")] = ("Version=\"<version>\"", "NuGet package version (e.g. `13.0.3`). Supports floating versions like `13.*`."),
+    [("PackageVersion", "Include")] = ("Include=\"<package id>\"", "NuGet package id (e.g. `Newtonsoft.Json`)."),
+    [("PackageVersion", "Version")] = ("Version=\"<version>\"", "NuGet package version (e.g. `13.0.3`). Supports floating versions like `13.*`."),
     [("PackageReference", "PrivateAssets")] = ("PrivateAssets=\"<assets>\"", "Restrict transitive flow. Common: `all`, `none`, `runtime;build`."),
     [("PackageReference", "IncludeAssets")] = ("IncludeAssets=\"<assets>\"", "Which assets from the package to consume."),
     [("PackageReference", "ExcludeAssets")] = ("ExcludeAssets=\"<assets>\"", "Assets to skip from the package."),
