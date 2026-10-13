@@ -1,3 +1,5 @@
+using EasyDotnet.BuildServer.Contracts;
+
 namespace EasyDotnet.IDE.TestRunner.Registry;
 
 /// <summary>
@@ -7,20 +9,19 @@ namespace EasyDotnet.IDE.TestRunner.Registry;
 /// Format: each segment separated by "::" to avoid clashing with dots in namespaces.
 /// 
 /// solution    → "MySolution.sln"
-/// project     → "MySolution.sln::MyProject::net8.0"
-/// namespace   → "MySolution.sln::MyProject::net8.0::ns:My.App.Tests"
-/// class       → "MySolution.sln::MyProject::net8.0::ns:My.App.Tests::class:MyClass"
-/// method      → "MySolution.sln::MyProject::net8.0::ns:My.App.Tests::class:MyClass::method:MyMethod"
-/// subcase     → "MySolution.sln::MyProject::net8.0::ns:My.App.Tests::class:MyClass::method:MyMethod(1, 2)"
+/// project     → "MySolution.sln::/home/repos/MySolution/::MyProject::net8.0"
+/// namespace   → "MySolution.sln::/home/repos/MySolution/::MyProject::net8.0::ns:My.App.Tests"
+/// class       → "MySolution.sln::/home/repos/MySolution/::MyProject::net8.0::ns:My.App.Tests::class:MyClass"
+/// method      → "MySolution.sln::/home/repos/MySolution/::MyProject::net8.0::ns:My.App.Tests::class:MyClass::method:MyMethod"
+/// subcase     → "MySolution.sln::/home/repos/MySolution/::MyProject::net8.0::ns:My.App.Tests::class:MyClass::method:MyMethod(1, 2)"
 /// </summary>
 public static class NodeIdBuilder
 {
   public static string Solution(string solutionName) =>
       solutionName;
 
-  public static string Project(string solutionId, string projectName, string tfm) =>
-      $"{solutionId}::{projectName}::{tfm}";
-
+  public static string Project(string solutionId, ValidatedDotnetProject project) =>
+    $"{solutionId}::{project.ProjectDir}::{project.ProjectName}::{project.TargetFramework ?? ""}";
   public static string Namespace(string projectNodeId, IReadOnlyList<string> namespaceParts) =>
       $"{projectNodeId}::ns:{string.Join(".", namespaceParts)}";
 

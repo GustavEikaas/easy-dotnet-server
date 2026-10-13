@@ -242,5 +242,8 @@ public sealed class WorkspaceRunCommandBuilderTests
         MSBuildProjectExtensionsPath: "/tmp/obj/",
         SelfContained: false,
         UserProfileRuntimeStorePath: null,
-        TargetPlatformIdentifier: null);
+        TargetPlatformIdentifier: null,
+        ManagePackageVersionsCentrally: false,
+        Nullable: true,
+        ImplicitUsings: false);
 }

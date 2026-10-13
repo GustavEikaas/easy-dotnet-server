@@ -171,7 +171,7 @@ public class TestRunnerService(
           .SelectMany(variants => variants)
           .Where(project =>
           {
-            var projectId = NodeIdBuilder.Project(solutionId, project.ProjectName, project.TargetFramework ?? "");
+            var projectId = NodeIdBuilder.Project(solutionId, project);
             return !registry.HasDescendants(projectId);
           })
           .GroupBy(p => p.ProjectFullPath, StringComparer.OrdinalIgnoreCase)
@@ -211,7 +211,7 @@ public class TestRunnerService(
         {
           foreach (var project in tfmVariants)
           {
-            var projectId = NodeIdBuilder.Project(solutionId, project.ProjectName, project.TargetFramework ?? "");
+            var projectId = NodeIdBuilder.Project(solutionId, project);
             await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.Building(), operationId: token.OperationId);
           }
           continue;
@@ -219,7 +219,7 @@ public class TestRunnerService(
 
         foreach (var project in tfmVariants)
         {
-          var projectId = NodeIdBuilder.Project(solutionId, project.ProjectName, project.TargetFramework ?? "");
+          var projectId = NodeIdBuilder.Project(solutionId, project);
 
           if (result.Success != true)
           {
@@ -420,7 +420,7 @@ public class TestRunnerService(
         {
           foreach (var p in variants)
           {
-            var pid = NodeIdBuilder.Project(solutionNodeId, p.ProjectName, p.TargetFramework ?? "");
+            var pid = NodeIdBuilder.Project(solutionNodeId, p);
             await dispatcher.SendStatusAsync(pid, new TestNodeStatus.Building(), operationId: token.OperationId);
           }
           continue;
@@ -428,7 +428,7 @@ public class TestRunnerService(
 
         foreach (var p in variants)
         {
-          var pid = NodeIdBuilder.Project(solutionNodeId, p.ProjectName, p.TargetFramework ?? "");
+          var pid = NodeIdBuilder.Project(solutionNodeId, p);
           if (result.Success != true)
           {
             await dispatcher.SendStatusAsync(pid, new TestNodeStatus.BuildFailed(),
@@ -499,7 +499,7 @@ public class TestRunnerService(
     var testProjects = await buildHost.GetTestProjectsFromSolutionAsync(solutionPath, ct: token.Ct);
 
     var desiredProjectIds = testProjects
-        .Select(p => NodeIdBuilder.Project(solutionNodeId, p.ProjectName, p.TargetFramework ?? ""))
+        .Select(p => NodeIdBuilder.Project(solutionNodeId, p))
         .ToHashSet(StringComparer.Ordinal);
 
     var existingProjectNodes = registry.GetDescendants(solutionNodeId)
@@ -552,7 +552,7 @@ public class TestRunnerService(
       {
         foreach (var p in variants)
         {
-          var pid = NodeIdBuilder.Project(solutionNodeId, p.ProjectName, p.TargetFramework ?? "");
+          var pid = NodeIdBuilder.Project(solutionNodeId, p);
           await dispatcher.SendStatusAsync(pid, new TestNodeStatus.Building(), operationId: token.OperationId);
         }
         continue;
@@ -560,7 +560,7 @@ public class TestRunnerService(
 
       foreach (var p in variants)
       {
-        var pid = NodeIdBuilder.Project(solutionNodeId, p.ProjectName, p.TargetFramework ?? "");
+        var pid = NodeIdBuilder.Project(solutionNodeId, p);
         if (result.Success != true)
         {
           await dispatcher.SendStatusAsync(pid, new TestNodeStatus.BuildFailed(),
@@ -590,7 +590,7 @@ public class TestRunnerService(
 
   private async Task<string> EnsureProjectNodeAsync(ValidatedDotnetProject project, string solutionNodeId, long operationId)
   {
-    var projectNodeId = NodeIdBuilder.Project(solutionNodeId, project.ProjectName, project.TargetFramework ?? "");
+    var projectNodeId = NodeIdBuilder.Project(solutionNodeId, project);
 
     var existing = registry.Get(projectNodeId);
     if (existing is null)

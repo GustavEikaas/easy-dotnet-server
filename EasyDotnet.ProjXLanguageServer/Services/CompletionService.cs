@@ -33,7 +33,8 @@ public class CompletionService(
     ["PublishAot"] = ["true", "false"],
     ["PublishTrimmed"] = ["true", "false"],
     ["InvariantGlobalization"] = ["true", "false"],
-    ["Configurations"] = ["Debug;Release"]
+    ["Configurations"] = ["Debug;Release"],
+    ["ManagePackageVersionsCentrally"] = ["true", "false"]
   };
 
   public async Task<CompletionResult> GetCompletionsAsync(CsprojDocument doc, int line, int character, CancellationToken cancellationToken)
@@ -62,7 +63,7 @@ public class CompletionService(
       return Static(GetSdkCompletions());
     }
 
-    if (ctx.ElementName != "PackageReference")
+    if (ctx.ElementName != "PackageReference" && ctx.ElementName != "PackageVersion")
     {
       return Static([]);
     }
@@ -250,6 +251,8 @@ public class CompletionService(
   private static CompletionItem[] GetItemGroupCompletions() =>
   [
     new CompletionItem { Label = "PackageReference", Kind = CompletionItemKind.Class, InsertText = "PackageReference Include=\"$1\" Version=\"$2\" />", InsertTextFormat = InsertTextFormat.Snippet, Detail = "NuGet Package Reference", Documentation = new MarkupContent { Kind = MarkupKind.Markdown, Value = "Reference to a NuGet package" } },
+    new CompletionItem { Label = "PackageReference (CPM)", Kind = CompletionItemKind.Class, InsertText = "PackageReference Include=\"$1\"/>", InsertTextFormat = InsertTextFormat.Snippet, Detail = "NuGet Package Reference", Documentation = new MarkupContent { Kind = MarkupKind.Markdown, Value = "Reference to a NuGet package (Central Package Management)" } },
+    new CompletionItem { Label = "PackageVersion", Kind = CompletionItemKind.Class, InsertText = "PackageVersion Include=\"$1\" Version=\"$2\" />", InsertTextFormat = InsertTextFormat.Snippet, Detail = "NuGet Package Version", Documentation = new MarkupContent { Kind = MarkupKind.Markdown, Value = "Reference to a NuGet package (Directory.Packages.props)" } },
     new CompletionItem { Label = "ProjectReference", Kind = CompletionItemKind.Class, InsertText = "ProjectReference Include=\"$1\" />", InsertTextFormat = InsertTextFormat.Snippet, Detail = "Project Reference", Documentation = new MarkupContent { Kind = MarkupKind.Markdown, Value = "Reference to another project in the solution" } },
     new CompletionItem { Label = "Reference", Kind = CompletionItemKind.Class, InsertText = "Reference Include=\"$1\" />", InsertTextFormat = InsertTextFormat.Snippet, Detail = "Assembly Reference" },
     new CompletionItem { Label = "Compile", Kind = CompletionItemKind.Class, InsertText = "Compile Include=\"$1\" />", InsertTextFormat = InsertTextFormat.Snippet, Detail = "Compile Item" },
