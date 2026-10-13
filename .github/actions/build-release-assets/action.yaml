@@ -9,7 +9,7 @@ inputs:
   toolsOutputPath:
     description: 'Where to copy tool assets inside project output'
     required: true
-    default: './EasyDotnet.IDE/bin/Release/net8.0/Tools'
+    default: './EasyDotnet.IDE/bin/Release/net10.0/Tools'
   netcoredbgVersion:
     description: 'netcoredbg release version (3.2.0 builds require glibc >= 2.38, breaking older linux distros GustavEikaas/easy-dotnet.nvim#1020)'
     required: true
@@ -46,8 +46,8 @@ runs:
         mkdir -p "$OUTPUT_PATH"
         mkdir -p "$EXTENSION_OUTPUT_PATH"
         mkdir -p "$DEVKIT_OUTPUT_PATH"
-        cp EasyDotnet.RoslynLanguageServices/bin/Release/net8.0/EasyDotnet.RoslynLanguageServices.dll "$EXTENSION_OUTPUT_PATH/"
-        cp EasyDotnet.RoslynLanguageServices/bin/Release/net8.0/Microsoft.CodeAnalysis.ExternalAccess.Extensions.dll "$DEVKIT_OUTPUT_PATH/"
+        cp EasyDotnet.RoslynLanguageServices/bin/Release/net10.0/EasyDotnet.RoslynLanguageServices.dll "$EXTENSION_OUTPUT_PATH/"
+        cp EasyDotnet.RoslynLanguageServices/bin/Release/net10.0/Microsoft.CodeAnalysis.ExternalAccess.Extensions.dll "$DEVKIT_OUTPUT_PATH/"
 
         mkdir -p artifacts/roslynator
 

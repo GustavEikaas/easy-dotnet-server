@@ -30,11 +30,11 @@
 
   <Target Name="CopyBuildServerOutputs" AfterTargets="Build">
     <ItemGroup>
-      <_BuildServerNet8 Include="..\EasyDotnet.BuildServer\bin\$(Configuration)\net8.0\**\*.*" />
+      <_BuildServerNet8 Include="..\EasyDotnet.BuildServer\bin\$(Configuration)\$(LowestNetCoreTfm)\**\*.*" />
       <_BuildServerNet472 Include="..\EasyDotnet.BuildServer\bin\$(Configuration)\net472\**\*.*" />
     </ItemGroup>
     <Copy SourceFiles="@(_BuildServerNet8)"
-          DestinationFiles="@(_BuildServerNet8->'$(OutDir)BuildServer\net8.0\%(RecursiveDir)%(Filename)%(Extension)')"
+          DestinationFiles="@(_BuildServerNet8->'$(OutDir)BuildServer\$(LowestNetCoreTfm)\%(RecursiveDir)%(Filename)%(Extension)')"
           SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(_BuildServerNet472)"
           DestinationFiles="@(_BuildServerNet472->'$(OutDir)BuildServer\net472\%(RecursiveDir)%(Filename)%(Extension)')"
