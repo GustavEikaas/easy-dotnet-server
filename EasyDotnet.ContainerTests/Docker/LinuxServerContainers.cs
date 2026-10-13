@@ -20,7 +20,11 @@ public abstract class LinuxServerContainer(string image) : ServerContainer
       .WithEnvironment("NUGET_PACKAGES", $"{_homePath}/.nuget/packages")
       .WithEnvironment("DOTNET_SKIP_FIRST_TIME_EXPERIENCE", "1")
       .WithEnvironment("DOTNET_CLI_TELEMETRY_OPTOUT", "1")
-      .WithEnvironment("DOTNET_NOLOGO", "1");
+      .WithEnvironment("DOTNET_NOLOGO", "1")
+      // Every container shares the host /tmp, where the Roslyn compiler server listens on a pipe named
+      // after the SDK path and user. Containers on the same SDK would hand their compilations to each
+      // other's server, which cannot see this container's reference assemblies.
+      .WithEnvironment("UseSharedCompilation", "false");
 
   /// <summary>
   /// The container writes its NuGet cache + tool install into <see cref="_homePath"/>, which
@@ -120,4 +124,13 @@ public sealed class MultiSdkLinuxContainer() : DockerfileLinuxServerContainer("D
 public sealed class RcSdkLinuxContainer() : DockerfileLinuxServerContainer("Dockerfile.rcsdk")
 {
   public override int SdkMajorVersion => 11;
+}
+/// <summary>
+/// A container with the .NET 10 SDK and the out of support .NET 6 SDK installed side by side.
+/// No roll-forward env vars are set, so it mirrors a developer machine working in a legacy repo
+/// whose global.json pins .NET 6.
+/// </summary>
+public sealed class Net6SdkLinuxContainer() : DockerfileLinuxServerContainer("Dockerfile.net6sdk")
+{
+  public override int SdkMajorVersion => 10;
 }
