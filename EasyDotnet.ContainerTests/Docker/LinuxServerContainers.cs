@@ -74,6 +74,15 @@ public sealed class Sdk10LinuxContainer() : LinuxServerContainer("mcr.microsoft.
   public override int SdkMajorVersion => 10;
 }
 
+/// <summary>
+/// .NET 10 SDK from the 3xx feature band. Its Razor source generator is compiled against a newer
+/// Roslyn than the 2xx band, so it catches the server's in-process Roslyn falling behind the SDK.
+/// </summary>
+public sealed class Sdk10Band3LinuxContainer() : LinuxServerContainer("mcr.microsoft.com/dotnet/sdk:10.0.302")
+{
+  public override int SdkMajorVersion => 10;
+}
+
 public abstract class DockerfileLinuxServerContainer(string dockerfile) : LinuxServerContainer("placeholder")
 {
   private static readonly ConcurrentDictionary<string, Lazy<Task<string>>> _builtImages = new();
