@@ -51,6 +51,10 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
     [Description("Allow connecting to (or starting) a shared, multi-client language server daemon instead of launching a dedicated language-server child process for that client.")]
     [CommandOption("--daemon-mode")]
     public bool UseDaemonMode { get; init; }
+
+    [Description("Log level")]
+    [CommandOption("--logLevel")]
+    public string LogLevel { get; init; } = "Information";
   }
 
   public override async Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
@@ -162,7 +166,9 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
 
   public static List<string> BuildRoslynArguments(Settings settings, string roslynLogDir)
   {
-    List<string> arguments = ["--stdio", "--logLevel=Information", "--extensionLogDirectory", roslynLogDir];
+    List<string> arguments = ["--stdio", "--extensionLogDirectory", roslynLogDir];
+
+    arguments.Add($"--logLevel={settings.LogLevel}");
 
     if (settings.UseDaemonMode)
     {
