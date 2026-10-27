@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using DotNet.Testcontainers.Builders;
+using DotNet.Testcontainers.Configurations;
 
 namespace EasyDotnet.ContainerTests.Docker;
 
@@ -13,6 +14,7 @@ public abstract class LinuxServerContainer(string image) : ServerContainer
   protected override ContainerBuilder ConfigureContainer(ContainerBuilder builder) =>
     builder
       .WithCreateParameterModifier(p => p.User = GetHostUserSpec())
+      .WithBindMount(CreatePasswdFile(), "/etc/passwd", AccessMode.ReadOnly)
       .WithEnvironment("HOME", _homePath)
       .WithEnvironment("DOTNET_CLI_HOME", _homePath)
       .WithEnvironment("XDG_DATA_HOME", $"{_homePath}/.local/share")
@@ -44,6 +46,18 @@ public abstract class LinuxServerContainer(string image) : ServerContainer
     }
 
     return ValueTask.CompletedTask;
+  }
+
+  /// <summary>
+  /// The host UID has no passwd entry in the image, and newer runtimes (8.0.33+) keep named mutex state
+  /// under the passwd home directory, so without one every named mutex (e.g. the CLI's "NuGet-Migrations")
+  /// fails. Map the UID to this container's private home.
+  /// </summary>
+  private string CreatePasswdFile()
+  {
+    var path = Path.Combine(Directory.CreateDirectory(_homePath).FullName, ".passwd");
+    File.WriteAllText(path, $"easydotnet:x:{GetHostUserSpec()}::{_homePath}:/bin/sh\n");
+    return path;
   }
 
   /// <summary>
