@@ -18,9 +18,9 @@ public class RoslynLocatorTests
   [Test]
   public async Task IsBelowRecommendedVersion_UsesMinimumRecommendedVersion()
   {
-    await Assert.That(RoslynToolService.IsBelowRecommendedVersion("5.8.0-1.26252.1")).IsTrue();
-    await Assert.That(RoslynToolService.IsBelowRecommendedVersion("5.8.0-1.26262.10")).IsFalse();
-    await Assert.That(RoslynToolService.IsBelowRecommendedVersion("5.8.0-1.26266.2")).IsFalse();
+    await Assert.That(RoslynToolService.IsBelowRecommendedVersion("5.11.0-1.26380.1")).IsTrue();
+    await Assert.That(RoslynToolService.IsBelowRecommendedVersion("5.11.0-1.26380.5")).IsFalse();
+    await Assert.That(RoslynToolService.IsBelowRecommendedVersion("5.11.0-1.26380.20")).IsFalse();
   }
 
   [Test]
