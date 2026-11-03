@@ -19,7 +19,7 @@ public static class RoslynToolService
 {
   public const string PackageId = "roslyn-language-server";
   public const string CommandName = "roslyn-language-server";
-  public const string MinimumRecommendedVersion = "5.8.0-1.26262.10";
+  public const string MinimumRecommendedVersion = "5.11.0-1.26380.4";
 
   public static async Task<RoslynToolStatus> GetStatusAsync(CancellationToken cancellationToken)
   {
@@ -102,13 +102,13 @@ public static class RoslynToolService
 
   private static async Task<string?> GetVersionAsync(string executable, CancellationToken cancellationToken)
   {
-    var result = await RunProcessAsync(executable, ["--version"], cancellationToken);
+    var result = await RunProcessAsync(executable, ["--stdio", "--version"], cancellationToken);
     if (result.ExitCode != 0)
     {
       return null;
     }
 
-    return result.Output.Trim();
+    return result.Output.Split(Environment.NewLine)[0].Trim();
   }
 
   private static Task<RoslynToolCommandResult> RunDotnetToolCommandAsync(string action, CancellationToken cancellationToken) =>
