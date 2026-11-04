@@ -117,9 +117,12 @@ public static class RoslynToolService
   private static async Task<RoslynToolCommandResult> RunProcessAsync(string fileName, IReadOnlyList<string> arguments, CancellationToken cancellationToken)
   {
     var startInfo = CreateProcessStartInfo(fileName, arguments, redirectOutput: true);
+    // Don't inherit stdin: under `roslyn start` it is the editor's LSP pipe, and `--stdio --version` would consume it.
+    startInfo.RedirectStandardInput = true;
 
     using var process = new Process { StartInfo = startInfo };
     process.Start();
+    process.StandardInput.Close();
 
     var stdout = process.StandardOutput.ReadToEndAsync(cancellationToken);
     var stderr = process.StandardError.ReadToEndAsync(cancellationToken);
