@@ -197,11 +197,6 @@ public class BatchBuildHandler(BuildFreshnessChecker freshnessChecker, Logger lo
           globalProperties["Platform"] = request.Platform!;
         }
 
-        if (!string.IsNullOrEmpty(request.TargetFramework))
-        {
-          globalProperties["TargetFramework"] = request.TargetFramework!;
-        }
-
         var logger = new DiagnosticLogger(diagnostics);
         var buildParameters = BuildServerBuildParameters.Create([logger]);
 
