@@ -51,7 +51,7 @@ public sealed class BatchBuildTests
   </ItemGroup>
 </Project>
 """);
-    File.WriteAllText(Path.Combine(appDir, "Class2.cs"), "namespace App; public class Class2 { }");
+    File.WriteAllText(Path.Combine(appDir, "Class2.cs"), "namespace App { public class Class2 { } }");
 
     await RestoreAsync(h.Server, appPath);
 
