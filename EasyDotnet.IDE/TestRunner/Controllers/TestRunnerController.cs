@@ -29,6 +29,14 @@ public class TestRunnerController(TestRunnerService service) : BaseController
     { throw new LocalRpcException(ex.Message) { ErrorCode = -32001 }; }
   }
 
+  [JsonRpcMethod("testrunner/runMany", UseSingleObjectParameterDeserialization = true)]
+  public async Task<OperationResult> RunManyAsync(NodesRequest request, CancellationToken ct)
+  {
+    try { return await service.RunManyAsync(request.Ids, request.Source, ct); }
+    catch (InvalidOperationException ex) when (ex.Message.Contains("already in progress"))
+    { throw new LocalRpcException(ex.Message) { ErrorCode = -32001 }; }
+  }
+
   [JsonRpcMethod("testrunner/debug", UseSingleObjectParameterDeserialization = true)]
   public async Task<OperationResult> DebugAsync(NodeRequest request, CancellationToken ct)
   {
@@ -76,3 +84,4 @@ public class TestRunnerController(TestRunnerService service) : BaseController
 
 public record InitializeRequest(string SolutionPath);
 public record NodeRequest(string Id, string? Source = null);
+public record NodesRequest(string[] Ids, string? Source = null);

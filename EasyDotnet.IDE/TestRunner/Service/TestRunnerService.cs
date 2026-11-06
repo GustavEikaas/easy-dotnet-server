@@ -274,10 +274,14 @@ public class TestRunnerService(
   }
 
   public async Task<OperationResult> RunAsync(string nodeId, string? source, CancellationToken ct)
-      => await ExecuteOnNodeAsync(nodeId, "run", debug: false, source, ct);
+      => await ExecuteOnNodesAsync([nodeId], "run", debug: false, source, ct);
+
+  /// <summary>Runs several nodes, possibly across projects, as one operation.</summary>
+  public async Task<OperationResult> RunManyAsync(IReadOnlyList<string> nodeIds, string? source, CancellationToken ct)
+      => await ExecuteOnNodesAsync(nodeIds, "run", debug: false, source, ct);
 
   public async Task<OperationResult> DebugAsync(string nodeId, string? source, CancellationToken ct)
-      => await ExecuteOnNodeAsync(nodeId, "debug", debug: true, source, ct);
+      => await ExecuteOnNodesAsync([nodeId], "debug", debug: true, source, ct);
 
   public async Task CancelAsync(CancellationToken ct)
   {
@@ -886,9 +890,12 @@ public class TestRunnerService(
     return successor?.Id ?? nodeId;
   }
 
-  private async Task<OperationResult> ExecuteOnNodeAsync(
-      string nodeId, string opName, bool debug, string? source, CancellationToken ct)
+  private async Task<OperationResult> ExecuteOnNodesAsync(
+      IReadOnlyList<string> nodeIds, string opName, bool debug, string? source, CancellationToken ct)
   {
+    if (nodeIds.Count == 0)
+      throw new ArgumentException("At least one node id is required", nameof(nodeIds));
+
     var opCts = new CancellationTokenSource();
     var control = new OperationControl();
 
@@ -899,12 +906,11 @@ public class TestRunnerService(
 
     try
     {
-      var node = registry.Get(nodeId)
-          ?? throw new KeyNotFoundException($"Node {nodeId} not found");
+      var nodes = nodeIds
+          .Select(id => registry.Get(id) ?? throw new KeyNotFoundException($"Node {id} not found"))
+          .ToList();
 
-      return node.Type is NodeType.Solution
-          ? await ExecuteMultiProjectAsync(nodeId, node, control, token, debug, source)
-          : await ExecuteSingleProjectAsync(nodeId, node, control, token, debug, source);
+      return await ExecuteNodesAsync(nodes, control, token, debug, source);
     }
     catch (OperationCanceledException)
     {
@@ -918,99 +924,116 @@ public class TestRunnerService(
     }
   }
 
-  private async Task<OperationResult> ExecuteMultiProjectAsync(
-      string nodeId,
-      TestNode node,
+  /// <summary>
+  /// Builds every project the selection touches in one batch, rediscovers them, then runs
+  /// each project's selected nodes in a single test host invocation.
+  /// </summary>
+  private async Task<OperationResult> ExecuteNodesAsync(
+      IReadOnlyList<TestNode> requested,
       OperationControl control,
       OperationToken token,
       bool debug,
       string? source)
   {
-    var projectNodes = (node.Type is NodeType.Project
-            ? [node]
-            : registry.GetDescendants(nodeId).Where(n => n.Type is NodeType.Project))
-        .ToList();
-
-    if (projectNodes.Count == 0)
+    var roots = SelectRunRoots(requested);
+    if (roots.Count == 0)
     {
       await dispatcher.SendRunnerStatusAsync(BuildIdleStatus(), token.OperationId);
       return new OperationResult(Success: true);
     }
 
-    var projects = (await Task.WhenAll(
-            projectNodes.Select(pn => ResolveProjectAsync(pn.Id, token.Ct))))
-        .Where(p => p is not null)
-        .Select(p => p!)
-        .ToList();
+    var probableSnapshots = roots
+        .Where(n => n.Type is NodeType.ProbableTest)
+        .ToDictionary(n => n.Id, n => (FilePath: n.FilePath, ParentId: n.ParentId, MethodName: n.DisplayName));
+
+    var rootIdsByProject = roots
+        .GroupBy(n => n.ProjectId ?? throw new InvalidOperationException($"Node {n.Id} has no project"))
+        .ToDictionary(g => g.Key, g => g.Select(n => n.Id).ToList());
+
+    var targets = new List<(TestNode Node, ValidatedDotnetProject Project)>();
+    foreach (var projectId in rootIdsByProject.Keys)
+    {
+      var projectNode = registry.Get(projectId);
+      var project = await ResolveProjectAsync(projectId, token.Ct);
+      if (projectNode is null || project is null)
+      {
+        logger.LogWarning("Skipping run for unresolved project {ProjectId}", projectId);
+        continue;
+      }
+      targets.Add((projectNode, project));
+    }
+
+    if (targets.Count == 0)
+    {
+      if (requested.Any(n => n.Type is NodeType.Solution))
+      {
+        await dispatcher.SendRunnerStatusAsync(BuildIdleStatus(), token.OperationId);
+        return new OperationResult(Success: true);
+      }
+      throw new InvalidOperationException($"Project {rootIdsByProject.Keys.First()} not found");
+    }
 
     await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus("Building", OverallStatus.Building), token.OperationId);
-    foreach (var pn in projectNodes)
-      await dispatcher.SendStatusAsync(pn.Id, new TestNodeStatus.Building(), operationId: token.OperationId);
-
-    var projectsByPath = projects
-        .GroupBy(p => p.ProjectFullPath, StringComparer.OrdinalIgnoreCase)
-        .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+    foreach (var (node, _) in targets)
+      await dispatcher.SendStatusAsync(node.Id, new TestNodeStatus.Building(), operationId: token.OperationId);
 
     var failedProjectIds = new HashSet<string>();
+    var projectPaths = targets
+        .Select(t => t.Project.ProjectFullPath)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToArray();
 
     await foreach (var result in buildHost.BatchBuildAsync(
-        new BatchBuildRequest([.. projectsByPath.Keys], Configuration: null), token.Ct))
+        new BatchBuildRequest(projectPaths, Configuration: null), token.Ct))
     {
       token.Ct.ThrowIfCancellationRequested();
       if (result.Kind != BatchBuildResultKind.Finished) { continue; }
 
-      foreach (var p in projectsByPath.GetValueOrDefault(result.ProjectPath) ?? [])
+      foreach (var (node, _) in targets.Where(t => string.Equals(t.Project.ProjectFullPath, result.ProjectPath, StringComparison.OrdinalIgnoreCase)))
       {
-        var pn = projectNodes.First(n => string.Equals(n.FilePath, p.ProjectFullPath, StringComparison.OrdinalIgnoreCase));
         if (result.Success != true)
         {
-          await dispatcher.SendStatusAsync(pn.Id, new TestNodeStatus.BuildFailed(),
+          await dispatcher.SendStatusAsync(node.Id, new TestNodeStatus.BuildFailed(),
               [TestAction.GetBuildErrors, TestAction.Invalidate, TestAction.Debug, TestAction.Run],
               token.OperationId);
 
-          failedProjectIds.Add(pn.Id);
+          failedProjectIds.Add(node.Id);
           if (result.Output?.Diagnostics is { } diags && diags.Length > 0)
           {
-            buildErrorStore.Set(pn.Id, diags);
+            buildErrorStore.Set(node.Id, diags);
           }
         }
         else
         {
-          buildErrorStore.Clear(pn.Id);
+          buildErrorStore.Clear(node.Id);
         }
       }
     }
 
     token.Ct.ThrowIfCancellationRequested();
 
-    var runnableProjects = projects
-        .Where(p => !failedProjectIds.Contains(
-            projectNodes.First(n => string.Equals(n.FilePath, p.ProjectFullPath, StringComparison.OrdinalIgnoreCase)).Id))
-        .ToList();
-
-    if (runnableProjects.Count == 0)
+    var runnable = targets.Where(t => !failedProjectIds.Contains(t.Node.Id)).ToList();
+    if (runnable.Count == 0)
     {
       await dispatcher.SendRunnerStatusAsync(BuildIdleStatus(), token.OperationId);
-      return new OperationResult(Success: failedProjectIds.Count == 0);
+      return new OperationResult(Success: false);
     }
 
     await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus("Discovering", OverallStatus.Discovering), token.OperationId);
-    await Task.WhenAll(runnableProjects.Select(p =>
-    {
-      var pn = projectNodes.First(n => string.Equals(n.FilePath, p.ProjectFullPath, StringComparison.OrdinalIgnoreCase));
-      return executor.DiscoverProjectAsync(p, pn.ParentId ?? nodeId, control, token);
-    }));
+    await Task.WhenAll(runnable
+        .Where(t => t.Node.ParentId is not null)
+        .Select(t => executor.DiscoverProjectAsync(t.Project, t.Node.ParentId!, control, token)));
 
     token.Ct.ThrowIfCancellationRequested();
 
-    var totalLeafCount = runnableProjects
-        .Sum(p =>
-        {
-          var pn = projectNodes.First(n => string.Equals(n.FilePath, p.ProjectFullPath, StringComparison.OrdinalIgnoreCase));
-          return registry.GetLeafDescendants(pn.Id).Count();
-        });
+    var runRootsByProject = runnable.ToDictionary(
+        t => t.Node.Id,
+        t => rootIdsByProject[t.Node.Id]
+            .Select(id => probableSnapshots.TryGetValue(id, out var snapshot) ? ResolveProbableSuccessor(id, snapshot) : id)
+            .Distinct()
+            .ToList());
 
-    var sharedCounter = new RunProgressCounter(totalLeafCount);
+    var sharedCounter = new RunProgressCounter(executor.CountRunnableLeaves(runRootsByProject.Values.SelectMany(ids => ids)));
 
     await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
         IsLoading: true,
@@ -1020,13 +1043,8 @@ public class TestRunnerService(
         TotalRunning: sharedCounter.TotalTests,
         TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0), token.OperationId);
 
-    var runTasks = runnableProjects
-        .Select(p =>
-        {
-          var pn = projectNodes.First(n => string.Equals(n.FilePath, p.ProjectFullPath, StringComparison.OrdinalIgnoreCase));
-          return executor.RunNodeAsync(pn.Id, p, control, token, debug, sharedCounter);
-        });
-    await Task.WhenAll(runTasks);
+    await Task.WhenAll(runnable.Select(t =>
+        executor.RunNodesAsync(runRootsByProject[t.Node.Id], t.Project, control, token, debug, sharedCounter)));
 
     token.Ct.ThrowIfCancellationRequested();
 
@@ -1044,88 +1062,30 @@ public class TestRunnerService(
     return new OperationResult(Success: failed == 0 && failedProjectIds.Count == 0);
   }
 
-  private async Task<OperationResult> ExecuteSingleProjectAsync(
-      string nodeId,
-      TestNode node,
-      OperationControl control,
-      OperationToken token,
-      bool debug,
-      string? source)
+  /// <summary>
+  /// Expands solution nodes into their projects and drops nodes already covered by a
+  /// selected ancestor, so every leaf runs at most once.
+  /// </summary>
+  private List<TestNode> SelectRunRoots(IReadOnlyList<TestNode> requested)
   {
-    var projectId = node.ProjectId
-        ?? throw new InvalidOperationException($"Node {nodeId} has no project");
+    var expanded = requested
+        .SelectMany(n => n.Type is NodeType.Solution
+            ? registry.GetDescendants(n.Id).Where(d => d.Type is NodeType.Project)
+            : [n])
+        .DistinctBy(n => n.Id)
+        .ToList();
 
-    var project = await ResolveProjectAsync(projectId, token.Ct)
-        ?? throw new InvalidOperationException($"Project {projectId} not found");
+    var selectedIds = expanded.Select(n => n.Id).ToHashSet();
+    return [.. expanded.Where(n => !HasSelectedAncestor(n, selectedIds))];
+  }
 
-    var probableSnapshot = node.Type is NodeType.ProbableTest
-        ? (FilePath: node.FilePath, ParentId: node.ParentId, MethodName: node.DisplayName)
-        : default;
-
-    await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus("Building", OverallStatus.Building), token.OperationId);
-    await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.Building(), operationId: token.OperationId);
-
-    var buildFailed = false;
-    await foreach (var result in buildHost.BatchBuildAsync(
-        new BatchBuildRequest([project.ProjectFullPath], Configuration: null), token.Ct))
+  private bool HasSelectedAncestor(TestNode node, HashSet<string> selectedIds)
+  {
+    for (var parentId = node.ParentId; parentId is not null; parentId = registry.Get(parentId)?.ParentId)
     {
-      if (result.Kind == BatchBuildResultKind.Finished)
-      {
-        if (result.Success != true)
-        {
-          await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.BuildFailed(),
-              [TestAction.GetBuildErrors, TestAction.Invalidate, TestAction.Debug, TestAction.Run],
-              token.OperationId);
-
-          buildFailed = true;
-          if (result.Output?.Diagnostics is { } diags && diags.Length > 0)
-          {
-            buildErrorStore.Set(projectId, diags);
-          }
-        }
-        else
-        {
-          buildErrorStore.Clear(projectId);
-        }
-      }
+      if (selectedIds.Contains(parentId)) return true;
     }
-
-    token.Ct.ThrowIfCancellationRequested();
-
-    if (buildFailed)
-    {
-      await dispatcher.SendRunnerStatusAsync(BuildIdleStatus(), token.OperationId);
-      return new OperationResult(Success: false);
-    }
-
-    var solutionNodeId = registry.Get(projectId)?.ParentId;
-    if (solutionNodeId is not null)
-    {
-      await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus("Discovering", OverallStatus.Discovering), token.OperationId);
-      await executor.DiscoverProjectAsync(project, solutionNodeId, control, token);
-    }
-
-    var runNodeId = ResolveProbableSuccessor(nodeId, probableSnapshot);
-
-    await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus(debug ? "Debugging" : "Running", debug ? OverallStatus.Debugging : OverallStatus.Running), token.OperationId);
-
-    var counter = await executor.RunNodeAsync(runNodeId, project, control, token, debug);
-
-    token.Ct.ThrowIfCancellationRequested();
-
-    var (_, passed, failed, skipped, cancelled, inconclusive) = counter.Snapshot();
-
-    await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
-        IsLoading: false, CurrentOperation: null,
-        OverallStatus: failed > 0 ? OverallStatus.Failed : inconclusive > 0 ? OverallStatus.Inconclusive : OverallStatus.Passed,
-        TotalTests: registry.GetLeafCount(), TotalRunning: 0,
-        TotalPassed: passed, TotalFailed: failed,
-        TotalSkipped: skipped, TotalCancelled: cancelled,
-        TotalInconclusive: inconclusive), token.OperationId);
-
-    await MaybeNotifyFinishedAsync(source, passed, failed, skipped, cancelled, inconclusive, token.Ct);
-
-    return new OperationResult(Success: failed == 0);
+    return false;
   }
 
   private async Task<ValidatedDotnetProject?> ResolveProjectAsync(

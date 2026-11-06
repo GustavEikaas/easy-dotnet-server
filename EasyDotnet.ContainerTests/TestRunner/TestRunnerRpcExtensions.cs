@@ -17,6 +17,9 @@ public static class TestRunnerRpcExtensions
   public static Task<OperationResultDto> TestRunnerRunWithResultAsync(this JsonRpc rpc, string id) =>
     rpc.InvokeWithParameterObjectAsync<OperationResultDto>("testrunner/run", new { id });
 
+  public static Task<OperationResultDto> TestRunnerRunManyAsync(this JsonRpc rpc, params string[] ids) =>
+    rpc.InvokeWithParameterObjectAsync<OperationResultDto>("testrunner/runMany", new { ids });
+
   public static Task<GetResultsDto> TestRunnerGetResultsAsync(this JsonRpc rpc, string id) =>
     rpc.InvokeWithParameterObjectAsync<GetResultsDto>("testrunner/getResults", new { id });
 
