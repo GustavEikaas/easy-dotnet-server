@@ -7,6 +7,12 @@ namespace EasyDotnet.ContainerTests.Docker;
 public abstract class LinuxServerContainer(string image) : ServerContainer
 {
   private readonly string _homePath = $"/tmp/easydotnet-home-{Guid.NewGuid():N}";
+  private static readonly Lazy<string> SharedNugetRoot = new(() =>
+  {
+    var root = Directory.CreateDirectory($"/tmp/easydotnet-nuget-{Guid.NewGuid():N}").FullName;
+    AppDomain.CurrentDomain.ProcessExit += (_, _) => TryDeleteDirectory(root, "Shared NuGet cache");
+    return root;
+  });
 
   protected override string Image => image;
   protected override string TmpMountPath => "/tmp";
@@ -19,7 +25,8 @@ public abstract class LinuxServerContainer(string image) : ServerContainer
       .WithEnvironment("DOTNET_CLI_HOME", _homePath)
       .WithEnvironment("XDG_DATA_HOME", $"{_homePath}/.local/share")
       .WithEnvironment("XDG_CONFIG_HOME", $"{_homePath}/.config")
-      .WithEnvironment("NUGET_PACKAGES", $"{_homePath}/.nuget/packages")
+      .WithEnvironment("NUGET_PACKAGES", $"{SharedNugetRoot.Value}/packages")
+      .WithEnvironment("NUGET_HTTP_CACHE_PATH", $"{SharedNugetRoot.Value}/http-cache")
       .WithEnvironment("DOTNET_SKIP_FIRST_TIME_EXPERIENCE", "1")
       .WithEnvironment("DOTNET_CLI_TELEMETRY_OPTOUT", "1")
       .WithEnvironment("DOTNET_NOLOGO", "1")
@@ -29,23 +36,27 @@ public abstract class LinuxServerContainer(string image) : ServerContainer
       .WithEnvironment("UseSharedCompilation", "false");
 
   /// <summary>
-  /// The container writes its NuGet cache + tool install into <see cref="_homePath"/>, which
-  /// lives under the bind-mounted <c>/tmp</c> and so survives on the host after <c>docker rm</c>.
-  /// Delete it on teardown so these (~tens of MB each) don't accumulate across runs and fill /tmp.
+  /// The container writes its CLI state into <see cref="_homePath"/>, which lives under the
+  /// bind-mounted <c>/tmp</c> and so survives on the host after <c>docker rm</c>.
+  /// Delete it on teardown so these don't accumulate across runs and fill /tmp.
   /// </summary>
   protected override ValueTask OnAfterDisposeAsync()
   {
+    TryDeleteDirectory(_homePath, "Home dir");
+    return ValueTask.CompletedTask;
+  }
+
+  private static void TryDeleteDirectory(string path, string description)
+  {
     try
     {
-      if (Directory.Exists(_homePath))
-        Directory.Delete(_homePath, recursive: true);
+      if (Directory.Exists(path))
+        Directory.Delete(path, recursive: true);
     }
     catch (Exception ex)
     {
-      Console.WriteLine($"Home dir cleanup failed for '{_homePath}': {ex}");
+      Console.WriteLine($"{description} cleanup failed for '{path}': {ex}");
     }
-
-    return ValueTask.CompletedTask;
   }
 
   /// <summary>

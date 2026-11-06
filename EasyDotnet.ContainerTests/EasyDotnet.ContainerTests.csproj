@@ -34,10 +34,16 @@
     <Message Text="Packing EasyDotnet.IDE as NuGet tool for container tests..." Importance="high" />
     <RemoveDir Directories="$(NugetFeedDir)" />
     <MakeDir Directories="$(NugetFeedDir)" />
+    <!-- Build and pack separately, like the release workflow: the IDE globs its published Tools at evaluation,
+         so the Pack call must be evaluated after the Release build has published them. -->
+    <MSBuild
+      Projects="../EasyDotnet.IDE/EasyDotnet.IDE.csproj"
+      Targets="Build"
+      Properties="Configuration=Release" />
     <MSBuild
       Projects="../EasyDotnet.IDE/EasyDotnet.IDE.csproj"
       Targets="Pack"
-      Properties="Configuration=Release;PackageOutputPath=$(NugetFeedDir)" />
+      Properties="Configuration=Release;NoBuild=true;PackageOutputPath=$(NugetFeedDir)" />
   </Target>
 
 </Project>
