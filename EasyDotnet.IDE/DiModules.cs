@@ -51,7 +51,44 @@ public static class DiModules
   public static ServiceProvider BuildServiceProvider(JsonRpc jsonRpc, SourceLevels levels)
   {
     var services = new ServiceCollection();
+    var logLevelState = AddCoreServices(services, levels);
+    AddJsonRpcClientServices(services, jsonRpc);
 
+    var serviceProvider = services.BuildServiceProvider();
+
+    var logger = serviceProvider.GetRequiredService<ILogger<JsonRpc>>();
+    jsonRpc.TraceSource.Switch.Level = levels;
+    logLevelState.LevelChanged += l => jsonRpc.TraceSource.Switch.Level = l;
+    jsonRpc.TraceSource.Listeners.Clear();
+    jsonRpc.TraceSource.Listeners.Add(new JsonRpcLogger(logger));
+
+    var appWrapperListener = serviceProvider.GetRequiredService<AppWrapperPipeListener>();
+    _ = appWrapperListener.StartAsync(CancellationToken.None);
+
+    return serviceProvider;
+  }
+
+  /// <summary>
+  /// Services that reach the editor through the JSON-RPC connection: editor requests,
+  /// notifications, pickers, testrunner events and the RPC controllers.
+  /// </summary>
+  public static void AddJsonRpcClientServices(IServiceCollection services, JsonRpc jsonRpc)
+  {
+    services.AddSingleton(jsonRpc);
+    services.AddSingleton<IEditorService, EditorService>();
+    services.AddSingleton<IPickerService, PickerService>();
+    services.AddSingleton<ITestRunnerClient, JsonRpcTestRunnerClient>();
+    services.AddTransient<INotificationService, NotificationService>();
+
+    AssemblyScanner.GetControllerTypes().ForEach(x => services.AddTransient(x));
+  }
+
+  /// <summary>
+  /// Services that do not depend on a connected editor. Hosts without a JSON-RPC client
+  /// must register their own IEditorService, IPickerService, ITestRunnerClient and INotificationService.
+  /// </summary>
+  public static LogLevelState AddCoreServices(IServiceCollection services, SourceLevels levels)
+  {
     var logLevelState = new LogLevelState(levels);
     ConfigureLogging(logLevelState);
 
@@ -63,10 +100,10 @@ public static class DiModules
 
     services.AddMemoryCache();
     services.AddHttpClient();
-    services.AddSingleton(jsonRpc);
     services.AddSingleton<DbContextCache>();
     services.AddSingleton(logLevelState);
     services.AddSingleton<IClientService, ClientService>();
+    services.AddTransient<ClientInitializer>();
     services.AddSingleton<IVisualStudioLocator, VisualStudioLocator>();
     services.AddSingleton<IFileSystem, FileSystem>();
     services.AddSingleton<RoslynService>();
@@ -83,10 +120,8 @@ public static class DiModules
     services.AddSingleton<SettingsService>();
     services.AddSingleton<SettingsGarbageCollector>();
     services.AddSingleton<IEditorProcessManagerService, EditorProcessManagerService>();
-    services.AddSingleton<IEditorService, EditorService>();
     services.AddSingleton<IPickerScopeRegistry, PickerScopeRegistry>();
     services.AddSingleton<PickerScopeFactory>();
-    services.AddSingleton<IPickerService, PickerService>();
     services.AddSingleton<IDebugStrategyFactory, DebugStrategyFactory>();
     services.AddSingleton<AppWrapperManager>();
     services.AddSingleton<IAppWrapperManager>(sp => sp.GetRequiredService<AppWrapperManager>());
@@ -134,7 +169,6 @@ public static class DiModules
     services.AddTransient<UserSecretsFlowService>();
     services.AddTransient<EntityFrameworkService>();
     services.AddTransient<ILaunchProfileService, LaunchProfileService>();
-    services.AddTransient<INotificationService, NotificationService>();
     services.AddTransient<NugetService>();
     services.AddTransient<INugetSettingsProvider>(sp =>
     {
@@ -174,20 +208,7 @@ public static class DiModules
 
     services.AddDebugger();
 
-    AssemblyScanner.GetControllerTypes().ForEach(x => services.AddTransient(x));
-
-    var serviceProvider = services.BuildServiceProvider();
-
-    var logger = serviceProvider.GetRequiredService<ILogger<JsonRpc>>();
-    jsonRpc.TraceSource.Switch.Level = levels;
-    logLevelState.LevelChanged += l => jsonRpc.TraceSource.Switch.Level = l;
-    jsonRpc.TraceSource.Listeners.Clear();
-    jsonRpc.TraceSource.Listeners.Add(new JsonRpcLogger(logger));
-
-    var appWrapperListener = serviceProvider.GetRequiredService<AppWrapperPipeListener>();
-    _ = appWrapperListener.StartAsync(CancellationToken.None);
-
-    return serviceProvider;
+    return logLevelState;
   }
 
   private static void ConfigureLogging(LogLevelState state)
