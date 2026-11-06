@@ -43,5 +43,35 @@ jobs:
             exit 1
           fi
 
+  container-tests:
+    name: ContainerTests (${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Shards are balanced by measured test time. "other" excludes the explicit shards, so new
+        # namespaces are picked up without touching this list.
+        include:
+          - shard: workspace-run
+            filter: FullyQualifiedName~EasyDotnet.ContainerTests.Workspace.Run.
+          - shard: testrunner
+            filter: FullyQualifiedName~EasyDotnet.ContainerTests.TestRunner.
+          - shard: other
+            filter: FullyQualifiedName!~EasyDotnet.ContainerTests.Workspace.Run.&FullyQualifiedName!~EasyDotnet.ContainerTests.TestRunner.
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # EasyDotnet.IDE publishes Aspire, AppWrapper, BuildServer and StartupHook from its build via the
+      # MSBuild task. Those aren't ProjectReferences, so restoring only the test project misses them.
+      - name: Restore
+        run: dotnet restore ./EasyDotnet.slnx
+
       - name: ContainerTests
-        run: dotnet test EasyDotnet.ContainerTests 
+        run: dotnet test EasyDotnet.ContainerTests --filter "${{ matrix.filter }}"

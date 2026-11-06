@@ -158,7 +158,9 @@ public abstract class EntityFrameworkTestBase<TContainer> : ContainerTestBase<TC
 
   private static void RunDotnetBuild(string csprojPath)
   {
-    var psi = new ProcessStartInfo("dotnet", $"build \"{csprojPath}\" -c Debug --nologo")
+    // A reused MSBuild node outlives `dotnet build` while still holding the redirected stdout/stderr,
+    // so ReadToEnd would block until the node idles out (~15 minutes).
+    var psi = new ProcessStartInfo("dotnet", $"build \"{csprojPath}\" -c Debug --nologo -nodeReuse:false")
     {
       RedirectStandardOutput = true,
       RedirectStandardError = true,
