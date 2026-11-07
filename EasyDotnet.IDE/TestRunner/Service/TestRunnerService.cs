@@ -194,6 +194,13 @@ public class TestRunnerService(
           TotalTests: registry.GetLeafCount(), TotalRunning: 0,
           TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0), token.OperationId);
 
+      // Register project nodes before building so a project that fails to build shows as
+      // BuildFailed instead of vanishing, and a later solution run retries it.
+      foreach (var project in needsBuild.Values.SelectMany(variants => variants))
+      {
+        await EnsureProjectNodeAsync(project, solutionId, token.OperationId);
+      }
+
       var buildRequest = new BatchBuildRequest(
           ProjectPaths: [.. needsBuild.Keys],
           Configuration: null);

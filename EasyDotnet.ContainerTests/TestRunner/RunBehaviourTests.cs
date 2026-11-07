@@ -106,6 +106,33 @@ public abstract class RunBehaviourTests<TContainer> : TestRunnerTestBase<TContai
   }
 
   [Fact]
+  public async Task Initialize_ProjectThatDoesNotBuild_ShowsBuildFailedAndRunsOnceItBuilds()
+  {
+    using var fixture = new TestProjectFixtureBuilder()
+      .WithName("Sample.InitBroken")
+      .WithFramework(TestFrameworkKind.XUnitV3Mtp)
+      .WithNamespace("Sample.InitBroken", ns => ns.WithClass("Alpha", c => c.WithTestMethod("A1")))
+      .Build();
+
+    var broken = Path.Combine(fixture.ProjectDir, "Broken.cs");
+    await File.WriteAllTextAsync(broken, "this is not C#");
+
+    await InitializeTestRunnerUncheckedAsync(fixture.RootDir, fixture.SolutionPath!);
+
+    var project = Assert.Single(NodesOfType(NodeTypeNames.Project));
+    Assert.Equal("BuildFailed", LastStatusKind.GetValueOrDefault(project.Id));
+    Assert.Empty(NodesOfType(NodeTypeNames.TestMethod));
+
+    File.Delete(broken);
+    var solution = Assert.Single(NodesOfType(NodeTypeNames.Solution));
+    var result = await BeginCall(Container.Rpc.TestRunnerRunWithResultAsync(solution.Id), RunTimeout);
+
+    Assert.True(result.Success);
+    var a1 = Assert.Single(NodesOfType(NodeTypeNames.TestMethod));
+    Assert.Equal("Passed", LastStatusKind.GetValueOrDefault(a1.Id));
+  }
+
+  [Fact]
   public async Task Run_SolutionWithMtpAndVsTestProjects_RunsEveryProjectWithItsOwnAdapter()
   {
     using var mtp = new TestProjectFixtureBuilder()

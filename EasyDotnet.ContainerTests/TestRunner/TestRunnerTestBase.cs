@@ -72,13 +72,21 @@ public abstract class TestRunnerTestBase<TContainer> : ContainerTestBase<TContai
   /// </summary>
   protected async Task InitializeTestRunnerAsync(string rootDir, string solutionPath)
   {
+    await InitializeTestRunnerUncheckedAsync(rootDir, solutionPath);
+    AssertInitializeProducedATree();
+  }
+
+  /// <summary>
+  /// Initializes the workspace and the testrunner without asserting on the outcome, for tests
+  /// that expect the initial build to fail.
+  /// </summary>
+  protected async Task InitializeTestRunnerUncheckedAsync(string rootDir, string solutionPath)
+  {
     await Container.Rpc.InvokeWithParameterObjectAsync<object>(
       "initialize",
       new List<object> { new { clientInfo = new { name = "test", version = "3.0.0" }, projectInfo = new { rootDir, solutionFile = solutionPath } } });
 
     await BeginCall(Container.Rpc.TestRunnerInitializeAsync(solutionPath), InitializeTimeout);
-
-    AssertInitializeProducedATree();
   }
 
   private void AssertInitializeProducedATree()
