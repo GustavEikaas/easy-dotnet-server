@@ -42,6 +42,7 @@ using EasyDotnet.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog;
+using Serilog.Events;
 using StreamJsonRpc;
 
 namespace EasyDotnet;
@@ -87,10 +88,10 @@ public static class DiModules
   /// Services that do not depend on a connected editor. Hosts without a JSON-RPC client
   /// must register their own IEditorService, IPickerService, ITestRunnerClient and INotificationService.
   /// </summary>
-  public static LogLevelState AddCoreServices(IServiceCollection services, SourceLevels levels)
+  public static LogLevelState AddCoreServices(IServiceCollection services, SourceLevels levels, bool logToStandardError = false)
   {
     var logLevelState = new LogLevelState(levels);
-    ConfigureLogging(logLevelState);
+    ConfigureLogging(logLevelState, logToStandardError);
 
     services.AddLogging(builder =>
         {
@@ -211,11 +212,11 @@ public static class DiModules
     return logLevelState;
   }
 
-  private static void ConfigureLogging(LogLevelState state)
+  private static void ConfigureLogging(LogLevelState state, bool logToStandardError)
   {
     Log.Logger = new LoggerConfiguration()
         .MinimumLevel.ControlledBy(state.Switch)
-        .WriteTo.Console()
+        .WriteTo.Console(standardErrorFromLevel: logToStandardError ? LogEventLevel.Verbose : null)
         .WriteTo.Sink(state.RingSink)
         .CreateLogger();
     WriteLogHeader();

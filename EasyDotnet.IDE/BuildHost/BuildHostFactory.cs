@@ -75,7 +75,8 @@ public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService c
       UseShellExecute = false,
       CreateNoWindow = true,
       RedirectStandardError = true,
-      RedirectStandardOutput = false,
+      // Never inherit our stdout: under `easydotnet mcp` it carries the MCP protocol.
+      RedirectStandardOutput = true,
       WorkingDirectory = coreFolder
     };
     startInfo.Environment.Remove("MSBUILD_EXE_PATH");
@@ -120,8 +121,17 @@ public class BuildHostFactory(ILogger<BuildHostFactory> logger, IClientService c
       }
     };
 
+    process.OutputDataReceived += (s, e) =>
+    {
+      if (!string.IsNullOrEmpty(e.Data))
+      {
+        logger.LogDebug("[BuildServer-STDOUT] {Msg}", e.Data);
+      }
+    };
+
     process.Start();
     process.BeginErrorReadLine();
+    process.BeginOutputReadLine();
 
     return process;
   }
