@@ -22,17 +22,17 @@ public class TestRunnerController(TestRunnerService service) : BaseController
   }
 
   [JsonRpcMethod("testrunner/run", UseSingleObjectParameterDeserialization = true)]
-  public async Task<OperationResult> RunAsync(NodeRequest request, CancellationToken ct)
+  public async Task<OperationResult> RunAsync(RunRequest request, CancellationToken ct)
   {
-    try { return await service.RunAsync(request.Id, request.Source, ct); }
+    try { return await service.RunAsync(request.GetNodeIds(), request.Source, ct); }
     catch (InvalidOperationException ex) when (ex.Message.Contains("already in progress"))
     { throw new LocalRpcException(ex.Message) { ErrorCode = -32001 }; }
   }
 
   [JsonRpcMethod("testrunner/debug", UseSingleObjectParameterDeserialization = true)]
-  public async Task<OperationResult> DebugAsync(NodeRequest request, CancellationToken ct)
+  public async Task<OperationResult> DebugAsync(RunRequest request, CancellationToken ct)
   {
-    try { return await service.DebugAsync(request.Id, request.Source, ct); }
+    try { return await service.DebugAsync(request.GetNodeIds(), request.Source, ct); }
     catch (InvalidOperationException ex) when (ex.Message.Contains("already in progress"))
     { throw new LocalRpcException(ex.Message) { ErrorCode = -32001 }; }
   }
@@ -76,3 +76,24 @@ public class TestRunnerController(TestRunnerService service) : BaseController
 
 public record InitializeRequest(string SolutionPath);
 public record NodeRequest(string Id, string? Source = null);
+
+public record RunRequest(string? Id = null, string[]? Ids = null, string? Source = null)
+{
+  public IReadOnlyList<string> GetNodeIds()
+  {
+    var ids = new List<string>();
+    if (Id is not null)
+    {
+      ids.Add(Id);
+    }
+
+    if (Ids is not null)
+    {
+      ids.AddRange(Ids);
+    }
+
+    return ids.Count == 0
+      ? throw new LocalRpcException("Either 'id' or 'ids' must be provided") { ErrorCode = -32602 }
+      : [.. ids.Distinct(StringComparer.Ordinal)];
+  }
+}

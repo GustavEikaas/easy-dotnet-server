@@ -211,6 +211,41 @@ public abstract class XUnitV3MtpDiscoveryTests<TContainer> : TestRunnerTestBase<
     }
   }
 
+  [Fact]
+  public async Task Run_MultipleLeafIds_RunsExactlyThoseLeavesInOneCall()
+  {
+    using var fixture = new TestProjectFixtureBuilder()
+      .WithName("Sample.XUnitV3MultiLeaf")
+      .WithFramework(TestFrameworkKind.XUnitV3Mtp)
+      .WithFile("SlowTests.cs", TestFixtures.XUnitSlowTests)
+      .Build();
+
+    await InitializeTestRunnerAsync(fixture);
+
+    var methods = NodesOfType(NodeTypeNames.TestMethod).ToList();
+    Assert.Equal(3, methods.Count);
+
+    var targets = methods.Where(m => m.DisplayName is "A" or "C").ToList();
+    var skipped = Assert.Single(methods, m => m.DisplayName == "B");
+
+    await BeginCall(Container.Rpc.TestRunnerRunManyAsync(targets.Select(t => t.Id)), TimeSpan.FromMinutes(2));
+
+    foreach (var target in targets)
+    {
+      Assert.True(
+        StatusHistory.TryGetValue(target.Id, out var history) &&
+          HistoryContainsInOrder(history, "Queued", "Running", "Passed"),
+        $"Expected {target.DisplayName} to go Queued→Running→Passed. Node dump:\n{DumpNodes()}");
+    }
+
+    Assert.False(
+      LastStatusKind.TryGetValue(skipped.Id, out var kind) && kind is "Queued" or "Running" or "Passed" or "Failed",
+      $"B was not requested and should not have run, but saw status '{kind}'.");
+
+    Assert.NotNull(LastRunnerStatus);
+    Assert.Equal(2, LastRunnerStatus!.TotalPassed);
+  }
+
   private string DumpNodes() =>
     string.Join("\n", Nodes.Values
       .OrderBy(n => n.Id)
