@@ -360,7 +360,7 @@ public sealed class TestProjectFixtureBuilder
 
   private static void RunDotnetBuild(string csprojPath)
   {
-    var psi = new ProcessStartInfo("dotnet", $"build \"{csprojPath}\" -c Debug --nologo")
+    var psi = new ProcessStartInfo("dotnet", $"build \"{csprojPath}\" -c Debug --nologo -nodeReuse:false")
     {
       RedirectStandardOutput = true,
       RedirectStandardError = true,
