@@ -5,7 +5,7 @@
 This is the **C# server** for the easy-dotnet Neovim plugin. It is the brain of the system — all business logic, project analysis, build orchestration, and IDE intelligence lives here. It communicates with the Neovim Lua client (`easy-dotnet.nvim`) over **JSON-RPC via stdin/stdout**, spawned as a child process.
 
 > **If you are about to make changes that affect the JSON-RPC wire contract** (adding, removing, or changing any method name, parameter shape, or return type), you must read the client repo's instructions first:
-> `$HOME/repo/easy-dotnet.nvim/.github/copilot-instructions.md`
+> `$HOME/repo/easy-dotnet.nvim/AGENTS.md`
 > Both sides must be updated atomically. The protocol is the contract.
 
 ### Reference Repositories (read-only)
