@@ -114,7 +114,7 @@
 ### `testrunner/debug`
 | Parameter | Type | Optional |
 |-----------|------|----------|
-| request | NodeRequest |   |
+| request | RunRequest |   |
 
 **Returns:** `Task<OperationResult>`
 
@@ -170,7 +170,7 @@
 ### `testrunner/run`
 | Parameter | Type | Optional |
 |-----------|------|----------|
-| request | NodeRequest |   |
+| request | RunRequest |   |
 
 **Returns:** `Task<OperationResult>`
 

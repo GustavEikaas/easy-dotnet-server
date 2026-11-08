@@ -14,6 +14,9 @@ public static class TestRunnerRpcExtensions
   public static Task TestRunnerRunAsync(this JsonRpc rpc, string id, string? source = null) =>
     rpc.InvokeWithParameterObjectAsync("testrunner/run", new { id, source });
 
+  public static Task TestRunnerRunManyAsync(this JsonRpc rpc, IEnumerable<string> ids, string? source = null) =>
+    rpc.InvokeWithParameterObjectAsync("testrunner/run", new { ids, source });
+
   public static Task<SyncFileResultDto> TestRunnerSyncFileAsync(this JsonRpc rpc, string path, string content, int version = 0) =>
     rpc.InvokeWithParameterObjectAsync<SyncFileResultDto>("testrunner/syncFile", new { path, content, version });
 }

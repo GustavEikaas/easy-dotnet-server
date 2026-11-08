@@ -313,6 +313,37 @@ public abstract class XUnitV2VsTestDiscoveryTests<TContainer> : TestRunnerTestBa
     Assert.Equal("Passed", LastStatusKind.GetValueOrDefault(keep.Id));
   }
 
+  [Fact]
+  public async Task Run_IdsAcrossNamespacesWithNestedAndUnknownIds_RunsEachRequestedLeafOnce()
+  {
+    using var fixture = new TestProjectFixtureBuilder()
+      .WithName("Sample.XUnitV2MultiNode")
+      .WithFramework(TestFrameworkKind.XUnitV2VsTest)
+      .WithFile("MultiNs.cs", TestFixtures.XUnitBlockNamespaces)
+      .Build();
+
+    await InitializeTestRunnerAsync(fixture);
+
+    var c1 = Assert.Single(NodesOfType(NodeTypeNames.TestClass), n => n.DisplayName == "C1");
+    var c2 = Assert.Single(NodesOfType(NodeTypeNames.TestClass), n => n.DisplayName == "C2");
+    var c1Method = Assert.Single(Children(c1.Id), n => n.Type.Type == NodeTypeNames.TestMethod);
+    var c2Method = Assert.Single(Children(c2.Id), n => n.Type.Type == NodeTypeNames.TestMethod);
+
+    // c1Method is covered by c1 and the last id does not exist: neither may break the run
+    // nor make a leaf execute twice.
+    string[] ids = [c1.Id, c1Method.Id, c2.Id, "does-not-exist"];
+    await BeginCall(Container.Rpc.TestRunnerRunManyAsync(ids), TimeSpan.FromMinutes(2));
+
+    Assert.Equal("Passed", LastStatusKind.GetValueOrDefault(c1Method.Id));
+    Assert.Equal("Passed", LastStatusKind.GetValueOrDefault(c2Method.Id));
+    Assert.Equal("Passed", LastStatusKind.GetValueOrDefault(c1.Id));
+    Assert.Equal("Passed", LastStatusKind.GetValueOrDefault(c2.Id));
+
+    Assert.NotNull(LastRunnerStatus);
+    Assert.Equal(2, LastRunnerStatus!.TotalPassed);
+    Assert.Equal(0, LastRunnerStatus.TotalFailed);
+  }
+
   private string DumpNodes() =>
     string.Join("\n", Nodes.Values
       .OrderBy(n => n.Id)

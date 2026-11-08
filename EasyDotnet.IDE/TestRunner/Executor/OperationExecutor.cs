@@ -231,19 +231,39 @@ public class OperationExecutor(
       string.Equals(project.Raw.Language, "fsharp", StringComparison.OrdinalIgnoreCase)
       || project.ProjectFullPath.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase);
 
-  public async Task<RunProgressCounter> RunNodeAsync(
-    string nodeId,
+  public List<TestNode> CollectLeaves(IEnumerable<string> nodeIds)
+  {
+    var seen = new HashSet<string>(StringComparer.Ordinal);
+    var leaves = new List<TestNode>();
+
+    foreach (var nodeId in nodeIds)
+    {
+      foreach (var leaf in registry.GetLeafDescendants(nodeId))
+      {
+        if (seen.Add(leaf.Id))
+        {
+          leaves.Add(leaf);
+        }
+      }
+
+      var self = registry.Get(nodeId);
+      if (self?.Type is NodeType.TestMethod or NodeType.Subcase && seen.Add(self.Id)) { leaves.Add(self); }
+    }
+
+    return leaves;
+  }
+
+  public async Task RunNodesAsync(
+    IReadOnlyCollection<string> nodeIds,
     ValidatedDotnetProject project,
     OperationControl control,
     OperationToken token,
-    bool debug = false,
-    RunProgressCounter? sharedCounter = null)
+    bool debug,
+    RunProgressCounter counter)
   {
-    detailStore.ClearSubtree(registry.GetDescendants(nodeId).Select(n => n.Id).Append(nodeId));
+    detailStore.ClearSubtree(nodeIds.SelectMany(id => registry.GetDescendants(id).Select(n => n.Id).Append(id)));
 
-    var leafNodes = registry.GetLeafDescendants(nodeId).ToList();
-    var self = registry.Get(nodeId);
-    if (self?.Type is NodeType.TestMethod or NodeType.Subcase) { leafNodes.Add(self); }
+    var leafNodes = CollectLeaves(nodeIds);
 
     var nativeIds = leafNodes
         .Select(n => registry.GetNativeId(n.Id))
@@ -253,23 +273,13 @@ public class OperationExecutor(
 
     if (nativeIds.Count == 0)
     {
-      logger.LogWarning("No runnable tests found under node {NodeId}", nodeId);
-      return sharedCounter ?? new RunProgressCounter(0);
+      logger.LogWarning("No runnable tests found under nodes {NodeIds}", string.Join(", ", nodeIds));
+      return;
     }
 
-    await dispatcher.SendBatchStatusAsync(nodeId, new TestNodeStatus.Queued(), registry, operationId: token.OperationId);
-
-    var counter = sharedCounter ?? new RunProgressCounter(nativeIds.Count);
-
-    if (sharedCounter is null)
+    foreach (var nodeId in nodeIds)
     {
-      await dispatcher.SendRunnerStatusAsync(new TestRunnerStatus(
-          IsLoading: true,
-          CurrentOperation: debug ? "Debugging" : "Running",
-          OverallStatus: debug ? OverallStatus.Debugging : OverallStatus.Running,
-          TotalTests: counter.TotalTests,
-          TotalRunning: counter.TotalTests,
-          TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0), operationId: token.OperationId);
+      await dispatcher.SendBatchStatusAsync(nodeId, new TestNodeStatus.Queued(), registry, operationId: token.OperationId);
     }
 
     var adapter = adapterResolver.Resolve(project);
@@ -338,8 +348,8 @@ public class OperationExecutor(
     if (!token.Ct.IsCancellationRequested && expectedNativeIds.Count > 0)
     {
       logger.LogError(
-        "Run completed without reporting all results for {NodeId}. Expected={Expected} Seen={Seen} Missing={Missing}",
-        nodeId,
+        "Run completed without reporting all results for {NodeIds}. Expected={Expected} Seen={Seen} Missing={Missing}",
+        string.Join(", ", nodeIds),
         nativeIds.Count,
         seenNativeIds.Count,
         expectedNativeIds.Count);
@@ -369,8 +379,6 @@ public class OperationExecutor(
     }
 
     await resultBatch.FlushAsync(forceRunnerStatus: true);
-
-    return counter;
   }
 
   private string EnsureProjectNode(ValidatedDotnetProject project, string solutionNodeId, long operationId)
