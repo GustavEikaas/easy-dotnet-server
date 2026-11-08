@@ -19,7 +19,7 @@ public static class RoslynToolService
 {
   public const string PackageId = "roslyn-language-server";
   public const string CommandName = "roslyn-language-server";
-  public const string MinimumRecommendedVersion = "5.11.0-1.26380.4";
+  public const string MinimumRecommendedVersion = "5.13.0-1.26507.4";
 
   public static async Task<RoslynToolStatus> GetStatusAsync(CancellationToken cancellationToken)
   {

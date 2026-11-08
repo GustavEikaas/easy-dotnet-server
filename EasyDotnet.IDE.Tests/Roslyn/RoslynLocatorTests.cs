@@ -18,9 +18,10 @@ public class RoslynLocatorTests
   [Test]
   public async Task IsBelowRecommendedVersion_UsesMinimumRecommendedVersion()
   {
-    await Assert.That(RoslynToolService.IsBelowRecommendedVersion("5.11.0-1.26380.1")).IsTrue();
-    await Assert.That(RoslynToolService.IsBelowRecommendedVersion("5.11.0-1.26380.5")).IsFalse();
-    await Assert.That(RoslynToolService.IsBelowRecommendedVersion("5.11.0-1.26380.20")).IsFalse();
+    await Assert.That(RoslynToolService.IsBelowRecommendedVersion("5.12.0-1.26475.2")).IsTrue();
+    await Assert.That(RoslynToolService.IsBelowRecommendedVersion("5.13.0-1.26507.3")).IsTrue();
+    await Assert.That(RoslynToolService.IsBelowRecommendedVersion("5.13.0-1.26507.4")).IsFalse();
+    await Assert.That(RoslynToolService.IsBelowRecommendedVersion("5.13.0-1.26514.10")).IsFalse();
   }
 
   [Test]
@@ -36,23 +37,18 @@ public class RoslynLocatorTests
   }
 
   [Test]
-  public async Task BuildRoslynArguments_EasyDotnetExtension_AddsBundledExtensionAndDevKitDependency()
+  public async Task BuildRoslynArguments_EasyDotnetExtension_AddsBundledExtensionWithoutDevKitDependency()
   {
-    var roslynBaseDir = GetRoslynBaseDirForTests();
-    var extensionPath = Path.Combine(roslynBaseDir, "Extensions", "EasyDotnet", "EasyDotnet.RoslynLanguageServices.dll");
-    var devKitPath = Path.Combine(roslynBaseDir, "DevKit", "Microsoft.CodeAnalysis.ExternalAccess.Extensions.dll");
+    var extensionPath = Path.Combine(GetRoslynBaseDirForTests(), "Extensions", "EasyDotnet", "EasyDotnet.RoslynLanguageServices.dll");
     Directory.CreateDirectory(Path.GetDirectoryName(extensionPath)!);
-    Directory.CreateDirectory(Path.GetDirectoryName(devKitPath)!);
     await File.WriteAllTextAsync(extensionPath, string.Empty);
-    await File.WriteAllTextAsync(devKitPath, string.Empty);
 
     var arguments = RoslynStartCommand.BuildRoslynArguments(
         new RoslynStartCommand.Settings { UseEasyDotnetExtension = true },
         "/tmp/easydotnet-roslyn-logs");
 
     await Assert.That(arguments.Contains(extensionPath)).IsTrue();
-    await Assert.That(arguments.Contains("--devKitDependencyPath")).IsTrue();
-    await Assert.That(arguments.Contains(devKitPath)).IsTrue();
+    await Assert.That(arguments.Contains("--devKitDependencyPath")).IsFalse();
   }
 
   [After(Test)]

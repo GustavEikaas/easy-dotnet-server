@@ -8,12 +8,13 @@ public sealed class CreateTypeFromUsageMessageHandler
 {
   public Task<CreateTypeFromUsageResponse> ExecuteAsync(
       CreateTypeFromUsageRequest message,
-      ExtensionMessageContext context,
-      Document document,
+      ExtensionDocumentMessageContext context,
       CancellationToken cancellationToken)
-    => CreateTypeFromUsageService.CreateTypeFromUsageAsync(
-        document,
-        message.Line,
-        message.Character,
-        cancellationToken);
+    => context.TextDocument is Document document
+        ? CreateTypeFromUsageService.CreateTypeFromUsageAsync(
+            document,
+            message.Line,
+            message.Character,
+            cancellationToken)
+        : Task.FromResult(CreateTypeFromUsageResponse.No("Document is not a source document."));
 }

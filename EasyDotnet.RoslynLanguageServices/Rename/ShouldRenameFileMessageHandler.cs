@@ -8,13 +8,14 @@ public sealed class ShouldRenameFileMessageHandler
 {
   public Task<ShouldRenameFileResponse> ExecuteAsync(
       ShouldRenameFileRequest message,
-      ExtensionMessageContext context,
-      Document document,
+      ExtensionDocumentMessageContext context,
       CancellationToken cancellationToken)
-    => RenameFileDecisionService.ShouldRenameFileAsync(
-        document,
-        message.Line,
-        message.Character,
-        message.NewName,
-        cancellationToken);
+    => context.TextDocument is Document document
+        ? RenameFileDecisionService.ShouldRenameFileAsync(
+            document,
+            message.Line,
+            message.Character,
+            message.NewName,
+            cancellationToken)
+        : Task.FromResult(ShouldRenameFileResponse.No("Document is not a source document."));
 }
