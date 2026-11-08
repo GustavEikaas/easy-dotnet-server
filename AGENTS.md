@@ -155,7 +155,9 @@ You should never commit or push anything to github ever
 
 Every push to `main` packs `EasyDotnet.IDE` and publishes it to NuGet as the `EasyDotnet` dotnet tool. A change without a new version never reaches users.
 
-- Bump the patch number of `<Version>` in `EasyDotnet.IDE/EasyDotnet.IDE.csproj` once per branch, e.g. `3.4.36` → `3.4.37`. Features and fixes both get a patch bump.
+- Bump `<Version>` in `EasyDotnet.IDE/EasyDotnet.IDE.csproj` once per branch.
+  - **Patch** (`3.4.36` → `3.4.37`): fixes, chores, dependency bumps and small or incremental features.
+  - **Minor** (`3.4.36` → `3.5.0`): significant new capabilities, such as a new feature area or a major integration (e.g. the Roslyn language server, the dncdbg engine, Aspire support). If unsure, ask the developer.
 - Bump whenever the branch changes anything that ends up in the package: any non-test project (`EasyDotnet.IDE`, `EasyDotnet.BuildServer`, the `*.Contracts` projects, `EasyDotnet.StartupHook`, `EasyDotnet.AppWrapper`, ...) or a package reference.
 - Skip it when the branch only touches tests, CI workflows or docs.
 - Count from the version on `main`. If `main` has moved past your number by the time the branch merges, take the next free one.
