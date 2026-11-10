@@ -119,6 +119,7 @@ public static class DiModules
     services.AddSingleton<StatusDispatcher>();
     services.AddSingleton<DetailStore>();
     services.AddSingleton<BuildErrorStore>();
+    services.AddSingleton<DiscoveryStampStore>();
     services.AddSingleton<GlobalOperationLock>();
     services.AddSingleton<OperationExecutor>();
     services.AddSingleton<AdapterResolver>();

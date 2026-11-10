@@ -19,6 +19,7 @@ public class TestRunnerService(
     StatusDispatcher dispatcher,
     DetailStore detailStore,
     BuildErrorStore buildErrorStore,
+    DiscoveryStampStore discoveryStamps,
     GlobalOperationLock operationLock,
     OperationExecutor executor,
     AdapterResolver adapterResolver,
@@ -59,6 +60,7 @@ public class TestRunnerService(
     {
       _isInitialized = false;
       registry.Clear();
+      discoveryStamps.Clear();
       detailStore.ClearAll();
       await adapterResolver.InvalidateAllAsync();
 
@@ -387,6 +389,8 @@ public class TestRunnerService(
       var projectsByPath = new Dictionary<string, List<ValidatedDotnetProject>>(
           StringComparer.OrdinalIgnoreCase);
 
+      discoveryStamps.Invalidate(nodeId);
+
       var project = await ResolveProjectAsync(nodeId, token.Ct);
       if (project is not null)
       {
@@ -495,6 +499,7 @@ public class TestRunnerService(
     }
 
     await adapterResolver.InvalidateAllAsync();
+    discoveryStamps.Clear();
 
     var testProjects = await buildHost.GetTestProjectsFromSolutionAsync(solutionPath, ct: token.Ct);
 
@@ -994,12 +999,29 @@ public class TestRunnerService(
       return new OperationResult(Success: failedProjectIds.Count == 0);
     }
 
-    await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus("Discovering", OverallStatus.Discovering), token.OperationId);
-    await Task.WhenAll(runnableProjects.Select(p =>
+    var staleProjects = new List<ValidatedDotnetProject>();
+    foreach (var p in runnableProjects)
     {
       var pn = projectNodes.First(n => string.Equals(n.FilePath, p.ProjectFullPath, StringComparison.OrdinalIgnoreCase));
-      return executor.DiscoverProjectAsync(p, pn.ParentId ?? nodeId, control, token);
-    }));
+      if (discoveryStamps.NeedsDiscovery(pn.Id, p.TargetPath))
+      {
+        staleProjects.Add(p);
+        continue;
+      }
+
+      logger.LogDebug("Skipping discovery for {Project}: test assembly unchanged since last discovery", p.ProjectName);
+      await dispatcher.SendStatusAsync(pn.Id, new TestNodeStatus.Idle(), operationId: token.OperationId);
+    }
+
+    if (staleProjects.Count > 0)
+    {
+      await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus("Discovering", OverallStatus.Discovering), token.OperationId);
+      await Task.WhenAll(staleProjects.Select(p =>
+      {
+        var pn = projectNodes.First(n => string.Equals(n.FilePath, p.ProjectFullPath, StringComparison.OrdinalIgnoreCase));
+        return executor.DiscoverProjectAsync(p, pn.ParentId ?? nodeId, control, token);
+      }));
+    }
 
     token.Ct.ThrowIfCancellationRequested();
 
@@ -1099,10 +1121,15 @@ public class TestRunnerService(
     }
 
     var solutionNodeId = registry.Get(projectId)?.ParentId;
-    if (solutionNodeId is not null)
+    if (solutionNodeId is not null && discoveryStamps.NeedsDiscovery(projectId, project.TargetPath, scopeNodeId: nodeId))
     {
       await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus("Discovering", OverallStatus.Discovering), token.OperationId);
       await executor.DiscoverProjectAsync(project, solutionNodeId, control, token);
+    }
+    else if (solutionNodeId is not null)
+    {
+      logger.LogDebug("Skipping discovery for {Project}: test assembly unchanged since last discovery", project.ProjectName);
+      await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.Idle(), operationId: token.OperationId);
     }
 
     var runNodeId = ResolveProbableSuccessor(nodeId, probableSnapshot);

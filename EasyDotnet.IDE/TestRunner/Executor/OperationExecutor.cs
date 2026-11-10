@@ -16,6 +16,7 @@ public class OperationExecutor(
     NodeRegistry registry,
     StatusDispatcher dispatcher,
     DetailStore detailStore,
+    DiscoveryStampStore discoveryStamps,
     AdapterResolver adapterResolver,
     ILogger<OperationExecutor> logger)
 {
@@ -29,6 +30,11 @@ public class OperationExecutor(
         .ToHashSet();
 
     registry.ClearDescendants(projectNodeId);
+
+    // Not fresh until this discovery completes — a failed or cancelled pass leaves the project
+    // half-populated, so the next run must discover again.
+    discoveryStamps.Invalidate(projectNodeId);
+    var assemblyStamp = discoveryStamps.Capture(project.TargetPath);
 
     var adapter = adapterResolver.Resolve(project);
     var emittedNamespaces = new HashSet<string>();
@@ -196,6 +202,8 @@ public class OperationExecutor(
       }
 
       await dispatcher.SendStatusAsync(projectNodeId, new TestNodeStatus.Idle(), operationId: token.OperationId);
+
+      discoveryStamps.MarkDiscovered(projectNodeId, project.TargetPath, assemblyStamp);
     }
     catch (OperationCanceledException)
     {
