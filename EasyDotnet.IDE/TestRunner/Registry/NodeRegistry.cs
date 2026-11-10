@@ -11,12 +11,38 @@ public class NodeRegistry
 
   private readonly ConcurrentDictionary<string, TestNodeStatusKind?> _lastStatus = new();
 
+  // Parent → child ids index so tree walks are O(subtree) instead of a full scan per visited node.
+  // All structural writes (_nodes + _children + _leafCount) happen under _structureLock so the
+  // index never disagrees with _nodes; point reads of _nodes stay lock-free.
+  private readonly object _structureLock = new();
+  private readonly Dictionary<string, HashSet<string>> _children = new(StringComparer.Ordinal);
+  private int _leafCount;
+
   /// <summary>
   /// Upserts a node. If nativeId is provided, registers the bidirectional ID mapping.
   /// </summary>
   public void Register(TestNode node, string? nativeId = null)
   {
-    _nodes[node.Id] = node;
+    lock (_structureLock)
+    {
+      if (_nodes.TryGetValue(node.Id, out var existing))
+      {
+        if (existing.ParentId != node.ParentId)
+        {
+          RemoveFromParentIndex(existing);
+          AddToParentIndex(node);
+        }
+
+        _leafCount += (IsCountedLeaf(node) ? 1 : 0) - (IsCountedLeaf(existing) ? 1 : 0);
+      }
+      else
+      {
+        AddToParentIndex(node);
+        if (IsCountedLeaf(node)) _leafCount++;
+      }
+
+      _nodes[node.Id] = node;
+    }
 
     if (nativeId is not null)
     {
@@ -55,12 +81,26 @@ public class NodeRegistry
 
   public IEnumerable<TestNode> GetAll() => _nodes.Values;
 
-  public IEnumerable<TestNode> GetChildren(string parentId) =>
-      _nodes.Values.Where(n => n.ParentId == parentId);
+  /// <summary>Returns a snapshot of the direct children of a node.</summary>
+  public IEnumerable<TestNode> GetChildren(string parentId)
+  {
+    lock (_structureLock)
+    {
+      return _children.TryGetValue(parentId, out var childIds)
+          ? childIds.Select(id => _nodes[id]).ToList()
+          : [];
+    }
+  }
+
+  public bool HasDescendants(string rootId)
+  {
+    lock (_structureLock)
+    {
+      return _children.ContainsKey(rootId);
+    }
+  }
 
   /// <summary>Recursively returns all descendants of a node.</summary>
-  public bool HasDescendants(string rootId) => GetDescendants(rootId).Any();
-
   public IEnumerable<TestNode> GetDescendants(string rootId)
   {
     var queue = new Queue<string>();
@@ -83,7 +123,12 @@ public class NodeRegistry
 
   public void Clear()
   {
-    _nodes.Clear();
+    lock (_structureLock)
+    {
+      _nodes.Clear();
+      _children.Clear();
+      _leafCount = 0;
+    }
     _stableToNative.Clear();
     _nativeToStable.Clear();
     _lastStatus.Clear();
@@ -91,12 +136,10 @@ public class NodeRegistry
 
   public void ClearDescendants(string rootId)
   {
-    foreach (var descendant in GetDescendants(rootId).ToList())
+    lock (_structureLock)
     {
-      _nodes.TryRemove(descendant.Id, out _);
-      _lastStatus.TryRemove(descendant.Id, out _);
-      if (_stableToNative.TryRemove(descendant.Id, out var native))
-        _nativeToStable.TryRemove(native, out _);
+      foreach (var id in CollectDescendantIds(rootId))
+        RemoveNode(id);
     }
   }
 
@@ -106,27 +149,21 @@ public class NodeRegistry
   /// </summary>
   public List<string> RemoveSubtree(string rootId)
   {
-    if (!Exists(rootId)) return [];
-
-    var removedIds = GetDescendants(rootId)
-        .Select(n => n.Id)
-        .ToList();
-
-    removedIds.Add(rootId);
-
-    foreach (var id in removedIds)
+    lock (_structureLock)
     {
-      _nodes.TryRemove(id, out _);
-      _lastStatus.TryRemove(id, out _);
-      if (_stableToNative.TryRemove(id, out var native))
-        _nativeToStable.TryRemove(native, out _);
-    }
+      if (!Exists(rootId)) return [];
 
-    return removedIds;
+      var removedIds = CollectDescendantIds(rootId);
+      removedIds.Add(rootId);
+
+      foreach (var id in removedIds)
+        RemoveNode(id);
+
+      return removedIds;
+    }
   }
 
-  public int GetLeafCount() =>
-      _nodes.Values.Count(n => n.Type is NodeType.TestMethod or NodeType.Subcase);
+  public int GetLeafCount() => Volatile.Read(ref _leafCount);
 
   public bool Exists(string stableId) => _nodes.ContainsKey(stableId);
 
@@ -152,23 +189,88 @@ public class NodeRegistry
   public bool UpdateLineNumbers(
       string stableId, int signatureLine, int bodyStartLine, int endLine)
   {
-    if (!_nodes.TryGetValue(stableId, out var node)) return false;
-
-    // No-op if nothing changed — avoids unnecessary re-renders
-    if (node.SignatureLine == signatureLine &&
-        node.BodyStartLine == bodyStartLine &&
-        node.EndLine == endLine)
+    // Under the structure lock so a concurrent re-parenting Register can't be overwritten
+    // with the stale ParentId captured here.
+    lock (_structureLock)
     {
-      return false;
+      if (!_nodes.TryGetValue(stableId, out var node)) return false;
+
+      // No-op if nothing changed — avoids unnecessary re-renders
+      if (node.SignatureLine == signatureLine &&
+          node.BodyStartLine == bodyStartLine &&
+          node.EndLine == endLine)
+      {
+        return false;
+      }
+
+
+      _nodes[stableId] = node with
+      {
+        SignatureLine = signatureLine,
+        BodyStartLine = bodyStartLine,
+        EndLine = endLine,
+      };
+      return true;
+    }
+  }
+
+  // Must be called under _structureLock. Breadth-first, matching GetDescendants order.
+  private List<string> CollectDescendantIds(string rootId)
+  {
+    var result = new List<string>();
+    var queue = new Queue<string>();
+    queue.Enqueue(rootId);
+
+    while (queue.Count > 0)
+    {
+      if (!_children.TryGetValue(queue.Dequeue(), out var childIds)) continue;
+      foreach (var childId in childIds)
+      {
+        result.Add(childId);
+        queue.Enqueue(childId);
+      }
     }
 
-
-    _nodes[stableId] = node with
-    {
-      SignatureLine = signatureLine,
-      BodyStartLine = bodyStartLine,
-      EndLine = endLine,
-    };
-    return true;
+    return result;
   }
+
+  // Must be called under _structureLock.
+  private void RemoveNode(string id)
+  {
+    if (_nodes.TryRemove(id, out var removed))
+    {
+      RemoveFromParentIndex(removed);
+      if (IsCountedLeaf(removed)) _leafCount--;
+    }
+
+    _lastStatus.TryRemove(id, out _);
+    if (_stableToNative.TryRemove(id, out var native))
+      _nativeToStable.TryRemove(native, out _);
+  }
+
+  // Must be called under _structureLock.
+  private void AddToParentIndex(TestNode node)
+  {
+    if (node.ParentId is null) return;
+
+    if (!_children.TryGetValue(node.ParentId, out var siblings))
+    {
+      siblings = new HashSet<string>(StringComparer.Ordinal);
+      _children[node.ParentId] = siblings;
+    }
+
+    siblings.Add(node.Id);
+  }
+
+  // Must be called under _structureLock.
+  private void RemoveFromParentIndex(TestNode node)
+  {
+    if (node.ParentId is null || !_children.TryGetValue(node.ParentId, out var siblings)) return;
+
+    siblings.Remove(node.Id);
+    if (siblings.Count == 0)
+      _children.Remove(node.ParentId);
+  }
+
+  private static bool IsCountedLeaf(TestNode node) => node.Type is NodeType.TestMethod or NodeType.Subcase;
 }

@@ -531,119 +531,21 @@ public class OperationExecutor(
     return (status, baseActions);
   }
 
-  sealed class TestNodeStatusAggregator
-  {
-    public int Passed { get; private set; }
-    public int Failed { get; private set; }
-    public int Skipped { get; private set; }
-    public int Inconclusive { get; private set; }
-    public int Running { get; private set; }
-    public long MaxDuration { get; private set; }
-    public int ScopedLeaves { get; private set; }
-
-    public void Add(TestDetail? details)
-    {
-      ++ScopedLeaves;
-      if (details is null)
-      {
-        ++Running;
-        return;
-      }
-      switch (details.Outcome)
-      {
-        case "passed": ++Passed; break;
-        case "failed": ++Failed; break;
-        case "skipped": ++Skipped; break;
-        case "none": ++Inconclusive; break;
-      }
-      if (details.DurationMs is { } ms && ms > MaxDuration)
-      {
-        MaxDuration = ms;
-      }
-    }
-  }
-
+  /// <summary>
+  /// Marks every ancestor of a just-started leaf as Running. The started leaf is itself in scope
+  /// and has no result yet, so any aggregate over its ancestors is necessarily Running —
+  /// walking the parent chain is enough. Terminal parent statuses come from ParentStatusAggregator.
+  /// </summary>
   private void BubbleStatus(RunResultBatch resultBatch, string leafId, HashSet<string> runningLeafIds)
   {
-    var node = registry.Get(leafId);
-    if (node is null) return;
-    var parentId = node.ParentId;
-    var aggregators = new Dictionary<string, TestNodeStatusAggregator>();
-    while (parentId is not null)
+    if (!runningLeafIds.Contains(leafId)) return;
+
+    var parentId = registry.Get(leafId)?.ParentId;
+    while (parentId is not null && registry.Get(parentId) is { } parent)
     {
-      var n = registry.Get(parentId);
-      if (n is null) break;
-      aggregators.Add(n.Id, new());
-      parentId = n.ParentId;
+      resultBatch.Enqueue(new(parent.Id, new TestNodeStatus.Running()));
+      parentId = parent.ParentId;
     }
-
-    if (aggregators.Count == 0) return;
-
-    var leaves = registry.GetAll()
-        .Where(n => n.Type
-          is NodeType.TestMethod
-          or NodeType.Subcase
-          or NodeType.ProbableTest
-          && IsInScope(n.Id, runningLeafIds))
-        .ToList();
-
-    foreach (var leaf in leaves)
-    {
-      var fetchedDetails = false;
-      TestDetail? details = null;
-      parentId = leaf.ParentId;
-      while (parentId is not null)
-      {
-        var n = registry.Get(parentId);
-        if (n is null) break;
-        if (!aggregators.TryGetValue(n.Id, out var tracker)) break;
-        if (!fetchedDetails)
-        {
-          details = detailStore.Get(leaf.Id);
-          fetchedDetails = true;
-        }
-        tracker.Add(details);
-        parentId = n.ParentId;
-      }
-    }
-
-    foreach (var (id, aggregator) in aggregators)
-    {
-      logger.LogDebug("Bubble from {LeafId} at parent {ParentId}: scopedLeaves={Count}",
-          leafId, parentId, aggregator.ScopedLeaves);
-
-      if (aggregator.Running > 0)
-      {
-        resultBatch.Enqueue(new(id, new TestNodeStatus.Running()));
-      }
-      else
-      {
-        logger.LogDebug(
-            "Bubble parent {ParentId}: passed={Passed} failed={Failed} skipped={Skipped} inconclusive={Inconclusive}",
-            parentId, aggregator.Passed, aggregator.Failed, aggregator.Skipped, aggregator.Inconclusive);
-
-        var durationDisplay = FormatDuration(aggregator.MaxDuration);
-        var aggregateStatus = TestStatusPriority.AggregateTerminalStatus(
-            aggregator.Passed,
-            aggregator.Failed,
-            aggregator.Skipped,
-            aggregator.Inconclusive,
-            durationDisplay);
-        resultBatch.Enqueue(new(id, aggregateStatus));
-      }
-    }
-  }
-
-  private bool IsInScope(string leafId, HashSet<string> runningLeafIds)
-  {
-    if (runningLeafIds.Contains(leafId)) return true;
-    var n = registry.Get(leafId);
-    while (n?.ParentId is not null)
-    {
-      if (runningLeafIds.Contains(n.ParentId)) return true;
-      n = registry.Get(n.ParentId);
-    }
-    return false;
   }
 
   private sealed class RunResultBatch(

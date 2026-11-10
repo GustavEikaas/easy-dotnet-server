@@ -874,7 +874,7 @@ public class TestRunnerService(
     if (current is not null && current.Type is not NodeType.ProbableTest) return nodeId;
 
     var normalized = snapshot.FilePath.Replace('\\', '/');
-    var successor = registry.GetAll().FirstOrDefault(n =>
+    var successor = registry.GetChildren(snapshot.ParentId).FirstOrDefault(n =>
         (n.Type is NodeType.TestMethod or NodeType.TheoryGroup) &&
         n.ParentId == snapshot.ParentId &&
         string.Equals(n.DisplayName, snapshot.MethodName, StringComparison.Ordinal) &&
