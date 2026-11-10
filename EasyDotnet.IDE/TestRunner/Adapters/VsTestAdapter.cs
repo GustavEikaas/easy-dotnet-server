@@ -9,8 +9,10 @@ using EasyDotnet.IDE.Settings;
 using EasyDotnet.IDE.TestRunner.Adapters.VSTest;
 using EasyDotnet.IDE.TestRunner.Lock;
 using EasyDotnet.IDE.TestRunner.Models;
+using EasyDotnet.IDE.TestRunner.Store;
 using Microsoft.Extensions.Logging;
 using Microsoft.TestPlatform.VsTestConsole.TranslationLayer;
+using Microsoft.VisualStudio.TestPlatform.ObjectModel;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Client;
 
 namespace EasyDotnet.IDE.TestRunner.Adapters;
@@ -41,6 +43,11 @@ public sealed class VsTestAdapter(
 
   private VsTestConsoleWrapper? _wrapper;
 
+  // TestCases from the last complete discovery, reused by RunCoreAsync so a run doesn't pay
+  // for a second full VSTest discovery. Dropped when the assembly stamp changes, on dispose
+  // and whenever the wrapper is killed or recreated.
+  private DiscoveredTestCases? _testCases;
+
   public async Task DiscoverAsync(
       ValidatedDotnetProject project,
       Func<DiscoveredTest, Task> onDiscovered,
@@ -58,16 +65,28 @@ public sealed class VsTestAdapter(
         try { wrapper.CancelDiscovery(); } catch { /* best effort */ }
       });
 
+      _testCases = null;
+      var stamp = AssemblyStamp.TryCapture(fileSystem, project.TargetPath);
+
       var handler = new StreamingDiscoveryHandler(loggerFactory);
       wrapper.DiscoverTests([project.TargetPath], null, DefaultOptions, null, handler);
 
       // Buffer all TestCases so we can detect parameterised rows by duplicate FQN —
       // this is the only reliable VSTest-layer signal, since frameworks like MSTest
       // can strip parens from DisplayName entirely via [DataRow(DisplayName = "...")].
-      var testCases = new List<Microsoft.VisualStudio.TestPlatform.ObjectModel.TestCase>();
+      var testCases = new List<TestCase>();
       await foreach (var tc in handler.ReadAllAsync().WithCancellation(ct))
       {
         testCases.Add(tc);
+      }
+
+      if (!handler.IsAborted && stamp is { } s && ReferenceEquals(_wrapper, wrapper))
+      {
+        _testCases = new DiscoveredTestCases(
+            project.TargetPath,
+            project.TargetFramework,
+            s,
+            testCases.DistinctBy(tc => tc.Id).ToDictionary(tc => tc.Id));
       }
 
       foreach (var group in testCases.GroupBy(tc => tc.FullyQualifiedName))
@@ -139,13 +158,7 @@ public sealed class VsTestAdapter(
 
       var channel = Channel.CreateUnbounded<VsTestRunEvent>();
 
-      // Re-discover to get TestCase objects needed by VSTest run API.
-      var discoveryHandler = new TestDiscoveryHandler(loggerFactory.CreateLogger<TestDiscoveryHandler>());
-      wrapper.DiscoverTests([project.TargetPath], null, DefaultOptions, null, discoveryHandler);
-
-      var toRun = discoveryHandler.TestCases
-          .Where(x => nativeGuids.Contains(x.Id))
-          .ToList();
+      var toRun = GetCachedTestCases(project, nativeGuids) ?? DiscoverTestCases(wrapper, project, nativeGuids);
 
       if (toRun.Count == 0) return;
 
@@ -239,8 +252,46 @@ public sealed class VsTestAdapter(
   {
     if (_wrapper is not null) return _wrapper;
     var vsTestPath = sdkService.GetVsTestPath();
+    _testCases = null;
     _wrapper = new VsTestConsoleWrapper(vsTestPath);
     return _wrapper;
+  }
+
+  /// <summary>
+  /// Returns the requested TestCases from the last discovery, or null on a cache miss
+  /// (different assembly, assembly rebuilt since, or any requested id unknown).
+  /// </summary>
+  private List<TestCase>? GetCachedTestCases(ValidatedDotnetProject project, HashSet<Guid> nativeGuids)
+  {
+    var cached = _testCases;
+    if (cached is null
+        || !string.Equals(cached.TargetPath, project.TargetPath, StringComparison.OrdinalIgnoreCase)
+        || !string.Equals(cached.TargetFramework, project.TargetFramework, StringComparison.OrdinalIgnoreCase)
+        || AssemblyStamp.TryCapture(fileSystem, project.TargetPath) != cached.Stamp)
+    {
+      return null;
+    }
+
+    var toRun = nativeGuids
+        .Select(id => cached.ById.GetValueOrDefault(id))
+        .OfType<TestCase>()
+        .ToList();
+
+    if (toRun.Count == nativeGuids.Count) return toRun;
+
+    _logger.LogDebug("TestCase cache missing {Missing} of {Requested} requested tests — re-discovering",
+        nativeGuids.Count - toRun.Count, nativeGuids.Count);
+    return null;
+  }
+
+  private List<TestCase> DiscoverTestCases(VsTestConsoleWrapper wrapper, ValidatedDotnetProject project, HashSet<Guid> nativeGuids)
+  {
+    var discoveryHandler = new TestDiscoveryHandler(loggerFactory.CreateLogger<TestDiscoveryHandler>());
+    wrapper.DiscoverTests([project.TargetPath], null, DefaultOptions, null, discoveryHandler);
+
+    return discoveryHandler.TestCases
+        .Where(x => nativeGuids.Contains(x.Id))
+        .ToList();
   }
 
   private DebuggerTestHostLauncher CreateDebuggerLauncher(
@@ -286,8 +337,15 @@ public sealed class VsTestAdapter(
   public ValueTask DisposeAsync()
   {
     _wrapper = null;
+    _testCases = null;
     return ValueTask.CompletedTask;
   }
+
+  private sealed record DiscoveredTestCases(
+      string TargetPath,
+      string? TargetFramework,
+      AssemblyStamp Stamp,
+      Dictionary<Guid, TestCase> ById);
 
   private Task KillWrapperAsync(VsTestConsoleWrapper wrapper)
   {
@@ -298,7 +356,10 @@ public sealed class VsTestAdapter(
       try { wrapper.EndSession(); } catch { /* best effort */ }
 
       if (ReferenceEquals(_wrapper, wrapper))
+      {
         _wrapper = null;
+        _testCases = null;
+      }
     });
   }
 }
