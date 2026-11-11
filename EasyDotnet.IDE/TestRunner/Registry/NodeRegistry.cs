@@ -55,27 +55,35 @@ public class NodeRegistry
 
   public IEnumerable<TestNode> GetAll() => _nodes.Values;
 
-  public IEnumerable<TestNode> GetChildren(string parentId) =>
-      _nodes.Values.Where(n => n.ParentId == parentId);
-
-  /// <summary>Recursively returns all descendants of a node.</summary>
-  public bool HasDescendants(string rootId) => GetDescendants(rootId).Any();
-
   public IEnumerable<TestNode> GetDescendants(string rootId)
   {
+    var childrenByParent = new Dictionary<string, List<TestNode>>(StringComparer.Ordinal);
+    foreach (var node in _nodes.Values)
+    {
+      if (node.ParentId is null) continue;
+      if (!childrenByParent.TryGetValue(node.ParentId, out var children))
+        childrenByParent[node.ParentId] = children = [];
+      children.Add(node);
+    }
+
     var queue = new Queue<string>();
     queue.Enqueue(rootId);
+    var visited = new HashSet<string>(StringComparer.Ordinal) { rootId };
 
     while (queue.Count > 0)
     {
-      var current = queue.Dequeue();
-      foreach (var child in GetChildren(current))
+      if (!childrenByParent.TryGetValue(queue.Dequeue(), out var children)) continue;
+      foreach (var child in children)
       {
+        if (!visited.Add(child.Id)) continue;
         yield return child;
         queue.Enqueue(child.Id);
       }
     }
   }
+
+  public bool HasDescendants(string rootId) =>
+      _nodes.Values.Any(n => n.ParentId == rootId);
 
   /// <summary>Returns all leaf nodes (TestMethod, Subcase, ProbableTest) under a given root.</summary>
   public IEnumerable<TestNode> GetLeafDescendants(string rootId) =>
