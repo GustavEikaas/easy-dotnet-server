@@ -1006,16 +1006,10 @@ public class TestRunnerService(
     }
 
     var stale = new List<(TestNode Node, ValidatedDotnetProject Project)>();
-    foreach (var (pn, p) in runnable)
+    foreach (var t in runnable)
     {
-      if (discoveryStamps.NeedsDiscovery(pn.Id, p.TargetPath))
-      {
-        stale.Add((pn, p));
-        continue;
-      }
-
-      logger.LogDebug("Skipping discovery for {Project}: test assembly unchanged since last discovery", p.ProjectName);
-      await dispatcher.SendStatusAsync(pn.Id, new TestNodeStatus.Idle(), operationId: token.OperationId);
+      if (!await SkipDiscoveryIfFreshAsync(t.Node.Id, t.Project, scopeNodeId: null, token))
+        stale.Add(t);
     }
 
     if (stale.Count > 0)
@@ -1114,15 +1108,10 @@ public class TestRunnerService(
     }
 
     var solutionNodeId = registry.Get(projectId)?.ParentId;
-    if (solutionNodeId is not null && discoveryStamps.NeedsDiscovery(projectId, project.TargetPath, scopeNodeId: nodeId))
+    if (solutionNodeId is not null && !await SkipDiscoveryIfFreshAsync(projectId, project, scopeNodeId: nodeId, token))
     {
       await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus("Discovering", OverallStatus.Discovering), token.OperationId);
       await executor.DiscoverProjectAsync(project, solutionNodeId, control, token);
-    }
-    else if (solutionNodeId is not null)
-    {
-      logger.LogDebug("Skipping discovery for {Project}: test assembly unchanged since last discovery", project.ProjectName);
-      await dispatcher.SendStatusAsync(projectId, new TestNodeStatus.Idle(), operationId: token.OperationId);
     }
 
     var runNodeId = ResolveProbableSuccessor(nodeId, probableSnapshot);
@@ -1146,6 +1135,21 @@ public class TestRunnerService(
     await MaybeNotifyFinishedAsync(source, passed, failed, skipped, cancelled, inconclusive, token.Ct);
 
     return new OperationResult(Success: failed == 0);
+  }
+
+  /// <summary>
+  /// Returns true (and settles the project node to Idle, as a discovery would) when the project's
+  /// last discovery is still valid for running <paramref name="scopeNodeId"/>; false when the
+  /// caller must discover first.
+  /// </summary>
+  private async Task<bool> SkipDiscoveryIfFreshAsync(
+      string projectNodeId, ValidatedDotnetProject project, string? scopeNodeId, OperationToken token)
+  {
+    if (discoveryStamps.NeedsDiscovery(projectNodeId, project.TargetPath, scopeNodeId)) return false;
+
+    logger.LogDebug("Skipping discovery for {Project}: test assembly unchanged since last discovery", project.ProjectName);
+    await dispatcher.SendStatusAsync(projectNodeId, new TestNodeStatus.Idle(), operationId: token.OperationId);
+    return true;
   }
 
   private async Task<ValidatedDotnetProject?> ResolveProjectAsync(

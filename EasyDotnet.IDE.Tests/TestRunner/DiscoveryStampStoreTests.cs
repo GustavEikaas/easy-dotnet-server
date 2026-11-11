@@ -85,7 +85,7 @@ public class DiscoveryStampStoreTests
   {
     MarkFresh();
 
-    const string added = "/repo/tests/bin/Debug/net8.0/runtimes/linux-x64/Native.dll";
+    const string added = "/repo/tests/bin/Debug/net8.0/Added.dll";
     _fileSystem.AddFile(added, new MockFileData([9]));
     _fileSystem.File.SetLastWriteTimeUtc(added, BuildTime);
 
@@ -93,13 +93,14 @@ public class DiscoveryStampStoreTests
   }
 
   [Test]
-  public async Task NonAssemblyFileWrittenToOutput_SkipsDiscovery()
+  public async Task NonAssemblyOrNestedFileWrittenToOutput_SkipsDiscovery()
   {
     MarkFresh();
 
     // Test runs and tooling write logs, coverlet mappings, … next to the assembly.
     _fileSystem.AddFile("/repo/tests/bin/Debug/net8.0/CoverletSourceRootsMapping", new MockFileData([7]));
     _fileSystem.AddFile("/repo/tests/bin/Debug/net8.0/logs/run.log", new MockFileData([8]));
+    _fileSystem.AddFile("/repo/tests/bin/Debug/net8.0/sv/Library.resources.dll", new MockFileData([9]));
 
     await Assert.That(_store.NeedsDiscovery(ProjectId, TargetPath)).IsFalse();
   }

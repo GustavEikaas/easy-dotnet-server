@@ -9,8 +9,10 @@ namespace EasyDotnet.IDE.TestRunner.Store;
 /// recompiled, yet inherited tests or theory data coming from that library can differ).
 /// A no-op build leaves all of these untouched.
 ///
-/// Only *.dll files are considered: test runs and build tooling write other files into the output
-/// directory (logs, coverlet mappings, …), which would otherwise force a discovery on every run.
+/// Only top-level *.dll files are considered: referenced assemblies are copied there, while
+/// subdirectories hold satellite resources and native runtimes that don't affect discovery. Test runs
+/// and build tooling write other files into the output directory (logs, coverlet mappings, …), which
+/// would otherwise force a discovery on every run.
 /// Non-assembly inputs to discovery (e.g. a JSON file feeding [MemberData]) are therefore not
 /// tracked — invalidating the project picks those up.
 /// </summary>
@@ -30,16 +32,13 @@ public readonly record struct AssemblyStamp(
       var info = fileSystem.FileInfo.New(path);
       if (!info.Exists || info.Directory is not { } outputDir) return null;
 
-      var assemblies = outputDir
-          .EnumerateFiles("*.dll", SearchOption.AllDirectories)
-          .Select(f => f.LastWriteTimeUtc)
-          .ToList();
+      var (newest, count) = outputDir
+          .EnumerateFiles("*.dll", SearchOption.TopDirectoryOnly)
+          .Aggregate(
+              (Newest: info.LastWriteTimeUtc, Count: 0),
+              (acc, f) => (f.LastWriteTimeUtc > acc.Newest ? f.LastWriteTimeUtc : acc.Newest, acc.Count + 1));
 
-      return new AssemblyStamp(
-          info.LastWriteTimeUtc,
-          info.Length,
-          assemblies.DefaultIfEmpty(info.LastWriteTimeUtc).Max(),
-          assemblies.Count);
+      return new AssemblyStamp(info.LastWriteTimeUtc, info.Length, newest, count);
     }
     catch (Exception)
     {

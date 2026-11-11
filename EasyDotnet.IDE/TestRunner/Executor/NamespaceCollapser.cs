@@ -1,15 +1,14 @@
 using EasyDotnet.IDE.TestRunner.Models;
-using EasyDotnet.IDE.TestRunner.Registry;
 
 namespace EasyDotnet.IDE.TestRunner.Executor;
 
 /// <summary>
 /// Collapses single-child namespace chains (A → B → C with nothing else in A and B) into one
-/// node displayed as "A.B.C", both in the discovered node list sent to the client and in the registry.
+/// node displayed as "A.B.C". Operates on the discovered node list before it is registered and emitted.
 /// </summary>
 public static class NamespaceCollapser
 {
-  public static void Collapse(string projectNodeId, List<TestNode> nodes, NodeRegistry registry)
+  public static void Collapse(string projectNodeId, List<TestNode> nodes)
   {
     var byId = nodes.ToDictionary(n => n.Id);
     var childrenOf = nodes
@@ -78,14 +77,5 @@ public static class NamespaceCollapser
       else if (toUpdate.TryGetValue(node.Id, out var updated))
         nodes[i] = updated;
     }
-
-    // Mirror the collapse in the registry so it holds the same tree the client receives.
-    // Re-parent the terminals first: each collapsed chain node then has no descendants left
-    // besides the rest of its chain, so RemoveSubtree drops exactly the collapsed nodes.
-    foreach (var updated in toUpdate.Values)
-      registry.Register(updated);
-
-    foreach (var id in toRemove)
-      registry.RemoveSubtree(id);
   }
 }

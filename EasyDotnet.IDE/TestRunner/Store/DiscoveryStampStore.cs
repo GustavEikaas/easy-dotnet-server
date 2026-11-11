@@ -42,9 +42,9 @@ public class DiscoveryStampStore(NodeRegistry registry, IFileSystem fileSystem)
   public bool NeedsDiscovery(string projectNodeId, string targetPath, string? scopeNodeId = null) =>
       !_stamps.TryGetValue(projectNodeId, out var discovered)
       || !string.Equals(discovered.TargetPath, targetPath, StringComparison.OrdinalIgnoreCase)
-      || Capture(targetPath) != discovered.Stamp
       || !registry.HasDescendants(projectNodeId)
-      || ContainsProbableTest(scopeNodeId ?? projectNodeId);
+      || ContainsProbableTest(scopeNodeId ?? projectNodeId)
+      || Capture(targetPath) != discovered.Stamp;
 
   private bool ContainsProbableTest(string scopeNodeId) =>
       registry.Get(scopeNodeId)?.Type is NodeType.ProbableTest

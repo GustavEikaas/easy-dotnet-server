@@ -45,7 +45,10 @@ public class OperationExecutor(
     var rootNamespaceParts = rootNs.Split('.', StringSplitOptions.RemoveEmptyEntries);
 
     var locator = new TestSourceLocator();
+    // Nodes are collected here and only registered once discovery is complete and namespaces
+    // are collapsed, so the registry holds exactly the tree the client receives.
     var pendingEmit = new List<TestNode>();
+    var nativeIds = new Dictionary<string, string>(StringComparer.Ordinal);
     var callbackLock = new SemaphoreSlim(1, 1);
 
     try
@@ -84,7 +87,6 @@ public class OperationExecutor(
                       ProjectId: projectNodeId,
                       AvailableActions: [TestAction.Run, TestAction.Debug, TestAction.GoToSource]
                   );
-              registry.Register(classNode);
               pendingEmit.Add(classNode);
             }
             parentId = classNodeId;
@@ -116,7 +118,6 @@ public class OperationExecutor(
                           ? [TestAction.Run, TestAction.Debug, TestAction.GoToSource]
                           : [TestAction.Run, TestAction.Debug]
                   );
-              registry.Register(groupNode);
               pendingEmit.Add(groupNode);
             }
             parentId = groupId;
@@ -175,7 +176,7 @@ public class OperationExecutor(
                       ? [TestAction.Run, TestAction.Debug, TestAction.GoToSource]
                       : [TestAction.Run, TestAction.Debug]
               );
-          registry.Register(methodNode, nativeId: discovered.NativeId);
+          nativeIds[methodNode.Id] = discovered.NativeId;
           pendingEmit.Add(methodNode);
         }
         finally
@@ -189,7 +190,10 @@ public class OperationExecutor(
       callbackLock.Release();
 
       if (!IsFSharpProject(project))
-        NamespaceCollapser.Collapse(projectNodeId, pendingEmit, registry);
+        NamespaceCollapser.Collapse(projectNodeId, pendingEmit);
+
+      foreach (var node in pendingEmit)
+        registry.Register(node, nativeIds.GetValueOrDefault(node.Id));
 
       foreach (var node in pendingEmit.ToList())
         await dispatcher.SendRegisterTestAsync(node, token.OperationId);
@@ -310,7 +314,7 @@ public class OperationExecutor(
       if (detailStore.Get(stableId) is not null) return;
 
       resultBatch.Enqueue(new StatusUpdate(stableId, runningStatus));
-      BubbleStatus(resultBatch, stableId, leafIds);
+      resultBatch.EnqueueRange(parentAggregator.Started(stableId));
       await resultBatch.FlushIfNeededAsync();
     }
 
@@ -440,7 +444,6 @@ public class OperationExecutor(
             ProjectId: projectNodeId,
             AvailableActions: [TestAction.Run, TestAction.Debug]
         );
-        registry.Register(nsNode);
         pendingEmit.Add(nsNode);
       }
 
@@ -471,23 +474,6 @@ public class OperationExecutor(
     };
 
     return (status, baseActions);
-  }
-
-  /// <summary>
-  /// Marks every ancestor of a just-started leaf as Running. The started leaf is itself in scope
-  /// and has no result yet, so any aggregate over its ancestors is necessarily Running —
-  /// walking the parent chain is enough. Terminal parent statuses come from ParentStatusAggregator.
-  /// </summary>
-  private void BubbleStatus(RunResultBatch resultBatch, string leafId, HashSet<string> runningLeafIds)
-  {
-    if (!runningLeafIds.Contains(leafId)) return;
-
-    var parentId = registry.Get(leafId)?.ParentId;
-    while (parentId is not null && registry.Get(parentId) is { } parent)
-    {
-      resultBatch.Enqueue(new(parent.Id, new TestNodeStatus.Running()));
-      parentId = parent.ParentId;
-    }
   }
 
   private sealed class RunResultBatch(
@@ -555,6 +541,7 @@ public class OperationExecutor(
     private readonly Dictionary<string, List<string>> _parentsByLeaf = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ParentRunState> _statesByParent = new(StringComparer.Ordinal);
     private readonly HashSet<string> _completedLeaves = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _runningParents = new(StringComparer.Ordinal);
 
     public ParentStatusAggregator(NodeRegistry registry, DetailStore detailStore, HashSet<string> runningLeafIds)
     {
@@ -578,6 +565,16 @@ public class OperationExecutor(
         }
       }
     }
+
+    /// <summary>
+    /// Marks the ancestors of a just-started leaf as Running — once per parent, since a parent
+    /// can only turn terminal after all its leaves (including this one) have completed.
+    /// </summary>
+    public IEnumerable<StatusUpdate> Started(string leafId) =>
+        _parentsByLeaf.GetValueOrDefault(leafId, [])
+            .Where(_runningParents.Add)
+            .Select(parentId => new StatusUpdate(parentId, new TestNodeStatus.Running()))
+            .ToList();
 
     public IEnumerable<StatusUpdate> Record(string leafId)
     {

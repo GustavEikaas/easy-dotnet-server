@@ -100,20 +100,12 @@ public class NodeRegistry
     }
   }
 
-  /// <summary>Recursively returns all descendants of a node.</summary>
+  /// <summary>Returns a breadth-first snapshot of all descendants of a node.</summary>
   public IEnumerable<TestNode> GetDescendants(string rootId)
   {
-    var queue = new Queue<string>();
-    queue.Enqueue(rootId);
-
-    while (queue.Count > 0)
+    lock (_structureLock)
     {
-      var current = queue.Dequeue();
-      foreach (var child in GetChildren(current))
-      {
-        yield return child;
-        queue.Enqueue(child.Id);
-      }
+      return CollectDescendantIds(rootId).Select(id => _nodes[id]).ToList();
     }
   }
 
@@ -214,7 +206,7 @@ public class NodeRegistry
     }
   }
 
-  // Must be called under _structureLock. Breadth-first, matching GetDescendants order.
+  // Must be called under _structureLock.
   private List<string> CollectDescendantIds(string rootId)
   {
     var result = new List<string>();

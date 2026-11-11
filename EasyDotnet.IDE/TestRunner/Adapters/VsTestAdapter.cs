@@ -9,7 +9,6 @@ using EasyDotnet.IDE.Settings;
 using EasyDotnet.IDE.TestRunner.Adapters.VSTest;
 using EasyDotnet.IDE.TestRunner.Lock;
 using EasyDotnet.IDE.TestRunner.Models;
-using EasyDotnet.IDE.TestRunner.Store;
 using Microsoft.Extensions.Logging;
 using Microsoft.TestPlatform.VsTestConsole.TranslationLayer;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel;
@@ -61,23 +60,10 @@ public sealed class VsTestAdapter(
         try { wrapper.CancelDiscovery(); } catch { /* best effort */ }
       });
 
-      _testCases = null;
-      var stamp = AssemblyStamp.TryCapture(fileSystem, project.TargetPath);
-
-      var handler = new StreamingDiscoveryHandler(loggerFactory);
-      wrapper.DiscoverTests([project.TargetPath], null, DefaultOptions, null, handler);
-
       // Buffer all TestCases so we can detect parameterised rows by duplicate FQN —
       // this is the only reliable VSTest-layer signal, since frameworks like MSTest
       // can strip parens from DisplayName entirely via [DataRow(DisplayName = "...")].
-      var testCases = new List<TestCase>();
-      await foreach (var tc in handler.ReadAllAsync().WithCancellation(ct))
-      {
-        testCases.Add(tc);
-      }
-
-      if (!handler.IsAborted)
-        CacheTestCases(wrapper, project, stamp, testCases);
+      var (testCases, complete) = await DiscoverAndCacheAsync(wrapper, project, ct);
 
       foreach (var group in testCases.GroupBy(tc => tc.FullyQualifiedName))
       {
@@ -90,7 +76,7 @@ public sealed class VsTestAdapter(
         }
       }
 
-      return !handler.IsAborted;
+      return complete;
     }
     finally
     {
@@ -150,7 +136,10 @@ public sealed class VsTestAdapter(
 
       var channel = Channel.CreateUnbounded<VsTestRunEvent>();
 
-      var toRun = GetCachedTestCases(project, nativeGuids) ?? DiscoverTestCases(wrapper, project, nativeGuids);
+      var toRun = GetCachedTestCases(project, nativeGuids)
+          ?? (await DiscoverAndCacheAsync(wrapper, project, ct)).TestCases
+              .Where(x => nativeGuids.Contains(x.Id))
+              .ToList();
 
       if (toRun.Count == 0) return;
 
@@ -244,25 +233,19 @@ public sealed class VsTestAdapter(
   {
     if (_wrapper is not null) return _wrapper;
     var vsTestPath = sdkService.GetVsTestPath();
-    _testCases = null;
     _wrapper = new VsTestConsoleWrapper(vsTestPath);
     return _wrapper;
   }
 
   /// <summary>
   /// Returns the requested TestCases from the last discovery, or null on a cache miss
-  /// (different assembly, assembly rebuilt since, or any requested id unknown).
+  /// (no discovery since the wrapper was created, a different assembly, or any requested id unknown).
   /// </summary>
   private List<TestCase>? GetCachedTestCases(ValidatedDotnetProject project, HashSet<Guid> nativeGuids)
   {
     var cached = _testCases;
-    if (cached is null
-        || !string.Equals(cached.TargetPath, project.TargetPath, StringComparison.OrdinalIgnoreCase)
-        || !string.Equals(cached.TargetFramework, project.TargetFramework, StringComparison.OrdinalIgnoreCase)
-        || AssemblyStamp.TryCapture(fileSystem, project.TargetPath) != cached.Stamp)
-    {
+    if (cached is null || !string.Equals(cached.TargetPath, project.TargetPath, StringComparison.OrdinalIgnoreCase))
       return null;
-    }
 
     var toRun = nativeGuids
         .Select(id => cached.ById.GetValueOrDefault(id))
@@ -277,32 +260,27 @@ public sealed class VsTestAdapter(
   }
 
   /// <summary>
-  /// Cache-miss path: discovers the assembly again and re-populates the cache, so a miss
-  /// (e.g. after the wrapper was killed) costs one discovery rather than one per run.
+  /// Runs a full VSTest discovery and, unless VSTest reports it aborted, caches the TestCases for
+  /// later runs. Also the cache-miss path of a run, so a miss (e.g. after the wrapper was killed)
+  /// costs one discovery rather than one per run.
   /// </summary>
-  private List<TestCase> DiscoverTestCases(VsTestConsoleWrapper wrapper, ValidatedDotnetProject project, HashSet<Guid> nativeGuids)
+  private async Task<(List<TestCase> TestCases, bool Complete)> DiscoverAndCacheAsync(
+      VsTestConsoleWrapper wrapper, ValidatedDotnetProject project, CancellationToken ct)
   {
-    var stamp = AssemblyStamp.TryCapture(fileSystem, project.TargetPath);
-    var discoveryHandler = new TestDiscoveryHandler(loggerFactory.CreateLogger<TestDiscoveryHandler>());
-    wrapper.DiscoverTests([project.TargetPath], null, DefaultOptions, null, discoveryHandler);
+    _testCases = null;
 
-    if (!discoveryHandler.IsAborted)
-      CacheTestCases(wrapper, project, stamp, discoveryHandler.TestCases);
+    var handler = new StreamingDiscoveryHandler(loggerFactory);
+    wrapper.DiscoverTests([project.TargetPath], null, DefaultOptions, null, handler);
+    var testCases = await handler.ReadAllAsync().ToListAsync(ct);
 
-    return discoveryHandler.TestCases
-        .Where(x => nativeGuids.Contains(x.Id))
-        .ToList();
-  }
+    if (!handler.IsAborted && ReferenceEquals(_wrapper, wrapper))
+    {
+      _testCases = new DiscoveredTestCases(
+          project.TargetPath,
+          testCases.DistinctBy(tc => tc.Id).ToDictionary(tc => tc.Id));
+    }
 
-  private void CacheTestCases(VsTestConsoleWrapper wrapper, ValidatedDotnetProject project, AssemblyStamp? stamp, List<TestCase> testCases)
-  {
-    if (stamp is not { } s || !ReferenceEquals(_wrapper, wrapper)) return;
-
-    _testCases = new DiscoveredTestCases(
-        project.TargetPath,
-        project.TargetFramework,
-        s,
-        testCases.DistinctBy(tc => tc.Id).ToDictionary(tc => tc.Id));
+    return (testCases, !handler.IsAborted);
   }
 
   private DebuggerTestHostLauncher CreateDebuggerLauncher(
@@ -352,11 +330,7 @@ public sealed class VsTestAdapter(
     return ValueTask.CompletedTask;
   }
 
-  private sealed record DiscoveredTestCases(
-      string TargetPath,
-      string? TargetFramework,
-      AssemblyStamp Stamp,
-      Dictionary<Guid, TestCase> ById);
+  private sealed record DiscoveredTestCases(string TargetPath, Dictionary<Guid, TestCase> ById);
 
   private Task KillWrapperAsync(VsTestConsoleWrapper wrapper)
   {
