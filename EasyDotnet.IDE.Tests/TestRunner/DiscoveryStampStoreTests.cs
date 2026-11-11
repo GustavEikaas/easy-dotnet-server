@@ -9,6 +9,8 @@ namespace EasyDotnet.IDE.Tests.TestRunner;
 public class DiscoveryStampStoreTests
 {
   private const string TargetPath = "/repo/tests/bin/Debug/net8.0/Tests.dll";
+  private const string LibraryPath = "/repo/tests/bin/Debug/net8.0/Library.dll";
+  private static readonly DateTime BuildTime = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
   private const string ProjectId = "proj";
 
   private readonly MockFileSystem _fileSystem = new();
@@ -18,7 +20,9 @@ public class DiscoveryStampStoreTests
   public DiscoveryStampStoreTests()
   {
     _fileSystem.AddFile(TargetPath, new MockFileData([1, 2, 3]));
-    _fileSystem.File.SetLastWriteTimeUtc(TargetPath, new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+    _fileSystem.File.SetLastWriteTimeUtc(TargetPath, BuildTime);
+    _fileSystem.AddFile(LibraryPath, new MockFileData([4, 5]));
+    _fileSystem.File.SetLastWriteTimeUtc(LibraryPath, BuildTime);
 
     _registry.Register(Node("sln", null, new NodeType.Solution()));
     _registry.Register(Node(ProjectId, "sln", new NodeType.Project()));
@@ -63,6 +67,41 @@ public class DiscoveryStampStoreTests
     _fileSystem.File.SetLastWriteTimeUtc(TargetPath, lastWrite);
 
     await Assert.That(_store.NeedsDiscovery(ProjectId, TargetPath)).IsTrue();
+  }
+
+  [Test]
+  public async Task RebuiltReferencedAssembly_NeedsDiscovery()
+  {
+    MarkFresh();
+
+    // e.g. a library whose public API didn't change: the test DLL is not recompiled.
+    _fileSystem.File.SetLastWriteTimeUtc(LibraryPath, BuildTime.AddMinutes(1));
+
+    await Assert.That(_store.NeedsDiscovery(ProjectId, TargetPath)).IsTrue();
+  }
+
+  [Test]
+  public async Task AddedAssemblyInOutput_NeedsDiscovery()
+  {
+    MarkFresh();
+
+    const string added = "/repo/tests/bin/Debug/net8.0/runtimes/linux-x64/Native.dll";
+    _fileSystem.AddFile(added, new MockFileData([9]));
+    _fileSystem.File.SetLastWriteTimeUtc(added, BuildTime);
+
+    await Assert.That(_store.NeedsDiscovery(ProjectId, TargetPath)).IsTrue();
+  }
+
+  [Test]
+  public async Task NonAssemblyFileWrittenToOutput_SkipsDiscovery()
+  {
+    MarkFresh();
+
+    // Test runs and tooling write logs, coverlet mappings, … next to the assembly.
+    _fileSystem.AddFile("/repo/tests/bin/Debug/net8.0/CoverletSourceRootsMapping", new MockFileData([7]));
+    _fileSystem.AddFile("/repo/tests/bin/Debug/net8.0/logs/run.log", new MockFileData([8]));
+
+    await Assert.That(_store.NeedsDiscovery(ProjectId, TargetPath)).IsFalse();
   }
 
   [Test]

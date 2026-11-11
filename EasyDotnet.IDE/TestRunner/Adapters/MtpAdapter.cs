@@ -26,7 +26,7 @@ public sealed class MtpAdapter(
   MtpClientFactory clientFactory
 ) : ITestAdapter
 {
-  public async Task DiscoverAsync(
+  public async Task<bool> DiscoverAsync(
       ValidatedDotnetProject project,
       Func<DiscoveredTest, Task> onDiscovered,
       OperationControl control,
@@ -41,6 +41,8 @@ public sealed class MtpAdapter(
       if (update.Node.NodeType != "action") continue;
       await onDiscovered(update.ToDiscoveredTest());
     }
+
+    return true;
   }
 
   public async Task RunAsync(

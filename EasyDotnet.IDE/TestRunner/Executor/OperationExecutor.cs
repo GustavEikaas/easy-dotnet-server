@@ -51,7 +51,7 @@ public class OperationExecutor(
     try
     {
       var discoveryComplete = false;
-      await adapter.DiscoverAsync(project, async discovered =>
+      var sawAllTests = await adapter.DiscoverAsync(project, async discovered =>
       {
         await callbackLock.WaitAsync(token.Ct);
         try
@@ -203,7 +203,12 @@ public class OperationExecutor(
 
       await dispatcher.SendStatusAsync(projectNodeId, new TestNodeStatus.Idle(), operationId: token.OperationId);
 
-      discoveryStamps.MarkDiscovered(projectNodeId, project.TargetPath, assemblyStamp);
+      // An aborted discovery (e.g. testhost crashed) still shows what it found, but must not be
+      // recorded as fresh or later runs would keep using the partial tree.
+      if (sawAllTests)
+        discoveryStamps.MarkDiscovered(projectNodeId, project.TargetPath, assemblyStamp);
+      else
+        logger.LogWarning("Discovery for project {Project} was aborted — results may be incomplete", project.ProjectName);
     }
     catch (OperationCanceledException)
     {

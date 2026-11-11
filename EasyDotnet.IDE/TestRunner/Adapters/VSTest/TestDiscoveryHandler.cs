@@ -9,6 +9,8 @@ public class TestDiscoveryHandler(ILogger<TestDiscoveryHandler> logger) : ITestD
 {
   public List<TestCase> TestCases { get; internal set; } = [];
 
+  public bool IsAborted { get; private set; }
+
   public void HandleDiscoveredTests(IEnumerable<TestCase>? discoveredTestCases)
   {
     if (discoveredTestCases == null)
@@ -28,6 +30,7 @@ public class TestDiscoveryHandler(ILogger<TestDiscoveryHandler> logger) : ITestD
   public void HandleDiscoveryComplete(long totalTests, IEnumerable<TestCase>? lastChunk, bool isAborted)
   {
     logger.LogInformation("HandleDiscoveryComplete(long,int,bool): total={totalTests}, isAborted={isAborted}", totalTests, isAborted);
+    IsAborted = isAborted;
 
     if (lastChunk != null)
     {
@@ -46,6 +49,7 @@ public class TestDiscoveryHandler(ILogger<TestDiscoveryHandler> logger) : ITestD
   public void HandleDiscoveryComplete(DiscoveryCompleteEventArgs args, IEnumerable<TestCase>? lastChunk)
   {
     logger.LogInformation("HandleDiscoveryComplete(DiscoveryCompleteEventArgs): total={totalTests}, aborted={aborted}", args.TotalCount, args.IsAborted);
+    IsAborted = args.IsAborted;
 
     if (lastChunk != null)
     {

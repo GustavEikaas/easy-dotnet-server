@@ -42,13 +42,9 @@ public sealed class VsTestAdapter(
   private readonly SemaphoreSlim _gate = new(1, 1);
 
   private VsTestConsoleWrapper? _wrapper;
-
-  // TestCases from the last complete discovery, reused by RunCoreAsync so a run doesn't pay
-  // for a second full VSTest discovery. Dropped when the assembly stamp changes, on dispose
-  // and whenever the wrapper is killed or recreated.
   private DiscoveredTestCases? _testCases;
 
-  public async Task DiscoverAsync(
+  public async Task<bool> DiscoverAsync(
       ValidatedDotnetProject project,
       Func<DiscoveredTest, Task> onDiscovered,
       OperationControl control,
@@ -80,14 +76,8 @@ public sealed class VsTestAdapter(
         testCases.Add(tc);
       }
 
-      if (!handler.IsAborted && stamp is { } s && ReferenceEquals(_wrapper, wrapper))
-      {
-        _testCases = new DiscoveredTestCases(
-            project.TargetPath,
-            project.TargetFramework,
-            s,
-            testCases.DistinctBy(tc => tc.Id).ToDictionary(tc => tc.Id));
-      }
+      if (!handler.IsAborted)
+        CacheTestCases(wrapper, project, stamp, testCases);
 
       foreach (var group in testCases.GroupBy(tc => tc.FullyQualifiedName))
       {
@@ -99,6 +89,8 @@ public sealed class VsTestAdapter(
           catch (Exception ex) { _logger.LogError(ex, "Error in onDiscovered callback for {TestCase}", discoveredTest.FullyQualifiedName); }
         }
       }
+
+      return !handler.IsAborted;
     }
     finally
     {
@@ -284,14 +276,33 @@ public sealed class VsTestAdapter(
     return null;
   }
 
+  /// <summary>
+  /// Cache-miss path: discovers the assembly again and re-populates the cache, so a miss
+  /// (e.g. after the wrapper was killed) costs one discovery rather than one per run.
+  /// </summary>
   private List<TestCase> DiscoverTestCases(VsTestConsoleWrapper wrapper, ValidatedDotnetProject project, HashSet<Guid> nativeGuids)
   {
+    var stamp = AssemblyStamp.TryCapture(fileSystem, project.TargetPath);
     var discoveryHandler = new TestDiscoveryHandler(loggerFactory.CreateLogger<TestDiscoveryHandler>());
     wrapper.DiscoverTests([project.TargetPath], null, DefaultOptions, null, discoveryHandler);
+
+    if (!discoveryHandler.IsAborted)
+      CacheTestCases(wrapper, project, stamp, discoveryHandler.TestCases);
 
     return discoveryHandler.TestCases
         .Where(x => nativeGuids.Contains(x.Id))
         .ToList();
+  }
+
+  private void CacheTestCases(VsTestConsoleWrapper wrapper, ValidatedDotnetProject project, AssemblyStamp? stamp, List<TestCase> testCases)
+  {
+    if (stamp is not { } s || !ReferenceEquals(_wrapper, wrapper)) return;
+
+    _testCases = new DiscoveredTestCases(
+        project.TargetPath,
+        project.TargetFramework,
+        s,
+        testCases.DistinctBy(tc => tc.Id).ToDictionary(tc => tc.Id));
   }
 
   private DebuggerTestHostLauncher CreateDebuggerLauncher(
