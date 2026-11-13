@@ -227,7 +227,11 @@ public class WorkspaceBuildService(
           restoreBeforeOperation,
           ct);
 
-  private async Task<bool> ExecuteBuildTargetQuickfixAsync(
+  /// <summary>
+  /// Restores (when asked) and runs <paramref name="buildTarget"/> on the build server,
+  /// returning every diagnostic instead of reporting to the editor.
+  /// </summary>
+  public async Task<BuildRunResult> RunBuildTargetAsync(
       string targetPath,
       string name,
       string? configuration,
@@ -241,8 +245,25 @@ public class WorkspaceBuildService(
         && string.Equals(buildTarget, "Build", StringComparison.OrdinalIgnoreCase)
         && DotnetFileTypes.IsAnySolutionFile(targetPath);
 
-    if (restoreBeforeOperation && !restoreInBuild && !await RestoreBeforeBuildQuickfixAsync(targetPath, name, ct))
-      return false;
+    if (restoreBeforeOperation && !restoreInBuild)
+    {
+      List<RestoreResult> restoreResults;
+      using (progressScopeFactory.Create("Restoring...", $"Restoring {name}"))
+      {
+        restoreResults = await buildHostManager
+            .RestoreNugetPackagesAsync(new RestoreRequest([targetPath]), ct)
+            .ToListAsync(ct);
+      }
+
+      if (!restoreResults.All(r => r.Success))
+      {
+        return new BuildRunResult(
+            Success: false,
+            RestoreFailed: true,
+            Diagnostics: [.. restoreResults.SelectMany(r => r.Output?.Diagnostics ?? [])],
+            Failures: [.. restoreResults.Where(r => !r.Success).Select(r => $"Restore failed for {name}")]);
+      }
+    }
 
     var tfm = DotnetFileTypes.IsAnySolutionFile(targetPath)
         ? null
@@ -256,12 +277,44 @@ public class WorkspaceBuildService(
     }
 
     var finishedResults = results.Where(r => r.Kind == BatchBuildResultKind.Finished).ToList();
-    var allDiagnostics = finishedResults
-        .SelectMany(r => r.Output?.Diagnostics ?? [])
-        .ToList();
+    return new BuildRunResult(
+        Success: finishedResults.Count > 0 && finishedResults.All(r => r.Success == true),
+        RestoreFailed: false,
+        Diagnostics: [.. finishedResults.SelectMany(r => r.Output?.Diagnostics ?? [])],
+        Failures: [.. finishedResults
+            .Where(r => r.Success != true && r.ErrorMessage is not null)
+            .Select(r => $"{Path.GetFileName(r.ProjectPath)}: {r.ErrorMessage}")]);
+  }
 
-    var errors = MapDiagnostics(allDiagnostics, BuildDiagnosticSeverity.Error, QuickFixItemType.Error);
-    var warnings = MapDiagnostics(allDiagnostics, BuildDiagnosticSeverity.Warning, QuickFixItemType.Warning);
+  private async Task<bool> ExecuteBuildTargetQuickfixAsync(
+      string targetPath,
+      string name,
+      string? configuration,
+      string buildTarget,
+      string operationName,
+      string? platform,
+      bool restoreBeforeOperation,
+      CancellationToken ct)
+  {
+    var run = await RunBuildTargetAsync(targetPath, name, configuration, buildTarget, operationName, platform, restoreBeforeOperation, ct);
+
+    if (run.RestoreFailed)
+    {
+      var restoreErrors = MapDiagnostics(run.Diagnostics, BuildDiagnosticSeverity.Error, QuickFixItemType.Error);
+      var restoreWarnings = MapDiagnostics(run.Diagnostics, BuildDiagnosticSeverity.Warning, QuickFixItemType.Warning);
+      if (restoreErrors.Count > 0 || restoreWarnings.Count > 0)
+      {
+        await editorService.SetQuickFixList([.. restoreErrors.Concat(restoreWarnings)]);
+        await editorService.DisplayError($"Restore FAILED — {restoreErrors.Count} error(s), {restoreWarnings.Count} warning(s)");
+        return false;
+      }
+
+      await editorService.DisplayError($"Restore failed for {name}");
+      return false;
+    }
+
+    var errors = MapDiagnostics(run.Diagnostics, BuildDiagnosticSeverity.Error, QuickFixItemType.Error);
+    var warnings = MapDiagnostics(run.Diagnostics, BuildDiagnosticSeverity.Warning, QuickFixItemType.Warning);
 
     if (errors.Count == 0 && warnings.Count == 0)
     {
@@ -282,36 +335,6 @@ public class WorkspaceBuildService(
     return false;
   }
 
-  private async Task<bool> RestoreBeforeBuildQuickfixAsync(string targetPath, string name, CancellationToken ct)
-  {
-    List<RestoreResult> restoreResults;
-    using (progressScopeFactory.Create("Restoring...", $"Restoring {name}"))
-    {
-      restoreResults = await buildHostManager
-          .RestoreNugetPackagesAsync(new RestoreRequest([targetPath]), ct)
-          .ToListAsync(ct);
-    }
-
-    if (restoreResults.All(r => r.Success))
-      return true;
-
-    var restoreDiagnostics = restoreResults
-        .SelectMany(r => r.Output?.Diagnostics ?? [])
-        .ToList();
-
-    var errors = MapDiagnostics(restoreDiagnostics, BuildDiagnosticSeverity.Error, QuickFixItemType.Error);
-    var warnings = MapDiagnostics(restoreDiagnostics, BuildDiagnosticSeverity.Warning, QuickFixItemType.Warning);
-    if (errors.Count > 0 || warnings.Count > 0)
-    {
-      await editorService.SetQuickFixList([.. errors.Concat(warnings)]);
-      await editorService.DisplayError($"Restore FAILED — {errors.Count} error(s), {warnings.Count} warning(s)");
-      return false;
-    }
-
-    await editorService.DisplayError($"Restore failed for {name}");
-    return false;
-  }
-
   private static List<QuickFixItem> MapDiagnostics(
       IEnumerable<BuildDiagnostic> diagnostics,
       BuildDiagnosticSeverity severity,
@@ -326,3 +349,10 @@ public class WorkspaceBuildService(
               Type: quickFixType))
           .Distinct()];
 }
+
+/// <summary>Outcome of <see cref="WorkspaceBuildService.RunBuildTargetAsync"/>.</summary>
+public sealed record BuildRunResult(
+    bool Success,
+    bool RestoreFailed,
+    IReadOnlyList<BuildDiagnostic> Diagnostics,
+    IReadOnlyList<string> Failures);

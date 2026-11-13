@@ -38,6 +38,9 @@ static class Program
            .WithDescription("Build and run tests using VSTest.");
         });
 
+      config.AddCommand<McpCommand>("mcp")
+        .WithDescription("Start an MCP server over stdio that builds and tests the workspace for AI agents.");
+
       config.AddCommand<ProjXLanguageServerCommand>("projx-language-server")
         .WithDescription("Start the ProjX Language Server over stdio.");
 

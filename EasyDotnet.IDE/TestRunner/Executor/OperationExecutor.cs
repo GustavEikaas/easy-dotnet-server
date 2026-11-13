@@ -231,19 +231,29 @@ public class OperationExecutor(
       string.Equals(project.Raw.Language, "fsharp", StringComparison.OrdinalIgnoreCase)
       || project.ProjectFullPath.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase);
 
-  public async Task<RunProgressCounter> RunNodeAsync(
-    string nodeId,
+  /// <summary>Number of leaves with a native id under <paramref name="nodeIds"/>, each counted once.</summary>
+  public int CountRunnableLeaves(IEnumerable<string> nodeIds) =>
+      CollectRunnableLeaves(nodeIds).Count(n => registry.GetNativeId(n.Id) is not null);
+
+  /// <summary>
+  /// Runs every leaf under <paramref name="nodeIds"/> (all in <paramref name="project"/>) in a
+  /// single adapter invocation.
+  /// </summary>
+  public async Task<RunProgressCounter> RunNodesAsync(
+    IReadOnlyCollection<string> nodeIds,
     ValidatedDotnetProject project,
     OperationControl control,
     OperationToken token,
     bool debug = false,
     RunProgressCounter? sharedCounter = null)
   {
-    detailStore.ClearSubtree(registry.GetDescendants(nodeId).Select(n => n.Id).Append(nodeId));
+    foreach (var nodeId in nodeIds)
+    {
+      detailStore.ClearSubtree(registry.GetDescendants(nodeId).Select(n => n.Id).Append(nodeId));
+    }
 
-    var leafNodes = registry.GetLeafDescendants(nodeId).ToList();
-    var self = registry.Get(nodeId);
-    if (self?.Type is NodeType.TestMethod or NodeType.Subcase) { leafNodes.Add(self); }
+    var leafNodes = CollectRunnableLeaves(nodeIds);
+    var runDescription = string.Join(", ", nodeIds);
 
     var nativeIds = leafNodes
         .Select(n => registry.GetNativeId(n.Id))
@@ -253,11 +263,14 @@ public class OperationExecutor(
 
     if (nativeIds.Count == 0)
     {
-      logger.LogWarning("No runnable tests found under node {NodeId}", nodeId);
+      logger.LogWarning("No runnable tests found under nodes {NodeIds}", runDescription);
       return sharedCounter ?? new RunProgressCounter(0);
     }
 
-    await dispatcher.SendBatchStatusAsync(nodeId, new TestNodeStatus.Queued(), registry, operationId: token.OperationId);
+    foreach (var nodeId in nodeIds)
+    {
+      await dispatcher.SendBatchStatusAsync(nodeId, new TestNodeStatus.Queued(), registry, operationId: token.OperationId);
+    }
 
     var counter = sharedCounter ?? new RunProgressCounter(nativeIds.Count);
 
@@ -338,8 +351,8 @@ public class OperationExecutor(
     if (!token.Ct.IsCancellationRequested && expectedNativeIds.Count > 0)
     {
       logger.LogError(
-        "Run completed without reporting all results for {NodeId}. Expected={Expected} Seen={Seen} Missing={Missing}",
-        nodeId,
+        "Run completed without reporting all results for {NodeIds}. Expected={Expected} Seen={Seen} Missing={Missing}",
+        runDescription,
         nativeIds.Count,
         seenNativeIds.Count,
         expectedNativeIds.Count);
@@ -372,6 +385,17 @@ public class OperationExecutor(
 
     return counter;
   }
+
+  private List<TestNode> CollectRunnableLeaves(IEnumerable<string> nodeIds) =>
+      [.. nodeIds
+          .SelectMany(nodeId =>
+          {
+            var leaves = registry.GetLeafDescendants(nodeId);
+            return registry.Get(nodeId) is { Type: NodeType.TestMethod or NodeType.Subcase } self
+                ? leaves.Append(self)
+                : leaves;
+          })
+          .DistinctBy(n => n.Id)];
 
   private string EnsureProjectNode(ValidatedDotnetProject project, string solutionNodeId, long operationId)
   {

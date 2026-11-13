@@ -45,6 +45,24 @@ It returns a deterministic JSON array of health items with `type`, `name`, `valu
 Pass `--debugger-bin-path <PATH>` to make the debugger health rows reflect a client-provided debugger path.
 Pass `--debugger-engine netcoredbg|dncdbg` to check a specific bundled debugger engine.
 
+## 🤖 MCP server for AI agents
+
+`dotnet-easydotnet mcp` runs the same build server and test runner behind an [MCP](https://modelcontextprotocol.io) server on stdin/stdout, so coding agents can build and test without parsing `dotnet build` / `dotnet test` output. Start it from the solution directory; it picks up the single `.sln`/`.slnx` there, or pass `--solution <PATH>`.
+
+```bash
+# Claude Code, registered for the current repository
+claude mcp add easy-dotnet -- dotnet-easydotnet mcp
+```
+
+| Tool | What it does |
+|------|--------------|
+| `build` | Builds a solution or project and returns deduplicated errors (file, line, column, code, message) as JSON. |
+| `list_tests` | Lists discovered tests with id, full name, file and line. The first call builds and discovers the solution. |
+| `run_tests` | Runs tests selected by id, file and line, name, project or last failure, across MTP and VSTest projects in one call, and returns each failure's message and failing line in user code. |
+| `get_test_result` | Returns the full message, stack trace and stdout of a test's last run. |
+
+The process stays alive for the agent's session, so discovered tests and the warm build server are reused between calls. Logs go to stderr; raise them with `--logLevel Verbose`.
+
 ## Configuration
 
 ### Custom Roslyn LSP Server

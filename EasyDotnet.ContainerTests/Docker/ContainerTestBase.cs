@@ -53,6 +53,14 @@ public abstract class ContainerTestBase<TContainer> : IAsyncLifetime
     return timedTask;
   }
 
+  /// <inheritdoc cref="BeginCall(Task, TimeSpan?)"/>
+  protected Task<T> BeginCall<T>(Task<T> task, TimeSpan? timeout = null)
+  {
+    var timedTask = task.WaitAsync(timeout ?? DefaultRpcTimeout);
+    _rpcScope = timedTask;
+    return timedTask;
+  }
+
   /// <summary>
   /// Waits for a reverse request or notification and treats RPC-scope completion as a
   /// signal to perform a short final drain before failing. This avoids races where the

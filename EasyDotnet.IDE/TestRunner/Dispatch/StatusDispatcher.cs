@@ -5,17 +5,16 @@ using EasyDotnet.IDE.Models.Client.Quickfix;
 using EasyDotnet.IDE.TestRunner.Lock;
 using EasyDotnet.IDE.TestRunner.Models;
 using EasyDotnet.IDE.TestRunner.Registry;
-using StreamJsonRpc;
 
 namespace EasyDotnet.IDE.TestRunner.Dispatch;
 
 /// <summary>
-/// Single choke point for all outbound JSON-RPC notifications to the Lua client.
+/// Single choke point for all outbound testrunner events, delivered through <see cref="ITestRunnerClient"/>.
 /// Suppresses duplicate status notifications — if a node's status type hasn't changed,
 /// the notification is dropped to avoid spamming the client.
 /// </summary>
 public class StatusDispatcher(
-    JsonRpc rpc,
+    ITestRunnerClient client,
     NodeRegistry registry,
     IEditorService editorService,
     GlobalOperationLock operationLock)
@@ -30,7 +29,7 @@ public class StatusDispatcher(
   public Task SendRegisterTestAsync(TestNode node, long? operationId = null)
   {
     if (!ShouldDispatch(operationId)) return Task.CompletedTask;
-    return rpc.NotifyWithParameterObjectAsync("registerTest", new { test = node });
+    return client.RegisterTestAsync(node);
   }
 
   /// <summary>
@@ -40,7 +39,7 @@ public class StatusDispatcher(
   public Task SendRemoveTestAsync(string nodeId, long? operationId = null)
   {
     if (!ShouldDispatch(operationId)) return Task.CompletedTask;
-    return rpc.NotifyWithParameterObjectAsync("removeTest", new { id = nodeId });
+    return client.RemoveTestAsync(nodeId);
   }
 
   /// <summary>
@@ -56,7 +55,7 @@ public class StatusDispatcher(
       return Task.CompletedTask;
     }
 
-    return rpc.NotifyWithParameterObjectAsync("updateStatus", new { id = nodeId, status, availableActions });
+    return client.UpdateStatusAsync(nodeId, status, availableActions);
   }
 
   public Task SendStatusUpdatesAsync(
@@ -67,7 +66,6 @@ public class StatusDispatcher(
 
     var updates = statusUpdates
         .Where(u => registry.SetLastStatus(u.Id, u.Status))
-        .Select(u => new { id = u.Id, status = u.Status, availableActions = u.AvailableActions })
         .ToList();
 
     if (updates.Count == 0)
@@ -75,7 +73,7 @@ public class StatusDispatcher(
       return Task.CompletedTask;
     }
 
-    return rpc.NotifyWithParameterObjectAsync("updateStatusBatch", new { updates });
+    return client.UpdateStatusBatchAsync(updates);
   }
 
   /// <summary>
@@ -95,7 +93,7 @@ public class StatusDispatcher(
         .Select(n => n.Id)
         .Prepend(rootId)
         .Where(id => reg.SetLastStatus(id, status))
-        .Select(id => new { id, status, availableActions })
+        .Select(id => new StatusUpdate(id, status, availableActions))
         .ToList();
 
     if (updates.Count == 0)
@@ -103,18 +101,18 @@ public class StatusDispatcher(
       return Task.CompletedTask;
     }
 
-    return rpc.NotifyWithParameterObjectAsync("updateStatusBatch", new { updates });
+    return client.UpdateStatusBatchAsync(updates);
   }
 
   /// <summary>Broadcast global runner status (IsLoading, aggregate counts, etc.).</summary>
   public Task SendRunnerStatusAsync(TestRunnerStatus status, long? operationId = null)
   {
     if (!ShouldDispatch(operationId)) return Task.CompletedTask;
-    return rpc.NotifyWithParameterObjectAsync("testrunner/statusUpdate", status);
+    return client.SendRunnerStatusAsync(status);
   }
 
   public Task<bool> IsTestRunnerVisibleAsync(CancellationToken ct) =>
-      rpc.InvokeWithParameterObjectAsync<bool>("testrunner/isVisible", new { }, ct);
+      client.IsTestRunnerVisibleAsync(ct);
 
   public Task SendQuickFixAsync(IEnumerable<BuildDiagnostic> diagnostics)
   {

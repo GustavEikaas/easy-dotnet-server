@@ -174,6 +174,13 @@
 
 **Returns:** `Task<OperationResult>`
 
+### `testrunner/runMany`
+| Parameter | Type | Optional |
+|-----------|------|----------|
+| request | NodesRequest |   |
+
+**Returns:** `Task<OperationResult>`
+
 ### `testrunner/syncFile`
 | Parameter | Type | Optional |
 |-----------|------|----------|
