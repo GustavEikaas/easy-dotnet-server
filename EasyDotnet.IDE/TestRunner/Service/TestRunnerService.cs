@@ -19,6 +19,7 @@ public class TestRunnerService(
     StatusDispatcher dispatcher,
     DetailStore detailStore,
     BuildErrorStore buildErrorStore,
+    DiscoveryStampStore discoveryStamps,
     GlobalOperationLock operationLock,
     OperationExecutor executor,
     AdapterResolver adapterResolver,
@@ -59,6 +60,7 @@ public class TestRunnerService(
     {
       _isInitialized = false;
       registry.Clear();
+      discoveryStamps.Clear();
       detailStore.ClearAll();
       await adapterResolver.InvalidateAllAsync();
 
@@ -387,6 +389,8 @@ public class TestRunnerService(
       var projectsByPath = new Dictionary<string, List<ValidatedDotnetProject>>(
           StringComparer.OrdinalIgnoreCase);
 
+      discoveryStamps.Invalidate(nodeId);
+
       var project = await ResolveProjectAsync(nodeId, token.Ct);
       if (project is not null)
       {
@@ -495,6 +499,7 @@ public class TestRunnerService(
     }
 
     await adapterResolver.InvalidateAllAsync();
+    discoveryStamps.Clear();
 
     var testProjects = await buildHost.GetTestProjectsFromSolutionAsync(solutionPath, ct: token.Ct);
 
@@ -763,7 +768,13 @@ public class TestRunnerService(
       if (loc is null)
       {
         if (isCSharp && !operationLock.IsLocked)
+        {
           registry.RemoveSubtree(node.Id);
+
+          // The pruned tests may still be in the unchanged assembly; rediscover so they come back.
+          if (node.ProjectId is not null)
+            discoveryStamps.Invalidate(node.ProjectId);
+        }
         continue;
       }
 
@@ -992,9 +1003,19 @@ public class TestRunnerService(
       return new OperationResult(Success: failedProjectIds.Count == 0);
     }
 
-    await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus("Discovering", OverallStatus.Discovering), token.OperationId);
-    await Task.WhenAll(runnable.Select(t =>
-        executor.DiscoverProjectAsync(t.Project, t.Node.ParentId ?? nodeId, control, token)));
+    var stale = new List<(TestNode Node, ValidatedDotnetProject Project)>();
+    foreach (var t in runnable)
+    {
+      if (!await SkipDiscoveryIfFreshAsync(t.Node.Id, t.Project, scopeNodeId: null, token))
+        stale.Add(t);
+    }
+
+    if (stale.Count > 0)
+    {
+      await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus("Discovering", OverallStatus.Discovering), token.OperationId);
+      await Task.WhenAll(stale.Select(t =>
+          executor.DiscoverProjectAsync(t.Project, t.Node.ParentId ?? nodeId, control, token)));
+    }
 
     token.Ct.ThrowIfCancellationRequested();
 
@@ -1085,7 +1106,7 @@ public class TestRunnerService(
     }
 
     var solutionNodeId = registry.Get(projectId)?.ParentId;
-    if (solutionNodeId is not null)
+    if (solutionNodeId is not null && !await SkipDiscoveryIfFreshAsync(projectId, project, scopeNodeId: nodeId, token))
     {
       await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus("Discovering", OverallStatus.Discovering), token.OperationId);
       await executor.DiscoverProjectAsync(project, solutionNodeId, control, token);
@@ -1112,6 +1133,16 @@ public class TestRunnerService(
     await MaybeNotifyFinishedAsync(source, passed, failed, skipped, cancelled, inconclusive, token.Ct);
 
     return new OperationResult(Success: failed == 0);
+  }
+
+  private async Task<bool> SkipDiscoveryIfFreshAsync(
+      string projectNodeId, ValidatedDotnetProject project, string? scopeNodeId, OperationToken token)
+  {
+    if (discoveryStamps.NeedsDiscovery(projectNodeId, project.TargetPath, scopeNodeId)) return false;
+
+    logger.LogDebug("Skipping discovery for {Project}: test assembly unchanged since last discovery", project.ProjectName);
+    await dispatcher.SendStatusAsync(projectNodeId, new TestNodeStatus.Idle(), operationId: token.OperationId);
+    return true;
   }
 
   private async Task<ValidatedDotnetProject?> ResolveProjectAsync(
