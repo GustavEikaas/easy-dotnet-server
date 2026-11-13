@@ -6,22 +6,23 @@ namespace EasyDotnet.IDE.TestRunner.Registry;
 public class NodeRegistry
 {
   private readonly ConcurrentDictionary<string, TestNode> _nodes = new();
-  private readonly ConcurrentDictionary<string, string> _stableToNative = new();
+  private readonly ConcurrentDictionary<string, NativeTest> _stableToNative = new();
   private readonly ConcurrentDictionary<string, string> _nativeToStable = new();
 
   private readonly ConcurrentDictionary<string, TestNodeStatusKind?> _lastStatus = new();
 
   /// <summary>
-  /// Upserts a node. If nativeId is provided, registers the bidirectional ID mapping.
+  /// Upserts a node. If native is provided, registers the bidirectional ID mapping and keeps
+  /// the native test (including its run handle) for running the node later.
   /// </summary>
-  public void Register(TestNode node, string? nativeId = null)
+  public void Register(TestNode node, NativeTest? native = null)
   {
     _nodes[node.Id] = node;
 
-    if (nativeId is not null)
+    if (native is not null)
     {
-      _stableToNative[node.Id] = nativeId;
-      _nativeToStable[nativeId] = node.Id;
+      _stableToNative[node.Id] = native;
+      _nativeToStable[native.Id] = node.Id;
     }
   }
 
@@ -47,8 +48,8 @@ public class NodeRegistry
   public TestNode? Get(string stableId) =>
       _nodes.TryGetValue(stableId, out var node) ? node : null;
 
-  public string? GetNativeId(string stableId) =>
-      _stableToNative.TryGetValue(stableId, out var id) ? id : null;
+  public NativeTest? GetNativeTest(string stableId) =>
+      _stableToNative.TryGetValue(stableId, out var native) ? native : null;
 
   public string? GetStableId(string nativeId) =>
       _nativeToStable.TryGetValue(nativeId, out var id) ? id : null;
@@ -104,7 +105,7 @@ public class NodeRegistry
       _nodes.TryRemove(descendant.Id, out _);
       _lastStatus.TryRemove(descendant.Id, out _);
       if (_stableToNative.TryRemove(descendant.Id, out var native))
-        _nativeToStable.TryRemove(native, out _);
+        _nativeToStable.TryRemove(native.Id, out _);
     }
   }
 
@@ -127,7 +128,7 @@ public class NodeRegistry
       _nodes.TryRemove(id, out _);
       _lastStatus.TryRemove(id, out _);
       if (_stableToNative.TryRemove(id, out var native))
-        _nativeToStable.TryRemove(native, out _);
+        _nativeToStable.TryRemove(native.Id, out _);
     }
 
     return removedIds;

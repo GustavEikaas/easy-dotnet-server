@@ -45,7 +45,7 @@ public sealed class MtpAdapter(
 
   public async Task RunAsync(
       ValidatedDotnetProject project,
-      IReadOnlyList<string> nativeIds,
+      IReadOnlyList<NativeTest> tests,
       Func<string, Task> onStarted,
       Func<TestRunResult, Task> onResult,
       OperationControl control,
@@ -55,8 +55,8 @@ public sealed class MtpAdapter(
     await using var client = await clientFactory.CreateAsync(exe, ct);
     control.RegisterKill(() => client.KillAsync());
 
-    var filter = nativeIds
-        .Select(id => new RunRequestNode(id, ""))
+    var filter = tests
+        .Select(t => new RunRequestNode(t.Id, ""))
         .ToArray();
 
     await foreach (var update in client.RunTestsAsync(filter, ct))
@@ -80,7 +80,7 @@ public sealed class MtpAdapter(
 
   public async Task DebugAsync(
       ValidatedDotnetProject project,
-      IReadOnlyList<string> nativeIds,
+      IReadOnlyList<NativeTest> tests,
       Func<string, Task> onStarted,
       Func<TestRunResult, Task> onResult,
       OperationControl control,
@@ -100,8 +100,8 @@ public sealed class MtpAdapter(
     await editorService.RequestStartDebugSession("127.0.0.1", session.Port);
     await session.WaitForDebugSessionStartedAsync().WaitAsync(ct);
 
-    var filter = nativeIds
-        .Select(id => new RunRequestNode(id, ""))
+    var filter = tests
+        .Select(t => new RunRequestNode(t.Id, ""))
         .ToArray();
 
     var debugSessionEnded = 0;
@@ -124,7 +124,7 @@ public sealed class MtpAdapter(
         onResult,
         logger,
         abortRequested: () => Volatile.Read(ref debugSessionEnded) == 1,
-        expectedResultCount: nativeIds.Count,
+        expectedResultCount: tests.Count,
         ct: streamCts.Token);
   }
 

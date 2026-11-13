@@ -9,6 +9,12 @@ public record DiscoveredTest
   /// <summary>VSTest GUID string or MTP Uid. Used only for dispatch to the framework.</summary>
   public required string NativeId { get; init; }
 
+  /// <summary>
+  /// Object the adapter needs to run this test later without rediscovering (VSTest's TestCase).
+  /// Stored with the registry node; see <see cref="NativeTest.RunHandle"/>.
+  /// </summary>
+  public object? RunHandle { get; init; }
+
   public required string FullyQualifiedName { get; init; }
 
   /// <summary>

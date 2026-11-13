@@ -63,6 +63,7 @@ public static class VsTestExtensions
     return new DiscoveredTest
     {
       NativeId = x.Id.ToString(),
+      RunHandle = x,
       FullyQualifiedName = x.FullyQualifiedName,
       NamespaceParts = namespaceParts,
       ClassName = className,
