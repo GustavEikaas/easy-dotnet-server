@@ -122,6 +122,7 @@ public static class DiModules
     services.AddSingleton<GlobalOperationLock>();
     services.AddSingleton<OperationExecutor>();
     services.AddSingleton<AdapterResolver>();
+    services.AddSingleton<VsTestConcurrencyGate>();
     services.AddTransient<VsTestAdapter>();
     services.AddSingleton<Func<VsTestAdapter>>(x => () => x.GetRequiredService<VsTestAdapter>());
     services.AddSingleton<MtpAdapter>();

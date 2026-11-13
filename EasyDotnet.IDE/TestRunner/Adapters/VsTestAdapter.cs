@@ -19,7 +19,15 @@ namespace EasyDotnet.IDE.TestRunner.Adapters;
 /// Wraps VSTest console for a single project TFM.
 /// The VsTestConsoleWrapper is kept warm between operations and only
 /// recreated when the adapter is disposed (on invalidate).
-/// The global operation lock makes the old VsTestService semaphore redundant.
+///
+/// This type is registered transient — one instance (and one VsTestConsoleWrapper) per
+/// project — so <see cref="_gate"/> only serializes repeat calls against the *same* project.
+/// GlobalOperationLock does NOT make a cross-project lock redundant here: it's held for the
+/// whole duration of one top-level operation (e.g. the entire TestRunnerService.InitializeAsync
+/// call), but discovery across all of a solution's test projects happens *inside* that single
+/// held lock via Task.WhenAll — so several VsTestAdapter instances still end up talking to
+/// vstest.console concurrently. <see cref="VsTestConcurrencyGate"/> serializes that cross-
+/// instance access, restoring what the old singleton VsTestService's lock used to provide.
 /// </summary>
 public sealed class VsTestAdapter(
     SdkService sdkService,
@@ -28,6 +36,7 @@ public sealed class VsTestAdapter(
     IDebugOrchestrator debugOrchestrator,
     IFileSystem fileSystem,
     SettingsService settingsService,
+    VsTestConcurrencyGate concurrencyGate,
     ILoggerFactory loggerFactory) : ITestAdapter, IAsyncDisposable
 {
   private readonly ILogger _logger = loggerFactory.CreateLogger<VsTestAdapter>();
@@ -50,6 +59,8 @@ public sealed class VsTestAdapter(
     await _gate.WaitAsync(ct);
     try
     {
+      await using var gateLease = await concurrencyGate.AcquireAsync(ct);
+
       var wrapper = EnsureWrapper();
       control.RegisterKill(() => KillWrapperAsync(wrapper));
 
@@ -123,6 +134,8 @@ public sealed class VsTestAdapter(
     await _gate.WaitAsync(ct);
     try
     {
+      await using var gateLease = await concurrencyGate.AcquireAsync(ct);
+
       var wrapper = EnsureWrapper();
       control.RegisterKill(() => KillWrapperAsync(wrapper));
 
