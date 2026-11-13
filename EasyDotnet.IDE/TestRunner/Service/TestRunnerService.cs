@@ -822,7 +822,7 @@ public class TestRunnerService(
           AvailableActions: [TestAction.Run, TestAction.Debug, TestAction.GoToSource]
       );
 
-      registry.Register(probableNode, nativeId: fqn);
+      registry.Register(probableNode, new NativeTest(fqn));
       await dispatcher.SendRegisterTestAsync(probableNode);
 
       updates.Add(new LineNumberUpdateDto(probableId, probable.Location.SignatureLine, probable.Location.BodyStartLine, probable.Location.EndLine));
