@@ -11,6 +11,7 @@ using EasyDotnet.IDE.TestRunner.Lock;
 using EasyDotnet.IDE.TestRunner.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.TestPlatform.VsTestConsole.TranslationLayer;
+using Microsoft.VisualStudio.TestPlatform.ObjectModel;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Client;
 
 namespace EasyDotnet.IDE.TestRunner.Adapters;
@@ -64,11 +65,7 @@ public sealed class VsTestAdapter(
       // Buffer all TestCases so we can detect parameterised rows by duplicate FQN —
       // this is the only reliable VSTest-layer signal, since frameworks like MSTest
       // can strip parens from DisplayName entirely via [DataRow(DisplayName = "...")].
-      var testCases = new List<Microsoft.VisualStudio.TestPlatform.ObjectModel.TestCase>();
-      await foreach (var tc in handler.ReadAllAsync().WithCancellation(ct))
-      {
-        testCases.Add(tc);
-      }
+      var testCases = await handler.ReadAllAsync().ToListAsync(ct);
 
       foreach (var group in testCases.GroupBy(tc => tc.FullyQualifiedName))
       {
@@ -89,31 +86,25 @@ public sealed class VsTestAdapter(
 
   public async Task RunAsync(
       ValidatedDotnetProject project,
-      IReadOnlyList<string> nativeIds,
+      IReadOnlyList<NativeTest> tests,
       Func<string, Task> onStarted,
       Func<TestRunResult, Task> onResult,
       OperationControl control,
-      CancellationToken ct)
-  {
-    var nativeGuids = nativeIds.Select(Guid.Parse).ToHashSet();
-    await RunCoreAsync(project, nativeGuids, onStarted, onResult, attachDebugger: false, control, ct);
-  }
+      CancellationToken ct) =>
+    await RunCoreAsync(project, tests, onStarted, onResult, attachDebugger: false, control, ct);
 
   public async Task DebugAsync(
       ValidatedDotnetProject project,
-      IReadOnlyList<string> nativeIds,
+      IReadOnlyList<NativeTest> tests,
       Func<string, Task> onStarted,
       Func<TestRunResult, Task> onResult,
       OperationControl control,
-      CancellationToken ct)
-  {
-    var nativeGuids = nativeIds.Select(Guid.Parse).ToHashSet();
-    await RunCoreAsync(project, nativeGuids, onStarted, onResult, attachDebugger: true, control, ct);
-  }
+      CancellationToken ct) =>
+    await RunCoreAsync(project, tests, onStarted, onResult, attachDebugger: true, control, ct);
 
   private async Task RunCoreAsync(
       ValidatedDotnetProject project,
-      HashSet<Guid> nativeGuids,
+      IReadOnlyList<NativeTest> tests,
       Func<string, Task> onStarted,
       Func<TestRunResult, Task> onResult,
       bool attachDebugger,
@@ -139,13 +130,13 @@ public sealed class VsTestAdapter(
 
       var channel = Channel.CreateUnbounded<VsTestRunEvent>();
 
-      // Re-discover to get TestCase objects needed by VSTest run API.
-      var discoveryHandler = new TestDiscoveryHandler(loggerFactory.CreateLogger<TestDiscoveryHandler>());
-      wrapper.DiscoverTests([project.TargetPath], null, DefaultOptions, null, discoveryHandler);
-
-      var toRun = discoveryHandler.TestCases
-          .Where(x => nativeGuids.Contains(x.Id))
-          .ToList();
+      // The TestCases discovery produced, stored with their registry nodes; no rediscovery needed.
+      var toRun = tests.Select(t => t.RunHandle).OfType<TestCase>().ToList();
+      if (toRun.Count < tests.Count)
+      {
+        _logger.LogWarning("{Missing} of {Requested} tests have no discovered TestCase and are not run",
+            tests.Count - toRun.Count, tests.Count);
+      }
 
       if (toRun.Count == 0) return;
 

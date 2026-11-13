@@ -169,7 +169,7 @@ public class OperationExecutor(
                       ? [TestAction.Run, TestAction.Debug, TestAction.GoToSource]
                       : [TestAction.Run, TestAction.Debug]
               );
-          registry.Register(methodNode, nativeId: discovered.NativeId);
+          registry.Register(methodNode, new NativeTest(discovered.NativeId, discovered.RunHandle));
           pendingEmit.Add(methodNode);
         }
         finally
@@ -245,13 +245,12 @@ public class OperationExecutor(
     var self = registry.Get(nodeId);
     if (self?.Type is NodeType.TestMethod or NodeType.Subcase) { leafNodes.Add(self); }
 
-    var nativeIds = leafNodes
-        .Select(n => registry.GetNativeId(n.Id))
-        .Where(id => id is not null)
-        .Select(id => id!)
+    var nativeTests = leafNodes
+        .Select(n => registry.GetNativeTest(n.Id))
+        .OfType<NativeTest>()
         .ToList();
 
-    if (nativeIds.Count == 0)
+    if (nativeTests.Count == 0)
     {
       logger.LogWarning("No runnable tests found under node {NodeId}", nodeId);
       return sharedCounter ?? new RunProgressCounter(0);
@@ -259,7 +258,7 @@ public class OperationExecutor(
 
     await dispatcher.SendBatchStatusAsync(nodeId, new TestNodeStatus.Queued(), registry, operationId: token.OperationId);
 
-    var counter = sharedCounter ?? new RunProgressCounter(nativeIds.Count);
+    var counter = sharedCounter ?? new RunProgressCounter(nativeTests.Count);
 
     if (sharedCounter is null)
     {
@@ -277,7 +276,7 @@ public class OperationExecutor(
     var parentAggregator = new ParentStatusAggregator(registry, detailStore, leafIds);
     var resultBatch = new RunResultBatch(dispatcher, counter, token.OperationId, debug);
 
-    var expectedNativeIds = nativeIds.ToHashSet(StringComparer.Ordinal);
+    var expectedNativeIds = nativeTests.Select(t => t.Id).ToHashSet(StringComparer.Ordinal);
     var seenNativeIds = new HashSet<string>(StringComparer.Ordinal);
     var startedNativeIds = new HashSet<string>(StringComparer.Ordinal);
     var runningStatus = debug ? (TestNodeStatus)new TestNodeStatus.Debugging() : new TestNodeStatus.Running();
@@ -329,9 +328,9 @@ public class OperationExecutor(
     }
 
     if (debug)
-      await adapter.DebugAsync(project, nativeIds, OnStarted, OnResult, control, token.Ct);
+      await adapter.DebugAsync(project, nativeTests, OnStarted, OnResult, control, token.Ct);
     else
-      await adapter.RunAsync(project, nativeIds, OnStarted, OnResult, control, token.Ct);
+      await adapter.RunAsync(project, nativeTests, OnStarted, OnResult, control, token.Ct);
 
     await resultBatch.FlushAsync(forceRunnerStatus: true);
 
@@ -340,7 +339,7 @@ public class OperationExecutor(
       logger.LogError(
         "Run completed without reporting all results for {NodeId}. Expected={Expected} Seen={Seen} Missing={Missing}",
         nodeId,
-        nativeIds.Count,
+        nativeTests.Count,
         seenNativeIds.Count,
         expectedNativeIds.Count);
 

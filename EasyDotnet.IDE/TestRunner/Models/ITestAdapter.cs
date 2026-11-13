@@ -24,24 +24,24 @@ public interface ITestAdapter
       CancellationToken ct);
 
   /// <summary>
-  /// Run specific tests by their native IDs.
+  /// Run specific tests, as recorded in the registry when they were discovered.
   /// onResult is called as each test completes.
   /// </summary>
   Task RunAsync(
       ValidatedDotnetProject project,
-      IReadOnlyList<string> nativeIds,
+      IReadOnlyList<NativeTest> tests,
       Func<string, Task> onStarted,
       Func<TestRunResult, Task> onResult,
       OperationControl control,
       CancellationToken ct);
 
   /// <summary>
-  /// Debug specific tests by their native IDs.
+  /// Debug specific tests, as recorded in the registry when they were discovered.
   /// onResult is called as each test completes.
   /// </summary>
   Task DebugAsync(
       ValidatedDotnetProject project,
-      IReadOnlyList<string> nativeIds,
+      IReadOnlyList<NativeTest> tests,
       Func<string, Task> onStarted,
       Func<TestRunResult, Task> onResult,
       OperationControl control,
