@@ -296,7 +296,7 @@ public class OperationExecutor(
       if (detailStore.Get(stableId) is not null) return;
 
       resultBatch.Enqueue(new StatusUpdate(stableId, runningStatus));
-      BubbleStatus(resultBatch, stableId, leafIds);
+      resultBatch.EnqueueRange(parentAggregator.Started(stableId));
       await resultBatch.FlushIfNeededAsync();
     }
 
@@ -530,121 +530,6 @@ public class OperationExecutor(
     return (status, baseActions);
   }
 
-  sealed class TestNodeStatusAggregator
-  {
-    public int Passed { get; private set; }
-    public int Failed { get; private set; }
-    public int Skipped { get; private set; }
-    public int Inconclusive { get; private set; }
-    public int Running { get; private set; }
-    public long MaxDuration { get; private set; }
-    public int ScopedLeaves { get; private set; }
-
-    public void Add(TestDetail? details)
-    {
-      ++ScopedLeaves;
-      if (details is null)
-      {
-        ++Running;
-        return;
-      }
-      switch (details.Outcome)
-      {
-        case "passed": ++Passed; break;
-        case "failed": ++Failed; break;
-        case "skipped": ++Skipped; break;
-        case "none": ++Inconclusive; break;
-      }
-      if (details.DurationMs is { } ms && ms > MaxDuration)
-      {
-        MaxDuration = ms;
-      }
-    }
-  }
-
-  private void BubbleStatus(RunResultBatch resultBatch, string leafId, HashSet<string> runningLeafIds)
-  {
-    var node = registry.Get(leafId);
-    if (node is null) return;
-    var parentId = node.ParentId;
-    var aggregators = new Dictionary<string, TestNodeStatusAggregator>();
-    while (parentId is not null)
-    {
-      var n = registry.Get(parentId);
-      if (n is null) break;
-      aggregators.Add(n.Id, new());
-      parentId = n.ParentId;
-    }
-
-    if (aggregators.Count == 0) return;
-
-    var leaves = registry.GetAll()
-        .Where(n => n.Type
-          is NodeType.TestMethod
-          or NodeType.Subcase
-          or NodeType.ProbableTest
-          && IsInScope(n.Id, runningLeafIds))
-        .ToList();
-
-    foreach (var leaf in leaves)
-    {
-      var fetchedDetails = false;
-      TestDetail? details = null;
-      parentId = leaf.ParentId;
-      while (parentId is not null)
-      {
-        var n = registry.Get(parentId);
-        if (n is null) break;
-        if (!aggregators.TryGetValue(n.Id, out var tracker)) break;
-        if (!fetchedDetails)
-        {
-          details = detailStore.Get(leaf.Id);
-          fetchedDetails = true;
-        }
-        tracker.Add(details);
-        parentId = n.ParentId;
-      }
-    }
-
-    foreach (var (id, aggregator) in aggregators)
-    {
-      logger.LogDebug("Bubble from {LeafId} at parent {ParentId}: scopedLeaves={Count}",
-          leafId, parentId, aggregator.ScopedLeaves);
-
-      if (aggregator.Running > 0)
-      {
-        resultBatch.Enqueue(new(id, new TestNodeStatus.Running()));
-      }
-      else
-      {
-        logger.LogDebug(
-            "Bubble parent {ParentId}: passed={Passed} failed={Failed} skipped={Skipped} inconclusive={Inconclusive}",
-            parentId, aggregator.Passed, aggregator.Failed, aggregator.Skipped, aggregator.Inconclusive);
-
-        var durationDisplay = FormatDuration(aggregator.MaxDuration);
-        var aggregateStatus = TestStatusPriority.AggregateTerminalStatus(
-            aggregator.Passed,
-            aggregator.Failed,
-            aggregator.Skipped,
-            aggregator.Inconclusive,
-            durationDisplay);
-        resultBatch.Enqueue(new(id, aggregateStatus));
-      }
-    }
-  }
-
-  private bool IsInScope(string leafId, HashSet<string> runningLeafIds)
-  {
-    if (runningLeafIds.Contains(leafId)) return true;
-    var n = registry.Get(leafId);
-    while (n?.ParentId is not null)
-    {
-      if (runningLeafIds.Contains(n.ParentId)) return true;
-      n = registry.Get(n.ParentId);
-    }
-    return false;
-  }
-
   private sealed class RunResultBatch(
       StatusDispatcher dispatcher,
       RunProgressCounter counter,
@@ -710,6 +595,7 @@ public class OperationExecutor(
     private readonly Dictionary<string, List<string>> _parentsByLeaf = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ParentRunState> _statesByParent = new(StringComparer.Ordinal);
     private readonly HashSet<string> _completedLeaves = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _runningParents = new(StringComparer.Ordinal);
 
     public ParentStatusAggregator(NodeRegistry registry, DetailStore detailStore, HashSet<string> runningLeafIds)
     {
@@ -733,6 +619,16 @@ public class OperationExecutor(
         }
       }
     }
+
+    /// <summary>
+    /// Marks the ancestors of a just-started leaf as Running — once per parent, since a parent
+    /// can only turn terminal after all its leaves (including this one) have completed.
+    /// </summary>
+    public IEnumerable<StatusUpdate> Started(string leafId) =>
+        _parentsByLeaf.GetValueOrDefault(leafId, [])
+            .Where(_runningParents.Add)
+            .Select(parentId => new StatusUpdate(parentId, new TestNodeStatus.Running()))
+            .ToList();
 
     public IEnumerable<StatusUpdate> Record(string leafId)
     {
