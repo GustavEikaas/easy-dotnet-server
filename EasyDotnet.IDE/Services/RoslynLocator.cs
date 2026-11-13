@@ -6,7 +6,6 @@ public static class RoslynLocator
 {
   private const string EasyDotnetAnalyzerFileName = "EasyDotnet.RoslynLanguageServices.dll";
   private const string EasyDotnetRoslynLanguageServicesFileName = "EasyDotnet.RoslynLanguageServices.dll";
-  private const string ExternalAccessExtensionsFileName = "Microsoft.CodeAnalysis.ExternalAccess.Extensions.dll";
 
   public static string? GetCustomRoslynDllPath()
   {
@@ -61,12 +60,6 @@ public static class RoslynLocator
     }
 
     return path;
-  }
-
-  public static string? GetExternalAccessExtensionsPath()
-  {
-    var path = Path.Combine(GetRoslynBaseDir(), "DevKit", ExternalAccessExtensionsFileName);
-    return File.Exists(path) ? path : null;
   }
 
   /// <summary>

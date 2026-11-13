@@ -3,21 +3,15 @@
   <PropertyGroup>
     <TargetFramework>$(LowestNetCoreTfm)</TargetFramework>
     <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);RSEXPERIMENTAL008</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="4.14.0">
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="5.9.0">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.0.0" />
-    <PackageDownload Include="Microsoft.CodeAnalysis.ExternalAccess.Extensions" Version="[5.0.0-1.25277.114]" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Reference Include="Microsoft.CodeAnalysis.ExternalAccess.Extensions">
-      <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.externalaccess.extensions/5.0.0-1.25277.114/lib/netstandard2.0/Microsoft.CodeAnalysis.ExternalAccess.Extensions.dll</HintPath>
-    </Reference>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.13.0-1.26507.4" />
   </ItemGroup>
 
 </Project>

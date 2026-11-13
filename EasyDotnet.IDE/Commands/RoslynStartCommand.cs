@@ -204,16 +204,10 @@ public sealed class RoslynStartCommand : AsyncCommand<RoslynStartCommand.Setting
       AddExtension(arguments, dll);
     }
 
-    var devKitDependencyPath = settings.DevKitDependencyPath;
-    if (string.IsNullOrWhiteSpace(devKitDependencyPath) && settings.UseEasyDotnetExtension)
-    {
-      devKitDependencyPath = RoslynLocator.GetExternalAccessExtensionsPath();
-    }
-
-    if (!string.IsNullOrWhiteSpace(devKitDependencyPath))
+    if (!string.IsNullOrWhiteSpace(settings.DevKitDependencyPath))
     {
       arguments.Add("--devKitDependencyPath");
-      arguments.Add(devKitDependencyPath);
+      arguments.Add(settings.DevKitDependencyPath);
     }
 
     return arguments;
