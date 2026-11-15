@@ -16,6 +16,7 @@ public class OperationExecutor(
     NodeRegistry registry,
     StatusDispatcher dispatcher,
     DetailStore detailStore,
+    DiscoveryStampStore discoveryStamps,
     AdapterResolver adapterResolver,
     ILogger<OperationExecutor> logger)
 {
@@ -29,6 +30,11 @@ public class OperationExecutor(
         .ToHashSet();
 
     registry.ClearDescendants(projectNodeId);
+
+    // Not fresh until this discovery completes — a failed or cancelled pass leaves the project
+    // half-populated, so the next run must discover again.
+    discoveryStamps.Invalidate(projectNodeId);
+    var assemblyStamp = discoveryStamps.Capture(project.TargetPath);
 
     var adapter = adapterResolver.Resolve(project);
     var emittedNamespaces = new HashSet<string>();
@@ -48,7 +54,7 @@ public class OperationExecutor(
     try
     {
       var discoveryComplete = false;
-      await adapter.DiscoverAsync(project, async discovered =>
+      var sawAllTests = await adapter.DiscoverAsync(project, async discovered =>
       {
         await callbackLock.WaitAsync(token.Ct);
         try
@@ -200,6 +206,13 @@ public class OperationExecutor(
       }
 
       await dispatcher.SendStatusAsync(projectNodeId, new TestNodeStatus.Idle(), operationId: token.OperationId);
+
+      // An aborted discovery (e.g. testhost crashed) still shows what it found, but must not be
+      // recorded as fresh or later runs would keep using the partial tree.
+      if (sawAllTests)
+        discoveryStamps.MarkDiscovered(projectNodeId, project.TargetPath, assemblyStamp);
+      else
+        logger.LogWarning("Discovery for project {Project} was aborted — results may be incomplete", project.ProjectName);
     }
     catch (OperationCanceledException)
     {

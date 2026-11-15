@@ -16,6 +16,8 @@ internal sealed class StreamingDiscoveryHandler(ILoggerFactory loggerFactory) : 
 {
   private readonly ILogger _logger = loggerFactory.CreateLogger<StreamingDiscoveryHandler>();
   private readonly Channel<TestCase> _channel = Channel.CreateUnbounded<TestCase>();
+  public bool IsAborted { get; private set; }
+
   public void HandleDiscoveredTests(IEnumerable<TestCase>? discoveredTestCases)
   {
     if (discoveredTestCases is null) return;
@@ -34,6 +36,7 @@ internal sealed class StreamingDiscoveryHandler(ILoggerFactory loggerFactory) : 
   public void HandleDiscoveryComplete(DiscoveryCompleteEventArgs discoveryCompleteEventArgs, IEnumerable<TestCase>? lastChunk)
   {
     if (lastChunk is not null) HandleDiscoveredTests(lastChunk);
+    IsAborted = discoveryCompleteEventArgs.IsAborted;
     _channel.Writer.Complete();
   }
 
