@@ -1,3 +1,4 @@
+using EasyDotnet.BuildServer.Contracts;
 using EasyDotnet.IDE.Models.Client;
 using EasyDotnet.IDE.Models.Client.Prompt;
 using EasyDotnet.IDE.Models.Client.Quickfix;
@@ -8,6 +9,7 @@ namespace EasyDotnet.IDE.Interfaces;
 public interface IEditorService
 {
   Task CloseQuickFixList();
+  Task<bool> ReportDiagnosticsAsync(IEnumerable<BuildDiagnostic> diagnostics);
   Task DisplayError(string message);
   Task DisplayMessage(string message);
   Task DisplayWarning(string message);

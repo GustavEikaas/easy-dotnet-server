@@ -152,6 +152,7 @@ public static class DiModules
 
     services.AddTransient<ProjectReferenceService>();
     services.AddTransient<ProjectReferenceCliService>();
+    services.AddTransient<EasyDotnet.IDE.ProjectView.Services.ProjectViewService>();
     services.AddTransient<SolutionManagementService>();
     services.AddTransient<PostActionProcessor>();
     services.AddTransient<IPostActionHandler, RunScriptPostActionHandler>();

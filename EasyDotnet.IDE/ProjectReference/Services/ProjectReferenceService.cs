@@ -40,9 +40,20 @@ public class ProjectReferenceService(
     var selection = await editorService.RequestSelection("Select project to add as reference", options);
     if (selection is null) return;
 
-    await projectReferenceCliService.AddProjectReferenceAsync(fullProjectPath, selection.Id, ct);
-    await editorService.DisplayMessage($"Reference to '{Path.GetFileNameWithoutExtension(selection.Id)}' added");
+    var name = Path.GetFileNameWithoutExtension(selection.Id);
+    var (added, error) = await projectReferenceCliService.AddProjectReferenceAsync(fullProjectPath, selection.Id, ct);
+    if (added)
+    {
+      await editorService.DisplayMessage($"Reference to '{name}' added");
+    }
+    else
+    {
+      await editorService.DisplayError($"Failed to add reference to '{name}'{FormatError(error)}");
+    }
   }
+
+  private static string FormatError(string error) =>
+      string.IsNullOrWhiteSpace(error) ? "" : $": {error.Trim()}";
 
   public async Task RemoveProjectReferenceInteractiveAsync(string projectPath, CancellationToken ct)
   {
@@ -63,7 +74,15 @@ public class ProjectReferenceService(
     var selection = await editorService.RequestSelection("Select project reference to remove", options);
     if (selection is null) return;
 
-    await projectReferenceCliService.RemoveProjectReferenceAsync(fullProjectPath, selection.Id, ct);
-    await editorService.DisplayMessage($"Reference to '{Path.GetFileNameWithoutExtension(selection.Id)}' removed");
+    var name = Path.GetFileNameWithoutExtension(selection.Id);
+    var (removed, error) = await projectReferenceCliService.RemoveProjectReferenceAsync(fullProjectPath, selection.Id, ct);
+    if (removed)
+    {
+      await editorService.DisplayMessage($"Reference to '{name}' removed");
+    }
+    else
+    {
+      await editorService.DisplayError($"Failed to remove reference to '{name}'{FormatError(error)}");
+    }
   }
 }
