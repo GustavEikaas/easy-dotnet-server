@@ -42,7 +42,7 @@ public sealed class VsTestAdapter(
 
   private VsTestConsoleWrapper? _wrapper;
 
-  public async Task DiscoverAsync(
+  public async Task<bool> DiscoverAsync(
       ValidatedDotnetProject project,
       Func<DiscoveredTest, Task> onDiscovered,
       OperationControl control,
@@ -77,6 +77,8 @@ public sealed class VsTestAdapter(
           catch (Exception ex) { _logger.LogError(ex, "Error in onDiscovered callback for {TestCase}", discoveredTest.FullyQualifiedName); }
         }
       }
+
+      return !handler.IsAborted;
     }
     finally
     {

@@ -16,8 +16,9 @@ public interface ITestAdapter
   /// <summary>
   /// Enumerate all tests in a compiled DLL.
   /// onDiscovered is called for each test as it arrives — do not buffer.
+  /// Returns false when the framework aborted the discovery, so the results may be partial.
   /// </summary>
-  Task DiscoverAsync(
+  Task<bool> DiscoverAsync(
       ValidatedDotnetProject project,
       Func<DiscoveredTest, Task> onDiscovered,
       OperationControl control,
