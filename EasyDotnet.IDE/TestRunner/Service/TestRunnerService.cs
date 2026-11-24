@@ -936,31 +936,31 @@ public class TestRunnerService(
       return new OperationResult(Success: true);
     }
 
-    var projects = (await Task.WhenAll(
-            projectNodes.Select(pn => ResolveProjectAsync(pn.Id, token.Ct))))
-        .Where(p => p is not null)
-        .Select(p => p!)
+    // A multi-targeted project has one node per TFM sharing a path, so keep each project with its node.
+    var targets = (await Task.WhenAll(projectNodes.Select(async pn =>
+            (Node: pn, Project: await ResolveProjectAsync(pn.Id, token.Ct)))))
+        .Where(t => t.Project is not null)
+        .Select(t => (t.Node, Project: t.Project!))
         .ToList();
 
     await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus("Building", OverallStatus.Building), token.OperationId);
     foreach (var pn in projectNodes)
       await dispatcher.SendStatusAsync(pn.Id, new TestNodeStatus.Building(), operationId: token.OperationId);
 
-    var projectsByPath = projects
-        .GroupBy(p => p.ProjectFullPath, StringComparer.OrdinalIgnoreCase)
+    var targetsByPath = targets
+        .GroupBy(t => t.Project.ProjectFullPath, StringComparer.OrdinalIgnoreCase)
         .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
 
     var failedProjectIds = new HashSet<string>();
 
     await foreach (var result in buildHost.BatchBuildAsync(
-        new BatchBuildRequest([.. projectsByPath.Keys], Configuration: null), token.Ct))
+        new BatchBuildRequest([.. targetsByPath.Keys], Configuration: null), token.Ct))
     {
       token.Ct.ThrowIfCancellationRequested();
       if (result.Kind != BatchBuildResultKind.Finished) { continue; }
 
-      foreach (var p in projectsByPath.GetValueOrDefault(result.ProjectPath) ?? [])
+      foreach (var (pn, _) in targetsByPath.GetValueOrDefault(result.ProjectPath) ?? [])
       {
-        var pn = projectNodes.First(n => string.Equals(n.FilePath, p.ProjectFullPath, StringComparison.OrdinalIgnoreCase));
         if (result.Success != true)
         {
           await dispatcher.SendStatusAsync(pn.Id, new TestNodeStatus.BuildFailed(),
@@ -982,32 +982,23 @@ public class TestRunnerService(
 
     token.Ct.ThrowIfCancellationRequested();
 
-    var runnableProjects = projects
-        .Where(p => !failedProjectIds.Contains(
-            projectNodes.First(n => string.Equals(n.FilePath, p.ProjectFullPath, StringComparison.OrdinalIgnoreCase)).Id))
+    var runnable = targets
+        .Where(t => !failedProjectIds.Contains(t.Node.Id))
         .ToList();
 
-    if (runnableProjects.Count == 0)
+    if (runnable.Count == 0)
     {
       await dispatcher.SendRunnerStatusAsync(BuildIdleStatus(), token.OperationId);
       return new OperationResult(Success: failedProjectIds.Count == 0);
     }
 
     await dispatcher.SendRunnerStatusAsync(BuildLoadingStatus("Discovering", OverallStatus.Discovering), token.OperationId);
-    await Task.WhenAll(runnableProjects.Select(p =>
-    {
-      var pn = projectNodes.First(n => string.Equals(n.FilePath, p.ProjectFullPath, StringComparison.OrdinalIgnoreCase));
-      return executor.DiscoverProjectAsync(p, pn.ParentId ?? nodeId, control, token);
-    }));
+    await Task.WhenAll(runnable.Select(t =>
+        executor.DiscoverProjectAsync(t.Project, t.Node.ParentId ?? nodeId, control, token)));
 
     token.Ct.ThrowIfCancellationRequested();
 
-    var totalLeafCount = runnableProjects
-        .Sum(p =>
-        {
-          var pn = projectNodes.First(n => string.Equals(n.FilePath, p.ProjectFullPath, StringComparison.OrdinalIgnoreCase));
-          return registry.GetLeafDescendants(pn.Id).Count();
-        });
+    var totalLeafCount = runnable.Sum(t => registry.GetLeafDescendants(t.Node.Id).Count());
 
     var sharedCounter = new RunProgressCounter(totalLeafCount);
 
@@ -1019,12 +1010,8 @@ public class TestRunnerService(
         TotalRunning: sharedCounter.TotalTests,
         TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0, TotalCancelled: 0), token.OperationId);
 
-    var runTasks = runnableProjects
-        .Select(p =>
-        {
-          var pn = projectNodes.First(n => string.Equals(n.FilePath, p.ProjectFullPath, StringComparison.OrdinalIgnoreCase));
-          return executor.RunNodeAsync(pn.Id, p, control, token, debug, sharedCounter);
-        });
+    var runTasks = runnable
+        .Select(t => executor.RunNodeAsync(t.Node.Id, t.Project, control, token, debug, sharedCounter));
     await Task.WhenAll(runTasks);
 
     token.Ct.ThrowIfCancellationRequested();
